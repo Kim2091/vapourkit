@@ -7,6 +7,7 @@ interface DevConsoleLog {
 
 export const useDeveloperMode = () => {
   const [developerMode, setDeveloperMode] = useState(false);
+  const [isDeveloperModeLoaded, setIsDeveloperModeLoaded] = useState(false);
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
@@ -27,6 +28,8 @@ export const useDeveloperMode = () => {
         setDeveloperMode(result.enabled);
       } catch (error) {
         console.error('Error loading developer mode:', error);
+      } finally {
+        setIsDeveloperModeLoaded(true);
       }
     };
     loadDeveloperMode();
@@ -65,6 +68,7 @@ export const useDeveloperMode = () => {
 
   return {
     developerMode,
+    isDeveloperModeLoaded,
     consoleOutput,
     consoleEndRef,
     addConsoleLog,

@@ -46,7 +46,7 @@ function App() {
   const rightPanelRef = useRef<HTMLDivElement>(null);
 
   // Setup and initialization hooks
-  const { developerMode, consoleOutput, consoleEndRef, addConsoleLog, toggleDeveloperMode } = useDeveloperMode();
+  const { developerMode, isDeveloperModeLoaded, consoleOutput, consoleEndRef, addConsoleLog, toggleDeveloperMode } = useDeveloperMode();
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup } = useSetup(addConsoleLog);
   const { useDirectML, toggleDirectML, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
   
@@ -63,7 +63,7 @@ function App() {
   const { templates: filterTemplates, saveTemplate, deleteTemplate, loadTemplates } = useFilterTemplates(isSetupComplete);
   
   // State management hooks
-  const { filters, handleSetFilters } = useFilterConfig(isSetupComplete, developerMode, addConsoleLog);
+  const { filters, handleSetFilters } = useFilterConfig(isSetupComplete, developerMode, isDeveloperModeLoaded, addConsoleLog);
   const { colorMatrixSettings, handleColorMatrixChange } = useColorMatrix(isSetupComplete, addConsoleLog);
   const { panelSizes, panelSizesLoaded, handlePanelResize } = usePanelLayout(isSetupComplete, addConsoleLog);
   const {
@@ -489,8 +489,8 @@ function App() {
                   
                   // Prevent processing if using TensorRT mode with ONNX models
                   if (!useDirectML) {
-                    // Check simple mode selected model
-                    if (selectedModel && selectedModel.toLowerCase().endsWith('.onnx')) {
+                    // Check simple mode selected model (only applies in simple mode)
+                    if (!developerMode && selectedModel && selectedModel.toLowerCase().endsWith('.onnx')) {
                       return true;
                     }
                     

@@ -4,7 +4,8 @@ import { getErrorMessage } from '../types/errors';
 
 export function useFilterConfig(
   isSetupComplete: boolean, 
-  developerMode: boolean, 
+  developerMode: boolean,
+  isDeveloperModeLoaded: boolean,
   onLog: (message: string) => void
 ) {
   const [filters, setFilters] = useState<Filter[]>(() => {
@@ -33,10 +34,10 @@ export function useFilterConfig(
       }
     };
 
-    if (isSetupComplete) {
+    if (isSetupComplete && isDeveloperModeLoaded) {
       loadFilterConfigurations();
     }
-  }, [isSetupComplete, onLog, developerMode]);
+  }, [isSetupComplete, isDeveloperModeLoaded, onLog, developerMode]);
 
   // Wrapper to persist state changes
   const handleSetFilters = (value: Filter[]) => {

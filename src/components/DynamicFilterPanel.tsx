@@ -396,6 +396,7 @@ export function DynamicFilterPanel({
                 <p className="text-xs text-gray-300 mb-2 font-medium">Tips:</p>
                 <ul className="list-disc list-inside space-y-1 text-xs text-gray-400">
                   <li>Use <code className="bg-gray-900 px-1 rounded text-blue-400">clip</code> variable for the video stream</li>
+                  <li>Use <code className="bg-gray-900 px-1 rounded text-blue-400">original_clip</code> variable to reference the original/input video stream</li>
                   <li>Filters are applied in the order shown (top to bottom)</li>
                   <li>Add AI models anywhere in the filter workflow</li>
                 </ul>
