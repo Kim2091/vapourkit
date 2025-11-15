@@ -1,0 +1,20 @@
+name = "DPIR Denoise/Deblock"
+code = """
+from vsmlrt import DPIR, DPIRModel, Backend
+# Full Docs: https://github.com/AmusementClub/vs-mlrt/wiki/DPIR
+# Models: DPIRModel.drunet_color, DPIRModel.drunet_deblocking_color
+
+model       = DPIRModel.drunet_color
+strength    = 5
+nvidia_gpu  = True
+fp16        = True
+num_streams = 1
+
+backend = (Backend.TRT if nvidia_gpu else Backend.ORT_DML)(fp16=fp16, num_streams=num_streams)
+clip = core.resize.Bilinear(clip, format=vs.RGBH if fp16 else vs.RGBS, matrix_in_s="709")
+clip = DPIR(clip, strength=strength, model=model, backend=backend)
+clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s="709")"""
+description = "Deep Plug-and-Play Image Restoration is an AI spatial denoiser and deblocker."
+
+[metadata]
+createdAt = "2025-11-13T15:40:38.444Z"

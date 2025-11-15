@@ -1,0 +1,17 @@
+name = "Wavelet Color Fix"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_colorfix?tab=readme-ov-file#wavelet-color-fix
+
+wavelets = 5
+device   = "cuda"
+fp16     = True
+
+import vs_colorfix
+original_clip_converted = core.resize.Point(original_clip, format=vs.YUV444PH if fp16 else vs.YUV444PS)
+clip_converted = core.resize.Point(clip, format=vs.YUV444PH if fp16 else vs.YUV444PS)
+clip_converted = vs_colorfix.wavelet(clip_converted, original_clip_converted, wavelets=wavelets, device=device)
+clip = core.resize.Point(clip_converted, format=clip.format.id)"""
+description = "Correct for color shift by matching the average color of the clip to that of the original input clip. Better results than Average Color Fix, but much slower."
+
+[metadata]
+createdAt = "2025-11-03T21:00:48.937Z"

@@ -1,0 +1,10 @@
+name = "NLM Denoise (CUDA)"
+code = """
+# Full Docs: https://github.com/AmusementClub/vs-nlm-cuda
+# This can be used as parameters explanation: https://github.com/Khanattila/KNLMeansCL/wiki/Filter-description
+
+clip = core.nlm_cuda.NLMeans(clip, d=1, a=2, s=4, h=1.2)"""
+description = "Non-Local Means Spatial Denoising Filter. Requires an Nvidia GPU."
+
+[metadata]
+createdAt = "2025-11-04T02:12:07.901Z"

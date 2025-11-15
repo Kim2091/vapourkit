@@ -1,0 +1,103 @@
+name = "QTGMC Deinterlace (Custom)"
+code = """
+# All default parameters for each stage exposed to see what is adjustable. These default are for best quality, not highest speed.
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdeinterlace/qtgmc/?h=sharpe#vsdeinterlace.qtgmc
+
+from functools import partial
+from vsdeinterlace.qtgmc import QTempGaussMC
+from vsdenoise.fft import DFTTest
+from vsdenoise.mvtools.presets import MVToolsPreset
+from vsaa.deinterlacers import NNEDI3
+
+clip = (
+    QTempGaussMC(
+        clip,
+        input_type=QTempGaussMC.InputType.INTERLACE,
+        tff=True,
+    )
+    .prefilter(
+        tr=2,
+        sc_threshold=0.1,
+        postprocess=QTempGaussMC.SearchPostProcess.GAUSSBLUR_EDGESOFTEN,
+        strength=(1.9, 0.1),
+        limit=(3, 7, 2),
+        range_expansion_args=None,
+        mask_shimmer_args=None,
+    )
+    .analyze(
+        force_tr=1,
+        preset=MVToolsPreset.HQ_SAD,
+        chroma=True,
+        blksize=16,
+        overlap=2,
+        refine=1,
+        thsad_recalc=None,
+        thscd=(180, 38.5),
+    )
+    .denoise(
+        tr=2,
+        func=partial(DFTTest().denoise, sigma=8),
+        mode=QTempGaussMC.NoiseProcessMode.IDENTIFY,
+        deint=QTempGaussMC.NoiseDeintMode.GENERATE,
+        mc_denoise=True,
+        stabilize=(0.6, 0.2),
+        func_comp_args=None,
+        stabilize_comp_args=None,
+    )
+    .basic(
+        tr=2,
+        thsad=640,
+        bobber=NNEDI3(nsize=1),
+        noise_restore=0.0,
+        degrain_args=None,
+        mask_args=None,
+        mask_shimmer_args={"erosion_distance": 0},
+    )
+    .source_match(
+        tr=1,
+        bobber=None,
+        mode=QTempGaussMC.SourceMatchMode.NONE,
+        similarity=0.5,
+        enhance=0.5,
+        degrain_args=None,
+    )
+    .lossless(
+        mode=QTempGaussMC.LosslessMode.NONE,
+    )
+    .sharpen(
+        mode=None,
+        strength=(1, 1.0),
+        clamp=1,
+        thin=0.0,
+    )
+    .back_blend(
+        mode=QTempGaussMC.BackBlendMode.BOTH,
+        sigma=1.4,
+    )
+    .sharpen_limit(
+        mode=None,
+        radius=3,
+        clamp=0,
+        comp_args=None,
+    )
+    .final(
+        tr=3,
+        thsad=256,
+        noise_restore=0.0,
+        degrain_args=None,
+        mask_shimmer_args=None,
+    )
+    .motion_blur(
+        shutter_angle=(180, 180),
+        fps_divisor=1,
+        blur_args=None,
+        mask_args={"ml": 4},
+    )
+    .deinterlace()
+)
+
+original_clip = clip"""
+description = "Quasi Temporal Gaussian Motion Compensated is an advanced deinterlacer with a wide range of features, including noise processing, support for repair of progressive material, precision source matching, shutter speed simulation, and more."
+
+[metadata]
+createdAt = "2025-11-13T15:29:24.720Z"

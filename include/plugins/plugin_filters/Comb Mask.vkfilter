@@ -1,0 +1,10 @@
+name = "Comb Mask"
+code = """
+# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/CombMask
+
+gray = core.resize.Point(clip, format=vs.GRAY8)
+clip = core.vszip.CombMask(gray, cthresh = 6, mthresh = 9, expand = True, metric = 0)"""
+description = "Masks leftover combing from deinterlacing or inverse telecining."
+
+[metadata]
+createdAt = "2025-11-03T18:24:41.070Z"

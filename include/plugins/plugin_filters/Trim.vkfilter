@@ -1,0 +1,11 @@
+name = "Trim"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#tpad
+# If only "clip" is provided, this will automatically trim what was added via Temporal Pad. You can also replace "start" and "end" with "length", which trims to the specified amount of frames, beginning from the start.
+
+import vs_tiletools
+clip = vs_tiletools.trim(clip, start=0, end=0)"""
+description = "Shortens a clip by trimming frames at the start or end."
+
+[metadata]
+createdAt = "2025-11-13T15:34:07.779Z"

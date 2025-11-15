@@ -1,0 +1,9 @@
+name = "Sharpen"
+code = """
+# Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-CAS
+
+clip = core.cas.CAS(clip, sharpness=0.5, planes=0)"""
+description = "Contrast Adaptive Sharpening Filter."
+
+[metadata]
+createdAt = "2025-11-03T20:38:35.528Z"

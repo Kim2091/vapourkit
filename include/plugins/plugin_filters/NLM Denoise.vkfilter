@@ -1,0 +1,10 @@
+name = "NLM Denoise"
+code = """
+# Full Docs: https://github.com/AmusementClub/vs-nlm-ispc
+# This can be used as parameters explanation: https://github.com/Khanattila/KNLMeansCL/wiki/Filter-description
+
+clip = core.nlm_ispc.NLMeans(clip, d=1, a=2, s=4, h=1.2)"""
+description = "Non-Local Means Spatial Denoising Filter."
+
+[metadata]
+createdAt = "2025-11-04T02:08:02.655Z"

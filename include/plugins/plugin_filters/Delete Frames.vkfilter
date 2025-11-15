@@ -1,0 +1,9 @@
+name = "Delete Frames"
+code = """
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/deleteframes.html
+
+clip = core.std.DeleteFrames(clip, frames=[0, 5, 6])"""
+description = "Removes specified frames from the clip."
+
+[metadata]
+createdAt = "2025-11-02T20:27:28.271Z"

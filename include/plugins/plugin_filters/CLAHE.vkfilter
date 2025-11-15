@@ -1,0 +1,10 @@
+name = "CLAHE"
+code = """
+# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/CLAHE
+
+gray = core.std.ShufflePlanes(clip, planes=0, colorfamily=vs.GRAY)
+clip = core.vszip.CLAHE(gray, limit=3000, tiles=10)"""
+description = "Contrast Limited Adaptive Histogram Equalization. Similar to Retinex"
+
+[metadata]
+createdAt = "2025-11-03T16:54:24.466Z"

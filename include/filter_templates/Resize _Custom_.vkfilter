@@ -1,0 +1,23 @@
+name = "Resize (Custom)"
+code = """
+# The resizers have many additional resize parameters for advanced users.
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/resize.html
+
+clip = core.resize.Bicubic(
+    clip=clip,
+    width=720,
+    height=480,
+    filter_param_a=0.0,
+    filter_param_b=0.5,
+    resample_filter_uv="bilinear",
+    filter_param_a_uv=0.0,
+    filter_param_b_uv=0.5,
+    src_left=0.0,
+    src_top=0.0,
+    src_width=clip.width,
+    src_height=clip.height,
+)"""
+description = "Resize example for advanced users."
+
+[metadata]
+createdAt = "2025-11-03T22:42:46.672Z"

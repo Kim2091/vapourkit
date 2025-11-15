@@ -1,0 +1,11 @@
+name = "Modulus"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#mod
+# Modes to reach the next upper multiple via padding can be mirror, repeat, fillmargins, black, a custom color in 8-bit scale [128, 128, 128], or discard to crop to the next lower multiple.
+
+import vs_tiletools
+clip = vs_tiletools.mod(clip, modulus=64, mode="mirror")"""
+description = "Pads or crops a clip so width and height are multiples of the given modulus. Useful for AI models that have such input limitations."
+
+[metadata]
+createdAt = "2025-11-13T15:44:21.343Z"

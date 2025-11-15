@@ -1,0 +1,9 @@
+name = "Bilateral"
+code = """
+# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/Bilateral
+
+clip = core.vszip.Bilateral(clip, sigmaS=3.0, sigmaR=0.02, algorithm=0)"""
+description = "Spatial smoother or denoiser that preserves edges."
+
+[metadata]
+createdAt = "2025-11-02T20:04:12.607Z"

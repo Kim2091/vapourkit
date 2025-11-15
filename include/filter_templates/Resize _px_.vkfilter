@@ -1,0 +1,11 @@
+name = "Resize (px)"
+code = """
+# Enter a new width and height. Either both or just one.
+# Kernerls: point, bilinear, bicubic, lanczos, spline16, spline36, spline64
+
+import basic_resize
+clip = basic_resize.pixel(clip, width=720, height=480, kernel="bilinear")"""
+description = "Resizes the clip to new dimensions by providing them directly."
+
+[metadata]
+createdAt = "2025-11-03T20:00:32.768Z"

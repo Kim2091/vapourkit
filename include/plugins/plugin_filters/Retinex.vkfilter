@@ -1,0 +1,10 @@
+name = "Retinex"
+code = """
+# Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-Retinex
+
+gray = core.std.ShufflePlanes(clip, planes=0, colorfamily=vs.GRAY)
+clip = core.retinex.MSRCP(gray, sigma=[25,80,250])"""
+description = "Powerful filter in dynamic range compression, local contrast enhancement, color constancy, or defogging. Similar to CLAHE."
+
+[metadata]
+createdAt = "2025-11-03T20:15:26.627Z"

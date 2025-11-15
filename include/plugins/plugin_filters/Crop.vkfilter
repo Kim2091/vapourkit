@@ -1,0 +1,11 @@
+name = "Crop"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#crop
+# If only "clip" is provided, this will automatically crop what was added via the Pad or the Modulus filter, even if the clip was since resized (after upscaling for example).
+
+import vs_tiletools
+clip = vs_tiletools.crop(clip, left=0, right=0, top=0, bottom=0)"""
+description = "Crops a clip by the specified pixel amount."
+
+[metadata]
+createdAt = "2025-11-13T15:42:21.239Z"

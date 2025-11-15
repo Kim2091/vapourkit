@@ -1,0 +1,11 @@
+name = "Temporal Pad"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#tpad
+# Padding mode can be mirror, repeat, black, or a custom color in 8-bit scale [128, 128, 128].
+
+import vs_tiletools
+clip = vs_tiletools.tpad(clip, start=0, end=0, mode="mirror")"""
+description = "Extends a clip using various padding modes."
+
+[metadata]
+createdAt = "2025-11-02T19:34:55.223Z"

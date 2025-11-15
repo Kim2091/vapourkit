@@ -1,0 +1,11 @@
+name = "Average Color Fix"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_colorfix?tab=readme-ov-file#average-color-fix
+
+import vs_colorfix
+original_clip_converted = core.resize.Point(original_clip, format=clip.format)
+clip = vs_colorfix.average(clip, original_clip_converted, radius=10)"""
+description = "Correct for color shift by matching the average color of the clip to that of the original input clip."
+
+[metadata]
+createdAt = "2025-11-03T16:35:55.081Z"

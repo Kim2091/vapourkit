@@ -1,0 +1,10 @@
+name = "Edge Mask"
+code = """
+# Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-TCanny
+
+gray = core.std.ShufflePlanes(clip, planes=0, colorfamily=vs.GRAY)
+clip = core.tcanny.TCanny(gray, sigma=0.5, mode=1, op=1, scale=1.0)"""
+description = "Masks edges in white with various edge detection algorithms."
+
+[metadata]
+createdAt = "2025-11-03T19:03:04.787Z"

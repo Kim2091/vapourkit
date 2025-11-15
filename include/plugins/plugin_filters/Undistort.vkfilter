@@ -1,0 +1,16 @@
+name = "Undistort"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_undistort?tab=readme-ov-file#usage
+
+temp_window = 10
+tile_width  = 352
+tile_height = 480
+
+from vs_undistort import vs_undistort
+clip = core.resize.Bilinear(clip, format=vs.RGBS, matrix_in_s=709)
+clip = vs_undistort(clip, temp_window=temp_window, tile_width=tile_width, tile_height=tile_height, device="cuda")
+clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s=709)"""
+description = "Removes distortion, turbulance, heat haze, or similar."
+
+[metadata]
+createdAt = "2025-11-03T00:51:33.116Z"

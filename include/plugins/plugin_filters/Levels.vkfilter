@@ -1,0 +1,9 @@
+name = "Levels"
+code = """
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/levels.html
+
+clip = core.std.Levels(clip, min_in=0, max_in=65535, min_out=0, max_out=65535, gamma=1.0)"""
+description = "Leveling Filter including Gamma"
+
+[metadata]
+createdAt = "2025-11-02T19:50:47.012Z"

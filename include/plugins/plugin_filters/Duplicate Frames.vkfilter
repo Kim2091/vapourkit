@@ -1,0 +1,9 @@
+name = "Duplicate Frames"
+code = """
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/duplicateframes.html
+
+clip = core.std.DuplicateFrames(clip, frames=[0, 5, 10])"""
+description = "Duplicates specified frames."
+
+[metadata]
+createdAt = "2025-11-02T20:28:28.353Z"

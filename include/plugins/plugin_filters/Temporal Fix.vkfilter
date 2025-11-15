@@ -1,0 +1,11 @@
+name = "Temporal Fix"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_temporalfix?tab=readme-ov-file#usage
+# Increase strength if the effect is not strong enough. Check the docs for a full explanation.
+
+from vs_temporalfix import vs_temporalfix
+clip = vs_temporalfix(clip, strength=400, tr=6, denoise=False)"""
+description = "Adds Temporal Coherence to Single Image AI Upscaling Models."
+
+[metadata]
+createdAt = "2025-11-13T15:24:02.315Z"

@@ -1,0 +1,12 @@
+activation: leaky_relu
+config_path: config/disney_model.yaml
+dense_block_num_filters_added: 32
+initializer_range: 0.0001
+model_class: Disney
+num_color_channels: 3
+num_dense_blocks_per_rdb: 5
+num_frames: 3
+num_parameters: 947683
+num_rdb_blocks: 3
+rdb_num_filters: 64
+state_dict_path: false

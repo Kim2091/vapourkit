@@ -1,0 +1,10 @@
+name = "Gauss Blur"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/?h=gauss_bl#vsrgtools.blur.gauss_blur
+
+import vsrgtools
+clip = vsrgtools.gauss_blur(clip, sigma=5.0)"""
+description = "Blurs the clip with a Gaussian Blur."
+
+[metadata]
+createdAt = "2025-11-04T02:16:04.575Z"

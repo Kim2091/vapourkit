@@ -1,0 +1,11 @@
+name = "Deband"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdeband/debanders/?h=deband#vsdeband.debanders.placebo_deband
+# thr is the strength for [luma, chroma, chroma]. Increase if the effect is not strong enough. Check the docs for a full explanation.
+
+import vsdeband
+clip = vsdeband.placebo_deband(clip, radius=8, thr=[3, 3, 3], grain=0.0, iterations=4)"""
+description = "Removes banding from the clip with the placebo debander."
+
+[metadata]
+createdAt = "2025-11-13T15:58:55.660Z"

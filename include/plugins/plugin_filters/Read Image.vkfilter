@@ -1,0 +1,15 @@
+name = "Read Image"
+code = """
+# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/ImageRead
+# Length is how long the image clip should be in frames.
+
+image_path = "path\\to\\image.png"
+length     = 100
+
+image = core.vszip.ImageRead(path=image_path)
+image = core.resize.Bilinear(image, format=vs.YUV444P16, primaries_in_s="709", transfer_in_s="srgb", matrix_s="709", primaries_s="709", transfer_s="709")
+clip = core.std.Loop(image, times=length)"""
+description = "Loads an image and converts it to a clip."
+
+[metadata]
+createdAt = "2025-11-13T15:47:32.244Z"

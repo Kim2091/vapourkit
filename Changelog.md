@@ -1,0 +1,36 @@
+## Changelog
+
+### 0.8.5:
+- Static engine support
+- Adds version number to about menu and window title
+- Fixes ffmpeg and vspipe handling when stopping processing, prevents corrupt files
+- Added animations and progress bar text when ffmpeg is stopping
+- Adds MOV as an output option
+- Rolled back to version 0.12 of zsmooth to fix temporalfix
+- Fixed visual bug with num_streams slider
+
+### 0.8.6:
+- Fix progress bar in setup screen, round ffmpeg download to nearest integer
+- Fix plugins being missing
+- Fix workflows not notifying the user of missing models
+- Fix workflow names including the extension when loaded
+
+## 0.8.7:
+- Add labels on header buttons
+- Relabel certain buttons to make their function clearer
+- Prevent processing when ONNX model is selected in TensorRT mode
+- Fix model auto select after building engine
+
+## 0.8.8:
+- Add custom engine build command support for tensorrt
+- Rework "Import Model" interface
+- Hopefully fix scrolling bug on right pane when processing a video
+
+## 0.8.9
+- Update VapourSynth and filter templates (thanks tepete)
+
+## 0.9.0
+- Change preview to PNG from mJPEG to improve compatibility and avoid YUV errors
+- ACTUALLY fix --fp32 being added to trt build command
+- Move ffmpeg settings to Settings menu, remove old config file
+- Add automatic detection for CUDA versions, and install different Pytorch versions depending on that

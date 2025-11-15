@@ -1,0 +1,12 @@
+name = "Box Blur"
+code = """
+# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/BoxBlur
+
+radius = 15
+passes = 3
+
+clip = core.vszip.BoxBlur(clip, hradius=radius, vradius=radius, hpasses=passes, vpasses=passes)"""
+description = "Blurs the clip with a Box Blur"
+
+[metadata]
+createdAt = "2025-11-02T20:01:13.777Z"

@@ -1,0 +1,13 @@
+name = "Dot Crawl Reducer"
+code = """
+# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/Checkmate
+# This filter will reduce the depth to 8-bit during processing.
+
+format8 = core.query_video_format(vs.YUV, vs.INTEGER, 8, clip.format.subsampling_w, clip.format.subsampling_h)
+clip_new = core.resize.Point(clip, format=format8.id)
+clip_new = core.vszip.Checkmate(clip_new, thr=12, tmax=12, tthr2=0)
+clip = core.resize.Point(clip_new, format=clip.format.id)"""
+description = "Spatial and temporal dot crawl reducer most effective in static or low motion scenes."
+
+[metadata]
+createdAt = "2025-11-03T19:01:16.656Z"

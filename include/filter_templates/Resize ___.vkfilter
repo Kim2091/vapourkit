@@ -1,0 +1,11 @@
+name = "Resize (%)"
+code = """
+# Use 0.5 for 50%, 2.0 for 200%, etc.
+# Kernerls: point, bilinear, bicubic, lanczos, spline16, spline36, spline64
+
+import basic_resize
+clip = basic_resize.scale(clip, scale=1.0, kernel="bilinear")"""
+description = "Resizes the clip to new dimensions via a scale factor."
+
+[metadata]
+createdAt = "2025-11-03T20:01:14.821Z"

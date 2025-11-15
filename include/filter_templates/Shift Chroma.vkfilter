@@ -1,0 +1,16 @@
+name = "Shift Chroma"
+code = """
+# Shifts just the chroma in case it is misaligned.
+# Positive values go up/left, negative down/right.
+# Subpixel shifts are allowed.
+
+horizontal_shift = 0
+vertical_shift   = 0
+
+shifted_chroma = core.resize.Bilinear(clip, format=vs.YUV444P16, src_top=vertical_shift, src_left=horizontal_shift)
+clip = core.resize.Bilinear(clip, format=vs.YUV444P16)
+clip = core.std.ShufflePlanes([clip, shifted_chroma, shifted_chroma], [0, 1, 2], vs.YUV)"""
+description = "If the chroma is misaligned with the luma, this helps correct it."
+
+[metadata]
+createdAt = "2025-11-13T15:52:56.683Z"

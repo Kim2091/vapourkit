@@ -1,0 +1,10 @@
+name = "Motion Mask"
+code = """
+# Full Docs: https://github.com/dubhater/vapoursynth-motionmask
+
+gray = core.std.ShufflePlanes(clip, planes=0, colorfamily=vs.GRAY)
+clip = core.motionmask.MotionMask(gray, th1=[10, 10, 10], th2=[10, 10, 10], tht=10, sc_value=0)"""
+description = "Creates a mask of moving pixels. Every output pixel will be set to the absolute difference between the current frame and the previous frame."
+
+[metadata]
+createdAt = "2025-11-03T19:08:31.861Z"

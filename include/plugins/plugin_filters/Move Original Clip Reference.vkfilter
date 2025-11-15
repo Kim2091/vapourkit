@@ -1,0 +1,6 @@
+name = "Move Original Clip Reference"
+code = "original_clip = clip"
+description = 'Moves the "original_clip" variable to here. That means, if it is later used (for example in the Color Fix filter), it will refer to this position in the workflow. Else it will refer to the very start of the workflow.'
+
+[metadata]
+createdAt = "2025-11-04T04:48:38.690Z"

@@ -1,0 +1,9 @@
+name = "Replace Frames"
+code = """
+# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/RFS
+
+clip = core.vszip.RFS(clip, original_clip, frames=[10, 20, 30])"""
+description = "Replace specified frames with the same frames from another clip."
+
+[metadata]
+createdAt = "2025-11-03T21:41:27.323Z"

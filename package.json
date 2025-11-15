@@ -1,0 +1,111 @@
+{
+    "name": "vapourkit-gui",
+    "version": "0.9.1",
+    "description": "Advanced GUI for VapourSynth and Video Upscaling",
+    "main": "dist/electron/main.js",
+    "scripts": {
+        "dev": "npm run build:electron && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+        "dev:vite": "vite",
+        "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
+        "build:electron": "tsc -p tsconfig.electron.json",
+        "build": "tsc && vite build && npm run build:electron",
+        "build:all": "npm run build && electron-builder --win --x64",
+        "build:setup": "npm run build && electron-builder --win nsis --x64",
+        "build:7z": "npm run build && electron-builder --win 7z --x64",
+        "preview": "vite preview"
+    },
+    "keywords": [
+        "video",
+        "upscaling",
+        "super-resolution",
+        "VapourSynth",
+        "Restoration",
+        "AI"
+    ],
+    "author": "Kim2091",
+    "license": "GPL 3.0",
+    "devDependencies": {
+        "@types/fs-extra": "^11.0.4",
+        "@types/iarna__toml": "^2.0.5",
+        "@types/node": "^22.5.0",
+        "@types/react": "^18.3.5",
+        "@types/react-dom": "^18.3.0",
+        "@vitejs/plugin-react": "^4.3.1",
+        "autoprefixer": "^10.4.20",
+        "concurrently": "^9.0.1",
+        "cross-env": "^10.1.0",
+        "electron": "^32.0.1",
+        "electron-builder": "^26.0.12",
+        "postcss": "^8.4.45",
+        "tailwindcss": "^3.4.10",
+        "typescript": "^5.9.3",
+        "vite": "^5.4.3",
+        "wait-on": "^8.0.1"
+    },
+    "dependencies": {
+        "7zip-min": "^2.1.0",
+        "@iarna/toml": "^2.2.5",
+        "axios": "^1.12.2",
+        "electron-log": "^5.2.2",
+        "fs-extra": "^11.3.2",
+        "lucide-react": "^0.441.0",
+        "onnxruntime-node": "^1.23.0",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "react-resizable-panels": "^3.0.6"
+    },
+    "build": {
+        "appId": "com.aivideoupscaler.gui",
+        "productName": "Vapourkit",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "dist/**/*",
+            "include/models/**/*.onnx",
+            "include/plugins/**/*.7z",
+            "include/plugins/plugin_filters/**/*",
+            "include/scripts/**/*.7z",
+            "include/filter_templates/**/*.vkfilter",
+            "include/vapoursynth_template.vpy",
+            "include/stock-app-config.json",
+            "package.json",
+            "!data/**/*"
+        ],
+        "asarUnpack": [
+            "include/models/**/*.onnx",
+            "include/plugins/**/*.7z",
+            "include/plugins/plugin_filters/**/*",
+            "include/scripts/**/*.7z",
+            "include/filter_templates/**/*.vkfilter",
+            "include/vapoursynth_template.vpy",
+            "include/stock-app-config.json",
+            "node_modules/7zip-bin/**/*"
+        ],
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                },
+                {
+                    "target": "7z",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "build/icon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "perMachine": false,
+            "allowElevation": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true
+        }
+    }
+}
