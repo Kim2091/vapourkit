@@ -34,3 +34,13 @@
 - ACTUALLY fix --fp32 being added to trt build command
 - Move ffmpeg settings to Settings menu, remove old config file
 - Add automatic detection for CUDA versions, and install different Pytorch versions depending on that
+
+## 0.9.1
+- Expose previously forced ffmpeg arguments to be edited
+- Remove automatic CUDA detection, turned out to be a driver based issue
+- Add menu to manage models (modify metadata, change precision, rename, delete)
+- Refactored `main.ts
+
+## 0.9.2
+- Fix race condition with filters
+- Fix "Start Processing" button not working when Advanced mode AND TensorRT mode are enabled without any built engines
