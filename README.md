@@ -9,7 +9,7 @@
 ## 🚀 Getting Started
 
 ### Installation
-[**Download here**](https://ko-fi.com/s/2e5ebd456d)
+[**Free download here**](https://ko-fi.com/s/2e5ebd456d)
 1. **Download**: Get the latest release from the link above
 2. **Install/Extract**: Run the installer or extract the ZIP to your desired location
 3. **First Launch**: The application will detect missing dependencies and prompt you to run setup
