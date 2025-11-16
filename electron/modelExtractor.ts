@@ -335,11 +335,13 @@ export class ModelExtractor {
       logger.model('Using custom trtexec parameters');
       logger.model(`Custom params: ${customTrtexecParams}`);
       
-      // Start with ONNX path
-      args = [`--onnx=${onnxPath}`];
+      // Start with ONNX path - quote it if it contains spaces
+      const quotedOnnxPath = onnxPath.includes(' ') ? `"${onnxPath}` : onnxPath;
+      args = [`--onnx=${quotedOnnxPath}`];
       
-      // Replace OUTPUT_PATH placeholder with actual engine path
-      const customParams = customTrtexecParams.replace(/OUTPUT_PATH/g, enginePath);
+      // Replace OUTPUT_PATH placeholder with actual engine path (quoted if needed)
+      const quotedEnginePath = enginePath.includes(' ') ? `"${enginePath}"` : enginePath;
+      const customParams = customTrtexecParams.replace(/OUTPUT_PATH/g, quotedEnginePath);
       
       // Parse custom parameters (split by spaces, but respect quotes)
       const paramMatches = customParams.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
@@ -349,8 +351,12 @@ export class ModelExtractor {
       args.push('--verbose');
     } else {
       // Use default parameter building logic
+      // Quote paths that contain spaces
+      const quotedOnnxPath = onnxPath.includes(' ') ? `"${onnxPath}"` : onnxPath;
+      const quotedEnginePath = enginePath.includes(' ') ? `"${enginePath}"` : enginePath;
+      
       args = [
-        `--onnx=${onnxPath}`,
+        `--onnx=${quotedOnnxPath}`,
       ];
       
       // For static shapes, only use --optShapes
@@ -376,7 +382,7 @@ export class ModelExtractor {
       }
       
       args.push(
-        `--saveEngine=${enginePath}`,
+        `--saveEngine=${quotedEnginePath}`,
         '--builderOptimizationLevel=3',
         '--useCudaGraph',
         '--tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT',
@@ -407,8 +413,11 @@ export class ModelExtractor {
         }
         
         // Rebuild args without shape parameters
+        const quotedOnnxPath = onnxPath.includes(' ') ? `"${onnxPath}"` : onnxPath;
+        const quotedEnginePath = enginePath.includes(' ') ? `"${enginePath}"` : enginePath;
+        
         const argsWithoutShapes = [
-          `--onnx=${onnxPath}`,
+          `--onnx=${quotedOnnxPath}`,
         ];
         
         if (!useFp32) {
@@ -419,7 +428,7 @@ export class ModelExtractor {
         }
         
         argsWithoutShapes.push(
-          `--saveEngine=${enginePath}`,
+          `--saveEngine=${quotedEnginePath}`,
           '--builderOptimizationLevel=3',
           '--useCudaGraph',
           '--tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT',
@@ -463,15 +472,10 @@ export class ModelExtractor {
     return new Promise((resolve, reject) => {
       const { spawn } = require('child_process');
       
-      // Quote command if it contains spaces (Windows compatibility)
-      const quotedCommand = command.includes(' ') ? `"${command}"` : command;
-      
-      // Quote args that contain spaces (Windows compatibility)
-      const quotedArgs = args.map(arg => arg.includes(' ') ? `"${arg}"` : arg);
-      
-      const proc = spawn(quotedCommand, quotedArgs, {
+      // Don't quote the command or args - spawn handles paths correctly without shell
+      const proc = spawn(command, args, {
         cwd,
-        shell: true,
+        shell: false, // Changed from true to false for proper argument handling
         env: process.env
       });
 

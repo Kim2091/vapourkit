@@ -34,7 +34,7 @@ export const Header = ({
 }: HeaderProps) => (
   <div className="flex-shrink-0">
     <div className="py-3 px-6 border-b border-gray-800/50">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 relative">
         {/* Left side buttons */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
@@ -75,7 +75,7 @@ export const Header = ({
         </div>
 
         {/* Center content - hides on smaller screens */}
-        <div className="hidden xl:block flex-shrink text-center min-w-0">
+        <div className="hidden xl:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
           <div className="flex items-center justify-center gap-2 mb-1">
             <Logo />
             <h1 className="text-xl font-bold bg-gradient-to-r from-primary-blue via-primary-purple to-accent-cyan bg-clip-text text-transparent select-none whitespace-nowrap">

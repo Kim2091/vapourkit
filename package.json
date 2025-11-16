@@ -1,6 +1,6 @@
 {
     "name": "vapourkit-gui",
-    "version": "0.9.2",
+    "version": "0.9.3",
     "description": "Advanced GUI for VapourSynth and Video Upscaling",
     "main": "dist/electron/main.js",
     "scripts": {

@@ -44,3 +44,7 @@
 ## 0.9.2
 - Fix race condition with filters
 - Fix "Start Processing" button not working when Advanced mode AND TensorRT mode are enabled without any built engines
+
+## 0.9.3
+- Fix Logo in header being misaligned in Simple Mode
+- Fix program icon being missing
