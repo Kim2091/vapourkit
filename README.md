@@ -1,10 +1,37 @@
 # Vapourkit
 
-![Version](https://img.shields.io/badge/version-0.9.2-blue)
+![Version](https://img.shields.io/badge/version-0.9.3-blue)
 ![License](https://img.shields.io/badge/license-GPL%203.0-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
-**Vapourkit** is a program for video upscaling and enhancement using VapourSynth and AI models. It provides a user-friendly interface for video processing with support for both NVIDIA TensorRT and DirectML (AMD/Intel/NVIDIA) backends.
+**Vapourkit** is a free, open source program for video upscaling and enhancement using VapourSynth and AI models. It provides a user-friendly interface for video processing with support for both NVIDIA TensorRT and DirectML (AMD/Intel/NVIDIA) backends.
+
+## 🚀 Getting Started
+
+### Installation
+[**Download here**](https://ko-fi.com/s/2e5ebd456d)
+1. **Download**: Get the latest release from the link above
+2. **Install/Extract**: Run the installer or extract the ZIP to your desired location
+3. **First Launch**: The application will detect missing dependencies and prompt you to run setup
+4. **Setup**: Click "Start Setup" to download and install all required components
+
+### Basic Usage (Simple Mode)
+
+1. **Select Video**: Click "Select Video" or drag and drop a video file into the window
+2. **Choose Model**: Select an AI upscaling model from the dropdown
+   - Video models are recommended for general use
+   - Image models provide sharper results but may have temporal instability
+3. **Configure Output**: 
+   - Choose output file location and name
+   - Select output format (MKV, MP4, AVI, etc.)
+4. **Preview** (Optional): Click "Preview Output" to see a sample frame
+5. **Process**: Click "Upscale Video" to start processing
+6. **Monitor Progress**: Track progress via the progress bar and console output
+7. **Compare**: After completion, use "Compare Videos" to view input vs output side-by-side
+
+### Advanced Usage (Developer Mode)
+
+See [Advanced Mode](docs/Advanced Mode.md) for more information.
 
 ## 🌟 Features
 
@@ -56,33 +83,6 @@ Export workflows to `.vkworkflow` files and share them or reuse them later.
   - Minimum 6 GB VRAM
   - NVIDIA GPU 16xx or higher
   - AMD/Intel/NVIDIA GPU with DirectX 12 support (for DirectML)
-
-## 🚀 Getting Started
-
-### Installation
-
-1. **Download**: Get the latest release (installer or portable ZIP)
-2. **Install/Extract**: Run the installer or extract the ZIP to your desired location
-3. **First Launch**: The application will detect missing dependencies and prompt you to run setup
-4. **Setup**: Click "Start Setup" to download and install all required components
-
-### Basic Usage (Simple Mode)
-
-1. **Select Video**: Click "Select Video" or drag and drop a video file into the window
-2. **Choose Model**: Select an AI upscaling model from the dropdown
-   - Video models are recommended for general use
-   - Image models provide sharper results but may have temporal instability
-3. **Configure Output**: 
-   - Choose output file location and name
-   - Select output format (MKV, MP4, AVI, etc.)
-4. **Preview** (Optional): Click "Preview Output" to see a sample frame
-5. **Process**: Click "Upscale Video" to start processing
-6. **Monitor Progress**: Track progress via the progress bar and console output
-7. **Compare**: After completion, use "Compare Videos" to view input vs output side-by-side
-
-### Advanced Usage (Developer Mode)
-
-See [Advanced Mode](docs/Advanced Mode.md) for more information.
 
 ## 🔧 Development
 
