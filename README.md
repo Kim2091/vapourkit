@@ -1,8 +1,10 @@
 # Vapourkit
 
-![Version](https://img.shields.io/badge/version-0.9.3-blue)
+![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FKim2091%2Fvapourkit%2Fmain%2Fpackage.json&query=%24.version&label=version&color=blue)
 ![License](https://img.shields.io/badge/license-GPL%203.0-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Discord](https://img.shields.io/discord/547949405949657098)
+
 
 **Vapourkit** is a free, open source program for video upscaling and enhancement using VapourSynth and AI models. It provides a user-friendly interface for video processing with support for both NVIDIA TensorRT and DirectML (AMD/Intel/NVIDIA) backends.
 
