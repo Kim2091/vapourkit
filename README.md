@@ -41,7 +41,7 @@ Simple mode is ideal for beginners who just want to upscale/restore a video usin
 
 #### 🔬 Advanced Mode
 Advanced mode is for power users who need customization:
-- **Pre-made Filters**: Dozens of ready-to-use filters (thanks tepete!)
+- **Pre-made Filters**: Dozens of ready-to-use filters (thanks [pifroggi](https://github.com/pifroggi/)!)
 - **Custom VapourSynth Filters**: Write and chain custom video processing filters
 - **Templates & Workflows**: Save/share filter configs (`.vkfilter`) and complete workflows (`.vkworkflow`)
 - **Custom Models**: Import your own ONNX models
@@ -83,4 +83,4 @@ Kim2091
 - [vs-jetpack](https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack/) for additional VapourSynth filters
 
 ### Other acknowledgments
-- tepete, Bendel, leobby, Princess, and Hermes for beta testing!
+- [tepete/pifroggi](https://github.com/pifroggi/), Bendel, leobby, Princess, and Hermes for beta testing!
