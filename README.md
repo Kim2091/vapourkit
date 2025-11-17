@@ -46,7 +46,7 @@ Advanced mode is for power users who need customization:
 
 ### Model Support
 
-See [Model Support](docs/Models.md) for included models and custom model requirements.
+See [Model Support](docs/Models.md) for included models, custom model requirements, and model licensing details.
 
 ## 📋 System Requirements
 
