@@ -84,7 +84,3 @@ Kim2091
 
 ### Other acknowledgments
 - tepete, Bendel, leobby, Princess, and Hermes for beta testing!
- 
----
-
-For issues, feature requests, or contributions, please visit the project repository.
