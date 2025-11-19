@@ -170,7 +170,7 @@ export function ModelManagerModal({
 
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">
-                          Precision
+                          Inference Precision
                         </label>
                         <select
                           value={editData.useFp32 ? 'fp32' : 'fp16'}
@@ -182,9 +182,14 @@ export function ModelManagerModal({
                           }
                           className="w-full bg-dark-elevated border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary-purple transition-colors"
                         >
-                          <option value="fp16">FP16 (Faster)</option>
-                          <option value="fp32">FP32 (Higher Precision)</option>
+                          <option value="fp16">FP16 (RGB format: RGBH)</option>
+                          <option value="fp32">FP32 (RGB format: RGBS)</option>
                         </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {model.backend === 'tensorrt' 
+                            ? 'Controls RGB format only (engine precision is baked in)'
+                            : 'Controls both DirectML precision and RGB format'}
+                        </p>
                       </div>
 
                       <div>

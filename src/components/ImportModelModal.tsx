@@ -217,7 +217,10 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                 <div className="mb-2">
                   <p className="text-sm font-medium text-white">Precision</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {importForm.useFp32 ? 'FP32 (32-bit float)' : 'FP16 (16-bit float, recommended)'}
+                    {importForm.useDirectML 
+                      ? (importForm.useFp32 ? 'FP32 (inference + RGB format)' : 'FP16 (inference + RGB format)')
+                      : (importForm.useFp32 ? 'FP32 (build + inference)' : 'FP16 (build + inference, recommended)')
+                    }
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -282,7 +285,7 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                 <div className="text-sm text-gray-300">
                   <p className="font-medium mb-1">DirectML Mode</p>
                   <p className="text-xs text-gray-400">
-                    Model will be used directly with DirectML (no TensorRT conversion needed). The precision toggle above controls the FP32/FP16 mode.
+                    Model will be used directly with DirectML (no TensorRT conversion needed). The precision toggle controls both the DirectML internal precision AND the RGB format (RGBS for FP32, RGBH for FP16).
                   </p>
                 </div>
               </div>
@@ -325,6 +328,7 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                       <li>FP16 is recommended for optimal performance and smaller model size</li>
                       <li>Dynamic shapes support multiple resolutions but take longer to build</li>
                       <li>TensorRT conversion may take 5-15 minutes depending on your GPU</li>
+                      <li>Precision is baked into the TensorRT engine during build</li>
                     </>
                   )}
                 </ul>
