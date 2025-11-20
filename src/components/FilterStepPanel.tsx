@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Save, ChevronDown, ChevronUp, Filter, Trash2, Pencil, Upload } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
+import { PythonCodeEditor } from './PythonCodeEditor';
 
 interface FilterStepPanelProps {
   title: string;
@@ -33,12 +34,6 @@ export function FilterStepPanel({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [presetName, setPresetName] = useState('');
   const [presetDescription, setPresetDescription] = useState('');
-
-  // Auto-resize textarea based on content
-  const autoResizeTextarea = (textarea: HTMLTextAreaElement) => {
-    textarea.style.height = 'auto';
-    textarea.style.height = Math.max(120, textarea.scrollHeight) + 'px';
-  };
 
   const handleSaveTemplate = async () => {
     if (onSaveTemplate && presetName.trim()) {
@@ -139,8 +134,6 @@ export function FilterStepPanel({
   const [isExpanded, setIsExpanded] = useState(false);
   const [pendingCode, setPendingCode] = useState(customCode);
   const previousExpandedRef = useRef<boolean>(isExpanded);
-  const previousProcessingRef = useRef<boolean>(isProcessing);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sync pending code when customCode prop changes from outside
@@ -148,43 +141,6 @@ export function FilterStepPanel({
     setPendingCode(customCode);
   }, [customCode]);
 
-  // Handle focus restoration when processing state changes
-  useEffect(() => {
-    const wasProcessing = previousProcessingRef.current;
-    
-    // If processing just stopped and the filter is expanded, ensure textarea is interactive
-    if (wasProcessing && !isProcessing && isExpanded && textareaRef.current) {
-      // Force a re-focus to ensure the textarea is properly interactive
-      // Use a small timeout to ensure the disabled attribute has been removed
-      const timeoutId = setTimeout(() => {
-        if (textareaRef.current && document.activeElement === textareaRef.current) {
-          // If the textarea already has focus, blur and refocus to reset its state
-          textareaRef.current.blur();
-          textareaRef.current.focus();
-        }
-      }, 0);
-      
-      return () => clearTimeout(timeoutId);
-    }
-    
-    previousProcessingRef.current = isProcessing;
-  }, [isProcessing, isExpanded]);
-
-  // Auto-resize textarea when content changes, preserving scroll position
-  useEffect(() => {
-    if (textareaRef.current && isExpanded) {
-      const container = containerRef.current;
-      const scrollParent = container?.closest('.overflow-auto, .overflow-y-auto') as HTMLElement;
-      const savedScrollTop = scrollParent?.scrollTop;
-      
-      autoResizeTextarea(textareaRef.current);
-      
-      // Restore scroll position after resize
-      if (scrollParent && savedScrollTop !== undefined) {
-        scrollParent.scrollTop = savedScrollTop;
-      }
-    }
-  }, [pendingCode, isExpanded]);
 
   // Evaluate when filter is collapsed
   useEffect(() => {
@@ -377,18 +333,15 @@ export function FilterStepPanel({
             )}
 
             {/* Code Editor */}
-            <div className="relative">
-              <textarea
-                ref={textareaRef}
+            <div className="relative rounded-lg overflow-hidden border border-gray-700">
+              <PythonCodeEditor
                 value={pendingCode}
-                onChange={(e) => {
-                  handleCodeChange(e.target.value);
-                }}
+                onChange={handleCodeChange}
                 onBlur={handleCodeBlur}
                 disabled={isProcessing}
                 placeholder="# Enter custom VapourSynth code here&#10;# Example: clip = core.resize.Bilinear(clip, width=720, height=540)"
-                className="w-full bg-dark-bg border border-gray-700 rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-primary-purple transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[120px] resize-none overflow-hidden"
-                spellCheck={false}
+                minHeight="120px"
+                className=""
               />
               <div className="mt-2 text-sm text-gray-500">
                 <p className="mb-1">Tips:</p>

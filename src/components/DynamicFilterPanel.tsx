@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Settings } from 'lucide-react';
 import type { Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { getModelDisplayName } from '../utils/modelUtils';
+import { PythonCodeEditor } from './PythonCodeEditor';
 
 interface DynamicFilterPanelProps {
   title?: string;
@@ -234,11 +235,6 @@ export function DynamicFilterPanel({
     });
   };
 
-  // Auto-resize textarea based on content
-  const autoResizeTextarea = (textarea: HTMLTextAreaElement) => {
-    textarea.style.height = 'auto';
-    textarea.style.height = Math.max(120, textarea.scrollHeight) + 'px';
-  };
 
   const handleSaveTemplate = async (filterId: string) => {
     const filter = pendingFilters.find(f => f.id === filterId);
@@ -784,26 +780,15 @@ export function DynamicFilterPanel({
                         )}
 
                         {/* Code Editor */}
-                        <div className="relative">
-                          <textarea
-                            key={`${filter.id}-${isProcessing}`}
-                            data-filter-textarea
-                            ref={(el) => {
-                              if (el) {
-                                autoResizeTextarea(el);
-                              }
-                            }}
+                        <div className="relative rounded-md overflow-hidden border border-gray-600" onMouseDown={(e) => e.stopPropagation()}>
+                          <PythonCodeEditor
                             value={pendingFilters.find(f => f.id === filter.id)?.code || ''}
-                            onChange={(e) => {
-                              handleCodeChange(filter.id, e.target.value);
-                              autoResizeTextarea(e.target);
-                            }}
+                            onChange={(code) => handleCodeChange(filter.id, code)}
                             onBlur={handleCodeBlur}
                             disabled={isProcessing}
                             placeholder="# Enter custom VapourSynth code here&#10;# Example: clip = core.resize.Bilinear(clip, width=720, height=540)"
-                            onMouseDown={(e) => e.stopPropagation()}
-                            className="w-full bg-gray-900/90 border border-gray-600 rounded-md px-2.5 py-2 font-mono text-sm focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[120px] resize-none overflow-hidden text-gray-200"
-                            spellCheck={false}
+                            minHeight="120px"
+                            className=""
                           />
                         </div>
                       </>
