@@ -142,15 +142,19 @@ export function PythonCodeEditor({
     '.cm-cursor': {
       borderLeftColor: '#fff',
     },
+    '.cm-variable, .cm-variableName, .cm-property': {
+      color: '#ffffff !important',
+    },
   }, { dark: true });
 
   // Syntax highlighting colors using proper HighlightStyle
   const customHighlightStyle = HighlightStyle.define([
     { tag: t.keyword, color: '#c678dd' },
     { tag: [t.name, t.deleted, t.character, t.macroName], color: '#ffffff' },
+    { tag: [t.variableName, t.propertyName, t.attributeName], color: '#ffffff' },
     { tag: [t.function(t.variableName), t.labelName], color: '#61afef' },
     { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: '#d19a66' },
-    { tag: [t.definition(t.name), t.separator], color: '#ffffff' },
+    { tag: [t.definition(t.name), t.separator, t.definition(t.variableName)], color: '#ffffff' },
     { tag: [t.typeName, t.className, t.number, t.changed, t.annotation, t.modifier, t.self, t.namespace], color: '#d19a66' },
     { tag: [t.operator, t.operatorKeyword, t.url, t.escape, t.regexp, t.link, t.special(t.string)], color: '#56b6c2' },
     { tag: [t.meta, t.comment], color: '#5c6370', fontStyle: 'italic' },
@@ -192,7 +196,6 @@ export function PythonCodeEditor({
         ref={editorRef}
         value={value}
         height="auto"
-        theme="dark"
         extensions={extensions}
         onChange={onChange}
         onBlur={onBlur}
