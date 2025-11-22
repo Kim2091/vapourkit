@@ -11,6 +11,7 @@ export interface ElectronAPI {
   selectOnnxFile: () => Promise<string | null>;
   selectTemplateFile: () => Promise<string | null>;
   getVideoInfo: (filePath: string) => Promise<VideoInfo>;
+  readVideoFile: (filePath: string) => Promise<ArrayBuffer>;
   getOutputResolution: (
     videoPath: string,
     modelPath: string | null,

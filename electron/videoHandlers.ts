@@ -50,6 +50,23 @@ export function registerVideoHandlers(
     }
   });
 
+  ipcMain.handle('read-video-file', async (event, filePath: string) => {
+    try {
+      // Check file size first to prevent loading massive files into memory
+      const stats = await fs.stat(filePath);
+      const MAX_SIZE = 100 * 1024 * 1024; // 100MB limit for preview
+      
+      if (stats.size > MAX_SIZE) {
+        throw new Error(`File too large for preview (${formatBytes(stats.size)}). Max size is ${formatBytes(MAX_SIZE)}.`);
+      }
+      
+      return await fs.readFile(filePath);
+    } catch (error) {
+      logger.error('Error reading video file:', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('get-output-resolution', async (
     event,
     videoPath: string,
