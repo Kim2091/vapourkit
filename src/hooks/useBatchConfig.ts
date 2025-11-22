@@ -27,6 +27,13 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
       
       if (!files || files.length === 0) return;
       
+      await handleBatchFiles(files);
+    } catch (error) {
+      onLog(`Error selecting videos: ${getErrorMessage(error)}`);
+    }
+  };
+
+  const handleBatchFiles = async (files: string[]): Promise<void> => {
       // Single file - load it normally
       if (files.length === 1) {
         await onLoadVideoInfo(files[0]);
@@ -58,9 +65,6 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
       setPendingBatchVideos(configs);
       setShowBatchConfig(true);
       onLog(`Selected ${files.length} video(s) for queue`);
-    } catch (error) {
-      onLog(`Error selecting videos: ${getErrorMessage(error)}`);
-    }
   };
 
   const handleConfirmBatchConfig = (configs: BatchVideoConfig[]): void => {
@@ -87,6 +91,7 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
     showBatchConfig,
     pendingBatchVideos,
     handleSelectVideoWithQueue,
+    handleBatchFiles,
     handleConfirmBatchConfig,
     handleCloseBatchConfig,
   };

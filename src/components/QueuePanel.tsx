@@ -15,6 +15,7 @@ interface QueuePanelProps {
   onRequeueItem: (itemId: string) => void;
   onCompareItem: (itemId: string) => void;
   onOpenItemFolder: (itemId: string) => void;
+  onDropFiles?: (files: string[]) => void;
 }
 
 export function QueuePanel({
@@ -30,9 +31,11 @@ export function QueuePanel({
   onRequeueItem,
   onCompareItem,
   onOpenItemFolder,
+  onDropFiles,
 }: QueuePanelProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
   const stats = {
     total: queue.length,
@@ -57,17 +60,45 @@ export function QueuePanel({
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleDragOver = (e: React.DragEvent, index?: number) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    // Check if dragging files
+    if (e.dataTransfer.types.includes('Files')) {
+      e.dataTransfer.dropEffect = 'copy';
+      setIsDraggingFiles(true);
+      return;
+    }
+
     e.dataTransfer.dropEffect = 'move';
-    if (draggedIndex !== null && draggedIndex !== index) {
+    if (index !== undefined && draggedIndex !== null && draggedIndex !== index) {
       setDragOverIndex(index);
     }
   };
 
-  const handleDrop = (e: React.DragEvent, index: number) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    if (draggedIndex !== null && draggedIndex !== index) {
+    e.stopPropagation();
+    setIsDraggingFiles(false);
+  };
+
+  const handleDrop = (e: React.DragEvent, index?: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFiles(false);
+
+    // Check if files are dropped
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files);
+        const filePaths = files.map(file => window.electronAPI.getFilePathFromFile(file));
+        onDropFiles?.(filePaths);
+        setDraggedIndex(null);
+        setDragOverIndex(null);
+        return;
+    }
+
+    if (draggedIndex !== null && index !== undefined && draggedIndex !== index) {
       onReorder(draggedIndex, index);
     }
     setDraggedIndex(null);
@@ -77,10 +108,18 @@ export function QueuePanel({
   const handleDragEnd = () => {
     setDraggedIndex(null);
     setDragOverIndex(null);
+    setIsDraggingFiles(false);
   };
 
   return (
-    <div className="flex flex-col h-full bg-dark-elevated rounded-2xl border border-gray-800 overflow-hidden">
+    <div 
+      className={`flex flex-col h-full bg-dark-elevated rounded-2xl border overflow-hidden transition-colors ${
+        isDraggingFiles ? 'border-primary-purple bg-primary-purple/5' : 'border-gray-800'
+      }`}
+      onDragOver={(e) => handleDragOver(e)}
+      onDragLeave={handleDragLeave}
+      onDrop={(e) => handleDrop(e)}
+    >
       {/* Header */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-gray-800 bg-dark-surface">
         <div className="flex items-center justify-between mb-2">
@@ -94,7 +133,7 @@ export function QueuePanel({
         </div>
         
         {/* Stats */}
-        <div className="flex gap-4 text-xs">
+        <div className="flex gap-4 text-xs flex-wrap">
           <div className="flex items-center gap-1">
             <span className="text-gray-400">Pending:</span>
             <span className="text-gray-300 font-medium">{stats.pending}</span>

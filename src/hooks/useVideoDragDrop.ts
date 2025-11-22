@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 
 export const useVideoDragDrop = (
   isProcessing: boolean,
-  onVideoLoad: (filePath: string) => Promise<void>
+  onVideoLoad: (filePaths: string[]) => Promise<void>
 ) => {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -29,9 +29,8 @@ export const useVideoDragDrop = (
 
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      const file = files[0];
-      const filePath = window.electronAPI.getFilePathFromFile(file);
-      await onVideoLoad(filePath);
+      const filePaths = files.map(file => window.electronAPI.getFilePathFromFile(file));
+      await onVideoLoad(filePaths);
     }
   }, [isProcessing, onVideoLoad]);
 

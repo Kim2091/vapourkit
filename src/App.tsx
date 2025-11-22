@@ -1,7 +1,7 @@
 // src/App.tsx - Refactored with extracted components and hooks
 
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles, XCircle, ChevronDown, ChevronUp, Terminal, Loader2, List, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { Sparkles, XCircle, ChevronDown, ChevronUp, Terminal, Loader2 } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ImportModelModal } from './components/ImportModelModal';
 import { AboutModal } from './components/AboutModal';
@@ -147,6 +147,7 @@ function App() {
     showBatchConfig,
     pendingBatchVideos,
     handleSelectVideoWithQueue,
+    handleBatchFiles,
     handleConfirmBatchConfig,
     handleCloseBatchConfig,
   } = useBatchConfig({
@@ -318,10 +319,10 @@ function App() {
   // Drag and drop hook
   const { isDragging, handleDragOver, handleDragLeave, handleDrop } = useVideoDragDrop(
     isProcessing,
-    async (filePath: string) => {
+    async (filePaths: string[]) => {
       try {
-        addConsoleLog(`Dropped video: ${filePath}`);
-        await loadVideoInfo(filePath);
+        addConsoleLog(`Dropped ${filePaths.length} video(s)`);
+        await handleBatchFiles(filePaths);
       } catch (error) {
         addConsoleLog(`Error: ${getErrorMessage(error)}`);
       }
@@ -783,7 +784,7 @@ function App() {
           {queueState.showQueue && (
             <>
               <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-primary-purple transition-colors rounded-full" />
-              <Panel defaultSize={25} minSize={20} maxSize={40}>
+              <Panel defaultSize={25} minSize={10} maxSize={40}>
                 <QueuePanel
                   queue={queue}
                   isQueueStarted={queueState.isQueueStarted}
@@ -797,6 +798,7 @@ function App() {
                   onRequeueItem={handleRequeueItem}
                   onCompareItem={handleCompareQueueItem}
                   onOpenItemFolder={handleOpenQueueItemFolder}
+                  onDropFiles={handleBatchFiles}
                 />
               </Panel>
             </>
