@@ -57,30 +57,17 @@ export function registerVideoHandlers(
   ) => {
     logger.info(`Getting output info for: ${videoPath}`);
     try {
-      const isUpscaling = upscalingEnabled !== false;
+      const config = createScriptConfig(
+        videoPath,
+        modelPath,
+        dependencyManager,
+        useDirectML,
+        upscalingEnabled,
+        filters,
+        numStreams
+      );
       
-      let modelType: 'tspan' | 'image' = 'tspan';
-      let useFp32 = false;
-      
-      if (isUpscaling && modelPath) {
-        modelType = configManager.getModelType(modelPath);
-        useFp32 = configManager.isModelFp32(modelPath);
-      }
-      
-      const colorMatrixSettings = configManager.getColorMatrixSettings();
-      
-      const scriptPath = await scriptGenerator.generateScript({
-        inputVideo: videoPath,
-        enginePath: modelPath || '',
-        pluginsPath: dependencyManager.getPluginsPath(),
-        useDirectML: useDirectML || false,
-        useFp32: useFp32,
-        modelType: modelType,
-        upscalingEnabled: isUpscaling,
-        colorMatrix: colorMatrixSettings,
-        filters: filters,
-        numStreams: numStreams
-      });
+      const scriptPath = await scriptGenerator.generateScript(config);
       
       const vspipePath = dependencyManager.getVSPipePath();
       const pythonPath = dependencyManager.getPythonExecutablePath();
@@ -130,45 +117,26 @@ export function registerVideoHandlers(
         // Generate VapourSynth script
         logger.upscale('Generating VapourSynth script');
         
-        let modelType: 'tspan' | 'image' = 'tspan';
-        let useFp32 = false;
-        
-        if (isUpscaling && modelPath) {
-          modelType = configManager.getModelType(modelPath);
-          useFp32 = configManager.isModelFp32(modelPath);
-          logger.upscale(`Model type: ${modelType}`);
+        const config = createScriptConfig(
+          videoPath,
+          modelPath,
+          dependencyManager,
+          useDirectML,
+          upscalingEnabled,
+          filters,
+          numStreams
+        );
+
+        if (config.upscalingEnabled && config.enginePath) {
+          logger.upscale(`Model type: ${config.modelType}`);
         }
         
-        // Handle simple mode: if upscaling is enabled with a model but no filters are enabled,
-        // create a default filter from the selected model
-        if (isUpscaling && modelPath && (!filters || filters.filter(f => f.enabled).length === 0)) {
-          filters = [{
-            id: 'default-upscale',
-            enabled: true,
-            filterType: 'aiModel' as const,
-            preset: 'Simple Upscale',
-            code: '',
-            order: 0,
-            modelPath: modelPath,
-            modelType: modelType
-          }];
+        // Log if simple mode default filter was created
+        if (config.filters && config.filters.length === 1 && config.filters[0].id === 'default-upscale') {
           logger.upscale('Simple mode: Created default upscale filter');
         }
         
-        const colorMatrixSettings = configManager.getColorMatrixSettings();
-        
-        const scriptPath = await scriptGenerator.generateScript({
-          inputVideo: videoPath,
-          enginePath: modelPath || '', // Empty string when upscaling disabled
-          pluginsPath: dependencyManager.getPluginsPath(),
-          useDirectML: useDirectML || false,
-          useFp32: useFp32,
-          modelType: modelType,
-          upscalingEnabled: isUpscaling,
-          colorMatrix: colorMatrixSettings,
-          filters: filters,
-          numStreams: numStreams
-        });
+        const scriptPath = await scriptGenerator.generateScript(config);
         logger.upscale(`Script generated: ${scriptPath}`);
 
         // Initialize executor
@@ -271,4 +239,57 @@ export function registerVideoHandlers(
       throw error;
     }
   });
+}
+
+/**
+ * Helper to create script configuration
+ */
+function createScriptConfig(
+  videoPath: string,
+  modelPath: string | null,
+  dependencyManager: DependencyManager,
+  useDirectML?: boolean,
+  upscalingEnabled?: boolean,
+  filters?: any[],
+  numStreams?: number
+) {
+  const isUpscaling = upscalingEnabled !== false;
+  
+  let modelType: 'tspan' | 'image' = 'tspan';
+  let useFp32 = false;
+  
+  if (isUpscaling && modelPath) {
+    modelType = configManager.getModelType(modelPath);
+    useFp32 = configManager.isModelFp32(modelPath);
+  }
+  
+  // Handle simple mode: if upscaling is enabled with a model but no filters are enabled,
+  // create a default filter from the selected model
+  if (isUpscaling && modelPath && (!filters || filters.filter(f => f.enabled).length === 0)) {
+    filters = [{
+      id: 'default-upscale',
+      enabled: true,
+      filterType: 'aiModel' as const,
+      preset: 'Simple Upscale',
+      code: '',
+      order: 0,
+      modelPath: modelPath,
+      modelType: modelType
+    }];
+  }
+  
+  const colorMatrixSettings = configManager.getColorMatrixSettings();
+  
+  return {
+    inputVideo: videoPath,
+    enginePath: modelPath || '',
+    pluginsPath: dependencyManager.getPluginsPath(),
+    useDirectML: useDirectML || false,
+    useFp32: useFp32,
+    modelType: modelType,
+    upscalingEnabled: isUpscaling,
+    colorMatrix: colorMatrixSettings,
+    filters: filters,
+    numStreams: numStreams
+  };
 }

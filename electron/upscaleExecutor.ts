@@ -74,410 +74,456 @@ export class UpscaleExecutor {
 
   async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0): Promise<void> {
     return new Promise(async (resolve, reject) => {
-      logger.separator();
-      logger.upscale('Starting upscale execution');
-      logger.upscale(`Script: ${scriptPath}`);
-      logger.upscale(`Input: ${inputPath}`);
-      logger.upscale(`Output: ${outputPath}`);
-      logger.upscale(`Total frames: ${totalFrames}`);
-      
-      // Validate script exists
-      if (!await fs.pathExists(scriptPath)) {
-        const error = `Script file not found: ${scriptPath}`;
-        logger.errorWithDialog('Upscale Error', error);
-        reject(new Error(error));
-        return;
-      }
-
-      // Validate input exists
-      if (!await fs.pathExists(inputPath)) {
-        const error = `Input file not found: ${inputPath}`;
-        logger.errorWithDialog('Upscale Error', error);
-        reject(new Error(error));
-        return;
-      }
-
-      // Validate video for upscaling compatibility
-      const validation = await VideoMetadataExtractor.validateVideoForUpscaling(inputPath);
-      if (!validation.valid) {
-        logger.errorWithDialog('Upscale Error', validation.error || 'Video validation failed');
-        reject(new Error(validation.error || 'Video validation failed'));
-        return;
-      }
-
-      // Get metadata from input
-      let metadata: VideoMetadata;
       try {
-        metadata = await VideoMetadataExtractor.getVideoMetadata(inputPath);
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        logger.errorWithDialog('Upscale Error', 'Failed to get video metadata: ' + errorMsg);
-        reject(error);
-        return;
-      }
-
-      // Log script content for debugging
-      logger.upscale('=== VapourSynth Script Content ===');
-      const scriptContent = await fs.readFile(scriptPath, 'utf-8');
-      logger.upscale(scriptContent);
-      logger.upscale('=== End Script Content ===');
-
-      // Setup VapourSynth environment
-      const env = setupVSEnvironment(this.pythonPath);
-
-      // Log environment for debugging
-      logger.upscale('=== VapourSynth Environment ===');
-      logger.upscale(`vspipe path: ${this.vspipePath}`);
-      logger.upscale(`Python path: ${this.pythonPath}`);
-      logger.upscale(`VS path: ${this.vsPath}`);
-      logger.upscale(`Plugins path: ${PATHS.PLUGINS}`);
-      logger.upscale(`VS_PLUGINS_PATH: ${env['VS_PLUGINS_PATH']}`);
-      logger.upscale(`PYTHONHOME: ${env['PYTHONHOME']}`);
-      logger.upscale(`PYTHONPATH: ${env['PYTHONPATH']}`);
-      logger.upscale(`Working directory: ${this.vsPath}`);
-      logger.upscale('=== End Environment ===');
-
-      // Check if vspipe exists
-      if (!await fs.pathExists(this.vspipePath)) {
-        const error = `vspipe not found at: ${this.vspipePath}`;
-        logger.errorWithDialog('Upscale Error', error);
-        reject(new Error(error));
-        return;
-      }
-
-      // Check if embedded Python exists
-      if (!await fs.pathExists(this.pythonPath)) {
-        const error = `Embedded Python not found at: ${this.pythonPath}`;
-        logger.errorWithDialog('Upscale Error', error);
-        reject(new Error(error));
-        return;
-      }
-      
-      // Check if ffmpeg exists
-      const ffmpegPath = FFmpegManager.getFFmpegPath();
-      if (!ffmpegPath || !await fs.pathExists(ffmpegPath)) {
-        const error = `ffmpeg not found at: ${ffmpegPath || 'unknown'}`;
-        logger.errorWithDialog('Upscale Error', error);
-        reject(new Error(error));
-        return;
-      }
-
-      // vspipe outputs Y4M directly
-      logger.upscale('Spawning vspipe process');
-      const vspipe = spawn(this.vspipePath, ['-c', 'y4m', scriptPath, '-'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: env,
-        cwd: this.vsPath
-      });
-
-      // Build FFmpeg command with audio/subtitle passthrough AND preview output
-      logger.upscale('Building FFmpeg command with metadata passthrough and preview output');
-      const ffmpegConfig = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
-      const ffmpegArgs: string[] = [
-        '-f', 'yuv4mpegpipe',
-        '-i', 'pipe:0',
-        '-i', inputPath
-      ];
-
-      // Main output: video file with audio/subs
-      // Map video from pipe
-      ffmpegArgs.push('-map', '0:v:0');
-
-      // Map all audio streams from input
-      if (metadata.hasAudio) {
-        logger.upscale(`Mapping ${metadata.audioStreams} audio stream(s)`);
-        ffmpegArgs.push('-map', '1:a?');
-        ffmpegArgs.push('-c:a', 'copy');
-      }
-
-      // Map all subtitle streams from input
-      if (metadata.hasSubtitles) {
-        logger.upscale(`Mapping ${metadata.subtitleStreams} subtitle stream(s)`);
-        ffmpegArgs.push('-map', '1:s?');
-        ffmpegArgs.push('-c:s', 'copy');
-      }
-
-      // Add video encoding settings
-      if (ffmpegConfig.videoArgs) {
-        ffmpegArgs.push(...ffmpegConfig.videoArgs);
-      }
-
-      // Set DAR if available and enabled in config
-      if (ffmpegConfig.preserveAspectRatio && metadata.dar) {
-        logger.upscale(`Setting DAR: ${metadata.dar}`);
-        ffmpegArgs.push('-aspect', metadata.dar);
-      }
-
-      // Copy metadata if enabled in config
-      if (ffmpegConfig.copyMetadata) {
-        logger.upscale('Copying metadata from input');
-        ffmpegArgs.push('-map_metadata', '1');
-      }
-
-      // Add movflags if specified in config
-      if (ffmpegConfig.movflags && ffmpegConfig.movflags.length > 0) {
-        logger.upscale(`Adding movflags: ${ffmpegConfig.movflags.join(',')}`);
-        ffmpegArgs.push('-movflags', ffmpegConfig.movflags.join(','));
-      }
-
-      // Main output file
-      ffmpegArgs.push('-y', outputPath);
-
-      // Preview output: PNG frames to stdout
-      ffmpegArgs.push('-map', '0:v:0');
-      ffmpegArgs.push('-vf', 'fps=1,scale=-2:720'); // 1 fps preview, max height 720p
-      ffmpegArgs.push('-f', 'image2pipe');
-      ffmpegArgs.push('-c:v', 'png');
-      ffmpegArgs.push('pipe:1');
-
-      logger.upscale(`FFmpeg command: ${ffmpegPath} ${ffmpegArgs.join(' ')}`);
-
-      // Single FFmpeg process for both encoding and preview
-      logger.upscale('Spawning single ffmpeg process for encoding and preview');
-      const ffmpeg = spawn(ffmpegPath, ffmpegArgs, {
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-      
-      // Store ffmpeg process reference for cancellation
-      this.ffmpegProcess = ffmpeg;
-
-      // Set binary encoding and add error handler
-      if (ffmpeg.stdin) {
-        ffmpeg.stdin.setDefaultEncoding('binary');
-        ffmpeg.stdin.on('error', (err) => {
-          // Suppress expected errors during cancellation
-          if (!this.isCanceling) {
-            logger.error('FFmpeg stdin error:', err);
-          }
-        });
-      }
-
-      // Pipe vspipe output directly to ffmpeg
-      if (vspipe.stdout && ffmpeg.stdin) {
-        vspipe.stdout.pipe(ffmpeg.stdin);
+        this.logExecutionStart(scriptPath, inputPath, outputPath, totalFrames);
         
-        vspipe.stdout.on('error', (error) => {
-          logger.error('vspipe stdout error:', error);
-        });
+        await this.validateFiles(scriptPath, inputPath);
+        const metadata = await this.getVideoMetadata(inputPath);
+        
+        await this.logScriptContent(scriptPath);
+        
+        const env = this.setupEnvironment();
+        await this.validateExecutables();
+        
+        // Spawn processes
+        const vspipe = this.spawnVspipe(scriptPath, env);
+        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata);
+        const ffmpeg = this.spawnFFmpeg(ffmpegArgs);
+        
+        this.setupProcessPiping(vspipe, ffmpeg);
+        this.setupProcessMonitoring(vspipe, ffmpeg, totalFrames, outputPath, resolve, reject);
+        
+        this.process = vspipe;
+        this.ffmpegProcess = ffmpeg;
+        
+      } catch (error) {
+        // If validation fails, we reject immediately
+        reject(error);
       }
+    });
+  }
 
-      let currentFrame = 0;
-      let currentFPS = 0;
-      let vspipeStderrBuffer = '';
-      let ffmpegStderrBuffer = '';
-      const MAX_STDERR_BUFFER_SIZE = 1024 * 1024; // 1MB max per stderr buffer
-      let previewFrameBuffer = Buffer.alloc(0);
-      const MAX_PREVIEW_BUFFER_SIZE = 5 * 1024 * 1024; // 5MB max buffer
-      let lastPreviewSentTime = 0;
-      const MIN_PREVIEW_INTERVAL_MS = 500; // Throttle to max 2 previews per second
+  private logExecutionStart(scriptPath: string, inputPath: string, outputPath: string, totalFrames: number) {
+    logger.separator();
+    logger.upscale('Starting upscale execution');
+    logger.upscale(`Script: ${scriptPath}`);
+    logger.upscale(`Input: ${inputPath}`);
+    logger.upscale(`Output: ${outputPath}`);
+    logger.upscale(`Total frames: ${totalFrames}`);
+  }
 
-      // Capture preview frames from ffmpeg stdout
-      if (ffmpeg.stdout) {
-        ffmpeg.stdout.on('data', (data: Buffer) => {
-          // Prevent memory overflow: if buffer is too large, drop incoming data
-          if (previewFrameBuffer.length > MAX_PREVIEW_BUFFER_SIZE) {
-            logger.warn(`Preview buffer overflow (${previewFrameBuffer.length} bytes), dropping frames`);
-            previewFrameBuffer = Buffer.alloc(0); // Clear buffer to prevent crash
-            return;
-          }
+  private async validateFiles(scriptPath: string, inputPath: string) {
+    // Validate script exists
+    if (!await fs.pathExists(scriptPath)) {
+      const error = `Script file not found: ${scriptPath}`;
+      logger.errorWithDialog('Upscale Error', error);
+      throw new Error(error);
+    }
+
+    // Validate input exists
+    if (!await fs.pathExists(inputPath)) {
+      const error = `Input file not found: ${inputPath}`;
+      logger.errorWithDialog('Upscale Error', error);
+      throw new Error(error);
+    }
+
+    // Validate video for upscaling compatibility
+    const validation = await VideoMetadataExtractor.validateVideoForUpscaling(inputPath);
+    if (!validation.valid) {
+      logger.errorWithDialog('Upscale Error', validation.error || 'Video validation failed');
+      throw new Error(validation.error || 'Video validation failed');
+    }
+  }
+
+  private async getVideoMetadata(inputPath: string): Promise<VideoMetadata> {
+    try {
+      return await VideoMetadataExtractor.getVideoMetadata(inputPath);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.errorWithDialog('Upscale Error', 'Failed to get video metadata: ' + errorMsg);
+      throw error;
+    }
+  }
+
+  private async logScriptContent(scriptPath: string) {
+    logger.upscale('=== VapourSynth Script Content ===');
+    const scriptContent = await fs.readFile(scriptPath, 'utf-8');
+    logger.upscale(scriptContent);
+    logger.upscale('=== End Script Content ===');
+  }
+
+  private setupEnvironment() {
+    const env = setupVSEnvironment(this.pythonPath);
+
+    // Log environment for debugging
+    logger.upscale('=== VapourSynth Environment ===');
+    logger.upscale(`vspipe path: ${this.vspipePath}`);
+    logger.upscale(`Python path: ${this.pythonPath}`);
+    logger.upscale(`VS path: ${this.vsPath}`);
+    logger.upscale(`Plugins path: ${PATHS.PLUGINS}`);
+    logger.upscale(`VS_PLUGINS_PATH: ${env['VS_PLUGINS_PATH']}`);
+    logger.upscale(`PYTHONHOME: ${env['PYTHONHOME']}`);
+    logger.upscale(`PYTHONPATH: ${env['PYTHONPATH']}`);
+    logger.upscale(`Working directory: ${this.vsPath}`);
+    logger.upscale('=== End Environment ===');
+
+    return env;
+  }
+
+  private async validateExecutables() {
+    // Check if vspipe exists
+    if (!await fs.pathExists(this.vspipePath)) {
+      const error = `vspipe not found at: ${this.vspipePath}`;
+      logger.errorWithDialog('Upscale Error', error);
+      throw new Error(error);
+    }
+
+    // Check if embedded Python exists
+    if (!await fs.pathExists(this.pythonPath)) {
+      const error = `Embedded Python not found at: ${this.pythonPath}`;
+      logger.errorWithDialog('Upscale Error', error);
+      throw new Error(error);
+    }
+    
+    // Check if ffmpeg exists
+    const ffmpegPath = FFmpegManager.getFFmpegPath();
+    if (!ffmpegPath || !await fs.pathExists(ffmpegPath)) {
+      const error = `ffmpeg not found at: ${ffmpegPath || 'unknown'}`;
+      logger.errorWithDialog('Upscale Error', error);
+      throw new Error(error);
+    }
+  }
+
+  private spawnVspipe(scriptPath: string, env: NodeJS.ProcessEnv) {
+    logger.upscale('Spawning vspipe process');
+    return spawn(this.vspipePath, ['-c', 'y4m', scriptPath, '-'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: env,
+      cwd: this.vsPath
+    });
+  }
+
+  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata): Promise<string[]> {
+    logger.upscale('Building FFmpeg command with metadata passthrough and preview output');
+    const ffmpegConfig = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
+    const ffmpegArgs: string[] = [
+      '-f', 'yuv4mpegpipe',
+      '-i', 'pipe:0',
+      '-i', inputPath
+    ];
+
+    // Main output: video file with audio/subs
+    // Map video from pipe
+    ffmpegArgs.push('-map', '0:v:0');
+
+    // Map all audio streams from input
+    if (metadata.hasAudio) {
+      logger.upscale(`Mapping ${metadata.audioStreams} audio stream(s)`);
+      ffmpegArgs.push('-map', '1:a?');
+      ffmpegArgs.push('-c:a', 'copy');
+    }
+
+    // Map all subtitle streams from input
+    if (metadata.hasSubtitles) {
+      logger.upscale(`Mapping ${metadata.subtitleStreams} subtitle stream(s)`);
+      ffmpegArgs.push('-map', '1:s?');
+      ffmpegArgs.push('-c:s', 'copy');
+    }
+
+    // Add video encoding settings
+    if (ffmpegConfig.videoArgs) {
+      ffmpegArgs.push(...ffmpegConfig.videoArgs);
+    }
+
+    // Set DAR if available and enabled in config
+    if (ffmpegConfig.preserveAspectRatio && metadata.dar) {
+      logger.upscale(`Setting DAR: ${metadata.dar}`);
+      ffmpegArgs.push('-aspect', metadata.dar);
+    }
+
+    // Copy metadata if enabled in config
+    if (ffmpegConfig.copyMetadata) {
+      logger.upscale('Copying metadata from input');
+      ffmpegArgs.push('-map_metadata', '1');
+    }
+
+    // Add movflags if specified in config
+    if (ffmpegConfig.movflags && ffmpegConfig.movflags.length > 0) {
+      logger.upscale(`Adding movflags: ${ffmpegConfig.movflags.join(',')}`);
+      ffmpegArgs.push('-movflags', ffmpegConfig.movflags.join(','));
+    }
+
+    // Main output file
+    ffmpegArgs.push('-y', outputPath);
+
+    // Preview output: PNG frames to stdout
+    ffmpegArgs.push('-map', '0:v:0');
+    ffmpegArgs.push('-vf', 'fps=1,scale=-2:720'); // 1 fps preview, max height 720p
+    ffmpegArgs.push('-f', 'image2pipe');
+    ffmpegArgs.push('-c:v', 'png');
+    ffmpegArgs.push('pipe:1');
+
+    return ffmpegArgs;
+  }
+
+  private spawnFFmpeg(ffmpegArgs: string[]) {
+    const ffmpegPath = FFmpegManager.getFFmpegPath();
+    if (!ffmpegPath) {
+      throw new Error('FFmpeg path not found');
+    }
+    logger.upscale(`FFmpeg command: ${ffmpegPath} ${ffmpegArgs.join(' ')}`);
+
+    // Single FFmpeg process for both encoding and preview
+    logger.upscale('Spawning single ffmpeg process for encoding and preview');
+    return spawn(ffmpegPath, ffmpegArgs, {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+  }
+
+  private setupProcessPiping(vspipe: ChildProcess, ffmpeg: ChildProcess) {
+    // Set binary encoding and add error handler
+    if (ffmpeg.stdin) {
+      ffmpeg.stdin.setDefaultEncoding('binary');
+      ffmpeg.stdin.on('error', (err) => {
+        // Suppress expected errors during cancellation
+        if (!this.isCanceling) {
+          logger.error('FFmpeg stdin error:', err);
+        }
+      });
+    }
+
+    // Pipe vspipe output directly to ffmpeg
+    if (vspipe.stdout && ffmpeg.stdin) {
+      vspipe.stdout.pipe(ffmpeg.stdin);
+      
+      vspipe.stdout.on('error', (error) => {
+        logger.error('vspipe stdout error:', error);
+      });
+    }
+  }
+
+  private setupProcessMonitoring(
+    vspipe: ChildProcess, 
+    ffmpeg: ChildProcess, 
+    totalFrames: number,
+    outputPath: string,
+    resolve: () => void,
+    reject: (reason?: any) => void
+  ) {
+    let currentFrame = 0;
+    let currentFPS = 0;
+    let vspipeStderrBuffer = '';
+    let ffmpegStderrBuffer = '';
+    const MAX_STDERR_BUFFER_SIZE = 1024 * 1024; // 1MB max per stderr buffer
+    let previewFrameBuffer = Buffer.alloc(0);
+    const MAX_PREVIEW_BUFFER_SIZE = 5 * 1024 * 1024; // 5MB max buffer
+    let lastPreviewSentTime = 0;
+    const MIN_PREVIEW_INTERVAL_MS = 500; // Throttle to max 2 previews per second
+
+    // Capture preview frames from ffmpeg stdout
+    if (ffmpeg.stdout) {
+      ffmpeg.stdout.on('data', (data: Buffer) => {
+        // Prevent memory overflow: if buffer is too large, drop incoming data
+        if (previewFrameBuffer.length > MAX_PREVIEW_BUFFER_SIZE) {
+          logger.warn(`Preview buffer overflow (${previewFrameBuffer.length} bytes), dropping frames`);
+          previewFrameBuffer = Buffer.alloc(0); // Clear buffer to prevent crash
+          return;
+        }
+        
+        previewFrameBuffer = Buffer.concat([previewFrameBuffer, data]);
+        
+        // PNG starts with signature: 89 50 4E 47 0D 0A 1A 0A
+        // PNG ends with IEND chunk: 49 45 4E 44 AE 42 60 82
+        const startMarker = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        const endMarker = Buffer.from([0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]);
+        
+        let startIdx = previewFrameBuffer.indexOf(startMarker);
+        let endIdx = previewFrameBuffer.indexOf(endMarker);
+        
+        while (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          const pngFrame = previewFrameBuffer.slice(startIdx, endIdx + 8);
           
-          previewFrameBuffer = Buffer.concat([previewFrameBuffer, data]);
-          
-          // PNG starts with signature: 89 50 4E 47 0D 0A 1A 0A
-          // PNG ends with IEND chunk: 49 45 4E 44 AE 42 60 82
-          const startMarker = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-          const endMarker = Buffer.from([0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]);
-          
-          let startIdx = previewFrameBuffer.indexOf(startMarker);
-          let endIdx = previewFrameBuffer.indexOf(endMarker);
-          
-          while (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-            const pngFrame = previewFrameBuffer.slice(startIdx, endIdx + 8);
+          // Throttle preview sending to prevent overwhelming the renderer
+          const now = Date.now();
+          if (now - lastPreviewSentTime >= MIN_PREVIEW_INTERVAL_MS) {
+            const base64Frame = pngFrame.toString('base64');
             
-            // Throttle preview sending to prevent overwhelming the renderer
-            const now = Date.now();
-            if (now - lastPreviewSentTime >= MIN_PREVIEW_INTERVAL_MS) {
-              const base64Frame = pngFrame.toString('base64');
-              
-              // Send preview frame
-              this.sendProgress({
-                type: 'preview-frame',
-                currentFrame,
-                totalFrames,
-                fps: currentFPS,
-                percentage: totalFrames > 0 ? Math.round((currentFrame / totalFrames) * 100) : 0,
-                message: '',
-                previewFrame: base64Frame
-              });
-              
-              lastPreviewSentTime = now;
-            }
-            
-            // Remove processed frame from buffer
-            previewFrameBuffer = previewFrameBuffer.slice(endIdx + 8);
-            startIdx = previewFrameBuffer.indexOf(startMarker);
-            endIdx = previewFrameBuffer.indexOf(endMarker);
-          }
-        });
-      }
-
-      // Monitor vspipe stderr
-      if (vspipe.stderr) {
-        vspipe.stderr.on('data', (data: Buffer) => {
-          const output = data.toString();
-          // Prevent unbounded stderr buffer growth
-          if (vspipeStderrBuffer.length < MAX_STDERR_BUFFER_SIZE) {
-            vspipeStderrBuffer += output;
-          } else if (vspipeStderrBuffer.length === MAX_STDERR_BUFFER_SIZE) {
-            vspipeStderrBuffer += '\n... (stderr buffer limit reached, truncating further output) ...';
-          }
-          logger.error(`[vspipe stderr] ${output.trim()}`);
-        });
-      }
-
-      // Monitor ffmpeg stderr for progress
-      if (ffmpeg.stderr) {
-        ffmpeg.stderr.on('data', (data: Buffer) => {
-          const output = data.toString();
-          // Prevent unbounded stderr buffer growth
-          if (ffmpegStderrBuffer.length < MAX_STDERR_BUFFER_SIZE) {
-            ffmpegStderrBuffer += output;
-          } else if (ffmpegStderrBuffer.length === MAX_STDERR_BUFFER_SIZE) {
-            ffmpegStderrBuffer += '\n... (stderr buffer limit reached, truncating further output) ...';
-          }
-          logger.debug(`[ffmpeg stderr] ${output.trim()}`);
-
-          // Parse ffmpeg progress format: "frame=  662 fps=187 q=24.0 size=..."
-          const ffmpegMatch = output.match(/frame=\s*(\d+)\s+fps=\s*([\d.]+)/i);
-          
-          if (ffmpegMatch) {
-            currentFrame = parseInt(ffmpegMatch[1], 10);
-            currentFPS = parseFloat(ffmpegMatch[2]);
-            
-            const percentage = totalFrames > 0 ? Math.round((currentFrame / totalFrames) * 100) : 0;
-
-            // Log progress every 100 frames
-            if (currentFrame % 100 === 0) {
-              logger.upscale(`Progress: frame ${currentFrame}/${totalFrames} (${percentage}%) @ ${currentFPS.toFixed(1)} fps`);
-            }
-
+            // Send preview frame
             this.sendProgress({
-              type: 'progress',
+              type: 'preview-frame',
               currentFrame,
               totalFrames,
               fps: currentFPS,
-              percentage,
-              message: this.isCanceling ? 'Stopping processing' : `Processing frame ${currentFrame}${totalFrames > 0 ? `/${totalFrames}` : ''}`,
-              isStopping: this.isCanceling
+              percentage: totalFrames > 0 ? Math.round((currentFrame / totalFrames) * 100) : 0,
+              message: '',
+              previewFrame: base64Frame
             });
-          }
-        });
-      }
-
-      // Handle errors
-      vspipe.on('error', (error) => {
-        logger.error('vspipe process error:', error);
-        logger.errorWithDialog('VapourSynth Process Error', `VapourSynth process failed to start or crashed: ${error.message}`);
-        
-        this.sendProgress({
-          type: 'error',
-          currentFrame: 0,
-          totalFrames: 0,
-          fps: 0,
-          percentage: 0,
-          message: `VapourSynth error: ${error.message}`
-        });
-        reject(error);
-      });
-
-      ffmpeg.on('error', (error) => {
-        logger.error('ffmpeg process error:', error);
-        logger.errorWithDialog('FFmpeg Process Error', `FFmpeg process failed to start or crashed: ${error.message}`);
-        
-        this.sendProgress({
-          type: 'error',
-          currentFrame: 0,
-          totalFrames: 0,
-          fps: 0,
-          percentage: 0,
-          message: `FFmpeg error: ${error.message}`
-        });
-        reject(error);
-      });
-
-      // Handle vspipe exit
-      vspipe.on('close', (code) => {
-        logger.upscale(`vspipe exited with code ${code}`);
-        this.process = null; // Clear reference on exit
-        
-        if (code !== 0 && code !== null) {
-          // Kill ffmpeg process since vspipe failed
-          if (ffmpeg && !ffmpeg.killed) {
-            ffmpeg.kill('SIGTERM');
-            this.ffmpegProcess = null;
+            
+            lastPreviewSentTime = now;
           }
           
-          // Extract actual error from stderr
-          const actualError = ErrorMessageHandler.extractErrorMessage(vspipeStderrBuffer);
-          const errorMsg = ErrorMessageHandler.formatUserErrorMessage('VapourSynth Error', actualError);
-          
-          logger.errorWithDialog('VapourSynth Error', errorMsg);
-          
-          this.sendProgress({
-            type: 'error',
-            currentFrame: 0,
-            totalFrames: 0,
-            fps: 0,
-            percentage: 0,
-            message: errorMsg
-          });
-          
-          reject(new Error(errorMsg));
+          // Remove processed frame from buffer
+          previewFrameBuffer = previewFrameBuffer.slice(endIdx + 8);
+          startIdx = previewFrameBuffer.indexOf(startMarker);
+          endIdx = previewFrameBuffer.indexOf(endMarker);
         }
       });
+    }
 
-      // Handle completion
-      ffmpeg.on('close', (code) => {
-        logger.upscale(`ffmpeg exited with code ${code}`);
-        this.ffmpegProcess = null; // Clear reference on exit
+    // Monitor vspipe stderr
+    if (vspipe.stderr) {
+      vspipe.stderr.on('data', (data: Buffer) => {
+        const output = data.toString();
+        // Prevent unbounded stderr buffer growth
+        if (vspipeStderrBuffer.length < MAX_STDERR_BUFFER_SIZE) {
+          vspipeStderrBuffer += output;
+        } else if (vspipeStderrBuffer.length === MAX_STDERR_BUFFER_SIZE) {
+          vspipeStderrBuffer += '\n... (stderr buffer limit reached, truncating further output) ...';
+        }
+        logger.error(`[vspipe stderr] ${output.trim()}`);
+      });
+    }
+
+    // Monitor ffmpeg stderr for progress
+    if (ffmpeg.stderr) {
+      ffmpeg.stderr.on('data', (data: Buffer) => {
+        const output = data.toString();
+        // Prevent unbounded stderr buffer growth
+        if (ffmpegStderrBuffer.length < MAX_STDERR_BUFFER_SIZE) {
+          ffmpegStderrBuffer += output;
+        } else if (ffmpegStderrBuffer.length === MAX_STDERR_BUFFER_SIZE) {
+          ffmpegStderrBuffer += '\n... (stderr buffer limit reached, truncating further output) ...';
+        }
+        logger.debug(`[ffmpeg stderr] ${output.trim()}`);
+
+        // Parse ffmpeg progress format: "frame=  662 fps=187 q=24.0 size=..."
+        const ffmpegMatch = output.match(/frame=\s*(\d+)\s+fps=\s*([\d.]+)/i);
         
-        if (code === 0) {
-          logger.upscale('Processing completed successfully!');
-          logger.upscale(`Output saved to: ${outputPath}`);
-          logger.separator();
+        if (ffmpegMatch) {
+          currentFrame = parseInt(ffmpegMatch[1], 10);
+          currentFPS = parseFloat(ffmpegMatch[2]);
           
+          const percentage = totalFrames > 0 ? Math.round((currentFrame / totalFrames) * 100) : 0;
+
+          // Log progress every 100 frames
+          if (currentFrame % 100 === 0) {
+            logger.upscale(`Progress: frame ${currentFrame}/${totalFrames} (${percentage}%) @ ${currentFPS.toFixed(1)} fps`);
+          }
+
           this.sendProgress({
-            type: 'complete',
-            currentFrame: totalFrames,
+            type: 'progress',
+            currentFrame,
             totalFrames,
             fps: currentFPS,
-            percentage: 100,
-            message: 'Processing completed successfully!'
+            percentage,
+            message: this.isCanceling ? 'Stopping processing' : `Processing frame ${currentFrame}${totalFrames > 0 ? `/${totalFrames}` : ''}`,
+            isStopping: this.isCanceling
           });
-          resolve();
-        } else {
-          logger.separator();
-          
-          // Extract actual error from stderr
-          const actualError = ErrorMessageHandler.extractErrorMessage(ffmpegStderrBuffer);
-          const errorMsg = ErrorMessageHandler.formatUserErrorMessage('FFmpeg Error', actualError);
-          
-          logger.errorWithDialog('FFmpeg Error', errorMsg);
-          
-          this.sendProgress({
-            type: 'error',
-            currentFrame: 0,
-            totalFrames: 0,
-            fps: 0,
-            percentage: 0,
-            message: errorMsg
-          });
-          
-          reject(new Error(errorMsg));
         }
       });
+    }
 
-      this.process = vspipe;
+    // Handle errors
+    vspipe.on('error', (error) => {
+      logger.error('vspipe process error:', error);
+      logger.errorWithDialog('VapourSynth Process Error', `VapourSynth process failed to start or crashed: ${error.message}`);
+      
+      this.sendProgress({
+        type: 'error',
+        currentFrame: 0,
+        totalFrames: 0,
+        fps: 0,
+        percentage: 0,
+        message: `VapourSynth error: ${error.message}`
+      });
+      reject(error);
+    });
+
+    ffmpeg.on('error', (error) => {
+      logger.error('ffmpeg process error:', error);
+      logger.errorWithDialog('FFmpeg Process Error', `FFmpeg process failed to start or crashed: ${error.message}`);
+      
+      this.sendProgress({
+        type: 'error',
+        currentFrame: 0,
+        totalFrames: 0,
+        fps: 0,
+        percentage: 0,
+        message: `FFmpeg error: ${error.message}`
+      });
+      reject(error);
+    });
+
+    // Handle vspipe exit
+    vspipe.on('close', (code) => {
+      logger.upscale(`vspipe exited with code ${code}`);
+      this.process = null; // Clear reference on exit
+      
+      if (code !== 0 && code !== null) {
+        // Kill ffmpeg process since vspipe failed
+        if (ffmpeg && !ffmpeg.killed) {
+          ffmpeg.kill('SIGTERM');
+          this.ffmpegProcess = null;
+        }
+        
+        // Extract actual error from stderr
+        const actualError = ErrorMessageHandler.extractErrorMessage(vspipeStderrBuffer);
+        const errorMsg = ErrorMessageHandler.formatUserErrorMessage('VapourSynth Error', actualError);
+        
+        logger.errorWithDialog('VapourSynth Error', errorMsg);
+        
+        this.sendProgress({
+          type: 'error',
+          currentFrame: 0,
+          totalFrames: 0,
+          fps: 0,
+          percentage: 0,
+          message: errorMsg
+        });
+        
+        reject(new Error(errorMsg));
+      }
+    });
+
+    // Handle completion
+    ffmpeg.on('close', (code) => {
+      logger.upscale(`ffmpeg exited with code ${code}`);
+      this.ffmpegProcess = null; // Clear reference on exit
+      
+      if (code === 0) {
+        logger.upscale('Processing completed successfully!');
+        logger.upscale(`Output saved to: ${outputPath}`);
+        logger.separator();
+        
+        this.sendProgress({
+          type: 'complete',
+          currentFrame: totalFrames,
+          totalFrames,
+          fps: currentFPS,
+          percentage: 100,
+          message: 'Processing completed successfully!'
+        });
+        resolve();
+      } else {
+        logger.separator();
+        
+        // Extract actual error from stderr
+        const actualError = ErrorMessageHandler.extractErrorMessage(ffmpegStderrBuffer);
+        const errorMsg = ErrorMessageHandler.formatUserErrorMessage('FFmpeg Error', actualError);
+        
+        logger.errorWithDialog('FFmpeg Error', errorMsg);
+        
+        this.sendProgress({
+          type: 'error',
+          currentFrame: 0,
+          totalFrames: 0,
+          fps: 0,
+          percentage: 0,
+          message: errorMsg
+        });
+        
+        reject(new Error(errorMsg));
+      }
     });
   }
 

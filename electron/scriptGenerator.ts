@@ -105,15 +105,22 @@ export class VapourSynthScriptGenerator {
     
     const modelType = filter.modelType || 'tspan';
     
+    // Constants for VapourSynth variable names
+    const CLIP = 'clip';
+    const M2 = 'm2';
+    const M1 = 'm1';
+    const P1 = 'p1';
+    const P2 = 'p2';
+    
     let code = '# AI Model\n';
     
     // Add RGB conversion before model processing and clamp to 0-1 range
     // Use RGBS (float32) for fp32 models, RGBH (float16) for fp16 models
     const rgbFormat = useFp32 ? 'vs.RGBS' : 'vs.RGBH';
     code += '# Convert to RGB format for upscaling\n';
-    code += `if clip.format.id != ${rgbFormat}:\n`;
-    code += `    clip = core.resize.Bilinear(clip, format=${rgbFormat}, matrix_in_s="${defaultMatrix}", primaries_in_s="${defaultPrimaries}", transfer_in_s="${defaultTransfer}")\n`;
-    code += `clip = core.std.Expr(clip, expr=['x 0 max 1 min'])\n`;
+    code += `if ${CLIP}.format.id != ${rgbFormat}:\n`;
+    code += `    ${CLIP} = core.resize.Bilinear(${CLIP}, format=${rgbFormat}, matrix_in_s="${defaultMatrix}", primaries_in_s="${defaultPrimaries}", transfer_in_s="${defaultTransfer}")\n`;
+    code += `${CLIP} = core.std.Expr(${CLIP}, expr=['x 0 max 1 min'])\n`;
     
     // Set up model plugin and parameters
     let modelPlugin: string;
@@ -140,19 +147,19 @@ export class VapourSynthScriptGenerator {
     // Generate model inference code based on model type
     if (modelType === 'tspan') {
       code += '# Temporal upscaling (5-frame TSPAN architecture)\n';
-      code += 'm2 = clip[:2] + clip[:-2]   # shift -2\n';
-      code += 'm1 = clip[:1] + clip[:-1]   # shift -1\n';
-      code += 'p1 = clip[1:] + clip[-1:]   # shift +1\n';
-      code += 'p2 = clip[2:] + clip[-2:]   # shift +2\n';
-      code += `clip = core.${modelPlugin}.Model([m2, m1, clip, p1, p2], ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;
+      code += `${M2} = ${CLIP}[:2] + ${CLIP}[:-2]   # shift -2\n`;
+      code += `${M1} = ${CLIP}[:1] + ${CLIP}[:-1]   # shift -1\n`;
+      code += `${P1} = ${CLIP}[1:] + ${CLIP}[-1:]   # shift +1\n`;
+      code += `${P2} = ${CLIP}[2:] + ${CLIP}[-2:]   # shift +2\n`;
+      code += `${CLIP} = core.${modelPlugin}.Model([${M2}, ${M1}, ${CLIP}, ${P1}, ${P2}], ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;
     } else {
       code += '# Single-frame upscaling (non-temporal architecture)\n';
-      code += `clip = core.${modelPlugin}.Model(clip, ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;
+      code += `${CLIP} = core.${modelPlugin}.Model(${CLIP}, ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;
     }
     
     // Convert to YUV for filter compatibility
     code += '# Convert to YUV for filter compatibility\n';
-    code += 'clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s="709", primaries_s="709", transfer_s="709")\n\n';
+    code += `${CLIP} = core.resize.Point(${CLIP}, format=vs.YUV444P16, matrix_s="709", primaries_s="709", transfer_s="709")\n\n`;
     
     return code;
   }

@@ -456,7 +456,49 @@ function App() {
     }
   };
 
-
+  // Determine if processing should be disabled
+  const isStartDisabled = (() => {
+    // Disable if stopping
+    if (isStopping) return true;
+    
+    // Basic validation
+    if (!videoInfo || !outputPath) return true;
+    
+    // Prevent processing if using TensorRT mode with ONNX models
+    if (!useDirectML) {
+      // Check simple mode selected model (only applies in simple mode)
+      if (!developerMode && selectedModel && selectedModel.toLowerCase().endsWith('.onnx')) {
+        return true;
+      }
+      
+      // Check advanced mode AI model filters
+      if (developerMode) {
+        const hasOnnxModel = filters.some(f => 
+          f.enabled && 
+          f.filterType === 'aiModel' && 
+          f.modelPath && 
+          f.modelPath.toLowerCase().endsWith('.onnx')
+        );
+        if (hasOnnxModel) return true;
+      }
+    }
+    
+    // In advanced mode, allow processing without AI model
+    // as long as there's at least one enabled filter or no filters at all
+    if (developerMode) {
+      // Allow if there are no filters (pure processing)
+      if (filters.length === 0) return false;
+      
+      // Allow if at least one filter is enabled (AI model or custom)
+      const hasEnabledFilter = filters.some(f => f.enabled);
+      return !hasEnabledFilter;
+    }
+    
+    // In simple mode, require a selected model
+    if (!selectedModel) return true;
+    
+    return false;
+  })();
 
   // Setup Screen
   if (isCheckingDeps || !isSetupComplete) {
@@ -700,48 +742,7 @@ function App() {
                 ) : (
                   <button
                     onClick={isProcessing ? handleCancelUpscale : () => handleUpscale(selectedModel || '', useDirectML, filters, numStreams)}
-                    disabled={(() => {
-                      // Disable if stopping
-                      if (isStopping) return true;
-                      
-                      // Basic validation
-                      if (!videoInfo || !outputPath) return true;
-                      
-                      // Prevent processing if using TensorRT mode with ONNX models
-                      if (!useDirectML) {
-                        // Check simple mode selected model (only applies in simple mode)
-                        if (!developerMode && selectedModel && selectedModel.toLowerCase().endsWith('.onnx')) {
-                          return true;
-                        }
-                        
-                        // Check advanced mode AI model filters
-                        if (developerMode) {
-                          const hasOnnxModel = filters.some(f => 
-                            f.enabled && 
-                            f.filterType === 'aiModel' && 
-                            f.modelPath && 
-                            f.modelPath.toLowerCase().endsWith('.onnx')
-                          );
-                          if (hasOnnxModel) return true;
-                        }
-                      }
-                      
-                      // In advanced mode, allow processing without AI model
-                      // as long as there's at least one enabled filter or no filters at all
-                      if (developerMode) {
-                        // Allow if there are no filters (pure processing)
-                        if (filters.length === 0) return false;
-                        
-                        // Allow if at least one filter is enabled (AI model or custom)
-                        const hasEnabledFilter = filters.some(f => f.enabled);
-                        return !hasEnabledFilter;
-                      }
-                      
-                      // In simple mode, require a selected model
-                      if (!selectedModel) return true;
-                      
-                      return false;
-                    })()}
+                    disabled={isStartDisabled}
                     className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
                       isStopping
                         ? 'bg-orange-500 cursor-not-allowed'
