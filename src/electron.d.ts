@@ -82,6 +82,10 @@ export interface ElectronAPI {
   setFfmpegArgs: (args: string) => Promise<{ success: boolean }>;
   getDefaultFfmpegArgs: () => Promise<{ args: string }>;
   
+  // Processing format
+  getProcessingFormat: () => Promise<{ format: string }>;
+  setProcessingFormat: (format: string) => Promise<{ success: boolean }>;
+
   // Panel sizes
   getPanelSizes: () => Promise<{ leftPanel: number; rightPanel: number; queuePanel?: number }>;
   setPanelSizes: (sizes: { leftPanel: number; rightPanel: number; queuePanel?: number }) => Promise<{ success: boolean }>;

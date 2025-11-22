@@ -38,6 +38,7 @@ export interface ScriptConfig {
   };
   filters?: Filter[];
   numStreams?: number;
+  outputFormat?: string;
 }
 
 export class VapourSynthScriptGenerator {
@@ -57,6 +58,7 @@ export class VapourSynthScriptGenerator {
     const defaultMatrix = config.colorMatrix?.defaultMatrix || '709';
     const defaultPrimaries = config.colorMatrix?.defaultPrimaries || '709';
     const defaultTransfer = config.colorMatrix?.defaultTransfer || '709';
+    const outputFormat = config.outputFormat || 'vs.YUV420P8';
 
     // Process filters sequentially
     const filters = config.filters || [];
@@ -85,6 +87,7 @@ export class VapourSynthScriptGenerator {
       .replace(/{{DEFAULT_MATRIX}}/g, defaultMatrix)
       .replace(/{{DEFAULT_PRIMARIES}}/g, defaultPrimaries)
       .replace(/{{DEFAULT_TRANSFER}}/g, defaultTransfer)
+      .replace(/{{OUTPUT_FORMAT}}/g, outputFormat)
       .replace(/{{FILTERS}}/g, filterCode);
 
     // Use timestamp + random string for unique script path to avoid collisions in batch processing

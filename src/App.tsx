@@ -36,6 +36,7 @@ import { useQueueHandlers } from './hooks/useQueueHandlers';
 import { useQueueProcessing } from './hooks/useQueueProcessing';
 import { useQueueEditing } from './hooks/useQueueEditing';
 import { useBatchConfig } from './hooks/useBatchConfig';
+import { useProcessingConfig } from './hooks/useProcessingConfig';
 import { getErrorMessage } from './types/errors';
 import { SetupScreen } from './components/SetupScreen';
 import { VideoPreviewPanel } from './components/VideoPreviewPanel';
@@ -49,9 +50,6 @@ function App() {
   // Output format state
   const [outputFormat, setOutputFormat] = useState<string>('mkv');
   
-  // FFmpeg configuration state (loaded from backend)
-  const [ffmpegArgs, setFfmpegArgs] = useState<string>('');
-  
   // Ref to preserve scroll position in right panel
   const rightPanelRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +57,13 @@ function App() {
   const { developerMode, isDeveloperModeLoaded, consoleOutput, consoleEndRef, addConsoleLog, toggleDeveloperMode } = useDeveloperMode();
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup } = useSetup(addConsoleLog);
   const { useDirectML, toggleDirectML, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
+  const { 
+    ffmpegArgs, 
+    processingFormat, 
+    handleUpdateFfmpegArgs, 
+    handleResetFfmpegArgs, 
+    handleUpdateProcessingFormat 
+  } = useProcessingConfig(isSetupComplete);
   
   // Model management hooks
   const {
@@ -352,22 +357,6 @@ function App() {
     }
   }, [previewFrame]);
 
-  // Load FFmpeg configuration on mount
-  useEffect(() => {
-    const loadFfmpegConfig = async (): Promise<void> => {
-      try {
-        const argsResult = await window.electronAPI.getFfmpegArgs();
-        setFfmpegArgs(argsResult.args);
-      } catch (error) {
-        console.error('Failed to load FFmpeg config:', error);
-      }
-    };
-    
-    if (isSetupComplete) {
-      loadFfmpegConfig();
-    }
-  }, [isSetupComplete]);
-
   // Check for updates on startup
   useEffect(() => {
     const checkForUpdates = async (): Promise<void> => {
@@ -441,25 +430,6 @@ function App() {
       }
     } catch (error) {
       addConsoleLog(`Error setting developer mode: ${getErrorMessage(error)}`);
-    }
-  };
-
-  const handleUpdateFfmpegArgs = async (args: string): Promise<void> => {
-    try {
-      setFfmpegArgs(args);
-      await window.electronAPI.setFfmpegArgs(args);
-    } catch (error) {
-      console.error('Error updating FFmpeg args:', error);
-    }
-  };
-
-  const handleResetFfmpegArgs = async (): Promise<void> => {
-    try {
-      const result = await window.electronAPI.getDefaultFfmpegArgs();
-      setFfmpegArgs(result.args);
-      await window.electronAPI.setFfmpegArgs(result.args);
-    } catch (error) {
-      console.error('Error resetting FFmpeg args:', error);
     }
   };
 
@@ -556,235 +526,239 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 p-4 overflow-hidden">
         {panelSizesLoaded && (
-        <PanelGroup direction="horizontal" onLayout={handlePanelResize} className="h-full gap-4">
-          {/* Left Panel - Output Preview & Controls */}
-          <Panel defaultSize={panelSizes.leftPanel} minSize={30}>
-            <div className="flex flex-col gap-4 h-full min-h-0">
-              {/* Preview Area */}
-              <VideoPreviewPanel
-                previewFrame={previewFrame}
-                completedVideoPath={completedVideoPath}
-                completedVideoBlobUrl={completedVideoBlobUrl}
-                videoLoadError={videoLoadError}
-                isProcessing={isProcessing}
-                onCompareVideos={handleCompareVideos}
-                onOpenOutputFolder={handleOpenOutputFolder}
-                onVideoError={handleVideoError}
-              />
-
-              {/* Progress & Controls */}
-              <div className="flex-shrink-0 bg-dark-elevated rounded-2xl border border-gray-800 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">{upscaleProgress?.message || 'Start an upscale!'}</span>
-                  <span className="text-sm text-gray-400">
-                    {upscaleProgress?.percentage !== undefined ? `${upscaleProgress.percentage}%` : 'N/A'}
-                  </span>
-                </div>
-                <div className="w-full bg-dark-surface rounded-full h-2 mb-3">
-                  <div 
-                    className="bg-gradient-to-r from-primary-blue to-primary-purple h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${upscaleProgress?.percentage ?? 0}%` }}
+        <PanelGroup direction="vertical" className="h-full gap-4">
+          <Panel>
+            <PanelGroup direction="horizontal" onLayout={handlePanelResize} className="h-full gap-4">
+              {/* Left Panel - Output Preview & Controls */}
+              <Panel defaultSize={panelSizes.leftPanel} minSize={30}>
+                <div className="flex flex-col gap-4 h-full min-h-0">
+                  {/* Preview Area */}
+                  <VideoPreviewPanel
+                    previewFrame={previewFrame}
+                    completedVideoPath={completedVideoPath}
+                    completedVideoBlobUrl={completedVideoBlobUrl}
+                    videoLoadError={videoLoadError}
+                    isProcessing={isProcessing}
+                    onCompareVideos={handleCompareVideos}
+                    onOpenOutputFolder={handleOpenOutputFolder}
+                    onVideoError={handleVideoError}
                   />
-                </div>
-                {upscaleProgress?.fps ? (
-                  <p className="text-base text-gray-400 font-medium">Speed: {upscaleProgress.fps} FPS</p>
-                ) : (
-                  <p className="text-base text-gray-400 font-medium">Speed: N/A</p>
-                )}
-              </div>
 
-              {/* Developer Console */}
-              {developerMode && (
-                <div className="flex-shrink-0 bg-dark-elevated rounded-2xl border border-gray-800 overflow-hidden">
-                  <button
-                    onClick={() => setShowConsole(!showConsole)}
-                    className="w-full px-4 py-3 border-b border-gray-800 flex items-center justify-between hover:bg-dark-surface transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Terminal className="w-5 h-5 text-accent-cyan" />
-                      <h2 className="font-semibold">Developer Console</h2>
+                  {/* Progress & Controls */}
+                  <div className="flex-shrink-0 bg-dark-elevated rounded-2xl border border-gray-800 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">{upscaleProgress?.message || 'Start an upscale!'}</span>
+                      <span className="text-sm text-gray-400">
+                        {upscaleProgress?.percentage !== undefined ? `${upscaleProgress.percentage}%` : 'N/A'}
+                      </span>
                     </div>
-                    {showConsole ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                  </button>
-                  {showConsole && (
-                    <div className="p-4 max-h-64 overflow-y-auto font-mono text-sm bg-black/30">
-                      {consoleOutput.map((log, i) => (
-                        <div key={i} className="text-gray-300 mb-1">{log}</div>
-                      ))}
-                      <div ref={consoleEndRef} />
+                    <div className="w-full bg-dark-surface rounded-full h-2 mb-3">
+                      <div 
+                        className="bg-gradient-to-r from-primary-blue to-primary-purple h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${upscaleProgress?.percentage ?? 0}%` }}
+                      />
+                    </div>
+                    {upscaleProgress?.fps ? (
+                      <p className="text-base text-gray-400 font-medium">Speed: {upscaleProgress.fps} FPS</p>
+                    ) : (
+                      <p className="text-base text-gray-400 font-medium">Speed: N/A</p>
+                    )}
+                  </div>
+
+                  {/* Developer Console */}
+                  {developerMode && (
+                    <div className="flex-shrink-0 bg-dark-elevated rounded-2xl border border-gray-800 overflow-hidden">
+                      <button
+                        onClick={() => setShowConsole(!showConsole)}
+                        className="w-full px-4 py-3 border-b border-gray-800 flex items-center justify-between hover:bg-dark-surface transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Terminal className="w-5 h-5 text-accent-cyan" />
+                          <h2 className="font-semibold">Developer Console</h2>
+                        </div>
+                        {showConsole ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      </button>
+                      {showConsole && (
+                        <div className="p-4 max-h-64 overflow-y-auto font-mono text-sm bg-black/30">
+                          {consoleOutput.map((log, i) => (
+                            <div key={i} className="text-gray-300 mb-1">{log}</div>
+                          ))}
+                          <div ref={consoleEndRef} />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          </Panel>
+              </Panel>
 
-          {/* Resize Handle */}
-          <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-primary-purple transition-colors rounded-full" />
+              {/* Resize Handle */}
+              <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-primary-purple transition-colors rounded-full" />
 
-          {/* Right Panel - Input & Info */}
-          <Panel defaultSize={panelSizes.rightPanel} minSize={25}>
-            <div ref={rightPanelRef} className="flex flex-col gap-2 overflow-y-auto h-full min-h-0 pr-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-              {/* Video Input */}
-              <VideoInputPanel
-                videoInfo={videoInfo}
-                isDragging={isDragging}
-                isProcessing={isProcessing}
-                queueCount={queue.length}
-                showQueue={queueState.showQueue}
-                onSelectVideo={handleSelectVideoWithQueue}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onToggleQueue={() => queueActions.setShowQueue(!queueState.showQueue)}
-              />
-              
-              <ModelSelectionPanel
-                selectedModel={selectedModel}
-                filteredModels={filteredModels}
-                isProcessing={isProcessing}
-                advancedMode={developerMode}
-                useDirectML={useDirectML}
-                colorMatrixSettings={colorMatrixSettings}
-                videoInfo={videoInfo}
-                filterTemplates={filterTemplates}
-                filters={filters}
-                onModelChange={setSelectedModel}
-                onImportClick={() => {
-                  setModalMode('import');
-                  setShowImportModal(true);
-                }}
-                onManageModels={() => setShowModelManager(true)}
-                onColorMatrixChange={handleColorMatrixChange}
-                onFiltersChange={handleSetFilters}
-                onSaveTemplate={saveTemplate}
-                onDeleteTemplate={deleteTemplate}
-              />
+              {/* Right Panel - Input & Info */}
+              <Panel defaultSize={panelSizes.rightPanel} minSize={25}>
+                <div ref={rightPanelRef} className="flex flex-col gap-2 overflow-y-auto h-full min-h-0 pr-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                  {/* Video Input */}
+                  <VideoInputPanel
+                    videoInfo={videoInfo}
+                    isDragging={isDragging}
+                    isProcessing={isProcessing}
+                    queueCount={queue.length}
+                    showQueue={queueState.showQueue}
+                    onSelectVideo={handleSelectVideoWithQueue}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onToggleQueue={() => queueActions.setShowQueue(!queueState.showQueue)}
+                  />
+                  
+                  <ModelSelectionPanel
+                    selectedModel={selectedModel}
+                    filteredModels={filteredModels}
+                    isProcessing={isProcessing}
+                    advancedMode={developerMode}
+                    useDirectML={useDirectML}
+                    colorMatrixSettings={colorMatrixSettings}
+                    videoInfo={videoInfo}
+                    filterTemplates={filterTemplates}
+                    filters={filters}
+                    onModelChange={setSelectedModel}
+                    onImportClick={() => {
+                      setModalMode('import');
+                      setShowImportModal(true);
+                    }}
+                    onManageModels={() => setShowModelManager(true)}
+                    onColorMatrixChange={handleColorMatrixChange}
+                    onFiltersChange={handleSetFilters}
+                    onSaveTemplate={saveTemplate}
+                    onDeleteTemplate={deleteTemplate}
+                  />
 
-              {/* Output Settings */}
-              <OutputSettingsPanel
-                videoInfo={videoInfo}
-                outputPath={outputPath}
-                outputFormat={outputFormat}
-                isProcessing={isProcessing}
-                onFormatChange={setOutputFormat}
-                onSelectOutputFile={handleSelectOutputFile}
-              />
+                  {/* Output Settings */}
+                  <OutputSettingsPanel
+                    videoInfo={videoInfo}
+                    outputPath={outputPath}
+                    outputFormat={outputFormat}
+                    isProcessing={isProcessing}
+                    onFormatChange={setOutputFormat}
+                    onSelectOutputFile={handleSelectOutputFile}
+                  />
 
-              {/* Video Info */}
-              <VideoInfoPanel
-                videoInfo={videoInfo}
-                showVideoInfo={showVideoInfo}
-                onToggle={handleToggleVideoInfo}
-              />
+                  {/* Video Info */}
+                  <VideoInfoPanel
+                    videoInfo={videoInfo}
+                    showVideoInfo={showVideoInfo}
+                    onToggle={handleToggleVideoInfo}
+                  />
 
-              {/* Editing Queue Item Banner */}
-              {queueState.editingQueueItemId && (() => {
-                const editingItem = queue.find(q => q.id === queueState.editingQueueItemId);
-                return editingItem ? (
-                  <div className="flex-shrink-0 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/50 rounded-xl p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-blue-400 font-medium mb-1">Editing Queue Item</p>
-                        <p className="text-sm truncate" title={editingItem.videoName}>{editingItem.videoName}</p>
+                  {/* Editing Queue Item Banner */}
+                  {queueState.editingQueueItemId && (() => {
+                    const editingItem = queue.find(q => q.id === queueState.editingQueueItemId);
+                    return editingItem ? (
+                      <div className="flex-shrink-0 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/50 rounded-xl p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-blue-400 font-medium mb-1">Editing Queue Item</p>
+                            <p className="text-sm truncate" title={editingItem.videoName}>{editingItem.videoName}</p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              queueActions.setEditingQueueItemId(null);
+                              queueActions.setShowQueue(false);
+                            }}
+                            className="ml-2 px-3 py-1 text-xs bg-dark-surface hover:bg-dark-bg rounded-lg transition-colors"
+                          >
+                            Exit
+                          </button>
+                        </div>
                       </div>
+                    ) : null;
+                  })()}
+
+                  {/* Action Buttons */}
+                  <div className="flex-shrink-0 flex gap-2">
+                    {/* Force Stop Button - Only visible when stuck */}
+                    {!isProcessing && upscaleProgress && upscaleProgress.type === 'progress' && (
                       <button
-                        onClick={() => {
-                          queueActions.setEditingQueueItemId(null);
-                          queueActions.setShowQueue(false);
-                        }}
-                        className="ml-2 px-3 py-1 text-xs bg-dark-surface hover:bg-dark-bg rounded-lg transition-colors"
+                        onClick={handleForceStop}
+                        className="bg-red-900/50 hover:bg-red-800 text-red-200 px-4 rounded-xl border border-red-700/50 transition-colors flex items-center gap-2"
+                        title="Force stop stuck process"
                       >
-                        Exit
-                      </button>
-                    </div>
-                  </div>
-                ) : null;
-              })()}
-
-              {/* Action Buttons */}
-              <div className="flex-shrink-0 flex gap-2">
-                {/* Force Stop Button - Only visible when stuck */}
-                {!isProcessing && upscaleProgress && upscaleProgress.type === 'progress' && (
-                   <button
-                     onClick={handleForceStop}
-                     className="bg-red-900/50 hover:bg-red-800 text-red-200 px-4 rounded-xl border border-red-700/50 transition-colors flex items-center gap-2"
-                     title="Force stop stuck process"
-                   >
-                     <XCircle className="w-5 h-5" />
-                   </button>
-                )}
-
-                {queueState.showQueue ? (
-                  <button
-                    onClick={queueState.isQueueStarted ? handleStopQueue : handleStartQueue}
-                    disabled={(!queueState.isQueueStarted && queue.filter(item => item.status === 'pending').length === 0) || queueState.isQueueStopping}
-                    className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
-                      queueState.isQueueStarted
-                        ? queueState.isQueueStopping
-                          ? 'bg-orange-600 cursor-wait'
-                          : 'bg-orange-500 hover:bg-orange-600'
-                        : 'bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed'
-                    }`}
-                  >
-                    {queueState.isQueueStarted ? (
-                      queueState.isQueueStopping ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Stopping Queue...
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-5 h-5" />
-                          Stop Queue
-                        </>
-                      )
-                    ) : (
-                      <>
-                        <Sparkles className="w-5 h-5" />
-                        Start Queue
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    onClick={isProcessing ? handleCancelUpscale : () => handleUpscale(selectedModel || '', useDirectML, filters, numStreams)}
-                    disabled={isStartDisabled}
-                    className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
-                      isStopping
-                        ? 'bg-orange-500 cursor-not-allowed'
-                        : isProcessing
-                        ? 'bg-red-500 hover:bg-red-600'
-                        : 'bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed'
-                    }`}
-                  >
-                    {isStopping ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Stopping...
-                      </>
-                    ) : isProcessing ? (
-                      <>
                         <XCircle className="w-5 h-5" />
-                        Stop Processing
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-5 h-5" />
-                        Start Processing
-                      </>
+                      </button>
                     )}
-                  </button>
-                )}
-              </div>
-            </div>
+
+                    {queueState.showQueue ? (
+                      <button
+                        onClick={queueState.isQueueStarted ? handleStopQueue : handleStartQueue}
+                        disabled={(!queueState.isQueueStarted && queue.filter(item => item.status === 'pending').length === 0) || queueState.isQueueStopping}
+                        className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
+                          queueState.isQueueStarted
+                            ? queueState.isQueueStopping
+                              ? 'bg-orange-600 cursor-wait'
+                              : 'bg-orange-500 hover:bg-orange-600'
+                            : 'bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed'
+                        }`}
+                      >
+                        {queueState.isQueueStarted ? (
+                          queueState.isQueueStopping ? (
+                            <>
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              Stopping Queue...
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-5 h-5" />
+                              Stop Queue
+                            </>
+                          )
+                        ) : (
+                          <>
+                            <Sparkles className="w-5 h-5" />
+                            Start Queue
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={isProcessing ? handleCancelUpscale : () => handleUpscale(selectedModel || '', useDirectML, filters, numStreams)}
+                        disabled={isStartDisabled}
+                        className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
+                          isStopping
+                            ? 'bg-orange-500 cursor-not-allowed'
+                            : isProcessing
+                            ? 'bg-red-500 hover:bg-red-600'
+                            : 'bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed'
+                        }`}
+                      >
+                        {isStopping ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Stopping...
+                          </>
+                        ) : isProcessing ? (
+                          <>
+                            <XCircle className="w-5 h-5" />
+                            Stop Processing
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-5 h-5" />
+                            Start Processing
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </Panel>
+            </PanelGroup>
           </Panel>
           
-          {/* Queue Panel - Collapsible on the right */}
+          {/* Queue Panel - Collapsible at the bottom */}
           {queueState.showQueue && (
             <>
-              <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-primary-purple transition-colors rounded-full" />
-              <Panel defaultSize={25} minSize={10} maxSize={40}>
+              <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-primary-purple transition-colors rounded-full" />
+              <Panel defaultSize={20} minSize={15} maxSize={40}>
                 <QueuePanel
                   queue={queue}
                   isQueueStarted={queueState.isQueueStarted}
@@ -841,6 +815,8 @@ function App() {
         ffmpegArgs={ffmpegArgs}
         onUpdateFfmpegArgs={handleUpdateFfmpegArgs}
         onResetFfmpegArgs={handleResetFfmpegArgs}
+        processingFormat={processingFormat}
+        onUpdateProcessingFormat={handleUpdateProcessingFormat}
       />
 
       <AboutModal

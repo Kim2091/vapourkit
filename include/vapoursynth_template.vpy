@@ -14,7 +14,8 @@ default_transfer  = "{{DEFAULT_TRANSFER}}"
 default_depth     = 16
 overwrite_matrix  = {{OVERWRITE_MATRIX}}
 matrix_709        = {{MATRIX_709}}
-output_format     = vs.YUV420P8
+input_format      = clip.format.id
+output_format     = {{OUTPUT_FORMAT}}
 
 
 # overwrite clip color tagging
@@ -42,6 +43,11 @@ original_clip = clip
 
 
 # convert to output format and output
+output_format = core.get_video_format(output_format)
+color_family  = output_format.color_family 
 if clip.format.id != output_format:
-    clip = core.resize.Bilinear(clip, format=output_format, matrix_s="709", primaries_s="709", transfer_s="709", dither_type="error_diffusion")
+    if color_family == vs.RGB:
+        clip = core.resize.Bilinear(clip, format=output_format, primaries_s="709", transfer_s="709", dither_type="error_diffusion")
+    else:
+        clip = core.resize.Bilinear(clip, format=output_format, primaries_s="709", transfer_s="709", dither_type="error_diffusion", matrix_s="709")
 clip.set_output()

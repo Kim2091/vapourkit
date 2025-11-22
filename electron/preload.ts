@@ -83,6 +83,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setFfmpegArgs: (args: string) => ipcRenderer.invoke('set-ffmpeg-args', args),
   getDefaultFfmpegArgs: () => ipcRenderer.invoke('get-default-ffmpeg-args'),
   
+  // Processing format
+  getProcessingFormat: () => ipcRenderer.invoke('get-processing-format'),
+  setProcessingFormat: (format: string) => ipcRenderer.invoke('set-processing-format', format),
+
   // Panel sizes
   getPanelSizes: () => ipcRenderer.invoke('get-panel-sizes'),
   setPanelSizes: (sizes: any) => ipcRenderer.invoke('set-panel-sizes', sizes),

@@ -60,9 +60,23 @@ export class UpscaleExecutor {
     }
   }
 
+  private isRawVideoFormat(pixelFormat: string | null | undefined): boolean {
+    if (!pixelFormat) return false;
+    // Check for RGB formats
+    return pixelFormat.includes('RGB') || pixelFormat.includes('GBR');
+  }
 
-
-
+  private mapVsFormatToFfmpeg(pixelFormat: string | null | undefined): string {
+    if (!pixelFormat) return 'gbrp'; // Default to planar RGB if unknown RGB
+    
+    // Map VapourSynth formats to FFmpeg pix_fmt
+    if (pixelFormat === 'RGB24') return 'gbrp';
+    if (pixelFormat === 'RGB48') return 'gbrp16le';
+    if (pixelFormat === 'RGBS') return 'gbrpf32le';
+    if (pixelFormat === 'RGBH') return 'gbrpf16le';
+    
+    return 'gbrp';
+  }
 
   async getFrameCount(scriptPath: string): Promise<number> {
     return this.vsInfoExtractor.getFrameCount(scriptPath);
@@ -80,14 +94,19 @@ export class UpscaleExecutor {
         await this.validateFiles(scriptPath, inputPath);
         const metadata = await this.getVideoMetadata(inputPath);
         
+        // Get output info for RGB handling
+        const outputInfo = await this.getOutputInfo(scriptPath);
+        
         await this.logScriptContent(scriptPath);
         
         const env = this.setupEnvironment();
         await this.validateExecutables();
         
+        const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
+        
         // Spawn processes
-        const vspipe = this.spawnVspipe(scriptPath, env);
-        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata);
+        const vspipe = this.spawnVspipe(scriptPath, env, isRawVideo);
+        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo);
         const ffmpeg = this.spawnFFmpeg(ffmpegArgs);
         
         this.setupProcessPiping(vspipe, ffmpeg);
@@ -194,23 +213,47 @@ export class UpscaleExecutor {
     }
   }
 
-  private spawnVspipe(scriptPath: string, env: NodeJS.ProcessEnv) {
+  private spawnVspipe(scriptPath: string, env: NodeJS.ProcessEnv, isRawVideo: boolean = false) {
     logger.upscale('Spawning vspipe process');
-    return spawn(this.vspipePath, ['-c', 'y4m', scriptPath, '-'], {
+    const args = isRawVideo ? [scriptPath, '-'] : ['-c', 'y4m', scriptPath, '-'];
+    
+    return spawn(this.vspipePath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: env,
       cwd: this.vsPath
     });
   }
 
-  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata): Promise<string[]> {
+  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo): Promise<string[]> {
     logger.upscale('Building FFmpeg command with metadata passthrough and preview output');
     const ffmpegConfig = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
-    const ffmpegArgs: string[] = [
-      '-f', 'yuv4mpegpipe',
-      '-i', 'pipe:0',
-      '-i', inputPath
-    ];
+    
+    const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
+    
+    const ffmpegArgs: string[] = [];
+    
+    if (isRawVideo) {
+      logger.upscale(`Detected RGB output (${outputInfo.pixelFormat}), using rawvideo format`);
+      ffmpegArgs.push('-f', 'rawvideo');
+      
+      const pixFmt = this.mapVsFormatToFfmpeg(outputInfo.pixelFormat);
+      ffmpegArgs.push('-pix_fmt', pixFmt);
+      
+      if (outputInfo.resolution) {
+        ffmpegArgs.push('-s', outputInfo.resolution);
+      }
+      
+      if (outputInfo.fpsString) {
+        ffmpegArgs.push('-r', outputInfo.fpsString);
+      } else if (outputInfo.fps) {
+        ffmpegArgs.push('-r', `${outputInfo.fps}`);
+      }
+    } else {
+      ffmpegArgs.push('-f', 'yuv4mpegpipe');
+    }
+    
+    ffmpegArgs.push('-i', 'pipe:0');
+    ffmpegArgs.push('-i', inputPath);
 
     // Main output: video file with audio/subs
     // Map video from pipe

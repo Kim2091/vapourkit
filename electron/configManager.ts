@@ -38,6 +38,7 @@ interface AppConfig {
   filterConfigurations?: Filter[];
   upscalePosition?: number;
   ffmpegArgs?: string;
+  processingFormat?: string;
   models: {
     [modelName: string]: {
       useFp32: boolean;
@@ -73,6 +74,7 @@ const DEFAULT_CONFIG: AppConfig = {
   filterConfigurations: [],
   upscalePosition: 0,
   ffmpegArgs: DEFAULT_FFMPEG_ARGS,
+  processingFormat: 'vs.YUV420P8',
   models: {}
 };
 
@@ -232,6 +234,15 @@ export class ConfigManager {
 
   async setFfmpegArgs(args: string): Promise<void> {
     this.config.ffmpegArgs = args;
+    await this.save();
+  }
+
+  getProcessingFormat(): string {
+    return this.config.processingFormat ?? 'vs.YUV420P8';
+  }
+
+  async setProcessingFormat(format: string): Promise<void> {
+    this.config.processingFormat = format;
     await this.save();
   }
 

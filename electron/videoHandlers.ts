@@ -308,6 +308,8 @@ function createScriptConfig(
   }
   
   const colorMatrixSettings = configManager.getColorMatrixSettings();
+  const processingFormat = configManager.getProcessingFormat();
+  const outputFormat = processingFormat === 'match_input' ? 'original_clip.format.id' : processingFormat;
   
   return {
     inputVideo: videoPath,
@@ -319,6 +321,7 @@ function createScriptConfig(
     upscalingEnabled: isUpscaling,
     colorMatrix: colorMatrixSettings,
     filters: filters,
-    numStreams: numStreams
+    numStreams: numStreams,
+    outputFormat: outputFormat
   };
 }

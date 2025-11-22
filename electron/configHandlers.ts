@@ -95,6 +95,17 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     return { args };
   });
 
+  ipcMain.handle('get-processing-format', async () => {
+    const format = configManager.getProcessingFormat();
+    return { format };
+  });
+
+  ipcMain.handle('set-processing-format', async (event, format: string) => {
+    logger.info(`Setting processing format: ${format}`);
+    await configManager.setProcessingFormat(format);
+    return { success: true };
+  });
+
   ipcMain.handle('get-version', async () => {
     return { version: app.getVersion() };
   });
