@@ -54,10 +54,11 @@ export function registerVideoHandlers(
     try {
       // Check file size first to prevent loading massive files into memory
       const stats = await fs.stat(filePath);
-      const MAX_SIZE = 100 * 1024 * 1024; // 100MB limit for preview
       
-      if (stats.size > MAX_SIZE) {
-        throw new Error(`File too large for preview (${formatBytes(stats.size)}). Max size is ${formatBytes(MAX_SIZE)}.`);
+      // Warning: Reading large files into memory can cause the app to crash.
+      // For playback, use the 'video://' protocol instead.
+      if (stats.size > 500 * 1024 * 1024) {
+         logger.warn(`Reading large file into memory: ${filePath} (${formatBytes(stats.size)})`);
       }
       
       return await fs.readFile(filePath);

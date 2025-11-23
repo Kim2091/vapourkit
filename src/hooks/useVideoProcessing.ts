@@ -22,22 +22,12 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
   const loadCompletedVideo = useCallback(async (videoPath: string): Promise<void> => {
     try {
       onLog('Loading completed video for playback...');
-      const arrayBuffer = await window.electronAPI.readVideoFile(videoPath);
       
-      // Determine MIME type based on file extension
-      const ext = videoPath.toLowerCase().split('.').pop();
-      let mimeType = 'video/mp4';
-      if (ext === 'mkv') {
-        mimeType = 'video/x-matroska';
-      } else if (ext === 'webm') {
-        mimeType = 'video/webm';
-      } else if (ext === 'avi') {
-        mimeType = 'video/x-msvideo';
-      }
+      // Use custom protocol to stream video directly from disk
+      // This avoids loading the entire file into memory and bypasses size limits
+      const videoUrl = `video://${videoPath}`;
+      setCompletedVideoBlobUrl(videoUrl);
       
-      const blob = new Blob([arrayBuffer], { type: mimeType });
-      const blobUrl = URL.createObjectURL(blob);
-      setCompletedVideoBlobUrl(blobUrl);
       onLog('Video loaded successfully');
     } catch (error) {
       onLog(`Error loading video: ${getErrorMessage(error)}`);
