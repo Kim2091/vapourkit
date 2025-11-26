@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.2
+- Implement segment selection. Users can now select a small segment of a video to process and preview!
+  - When using this mode, the comparison buttons are disabled
+- Minor bug fixes
+
 ## 0.10.1
 - Redesign "Show Queue" button and change location
 - Allow the user to change the color space the output video is saved in
