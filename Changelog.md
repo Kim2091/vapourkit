@@ -3,6 +3,7 @@
 ## 0.10.2
 - Implement segment selection. Users can now select a small segment of a video to process and preview!
   - When using this mode, the comparison buttons are disabled
+- Fix issue where highlighted code wasn't visible in the Filter panel
 - Minor bug fixes
 
 ## 0.10.1

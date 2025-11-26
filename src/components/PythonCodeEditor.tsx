@@ -114,14 +114,14 @@ export function PythonCodeEditor({
     '&.cm-focused': {
       outline: 'none',
     },
-    '&.cm-focused .cm-selectionBackground, ::selection': {
-      backgroundColor: '#3b82f680 !important',
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
+      background: 'rgba(59, 130, 246, 0.5) !important',
     },
-    '.cm-selectionBackground': {
-      backgroundColor: '#3b82f660 !important',
+    '.cm-content ::selection': {
+      background: 'rgba(59, 130, 246, 0.5) !important',
     },
     '.cm-selectionMatch': {
-      backgroundColor: '#3b82f640 !important',
+      backgroundColor: 'rgba(59, 130, 246, 0.25) !important',
     },
     '.cm-activeLine': {
       backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -220,6 +220,7 @@ export function PythonCodeEditor({
           foldKeymap: false,
           completionKeymap: true,
           lintKeymap: true,
+          drawSelection: true,
         }}
         placeholder={placeholder}
         style={{

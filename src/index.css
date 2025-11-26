@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CodeMirror Selection Fix */
+.cm-editor .cm-selectionLayer .cm-selectionBackground {
+  background: rgba(59, 130, 246, 0.4) !important;
+}
+
+.cm-editor.cm-focused .cm-selectionLayer .cm-selectionBackground {
+  background: rgba(59, 130, 246, 0.5) !important;
+}
+
+.cm-editor .cm-content ::selection {
+  background: rgba(59, 130, 246, 0.5) !important;
+}
+
+.cm-editor .cm-line::selection,
+.cm-editor .cm-line *::selection {
+  background: rgba(59, 130, 246, 0.5) !important;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
