@@ -1,6 +1,6 @@
 // src/hooks/useQueueProcessing.ts - Automated queue processing logic
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { QueueItem } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 
@@ -126,11 +126,28 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
   }, [queue, isProcessingQueueItem, isProcessingQueue, isQueueStarted, isQueueStopping]);
 
   // Update queue item progress based on upscale progress
+  // Throttle progress updates to prevent excessive re-renders
+  const lastProgressUpdateRef = useRef<number>(0);
+  const lastProgressValueRef = useRef<number>(0);
+  
   useEffect(() => {
     if (isProcessing && isProcessingQueue && upscaleProgress) {
       const processingItem = queue.find(item => item.status === 'processing');
       if (processingItem && upscaleProgress.percentage !== undefined) {
-        updateQueueItem(processingItem.id, { progress: upscaleProgress.percentage });
+        const now = Date.now();
+        const progressDiff = Math.abs(upscaleProgress.percentage - lastProgressValueRef.current);
+        
+        // Only update if:
+        // 1. At least 1 second has passed since last update, OR
+        // 2. Progress has changed by at least 5%, OR
+        // 3. Progress is 100% (completion)
+        if (now - lastProgressUpdateRef.current >= 1000 || 
+            progressDiff >= 5 || 
+            upscaleProgress.percentage === 100) {
+          lastProgressUpdateRef.current = now;
+          lastProgressValueRef.current = upscaleProgress.percentage;
+          updateQueueItem(processingItem.id, { progress: upscaleProgress.percentage });
+        }
       }
     }
   }, [upscaleProgress, isProcessing, isProcessingQueue, queue, updateQueueItem]);

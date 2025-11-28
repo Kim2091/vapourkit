@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as os from 'os';
+import { spawn } from 'child_process';
 import { logger } from './logger';
 import { PATHS } from './constants';
 import { configManager } from './configManager';
@@ -12,6 +13,7 @@ import { VapourSynthScriptGenerator } from './scriptGenerator';
 import { UpscaleExecutor } from './upscaleExecutor';
 import { DependencyManager } from './dependencyManager';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
+import { FFmpegManager } from './ffmpegManager';
 
 let upscaleExecutor: UpscaleExecutor | null = null;
 let previewExecutor: UpscaleExecutor | null = null;
@@ -348,6 +350,120 @@ export function registerVideoHandlers(
         return { success: false, error: errorMsg };
       }
     });
+  });
+
+  // Extract embedded thumbnail from video file
+  ipcMain.handle('get-video-thumbnail', async (event, videoPath: string): Promise<string | null> => {
+    try {
+      const ffmpegPath = FFmpegManager.getFFmpegPath();
+      if (!ffmpegPath) {
+        logger.warn('FFmpeg not available for thumbnail extraction');
+        return null;
+      }
+
+      // Check if video file exists
+      if (!fs.existsSync(videoPath)) {
+        logger.warn(`Video file not found for thumbnail: ${videoPath}`);
+        return null;
+      }
+
+      // Create a hash of the video path for caching
+      const crypto = require('crypto');
+      const pathHash = crypto.createHash('md5').update(videoPath).digest('hex');
+      const thumbnailDir = path.join(os.tmpdir(), 'vapourkit_thumbnails');
+      const thumbnailPath = path.join(thumbnailDir, `${pathHash}.jpg`);
+
+      // Check if thumbnail already exists in cache
+      if (fs.existsSync(thumbnailPath)) {
+        const thumbnailData = await fs.readFile(thumbnailPath);
+        return `data:image/jpeg;base64,${thumbnailData.toString('base64')}`;
+      }
+
+      // Ensure thumbnail directory exists
+      await fs.ensureDir(thumbnailDir);
+
+      // Try to extract embedded thumbnail first (faster, uses existing thumbnail in file)
+      const extractEmbedded = (): Promise<boolean> => {
+        return new Promise((resolve) => {
+          const proc = spawn(ffmpegPath, [
+            '-i', videoPath,
+            '-map', '0:v:0',      // First video stream (often the thumbnail)
+            '-c:v', 'mjpeg',      // Output as JPEG
+            '-frames:v', '1',     // Only one frame
+            '-an',                // No audio
+            '-y',                 // Overwrite
+            thumbnailPath
+          ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+          let hasOutput = false;
+          
+          proc.on('close', async (code) => {
+            // Check if file was created and has content
+            if (code === 0 && fs.existsSync(thumbnailPath)) {
+              const stats = await fs.stat(thumbnailPath);
+              hasOutput = stats.size > 0;
+            }
+            resolve(hasOutput);
+          });
+
+          proc.on('error', () => resolve(false));
+          
+          // Timeout after 3 seconds
+          setTimeout(() => {
+            proc.kill();
+            resolve(false);
+          }, 3000);
+        });
+      };
+
+      // Extract a frame from the video at 1 second mark as fallback
+      const extractFrame = (): Promise<boolean> => {
+        return new Promise((resolve) => {
+          const proc = spawn(ffmpegPath, [
+            '-ss', '1',           // Seek to 1 second
+            '-i', videoPath,
+            '-frames:v', '1',     // Only one frame
+            '-vf', 'scale=320:-1', // Scale to 320px width, maintain aspect ratio
+            '-q:v', '5',          // Quality (2-31, lower is better)
+            '-y',                 // Overwrite
+            thumbnailPath
+          ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+          proc.on('close', async (code) => {
+            if (code === 0 && fs.existsSync(thumbnailPath)) {
+              const stats = await fs.stat(thumbnailPath);
+              resolve(stats.size > 0);
+            } else {
+              resolve(false);
+            }
+          });
+
+          proc.on('error', () => resolve(false));
+          
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            proc.kill();
+            resolve(false);
+          }, 5000);
+        });
+      };
+
+      // Try embedded first, then fallback to extracting a frame
+      let success = await extractEmbedded();
+      if (!success) {
+        success = await extractFrame();
+      }
+
+      if (success && fs.existsSync(thumbnailPath)) {
+        const thumbnailData = await fs.readFile(thumbnailPath);
+        return `data:image/jpeg;base64,${thumbnailData.toString('base64')}`;
+      }
+
+      return null;
+    } catch (error) {
+      logger.warn('Error extracting video thumbnail:', error);
+      return null;
+    }
   });
 }
 

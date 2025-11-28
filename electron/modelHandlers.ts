@@ -20,82 +20,55 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       const engineFiles = files.filter(f => f.endsWith('.engine'));
       const onnxFiles = files.filter(f => f.endsWith('.onnx'));
       
-      // Helper function to extract precision from config metadata
-      const getPrecision = (baseName: string): string => {
-        const metadata = configManager.getModelMetadata(baseName);
-        return metadata?.useFp32 ? 'FP32' : 'FP16';
-      };
-
-      // Helper function to clean model name by removing technical suffixes
-      const cleanModelName = (filename: string): string => {
-        // Remove file extension
-        let name = filename.replace(/\.(onnx|engine)$/, '');
-        // Remove precision suffixes
-        name = name.replace(/_(fp16|fp32)$/i, '');
-        return name;
-      };
-
-      // Helper function to get model type label
-      const getModelTypeLabel = (baseName: string): string => {
-        const metadata = configManager.getModelMetadata(baseName);
-        if (metadata?.modelType === 'image') return 'Image';
-        return 'Video'; // Default to Video for TSPAN models
-      };
-
-      // Helper function to get custom display tag
-      const getDisplayTag = (baseName: string): string => {
-        const metadata = configManager.getModelMetadata(baseName);
-        return metadata?.displayTag ? ` [${metadata.displayTag}]` : '';
-      };
+      // Build a set of ONNX basenames that have corresponding engines
+      // Engine naming: modelname_fp16.onnx -> modelname_fp16_fp16.engine
+      const onnxBasenamesWithEngines = new Set<string>();
+      for (const engineFile of engineFiles) {
+        const engineBaseName = path.basename(engineFile, '.engine');
+        // Engine files have doubled precision suffix, e.g., model_fp16_fp16.engine
+        // Try to find the corresponding ONNX basename
+        const match = engineBaseName.match(/^(.+)_(fp16|fp32)$/i);
+        if (match) {
+          onnxBasenamesWithEngines.add(match[1]);
+        }
+      }
 
       // Include both .engine files (for TensorRT) and .onnx files (for DirectML)
       const models = [
         ...engineFiles.map(file => {
-          const baseName = path.basename(file, '.engine');
-          const cleanName = cleanModelName(file);
-          const precision = getPrecision(baseName);
-          const modelTypeLabel = getModelTypeLabel(baseName);
-          const displayTag = getDisplayTag(baseName);
-          const modelType = configManager.getModelMetadata(baseName)?.modelType || 'tspan';
+          const id = path.basename(file, '.engine');
+          const metadata = configManager.getModelMetadata(id);
           return {
-            id: baseName,
-            name: `${cleanName}${displayTag} (${modelTypeLabel}, ${precision})`,
+            id,
+            name: id, // Clean: just the filename without extension
             path: path.join(PATHS.MODELS, file),
-            precision,
-            backend: 'tensorrt',
-            modelType
+            precision: metadata?.useFp32 ? 'FP32' : 'FP16',
+            backend: 'tensorrt' as const,
+            modelType: metadata?.modelType || 'tspan',
+            displayTag: metadata?.displayTag,
+            description: metadata?.description
           };
         }),
         ...onnxFiles.map(file => {
-          const baseName = path.basename(file, '.onnx');
-          const cleanName = cleanModelName(file);
-          const precision = getPrecision(baseName);
-          const modelTypeLabel = getModelTypeLabel(baseName);
-          const displayTag = getDisplayTag(baseName);
+          const id = path.basename(file, '.onnx');
+          const metadata = configManager.getModelMetadata(id);
+          const hasEngine = onnxBasenamesWithEngines.has(id);
           
-          // Check if any engine file corresponds to this ONNX file
-          // Engine files are named like: model_fp16_fp16.engine (precision duplicated)
-          // So we check if any engine file starts with the ONNX basename
-          const hasEngine = engineFiles.some(engineFile => {
-            const engineBaseName = path.basename(engineFile, '.engine');
-            // Check if engine name starts with ONNX name and has precision suffix duplicated
-            return engineBaseName.startsWith(baseName + '_');
-          });
-          
-          const modelType = configManager.getModelMetadata(baseName)?.modelType || 'tspan';
           return {
-            id: baseName + ' (ONNX)',
-            name: `${cleanName}${displayTag} (${modelTypeLabel}, ${precision})`,
+            id,
+            name: id, // Clean: just the filename without extension
             path: path.join(PATHS.MODELS, file),
-            precision,
-            backend: 'onnx',
+            precision: metadata?.useFp32 ? 'FP32' : 'FP16',
+            backend: 'onnx' as const,
             hasEngine,
-            modelType
+            modelType: metadata?.modelType || 'tspan',
+            displayTag: metadata?.displayTag,
+            description: metadata?.description
           };
         })
       ];
       
-      logger.info(`Found ${models.length} model(s): ${models.map(m => m.name).join(', ')}`);
+      logger.info(`Found ${models.length} model(s): ${models.map(m => m.id).join(', ')}`);
       return models;
     } catch (error) {
       logger.error('Error getting available models:', error);
@@ -387,6 +360,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
   ipcMain.handle('get-model-metadata', async (event, modelId: string) => {
     logger.info(`Getting metadata for model: ${modelId}`);
     try {
+      // Model ID is now the exact filename without extension - direct lookup
       const metadata = configManager.getModelMetadata(modelId);
       return metadata;
     } catch (error) {
@@ -398,7 +372,20 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
   ipcMain.handle('update-model-metadata', async (event, modelId: string, metadata: any) => {
     logger.info(`Updating metadata for model: ${modelId}`);
     try {
-      await configManager.updateModelMetadata(modelId, metadata);
+      // Model ID is now the exact filename without extension - direct lookup
+      // If metadata doesn't exist yet, create it
+      const existing = configManager.getModelMetadata(modelId);
+      if (!existing) {
+        await configManager.setModelMetadata(
+          modelId,
+          metadata.useFp32 ?? false,
+          metadata.modelType ?? 'tspan',
+          metadata.displayTag,
+          metadata.description
+        );
+      } else {
+        await configManager.updateModelMetadata(modelId, metadata);
+      }
       return { success: true };
     } catch (error) {
       logger.error('Error updating model metadata:', error);
@@ -411,35 +398,13 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
   });
 
   ipcMain.handle('delete-model', async (event, modelPath: string, modelId: string) => {
-    logger.info(`Deleting model: ${modelPath}`);
+    logger.info(`Deleting model: ${modelPath} (id: ${modelId})`);
     try {
-      // Delete the physical file(s)
+      // Delete only the specific file being requested
       await fs.remove(modelPath);
       logger.info(`Deleted file: ${modelPath}`);
       
-      // If it's an ONNX file, also delete the corresponding engine file if it exists
-      if (modelPath.endsWith('.onnx')) {
-        const enginePath = modelPath.replace('.onnx', '_fp16.engine').replace('.onnx', '_fp32.engine');
-        const baseName = path.basename(modelPath, '.onnx');
-        const dir = path.dirname(modelPath);
-        
-        // Check for both fp16 and fp32 engine variants
-        const enginePaths = [
-          path.join(dir, `${baseName}_fp16.engine`),
-          path.join(dir, `${baseName}_fp32.engine`),
-          path.join(dir, `${baseName}_fp16_fp16.engine`),
-          path.join(dir, `${baseName}_fp32_fp32.engine`)
-        ];
-        
-        for (const enginePath of enginePaths) {
-          if (await fs.pathExists(enginePath)) {
-            await fs.remove(enginePath);
-            logger.info(`Deleted engine file: ${enginePath}`);
-          }
-        }
-      }
-      
-      // Delete metadata from config
+      // Delete metadata only for this specific model ID
       await configManager.deleteModelMetadata(modelId);
       logger.info(`Deleted metadata for model: ${modelId}`);
       

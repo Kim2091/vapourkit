@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectTemplateFile: () => ipcRenderer.invoke('select-template-file'),
   getVideoInfo: (filePath: string) => ipcRenderer.invoke('get-video-info', filePath),
   readVideoFile: (filePath: string) => ipcRenderer.invoke('read-video-file', filePath),
+  getVideoThumbnail: (filePath: string) => ipcRenderer.invoke('get-video-thumbnail', filePath),
   getOutputResolution: (videoPath: string, modelPath: string | null, useDirectML?: boolean, upscalingEnabled?: boolean, filters?: any, upscalePosition?: number, numStreams?: number) =>
     ipcRenderer.invoke('get-output-resolution', videoPath, modelPath, useDirectML, upscalingEnabled, filters, upscalePosition, numStreams),
   getFilePathFromFile: (file: File) => webUtils.getPathForFile(file),

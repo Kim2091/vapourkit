@@ -57,9 +57,14 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
   }, [loadQueue]);
 
   // Auto-save queue whenever it changes (but only after initial load)
+  // Debounce saves to prevent excessive disk writes during processing
   useEffect(() => {
     if (hasLoadedInitially.current && !isLoadingQueue) {
-      saveQueue(queue);
+      const timeoutId = setTimeout(() => {
+        saveQueue(queue);
+      }, 2000); // Debounce by 2 seconds
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [queue, isLoadingQueue, saveQueue]);
 

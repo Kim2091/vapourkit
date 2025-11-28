@@ -12,6 +12,7 @@ export interface ElectronAPI {
   selectTemplateFile: () => Promise<string | null>;
   getVideoInfo: (filePath: string) => Promise<VideoInfo>;
   readVideoFile: (filePath: string) => Promise<ArrayBuffer>;
+  getVideoThumbnail: (filePath: string) => Promise<string | null>;
   getOutputResolution: (
     videoPath: string,
     modelPath: string | null,
@@ -187,6 +188,8 @@ export interface ModelFile {
   backend: 'tensorrt' | 'onnx';
   hasEngine?: boolean;
   modelType?: 'tspan' | 'image';
+  displayTag?: string;
+  description?: string;
 }
 
 export interface ModelMetadata {

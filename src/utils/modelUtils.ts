@@ -56,8 +56,8 @@ export function filterModels(
  * Gets the display name for a model with appropriate labels.
  * 
  * Rules:
- * - DirectML mode: Clean name, no labels
- * - TensorRT mode (Simple): Clean name, no labels
+ * - DirectML mode: Show name with display tag if available
+ * - TensorRT mode (Simple): Show name with display tag if available
  * - TensorRT mode (Advanced): Add [Unbuilt] prefix for ONNX without engines
  */
 export function getModelDisplayName(
@@ -65,8 +65,13 @@ export function getModelDisplayName(
   useDirectML: boolean,
   advancedMode: boolean
 ): string {
-  // Extract clean name (remove technical details in parentheses for simple mode)
-  let displayName = advancedMode ? model.name : model.name.replace(/\s*\([^)]*\)\s*$/, '');
+  // Build display name: base name + optional display tag
+  let displayName = model.name;
+  
+  // Add display tag if available
+  if (model.displayTag) {
+    displayName = `${displayName} [${model.displayTag}]`;
+  }
   
   // Add [Unbuilt] label only in TensorRT advanced mode for ONNX without engines
   if (!useDirectML && advancedMode && model.backend === 'onnx' && !model.hasEngine) {

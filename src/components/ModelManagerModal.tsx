@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Edit2, Trash2, Save, XCircle, Sparkles } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Edit2, Trash2, Save, XCircle, Sparkles, Search } from 'lucide-react';
 import type { ModelFile } from '../electron.d';
 
 interface ModelManagerModalProps {
@@ -31,12 +31,24 @@ export function ModelManagerModal({
   });
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
+  // Filter models based on search query
+  const filteredModels = useMemo(() => {
+    if (!searchQuery.trim()) return models;
+    const query = searchQuery.toLowerCase();
+    return models.filter(model => 
+      model.name.toLowerCase().includes(query) ||
+      model.path.toLowerCase().includes(query)
+    );
+  }, [models, searchQuery]);
+
+  // Reset state when modal opens or closes
   useEffect(() => {
-    if (!isOpen) {
-      setEditingModel(null);
-      setIsDeleting(null);
-    }
+    // Reset all state when modal opens to ensure clean state
+    setEditingModel(null);
+    setIsDeleting(null);
+    setSearchQuery('');
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -60,7 +72,10 @@ export function ModelManagerModal({
   const handleSave = async (modelId: string) => {
     setIsSaving(true);
     try {
-      await window.electronAPI.updateModelMetadata(modelId, editData);
+      const result = await window.electronAPI.updateModelMetadata(modelId, editData);
+      if (!result.success) {
+        throw new Error(result.error || 'Unknown error');
+      }
       setEditingModel(null);
       onModelUpdated();
     } catch (error) {
@@ -110,6 +125,22 @@ export function ModelManagerModal({
           </button>
         </div>
 
+        {/* Search Bar */}
+        {models.length > 0 && (
+          <div className="px-4 pt-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search models..."
+                className="w-full bg-dark-surface border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-primary-purple transition-colors placeholder-gray-500"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {models.length === 0 ? (
@@ -117,9 +148,14 @@ export function ModelManagerModal({
               <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No models found</p>
             </div>
+          ) : filteredModels.length === 0 ? (
+            <div className="text-center text-gray-400 py-12">
+              <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No models match your search</p>
+            </div>
           ) : (
             <div className="space-y-2">
-              {models.map((model) => (
+              {filteredModels.map((model) => (
                 <div
                   key={model.id}
                   className="bg-dark-surface rounded-lg border border-gray-700 p-3"

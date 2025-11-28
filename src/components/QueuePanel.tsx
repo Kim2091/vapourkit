@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { List, Trash2, ChevronLeft, ChevronRight, PlayCircle, XCircle, RotateCcw, FolderOpen, SplitSquareHorizontal, Scissors } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { List, Trash2, ChevronLeft, ChevronRight, PlayCircle, XCircle, RotateCcw, FolderOpen, SplitSquareHorizontal, Scissors, Film } from 'lucide-react';
 import type { QueueItem } from '../electron.d';
 
 interface QueuePanelProps {
@@ -36,14 +36,51 @@ export function QueuePanel({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
+  
+  // Track which thumbnails we've already fetched to prevent duplicate requests
+  const fetchedThumbnailsRef = useRef<Set<string>>(new Set());
 
-  const stats = {
+  // Fetch thumbnails for queue items
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchThumbnails = async () => {
+      for (const item of queue) {
+        // Skip if we've already attempted to fetch this thumbnail
+        if (fetchedThumbnailsRef.current.has(item.videoPath)) continue;
+        
+        // Mark as fetching to prevent duplicate requests
+        fetchedThumbnailsRef.current.add(item.videoPath);
+        
+        try {
+          const thumbnail = await window.electronAPI.getVideoThumbnail(item.videoPath);
+          if (isMounted) {
+            setThumbnails(prev => ({ ...prev, [item.videoPath]: thumbnail }));
+          }
+        } catch {
+          // Keep as null if failed
+          if (isMounted) {
+            setThumbnails(prev => ({ ...prev, [item.videoPath]: null }));
+          }
+        }
+      }
+    };
+
+    fetchThumbnails();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [queue]);
+
+  const stats = useMemo(() => ({
     total: queue.length,
     pending: queue.filter(item => item.status === 'pending').length,
     processing: queue.filter(item => item.status === 'processing').length,
     completed: queue.filter(item => item.status === 'completed').length,
     error: queue.filter(item => item.status === 'error').length,
-  };
+  }), [queue]);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIndex(index);
@@ -211,9 +248,12 @@ export function QueuePanel({
                   isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
                 }`}
               >
-                {/* Top Row: Index, Status, Actions */}
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
+                {/* Top Row: Name, Index, Status, Actions */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                    <p className="text-sm font-medium truncate flex-1 min-w-0" title={item.videoName}>
+                        {item.videoName}
+                    </p>
+                    <div className="flex items-center gap-2 flex-shrink-0">
                         <div className={`flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center ${
                             item.status === 'processing' ? 'bg-blue-500/20 border-blue-500/50' :
                             item.status === 'completed' ? 'bg-green-500/20 border-green-500/50' :
@@ -238,19 +278,31 @@ export function QueuePanel({
                             {item.status}
                         </span>
                     </div>
+                </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Thumbnail - Large */}
+                <div className="flex-1 min-h-0 rounded-lg overflow-hidden bg-dark-bg border border-gray-800 flex items-center justify-center relative group/thumb">
+                  {thumbnails[item.videoPath] ? (
+                    <img 
+                      src={thumbnails[item.videoPath]!} 
+                      alt="" 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Film className="w-10 h-10 text-gray-600" />
+                  )}
+                  {/* Hover Actions Overlay */}
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1">
                         {item.status === 'processing' ? (
                         <button
                             onClick={(e) => {
                             e.stopPropagation();
                             onCancelItem(item.id);
                             }}
-                            className="p-1 hover:bg-orange-900/20 rounded transition-colors"
+                            className="p-1.5 bg-orange-900/50 hover:bg-orange-900/70 rounded transition-colors"
                             title="Cancel"
                         >
-                            <XCircle className="w-3.5 h-3.5 text-orange-400" />
+                            <XCircle className="w-4 h-4 text-orange-400" />
                         </button>
                         ) : item.status === 'pending' && !isQueueStarted ? (
                         <>
@@ -260,10 +312,10 @@ export function QueuePanel({
                                 e.stopPropagation();
                                 onReorder(index, index - 1);
                                 }}
-                                className="p-1 hover:bg-dark-bg rounded transition-colors"
+                                className="p-1.5 bg-dark-surface/80 hover:bg-dark-surface rounded transition-colors"
                                 title="Move left"
                             >
-                                <ChevronLeft className="w-3.5 h-3.5 text-gray-400" />
+                                <ChevronLeft className="w-4 h-4 text-gray-300" />
                             </button>
                             )}
                             {index < queue.length - 1 && (
@@ -272,10 +324,10 @@ export function QueuePanel({
                                 e.stopPropagation();
                                 onReorder(index, index + 1);
                                 }}
-                                className="p-1 hover:bg-dark-bg rounded transition-colors"
+                                className="p-1.5 bg-dark-surface/80 hover:bg-dark-surface rounded transition-colors"
                                 title="Move right"
                             >
-                                <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                                <ChevronRight className="w-4 h-4 text-gray-300" />
                             </button>
                             )}
                         </>
@@ -285,10 +337,10 @@ export function QueuePanel({
                             e.stopPropagation();
                             onRequeueItem(item.id);
                             }}
-                            className="p-1 hover:bg-blue-900/20 rounded transition-colors"
+                            className="p-1.5 bg-blue-900/50 hover:bg-blue-900/70 rounded transition-colors"
                             title="Reprocess"
                         >
-                            <RotateCcw className="w-3.5 h-3.5 text-blue-400" />
+                            <RotateCcw className="w-4 h-4 text-blue-400" />
                         </button>
                         ) : null}
                         {item.status !== 'processing' && (
@@ -297,46 +349,39 @@ export function QueuePanel({
                             e.stopPropagation();
                             onRemoveItem(item.id);
                             }}
-                            className="p-1 hover:bg-red-900/20 rounded transition-colors"
+                            className="p-1.5 bg-red-900/50 hover:bg-red-900/70 rounded transition-colors"
                             title="Remove"
                         >
-                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            <Trash2 className="w-4 h-4 text-red-400" />
                         </button>
                         )}
-                    </div>
+                  </div>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <p className="text-sm font-medium truncate mb-1" title={item.videoName}>
-                        {item.videoName}
-                    </p>
-                    
-                    {/* Workflow info */}
-                    <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                {/* Bottom: Workflow info */}
+                <div className="flex items-center gap-2 text-xs text-gray-500 mt-2 flex-wrap">
+                    <span className="bg-dark-bg px-1.5 py-0.5 rounded border border-gray-800">
+                        {item.workflow.outputFormat.toUpperCase()}
+                    </span>
+                    {item.workflow.filters.filter(f => f.enabled).length > 0 && (
                         <span className="bg-dark-bg px-1.5 py-0.5 rounded border border-gray-800">
-                            {item.workflow.outputFormat.toUpperCase()}
+                            {item.workflow.filters.filter(f => f.enabled).length} filter(s)
                         </span>
-                        {item.workflow.filters.filter(f => f.enabled).length > 0 && (
-                            <span className="bg-dark-bg px-1.5 py-0.5 rounded border border-gray-800">
-                                {item.workflow.filters.filter(f => f.enabled).length} filter(s)
-                            </span>
-                        )}
-                        {item.workflow.segment?.enabled && (
-                            <span className="bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/30 text-orange-400 flex items-center gap-1">
-                                <Scissors className="w-3 h-3" />
-                                {item.workflow.segment.startFrame}-{item.workflow.segment.endFrame === -1 ? 'end' : item.workflow.segment.endFrame}
-                            </span>
-                        )}
-                    </div>
-                    
-                    {/* Error message */}
-                    {item.status === 'error' && item.errorMessage && (
-                      <p className="text-xs text-red-400 mt-2 line-clamp-2 bg-red-900/10 p-1 rounded border border-red-900/20">
-                        {item.errorMessage}
-                      </p>
+                    )}
+                    {item.workflow.segment?.enabled && (
+                        <span className="bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/30 text-orange-400 flex items-center gap-1">
+                            <Scissors className="w-3 h-3" />
+                            {item.workflow.segment.startFrame}-{item.workflow.segment.endFrame === -1 ? 'end' : item.workflow.segment.endFrame}
+                        </span>
                     )}
                 </div>
+                    
+                {/* Error message */}
+                {item.status === 'error' && item.errorMessage && (
+                  <p className="text-xs text-red-400 mt-2 line-clamp-2 bg-red-900/10 p-1 rounded border border-red-900/20">
+                    {item.errorMessage}
+                  </p>
+                )}
 
                 {/* Completed Item Actions */}
                 {item.status === 'completed' && (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { VideoInfo, UpscaleProgress, Filter, SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 
@@ -17,6 +17,19 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
   const [completedVideoPath, setCompletedVideoPath] = useState<string | null>(null);
   const [completedVideoBlobUrl, setCompletedVideoBlobUrl] = useState<string | null>(null);
   const [videoLoadError, setVideoLoadError] = useState(false);
+
+  // Refs to avoid re-subscribing to the progress listener when these values change
+  const isProcessingRef = useRef(isProcessing);
+  const outputPathRef = useRef(outputPath);
+  
+  // Keep refs in sync
+  useEffect(() => {
+    isProcessingRef.current = isProcessing;
+  }, [isProcessing]);
+  
+  useEffect(() => {
+    outputPathRef.current = outputPath;
+  }, [outputPath]);
 
   // Load completed video as blob URL
   const loadCompletedVideo = useCallback(async (videoPath: string): Promise<void> => {
@@ -45,7 +58,13 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     }
   }, [onLog]);
 
-  // Upscale progress listener
+  // Ref for loadCompletedVideo to avoid re-subscription
+  const loadCompletedVideoRef = useRef(loadCompletedVideo);
+  useEffect(() => {
+    loadCompletedVideoRef.current = loadCompletedVideo;
+  }, [loadCompletedVideo]);
+
+  // Upscale progress listener - subscribe once and use refs to access current values
   useEffect(() => {
     const unsubscribe = window.electronAPI.onUpscaleProgress((progress: UpscaleProgress) => {
       if (progress.type === 'preview-frame' && progress.previewFrame) {
@@ -56,7 +75,7 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
         
         // Update stopping state based on progress
         // Only set isStopping to true if we're still processing (avoid race condition with cancel)
-        if (progress.isStopping && isProcessing) {
+        if (progress.isStopping && isProcessingRef.current) {
           setIsStopping(true);
         }
         
@@ -66,11 +85,11 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
           
           // Only auto-load video if we're in a real processing session (not preview)
           // Preview handles its own video loading via handlePreviewSegment
-          if (isProcessing) {
+          if (isProcessingRef.current) {
             setIsProcessing(false);
-            setCompletedVideoPath(outputPath);
+            setCompletedVideoPath(outputPathRef.current);
             setPreviewFrame(null);
-            loadCompletedVideo(outputPath);
+            loadCompletedVideoRef.current(outputPathRef.current);
           }
         } else if (progress.type === 'error') {
           setIsProcessing(false);
@@ -80,7 +99,7 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     });
 
     return unsubscribe;
-  }, [outputPath, onLog, loadCompletedVideo, isProcessing]);
+  }, [onLog]); // Only re-subscribe if onLog changes (which it shouldn't)
 
   // Cleanup blob URL when component unmounts or new video starts
   useEffect(() => {
