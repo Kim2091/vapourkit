@@ -44,7 +44,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
             path: path.join(PATHS.MODELS, file),
             precision: metadata?.useFp32 ? 'FP32' : 'FP16',
             backend: 'tensorrt' as const,
-            modelType: metadata?.modelType || 'tspan',
+            modelType: metadata?.modelType || 'image',
             displayTag: metadata?.displayTag,
             description: metadata?.description
           };
@@ -61,7 +61,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
             precision: metadata?.useFp32 ? 'FP32' : 'FP16',
             backend: 'onnx' as const,
             hasEngine,
-            modelType: metadata?.modelType || 'tspan',
+            modelType: metadata?.modelType || 'image',
             displayTag: metadata?.displayTag,
             description: metadata?.description
           };
@@ -130,7 +130,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       logger.model(`ONNX path: ${params.onnxPath}`);
       logger.model(`Model name: ${params.modelName}`);
       logger.model(`Precision: ${params.useFp32 ? 'FP32' : 'FP16'}`);
-      logger.model(`Model type: ${params.modelType || 'tspan'}`);
+      logger.model(`Model type: ${params.modelType || 'image'}`);
       
       try {
         const { ModelExtractor } = await import('./modelExtractor');
@@ -186,7 +186,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         await configManager.setModelMetadata(
           modelNameWithPrecision, 
           params.useFp32,
-          (params.modelType as 'tspan' | 'image') || 'tspan',
+          (params.modelType as 'tspan' | 'image') || 'image',
           params.displayTag
         );
         
@@ -235,7 +235,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       logger.model(`ONNX path: ${params.onnxPath}`);
       logger.model(`Model name: ${params.modelName}`);
       logger.model(`Precision: ${params.useFp32 ? 'FP32' : 'FP16'}`);
-      logger.model(`Model type: ${params.modelType || 'tspan'}`);
+      logger.model(`Model type: ${params.modelType || 'image'}`);
       logger.model(`DirectML mode: ${params.useDirectML ? 'enabled' : 'disabled'}`);
       
       try {
@@ -286,7 +286,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         await configManager.setModelMetadata(
           modelNameWithPrecision, 
           params.useFp32,
-          (params.modelType as 'tspan' | 'image') || 'tspan',
+          (params.modelType as 'tspan' | 'image') || 'image',
           params.displayTag
         );
         
@@ -379,7 +379,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         await configManager.setModelMetadata(
           modelId,
           metadata.useFp32 ?? false,
-          metadata.modelType ?? 'tspan',
+          metadata.modelType ?? 'image',
           metadata.displayTag,
           metadata.description
         );

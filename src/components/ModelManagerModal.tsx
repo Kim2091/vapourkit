@@ -26,7 +26,7 @@ export function ModelManagerModal({
   const [editData, setEditData] = useState<ModelMetadata>({
     displayTag: '',
     description: '',
-    modelType: 'tspan',
+    modelType: 'image',
     useFp32: false,
   });
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -60,7 +60,7 @@ export function ModelManagerModal({
       setEditData({
         displayTag: metadata?.displayTag || '',
         description: metadata?.description || '',
-        modelType: model.modelType || 'tspan',
+        modelType: model.modelType || 'image',
         useFp32: metadata?.useFp32 || false,
       });
       setEditingModel(model.id);

@@ -482,7 +482,7 @@ function createScriptConfig(
 ) {
   const isUpscaling = upscalingEnabled !== false;
   
-  let modelType: 'tspan' | 'image' = 'tspan';
+  let modelType: 'tspan' | 'image' = 'image';
   let useFp32 = false;
   
   if (isUpscaling && modelPath) {

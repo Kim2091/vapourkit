@@ -93,9 +93,10 @@ export class VapourSynthScriptGenerator {
     for (const filter of enabledFilters) {
       if (filter.filterType === 'aiModel' && filter.modelPath) {
         // Generate AI model upscaling code
-        // Check precision for THIS specific model, not the global setting
+        // Check precision and model type for THIS specific model from config, not filter state
         const filterUseFp32 = configManager.isModelFp32(filter.modelPath);
-        filterCode += this.generateAIModelCode(filter, config.useDirectML || false, filterUseFp32, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams);
+        const filterModelType = configManager.getModelType(filter.modelPath);
+        filterCode += this.generateAIModelCode(filter, config.useDirectML || false, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams);
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';
@@ -127,10 +128,8 @@ export class VapourSynthScriptGenerator {
   /**
    * Generate VapourSynth code for an AI model filter
    */
-  private generateAIModelCode(filter: Filter, useDirectML: boolean, useFp32: boolean, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number): string {
+  private generateAIModelCode(filter: Filter, useDirectML: boolean, useFp32: boolean, modelType: ModelType, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number): string {
     if (!filter.modelPath) return '';
-    
-    const modelType = filter.modelType || 'tspan';
     
     // Constants for VapourSynth variable names
     const CLIP = 'clip';

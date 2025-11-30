@@ -123,7 +123,7 @@ export function DynamicFilterPanel({
       code: '',
       order: pendingFilters.length,
       modelPath: '',
-      modelType: 'tspan',
+      modelType: 'image',
     };
     const updatedFilters = [...pendingFilters, newFilter];
     setPendingFilters(updatedFilters);
@@ -193,7 +193,7 @@ export function DynamicFilterPanel({
         ...f, 
         modelPath,
         // Use the actual modelType from the model's metadata
-        modelType: selectedModel?.modelType || 'tspan'
+        modelType: selectedModel?.modelType || 'image'
       } : f
     );
     setPendingFilters(updatedFilters);

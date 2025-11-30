@@ -559,11 +559,13 @@ function App() {
       <Header
         isProcessing={isProcessing}
         developerMode={developerMode}
+        useDirectML={useDirectML}
         onSettingsClick={() => setShowSettings(true)}
         onPluginsClick={() => setShowPlugins(true)}
         onReloadBackend={handleReloadBackend}
         onAboutClick={() => setShowAbout(true)}
         onToggleDeveloperMode={handleToggleDeveloperMode}
+        onToggleDirectML={handleToggleDirectML}
         onLoadWorkflow={handleLoadWorkflow}
         onImportWorkflow={handleImportWorkflow}
         onExportWorkflow={handleExportWorkflow}

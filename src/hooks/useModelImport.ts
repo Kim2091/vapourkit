@@ -20,7 +20,7 @@ interface ImportForm {
 export const generateTrtexecCommand = (modelType: 'tspan' | 'image', useFp32: boolean, useStaticShape: boolean): string => {
   const channels = modelType === 'tspan' ? '15' : '3';
   // FP32 is the default in trtexec, so only add --fp16 flag when NOT using FP32
-  const precisionFlags = useFp32 ? '' : '--fp16';
+  const precisionFlags = useFp32 ? '' : '--inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --fp16';
   
   if (useStaticShape) {
     // Static shape mode

@@ -209,7 +209,7 @@ export function useWorkflow({
             order: filter.order,
             filterType: filter.filterType,
             modelPath: portableModelName,
-            modelType: filter.filterType === 'aiModel' ? (filter.modelType || 'tspan') : undefined,
+            modelType: filter.filterType === 'aiModel' ? (filter.modelType || 'image') : undefined,
           };
         }),
         createdAt: new Date().toISOString(),

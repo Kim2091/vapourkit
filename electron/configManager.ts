@@ -117,7 +117,7 @@ export class ConfigManager {
     await this.save();
   }
 
-  async setModelMetadata(modelName: string, useFp32: boolean, modelType: ModelType = 'tspan', displayTag?: string, description?: string): Promise<void> {
+  async setModelMetadata(modelName: string, useFp32: boolean, modelType: ModelType = 'image', displayTag?: string, description?: string): Promise<void> {
     this.config.models[modelName] = {
       useFp32,
       modelType,
@@ -135,7 +135,7 @@ export class ConfigManager {
     // Ensure modelType exists (for backward compatibility with old configs)
     return {
       useFp32: metadata.useFp32,
-      modelType: metadata.modelType || 'tspan',
+      modelType: metadata.modelType || 'image',
       displayTag: metadata.displayTag,
       description: metadata.description,
       createdAt: metadata.createdAt
@@ -170,8 +170,8 @@ export class ConfigManager {
   getModelType(modelPath: string): ModelType {
     const filename = path.basename(modelPath, path.extname(modelPath));
     const metadata = this.getModelMetadata(filename);
-    // Return stored model type, default to 'tspan' for backward compatibility
-    return metadata?.modelType || 'tspan';
+    // Return stored model type, default to 'image' as it's the most common type
+    return metadata?.modelType || 'image';
   }
 
   getColorMatrixSettings(): { overwriteMatrix: boolean; matrix709: boolean; defaultMatrix: '709' | '170m'; defaultPrimaries: '709' | '601'; defaultTransfer: '709' | '170m' } {
