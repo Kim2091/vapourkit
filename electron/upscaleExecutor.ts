@@ -13,6 +13,12 @@ import { VapourSynthInfoExtractor, OutputInfo } from './vapourSynthInfoExtractor
 import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
 import { configManager } from './configManager';
 
+export interface SegmentSelection {
+  enabled: boolean;
+  startFrame: number;
+  endFrame: number; // -1 means end of video
+}
+
 export interface UpscaleProgress {
   type: 'progress' | 'complete' | 'error' | 'preview-frame';
   currentFrame: number;
@@ -86,7 +92,7 @@ export class UpscaleExecutor {
     return this.vsInfoExtractor.getOutputInfo(scriptPath);
   }
 
-  async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0, previewMode: boolean = false): Promise<void> {
+  async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0, previewMode: boolean = false, segment?: SegmentSelection, fps?: number): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
         this.logExecutionStart(scriptPath, inputPath, outputPath, totalFrames);
@@ -106,7 +112,7 @@ export class UpscaleExecutor {
         
         // Spawn processes
         const vspipe = this.spawnVspipe(scriptPath, env, isRawVideo);
-        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, previewMode);
+        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, previewMode, segment, fps);
         const ffmpeg = this.spawnFFmpeg(ffmpegArgs);
         
         this.setupProcessPiping(vspipe, ffmpeg);
@@ -224,7 +230,7 @@ export class UpscaleExecutor {
     });
   }
 
-  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, previewMode: boolean = false): Promise<string[]> {
+  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, previewMode: boolean = false, segment?: SegmentSelection, fps?: number): Promise<string[]> {
     logger.upscale('Building FFmpeg command with metadata passthrough and preview output');
     const ffmpegConfig = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
     
@@ -253,6 +259,24 @@ export class UpscaleExecutor {
     }
     
     ffmpegArgs.push('-i', 'pipe:0');
+
+    // Calculate audio trimming for segment selection
+    // We need to trim the audio input to match the video segment
+    if (segment?.enabled && fps && fps > 0) {
+      const startTime = segment.startFrame / fps;
+      ffmpegArgs.push('-ss', startTime.toFixed(6));
+      
+      // If endFrame is specified (not -1), calculate duration
+      if (segment.endFrame > 0) {
+        const endTime = segment.endFrame / fps;
+        const duration = endTime - startTime;
+        ffmpegArgs.push('-t', duration.toFixed(6));
+        logger.upscale(`Audio trimming: start=${startTime.toFixed(3)}s, duration=${duration.toFixed(3)}s`);
+      } else {
+        logger.upscale(`Audio trimming: start=${startTime.toFixed(3)}s to end`);
+      }
+    }
+    
     ffmpegArgs.push('-i', inputPath);
 
     // Main output: video file with audio/subs

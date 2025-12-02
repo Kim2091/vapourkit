@@ -193,6 +193,11 @@ export function registerVideoHandlers(
         const scriptPath = await scriptGenerator.generateScript(config);
         logger.upscale(`Script generated: ${scriptPath}`);
 
+        // Get video metadata for fps (needed for audio segment trimming)
+        const videoMetadata = await extractVideoMetadata(videoPath);
+        const fps = videoMetadata.fps || 24;
+        logger.upscale(`Input video fps: ${fps}`);
+
         // Initialize executor
         const vspipePath = dependencyManager.getVSPipePath();
         const pythonPath = dependencyManager.getPythonExecutablePath();
@@ -207,7 +212,7 @@ export function registerVideoHandlers(
         logger.upscale(`Total frames to process: ${totalFrames}`);
 
         logger.upscale('Starting execution');
-        await upscaleExecutor.execute(scriptPath, outputPath, videoPath, totalFrames);
+        await upscaleExecutor.execute(scriptPath, outputPath, videoPath, totalFrames, false, segment?.enabled ? segment : undefined, fps);
 
         // Cleanup
         logger.upscale('Cleaning up script file');
@@ -325,6 +330,11 @@ export function registerVideoHandlers(
         const scriptPath = await scriptGenerator.generateScript(config);
         logger.upscale(`Preview script generated: ${scriptPath}`);
         
+        // Get video metadata for fps (needed for audio segment trimming)
+        const videoMetadata = await extractVideoMetadata(videoPath);
+        const fps = videoMetadata.fps || 24;
+        logger.upscale(`Input video fps: ${fps}`);
+        
         // Initialize executor for preview
         const vspipePath = dependencyManager.getVSPipePath();
         const pythonPath = dependencyManager.getPythonExecutablePath();
@@ -335,7 +345,7 @@ export function registerVideoHandlers(
         logger.upscale(`Preview frames to process: ${totalFrames}`);
         
         // Execute preview (previewMode=true to skip subtitles for MKV compatibility)
-        await previewExecutor.execute(scriptPath, previewPath, videoPath, totalFrames, true);
+        await previewExecutor.execute(scriptPath, previewPath, videoPath, totalFrames, true, previewSegment, fps);
         
         // Cleanup script
         await scriptGenerator.cleanupScript(scriptPath);
