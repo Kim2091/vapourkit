@@ -280,26 +280,21 @@ export class ModelExtractor {
    */
   cancelConversion(): void {
     if (this.currentTrtexecProcess) {
-      logger.model('Canceling trtexec conversion process');
+      logger.model('Force killing trtexec conversion process');
       try {
-        // On Windows, we need to kill the entire process tree
+        // On Windows, we need to kill the entire process tree immediately
         if (process.platform === 'win32') {
           const { exec } = require('child_process');
-          exec(`taskkill /pid ${this.currentTrtexecProcess.pid} /T /F`, (error: any) => {
-            if (error) {
-              logger.error('Error killing trtexec process tree:', error);
+          exec(`taskkill /F /T /PID ${this.currentTrtexecProcess.pid}`, (error: any) => {
+            if (error && !error.message.includes('not found')) {
+              logger.debug('taskkill error (may already be dead):', error.message);
             } else {
               logger.model('trtexec process tree terminated');
             }
           });
         } else {
-          // On Unix-like systems, send SIGTERM first, then SIGKILL if needed
-          this.currentTrtexecProcess.kill('SIGTERM');
-          setTimeout(() => {
-            if (this.currentTrtexecProcess && !this.currentTrtexecProcess.killed) {
-              this.currentTrtexecProcess.kill('SIGKILL');
-            }
-          }, 3000);
+          // On Unix-like systems, SIGKILL for immediate termination
+          this.currentTrtexecProcess.kill('SIGKILL');
         }
         this.currentTrtexecProcess = null;
       } catch (error) {

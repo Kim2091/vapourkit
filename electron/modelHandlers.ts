@@ -6,6 +6,20 @@ import { PATHS } from './constants';
 import { configManager } from './configManager';
 import { withLogSeparator } from './utils';
 import { sendModelImportProgress } from './ipcUtilities';
+import { ModelExtractor } from './modelExtractor';
+
+// Module-level ModelExtractor instance for cancellation support
+let activeModelExtractor: ModelExtractor | null = null;
+
+/**
+ * Cancels any active model conversion/import operation
+ */
+export function cancelActiveModelOperation(): void {
+  if (activeModelExtractor) {
+    activeModelExtractor.cancelConversion();
+    activeModelExtractor = null;
+  }
+}
 
 /**
  * Registers all model-related IPC handlers
@@ -133,8 +147,8 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       logger.model(`Model type: ${params.modelType || 'image'}`);
       
       try {
-        const { ModelExtractor } = await import('./modelExtractor');
-        const modelExtractor = new ModelExtractor();
+        // Use module-level extractor for cancellation support
+        activeModelExtractor = new ModelExtractor();
         
         // Send progress updates
         const sendProgress = (type: 'converting' | 'complete' | 'error', progress: number, message: string, enginePath?: string) => {
@@ -154,7 +168,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         const enginePath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.engine`);
         
         try {
-          await modelExtractor.convertToEngineWithProgress(
+          await activeModelExtractor.convertToEngineWithProgress(
             params.onnxPath,
             enginePath,
             params.minShapes,
@@ -164,7 +178,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
             params.useStaticShape || false,
             0,
             99,
-            (message, progress) => {
+            (message: string, progress: number) => {
               sendProgress('converting', progress, message);
             },
             params.useCustomTrtexecParams ? params.customTrtexecParams : undefined
@@ -192,6 +206,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         
         // Complete
         sendProgress('complete', 100, 'Model initialized successfully!', enginePath);
+        activeModelExtractor = null;
         
         return {
           success: true,
@@ -199,6 +214,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         };
         
       } catch (error) {
+        activeModelExtractor = null;
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         logger.error('Model initialization failed:', errorMsg);
         
@@ -240,10 +256,10 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       
       try {
         const { ModelValidator } = await import('./modelValidator');
-        const { ModelExtractor } = await import('./modelExtractor');
         
         const validator = new ModelValidator();
-        const modelExtractor = new ModelExtractor();
+        // Use module-level extractor for cancellation support
+        activeModelExtractor = new ModelExtractor();
         
         // Validate
         sendModelImportProgress(mainWindow, 'validating', 10, 'Validating ONNX model...');
@@ -294,6 +310,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         if (params.useDirectML) {
           logger.model('DirectML mode enabled - skipping TensorRT conversion');
           sendModelImportProgress(mainWindow, 'complete', 100, 'Model imported successfully for DirectML use!', targetOnnxPath);
+          activeModelExtractor = null;
           
           return {
             success: true,
@@ -307,7 +324,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         const enginePath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.engine`);
         
         try {
-          await modelExtractor.convertToEngineWithProgress(
+          await activeModelExtractor!.convertToEngineWithProgress(
             targetOnnxPath,
             enginePath,
             params.minShapes,
@@ -317,7 +334,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
             params.useStaticShape || false,
             30,
             69,
-            (message, progress) => {
+            (message: string, progress: number) => {
               const cleanMessage = message.replace(/\.\.\.\s\d+%$/, '...');
               sendModelImportProgress(mainWindow, 'converting', progress, cleanMessage);
             },
@@ -338,6 +355,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         
         // Complete
         sendModelImportProgress(mainWindow, 'complete', 100, 'Model imported successfully!', enginePath);
+        activeModelExtractor = null;
         
         return {
           success: true,
@@ -345,6 +363,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         };
         
       } catch (error) {
+        activeModelExtractor = null;
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         logger.error('Model import failed:', errorMsg);
         sendModelImportProgress(mainWindow, 'error', 0, `Import failed: ${errorMsg}`);
@@ -417,5 +436,11 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         error: errorMsg
       };
     }
+  });
+
+  ipcMain.handle('cancel-model-import', async () => {
+    logger.info('Cancelling model import/initialization');
+    cancelActiveModelOperation();
+    return { success: true };
   });
 }

@@ -4,6 +4,8 @@ import { logger } from './logger';
 import { configManager } from './configManager';
 import { WindowManager } from './windowManager';
 import { registerAllIpcHandlers } from './ipcRegistry';
+import { cancelActiveModelOperation } from './modelHandlers';
+import { cancelAllVideoProcessing } from './videoHandlers';
 
 // ============================================================================
 // INITIALIZATION
@@ -88,6 +90,14 @@ app.on('window-all-closed', () => {
     logger.info('Quitting application');
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  logger.info('App quitting, cleaning up child processes');
+  // Cancel any active model operations (trtexec processes)
+  cancelActiveModelOperation();
+  // Cancel any active video processing (vspipe, ffmpeg processes)
+  cancelAllVideoProcessing();
 });
 
 app.on('activate', () => {

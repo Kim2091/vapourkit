@@ -1,5 +1,5 @@
 // electron/upscaleExecutor.ts
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { BrowserWindow } from 'electron';
@@ -12,6 +12,29 @@ import { VideoMetadataExtractor, VideoMetadata } from './videoMetadataExtractor'
 import { VapourSynthInfoExtractor, OutputInfo } from './vapourSynthInfoExtractor';
 import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
 import { configManager } from './configManager';
+
+/**
+ * Force kills a process and its children on Windows using taskkill
+ */
+function forceKillProcess(proc: ChildProcess): void {
+  if (!proc.pid) return;
+  
+  if (process.platform === 'win32') {
+    // On Windows, use taskkill to force kill the process tree immediately
+    exec(`taskkill /F /T /PID ${proc.pid}`, (error) => {
+      if (error && !error.message.includes('not found')) {
+        logger.debug(`taskkill error (may already be dead): ${error.message}`);
+      }
+    });
+  } else {
+    // On Unix, SIGKILL should work
+    try {
+      proc.kill('SIGKILL');
+    } catch (e) {
+      // Process may already be dead
+    }
+  }
+}
 
 export interface SegmentSelection {
   enabled: boolean;
@@ -600,6 +623,9 @@ export class UpscaleExecutor {
     logger.upscale('Canceling upscale process gracefully');
     this.isCanceling = true;
     
+    // Cancel any pending info extraction processes
+    this.vsInfoExtractor.cancelAll();
+    
     // Send stopping progress update
     this.sendProgress({
       type: 'progress',
@@ -626,11 +652,11 @@ export class UpscaleExecutor {
       logger.upscale('Stopping vspipe process (no new frames)');
       vspipeProcess.kill('SIGTERM');
       
-      // Force kill vspipe if it doesn't exit
+      // Force kill vspipe if it doesn't exit quickly
       setTimeout(() => {
         if (vspipeProcess && !vspipeProcess.killed) {
           logger.upscale('vspipe process did not exit gracefully, forcing termination');
-          vspipeProcess.kill('SIGKILL');
+          forceKillProcess(vspipeProcess);
         }
       }, 3000);
       
@@ -651,16 +677,8 @@ export class UpscaleExecutor {
       // Give ffmpeg time to finish encoding what it has (10 seconds)
       const ffmpegTimeout = setTimeout(() => {
         if (ffmpegProcess && !ffmpegProcess.killed) {
-          logger.upscale('FFmpeg did not finish in time, sending SIGTERM');
-          ffmpegProcess.kill('SIGTERM');
-          
-          // Force kill if SIGTERM doesn't work
-          setTimeout(() => {
-            if (ffmpegProcess && !ffmpegProcess.killed) {
-              logger.upscale('FFmpeg did not exit gracefully, forcing termination');
-              ffmpegProcess.kill('SIGKILL');
-            }
-          }, 3000);
+          logger.upscale('FFmpeg did not finish in time, force killing');
+          forceKillProcess(ffmpegProcess);
         }
       }, 10000); // 10 second grace period for encoding
       
@@ -684,26 +702,28 @@ export class UpscaleExecutor {
     logger.upscale('Force killing upscale process');
     this.isCanceling = true;
 
+    // Cancel any pending info extraction processes
+    this.vsInfoExtractor.cancelAll();
+
     if (this.process) {
       logger.upscale('Force killing vspipe');
-      try {
-        this.process.kill('SIGKILL');
-      } catch (e) {
-        logger.error('Error killing vspipe:', e);
-      }
+      forceKillProcess(this.process);
       this.process = null;
     }
 
     if (this.ffmpegProcess) {
       logger.upscale('Force killing ffmpeg');
-      try {
-        this.ffmpegProcess.kill('SIGKILL');
-      } catch (e) {
-        logger.error('Error killing ffmpeg:', e);
-      }
+      forceKillProcess(this.ffmpegProcess);
       this.ffmpegProcess = null;
     }
     
     this.isCanceling = false;
+  }
+
+  /**
+   * Cancels any active info extraction processes (vspipe -i)
+   */
+  cancelInfoExtraction(): void {
+    this.vsInfoExtractor.cancelAll();
   }
 }

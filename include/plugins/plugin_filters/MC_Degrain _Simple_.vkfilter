@@ -1,0 +1,21 @@
+name = "MC_Degrain (Simple)"
+code = """
+# Motion Compensated Degrain
+# Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdenoise/mvtools/
+
+
+from vsdenoise import mc_degrain
+from vsdenoise.mvtools.presets import MVToolsPreset
+
+clip = mc_degrain(
+    clip,
+    tr=2,
+    thsad=400,
+    blksize=16,
+    overlap=2,
+    preset=MVToolsPreset.HQ_SAD
+)"""
+description = "Motion Compensated Degrain - temporal denoising with motion compensation"
+
+[metadata]
+createdAt = "2025-12-07T22:28:55.711Z"

@@ -1,0 +1,28 @@
+name = "MC_Degrain (Advanced)"
+code = """
+# Motion Compensated Degrain using MVTools
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdenoise/mvtools/
+
+from vsdenoise import mc_degrain
+from vsdenoise.mvtools.presets import MVToolsPreset
+
+clip = mc_degrain(
+    clip,
+    vectors=None,           # Use internally generated motion vectors
+    prefilter=None,         # Optional prefilter clip or function
+    mfilter=None,           # Optional filtered clip for motion compensation
+    preset=MVToolsPreset.HQ_SAD,  # Quality preset (HQ_SAD, FAST, etc.)
+    tr=2,                   # Temporal radius (1-3 recommended)
+    blksize=16,             # Block size for motion estimation
+    overlap=2,              # Block overlap
+    refine=1,               # Motion vector refinement iterations
+    thsad=400,              # SAD threshold for denoising strength
+    thsad_recalc=None,      # SAD threshold for recalculation
+    limit=None,             # Pixel change limit
+    thscd=None,             # Scene change detection threshold
+    planes=None             # Planes to process (None = all)
+)"""
+description = "Motion Compensated Degrain - temporal denoising using motion compensation for high-quality noise reduction"
+
+[metadata]
+createdAt = "2025-12-07T00:00:00.000Z"

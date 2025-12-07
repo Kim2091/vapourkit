@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getModelMetadata: (modelId: string) => ipcRenderer.invoke('get-model-metadata', modelId),
   updateModelMetadata: (modelId: string, metadata: any) => ipcRenderer.invoke('update-model-metadata', modelId, metadata),
   deleteModel: (modelPath: string, modelId: string) => ipcRenderer.invoke('delete-model', modelPath, modelId),
+  cancelModelImport: () => ipcRenderer.invoke('cancel-model-import'),
   
   // Upscaling operations
   selectOutputFile: (defaultName: string) => ipcRenderer.invoke('select-output-file', defaultName),

@@ -1,5 +1,5 @@
 // electron/vapourSynthInfoExtractor.ts
-import { spawn } from 'child_process';
+import { spawn, ChildProcess, exec } from 'child_process';
 import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 import { ErrorMessageHandler } from './errorMessageHandler';
@@ -11,6 +11,32 @@ export interface OutputInfo {
   pixelFormat?: string | null;
 }
 
+// Default timeout for vspipe info commands (30 seconds)
+const VSPIPE_INFO_TIMEOUT_MS = 30000;
+
+/**
+ * Force kills a process and its children on Windows using taskkill
+ */
+function forceKillProcess(proc: ChildProcess): void {
+  if (!proc.pid) return;
+  
+  if (process.platform === 'win32') {
+    // On Windows, use taskkill to force kill the process tree immediately
+    exec(`taskkill /F /T /PID ${proc.pid}`, (error) => {
+      if (error && !error.message.includes('not found')) {
+        logger.debug(`taskkill error (may already be dead): ${error.message}`);
+      }
+    });
+  } else {
+    // On Unix, SIGKILL should work
+    try {
+      proc.kill('SIGKILL');
+    } catch (e) {
+      // Process may already be dead
+    }
+  }
+}
+
 /**
  * Utility class for extracting information from VapourSynth scripts
  */
@@ -18,11 +44,36 @@ export class VapourSynthInfoExtractor {
   private vspipePath: string;
   private pythonPath: string;
   private vsPath: string;
+  private activeProcesses: Set<ChildProcess> = new Set();
 
   constructor(vspipePath: string, pythonPath: string, vsPath: string) {
     this.vspipePath = vspipePath;
     this.pythonPath = pythonPath;
     this.vsPath = vsPath;
+  }
+
+  /**
+   * Cancels all active vspipe info processes immediately
+   */
+  cancelAll(): void {
+    logger.upscale(`Force killing ${this.activeProcesses.size} active vspipe info process(es)`);
+    for (const proc of this.activeProcesses) {
+      forceKillProcess(proc);
+    }
+    this.activeProcesses.clear();
+  }
+
+  /**
+   * Tracks a process and removes it when it exits
+   */
+  private trackProcess(proc: ChildProcess): void {
+    this.activeProcesses.add(proc);
+    proc.on('close', () => {
+      this.activeProcesses.delete(proc);
+    });
+    proc.on('error', () => {
+      this.activeProcesses.delete(proc);
+    });
   }
 
   /**
@@ -40,6 +91,16 @@ export class VapourSynthInfoExtractor {
         env: env,
         cwd: this.vsPath
       });
+
+      // Track the process for cleanup
+      this.trackProcess(vspipe);
+
+      // Set timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        logger.warn(`vspipe info timed out after ${VSPIPE_INFO_TIMEOUT_MS}ms, force killing`);
+        forceKillProcess(vspipe);
+        resolve(0);
+      }, VSPIPE_INFO_TIMEOUT_MS);
 
       let output = '';
       let stderrOutput = '';
@@ -59,6 +120,7 @@ export class VapourSynthInfoExtractor {
       }
 
       vspipe.on('close', (code) => {
+        clearTimeout(timeout);
         if (code === 0) {
           const match = output.match(/Frames:\s*(\d+)/i);
           if (match) {
@@ -80,6 +142,7 @@ export class VapourSynthInfoExtractor {
       });
 
       vspipe.on('error', (error) => {
+        clearTimeout(timeout);
         logger.error('vspipe info error:', error);
         resolve(0);
       });
@@ -102,6 +165,16 @@ export class VapourSynthInfoExtractor {
         cwd: this.vsPath
       });
 
+      // Track the process for cleanup
+      this.trackProcess(vspipe);
+
+      // Set timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        logger.warn(`vspipe info timed out after ${VSPIPE_INFO_TIMEOUT_MS}ms, force killing`);
+        forceKillProcess(vspipe);
+        resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null });
+      }, VSPIPE_INFO_TIMEOUT_MS);
+
       let output = '';
       let stderrOutput = '';
       
@@ -120,6 +193,7 @@ export class VapourSynthInfoExtractor {
       }
 
       vspipe.on('close', (code) => {
+        clearTimeout(timeout);
         if (code === 0) {
           // Always log the full vspipe output for debugging
           logger.upscale('=== vspipe -i output ===');
@@ -175,6 +249,7 @@ export class VapourSynthInfoExtractor {
       });
 
       vspipe.on('error', (error) => {
+        clearTimeout(timeout);
         logger.error('vspipe info error:', error);
         resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null });
       });

@@ -17,6 +17,27 @@ import { FFmpegManager } from './ffmpegManager';
 
 let upscaleExecutor: UpscaleExecutor | null = null;
 let previewExecutor: UpscaleExecutor | null = null;
+let infoExecutor: UpscaleExecutor | null = null;
+
+/**
+ * Cancels all active video processing executors and their child processes
+ */
+export function cancelAllVideoProcessing(): void {
+  if (upscaleExecutor) {
+    upscaleExecutor.cancelInfoExtraction();
+    upscaleExecutor.kill();
+    upscaleExecutor = null;
+  }
+  if (previewExecutor) {
+    previewExecutor.cancelInfoExtraction();
+    previewExecutor.kill();
+    previewExecutor = null;
+  }
+  if (infoExecutor) {
+    infoExecutor.cancelInfoExtraction();
+    infoExecutor = null;
+  }
+}
 
 /**
  * Registers all video-related IPC handlers
@@ -85,6 +106,12 @@ export function registerVideoHandlers(
   ) => {
     logger.info(`Getting output info for: ${videoPath}`);
     try {
+      // Cancel any previous info extraction
+      if (infoExecutor) {
+        infoExecutor.cancelInfoExtraction();
+        infoExecutor = null;
+      }
+      
       const config = createScriptConfig(
         videoPath,
         modelPath,
@@ -99,9 +126,10 @@ export function registerVideoHandlers(
       
       const vspipePath = dependencyManager.getVSPipePath();
       const pythonPath = dependencyManager.getPythonExecutablePath();
-      const tempExecutor = new UpscaleExecutor(vspipePath, pythonPath, null);
+      infoExecutor = new UpscaleExecutor(vspipePath, pythonPath, null);
       
-      const info = await tempExecutor.getOutputInfo(scriptPath);
+      const info = await infoExecutor.getOutputInfo(scriptPath);
+      infoExecutor = null;
       
       // Get codec from settings
       const ffmpegConfig = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
@@ -126,6 +154,7 @@ export function registerVideoHandlers(
         scanType: 'Progressive' // AI upscaling output is typically progressive
       };
     } catch (error) {
+      infoExecutor = null;
       logger.error('Error getting output info:', error);
       return { resolution: null, fps: null };
     }
@@ -145,6 +174,25 @@ export function registerVideoHandlers(
   ) => {
     return await withLogSeparator(async () => {
       const isUpscaling = upscalingEnabled !== false; // Default to true for backward compatibility
+      
+      // Cancel any pending upscale/preview/info executors and their child processes
+      if (infoExecutor) {
+        logger.upscale('Canceling info executor before starting new processing');
+        infoExecutor.cancelInfoExtraction();
+        infoExecutor = null;
+      }
+      if (upscaleExecutor) {
+        logger.upscale('Canceling previous upscale executor before starting new processing');
+        upscaleExecutor.cancelInfoExtraction();
+        upscaleExecutor.kill();
+        upscaleExecutor = null;
+      }
+      if (previewExecutor) {
+        logger.upscale('Canceling previous preview executor before starting new processing');
+        previewExecutor.cancelInfoExtraction();
+        previewExecutor.kill();
+        previewExecutor = null;
+      }
       
       logger.upscale('Starting processing');
       logger.upscale(`Input: ${videoPath}`);
@@ -312,6 +360,18 @@ export function registerVideoHandlers(
       logger.upscale('Starting segment preview');
       logger.upscale(`Input: ${videoPath}`);
       logger.upscale(`Preview frames: ${startFrame ?? 0} to ${endFrame ?? 'auto'}`);
+      
+      // Cancel any pending info extraction or previous preview
+      if (infoExecutor) {
+        infoExecutor.cancelInfoExtraction();
+        infoExecutor = null;
+      }
+      if (previewExecutor) {
+        logger.upscale('Canceling previous preview executor');
+        previewExecutor.cancelInfoExtraction();
+        previewExecutor.kill();
+        previewExecutor = null;
+      }
       
       try {
         // Create temporary preview output path
