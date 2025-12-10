@@ -10,9 +10,10 @@ import { AutoBuildModal } from './components/AutoBuildModal';
 import { PluginsModal } from './components/PluginsModal';
 import { ModelManagerModal } from './components/ModelManagerModal';
 import { UpdateNotificationModal } from './components/UpdateNotificationModal';
+import { VsMlrtUpdateModal } from './components/VsMlrtUpdateModal';
 import { QueuePanel } from './components/QueuePanel';
 import { BatchConfigModal } from './components/BatchConfigModal';
-import type { UpdateInfo, SegmentSelection } from './electron';
+import type { UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
 import { Header } from './components/Header';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
 import { useModels } from './hooks/useModels';
@@ -112,6 +113,10 @@ function App() {
   // Update notification state
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  
+  // vs-mlrt version mismatch notification state
+  const [vsMlrtVersionInfo, setVsMlrtVersionInfo] = useState<VsMlrtVersionInfo | null>(null);
+  const [showVsMlrtModal, setShowVsMlrtModal] = useState(false);
 
   // Queue management state and handlers
   const { state: queueState, actions: queueActions } = useQueueState(addConsoleLog);
@@ -406,6 +411,32 @@ function App() {
       return () => clearTimeout(timeoutId);
     }
   }, [isSetupComplete, addConsoleLog]);
+
+  // Check for vs-mlrt version mismatch on startup
+  useEffect(() => {
+    const checkVsMlrtVersion = async (): Promise<void> => {
+      try {
+        const versionInfo = await window.electronAPI.checkVsMlrtVersion();
+        if (versionInfo.needsNotification) {
+          setVsMlrtVersionInfo(versionInfo);
+          setShowVsMlrtModal(true);
+          addConsoleLog(`vs-mlrt version changed: ${versionInfo.storedVersion} → ${versionInfo.currentVersion}`);
+        } else if (versionInfo.storedVersion === undefined) {
+          // First run or version not tracked yet - store the current version
+          await window.electronAPI.updateVsMlrtVersion();
+          addConsoleLog(`vs-mlrt version set to ${versionInfo.currentVersion}`);
+        }
+      } catch (error) {
+        console.error('Failed to check vs-mlrt version:', error);
+      }
+    };
+    
+    if (isSetupComplete && hasCudaSupport) {
+      // Check after a short delay to avoid blocking initial load
+      const timeoutId = setTimeout(checkVsMlrtVersion, 1000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isSetupComplete, hasCudaSupport, addConsoleLog]);
 
   // Global error handlers with proper cleanup
   useEffect(() => {
@@ -917,6 +948,17 @@ function App() {
         <UpdateNotificationModal
           updateInfo={updateInfo}
           onClose={() => setShowUpdateModal(false)}
+        />
+      )}
+
+      {showVsMlrtModal && vsMlrtVersionInfo && (
+        <VsMlrtUpdateModal
+          versionInfo={vsMlrtVersionInfo}
+          onClose={() => setShowVsMlrtModal(false)}
+          onEnginesCleared={async () => {
+            await loadModels();
+            await loadUninitializedModels();
+          }}
         />
       )}
       

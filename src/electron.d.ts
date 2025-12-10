@@ -41,6 +41,7 @@ export interface ElectronAPI {
   updateModelMetadata: (modelId: string, metadata: Partial<ModelMetadata>) => Promise<{ success: boolean; error?: string }>;
   deleteModel: (modelPath: string, modelId: string) => Promise<{ success: boolean; error?: string }>;
   cancelModelImport: () => Promise<{ success: boolean }>;
+  validateOnnxModel: (onnxPath: string) => Promise<ValidateOnnxModelResult>;
   
   // Upscaling operations
   selectOutputFile: (defaultName: string) => Promise<string | null>;
@@ -151,12 +152,25 @@ export interface ElectronAPI {
   getQueue: () => Promise<QueueItem[]>;
   saveQueue: (queue: QueueItem[]) => Promise<{ success: boolean; error?: string }>;
   clearQueue: () => Promise<{ success: boolean; error?: string }>;
+  
+  // vs-mlrt version management
+  checkVsMlrtVersion: () => Promise<VsMlrtVersionInfo>;
+  clearEngineFiles: () => Promise<{ success: boolean; deletedCount: number; error?: string }>;
+  updateVsMlrtVersion: () => Promise<{ success: boolean; version?: string; error?: string }>;
 }
 
 export interface DevConsoleLog {
   level: 'info' | 'warn' | 'error' | 'debug';
   message: string;
   timestamp: string;
+}
+
+export interface VsMlrtVersionInfo {
+  storedVersion: string | undefined;
+  currentVersion: string;
+  hasVersionMismatch: boolean;
+  engineCount: number;
+  needsNotification: boolean;
 }
 
 export interface SetupProgress {
@@ -232,6 +246,14 @@ export interface InitializeModelResult {
   success: boolean;
   enginePath?: string;
   error?: string;
+}
+
+export interface ValidateOnnxModelResult {
+  isValid: boolean;
+  error?: string;
+  inputShape?: number[];
+  outputShape?: number[];
+  inputName?: string;
 }
 
 export interface ModelInitProgress {

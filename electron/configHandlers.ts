@@ -1,6 +1,9 @@
 import { ipcMain, BrowserWindow, app } from 'electron';
+import * as fs from 'fs-extra';
+import * as path from 'path';
 import { logger } from './logger';
 import { configManager } from './configManager';
+import { VS_MLRT_VERSION, PATHS } from './constants';
 
 /**
  * Registers all configuration-related IPC handlers
@@ -154,6 +157,79 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     } catch (error) {
       logger.error('Error checking file existence:', error);
       return false;
+    }
+  });
+
+  // vs-mlrt version check - returns info about version mismatch and existing engines
+  ipcMain.handle('check-vsmlrt-version', async () => {
+    try {
+      const storedVersion = configManager.getVsMlrtVersion();
+      const currentVersion = VS_MLRT_VERSION;
+      const hasVersionMismatch = storedVersion !== undefined && storedVersion !== currentVersion;
+      
+      // Count existing engine files
+      let engineCount = 0;
+      if (await fs.pathExists(PATHS.MODELS)) {
+        const files = await fs.readdir(PATHS.MODELS);
+        engineCount = files.filter((f: string) => f.endsWith('.engine')).length;
+      }
+      
+      logger.info(`vs-mlrt version check: stored=${storedVersion}, current=${currentVersion}, mismatch=${hasVersionMismatch}, engines=${engineCount}`);
+      
+      return {
+        storedVersion,
+        currentVersion,
+        hasVersionMismatch,
+        engineCount,
+        needsNotification: hasVersionMismatch && engineCount > 0
+      };
+    } catch (error) {
+      logger.error('Error checking vs-mlrt version:', error);
+      return {
+        storedVersion: undefined,
+        currentVersion: VS_MLRT_VERSION,
+        hasVersionMismatch: false,
+        engineCount: 0,
+        needsNotification: false
+      };
+    }
+  });
+
+  // Clear all engine files
+  ipcMain.handle('clear-engine-files', async () => {
+    try {
+      if (!await fs.pathExists(PATHS.MODELS)) {
+        return { success: true, deletedCount: 0 };
+      }
+      
+      const files = await fs.readdir(PATHS.MODELS);
+      const engineFiles = files.filter((f: string) => f.endsWith('.engine'));
+      
+      for (const engineFile of engineFiles) {
+        const enginePath = path.join(PATHS.MODELS, engineFile);
+        await fs.remove(enginePath);
+        logger.info(`Deleted engine file: ${engineFile}`);
+      }
+      
+      logger.info(`Cleared ${engineFiles.length} engine files`);
+      return { success: true, deletedCount: engineFiles.length };
+    } catch (error) {
+      logger.error('Error clearing engine files:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMsg, deletedCount: 0 };
+    }
+  });
+
+  // Update stored vs-mlrt version to current
+  ipcMain.handle('update-vsmlrt-version', async () => {
+    try {
+      await configManager.setVsMlrtVersion(VS_MLRT_VERSION);
+      logger.info(`Updated stored vs-mlrt version to ${VS_MLRT_VERSION}`);
+      return { success: true, version: VS_MLRT_VERSION };
+    } catch (error) {
+      logger.error('Error updating vs-mlrt version:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMsg };
     }
   });
 }

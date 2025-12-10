@@ -443,4 +443,28 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     cancelActiveModelOperation();
     return { success: true };
   });
+
+  ipcMain.handle('validate-onnx-model', async (event, onnxPath: string) => {
+    logger.info(`Validating ONNX model: ${onnxPath}`);
+    try {
+      const { ModelValidator } = await import('./modelValidator');
+      const validator = new ModelValidator();
+      const result = await validator.validateOnnxModel(onnxPath);
+      
+      return {
+        isValid: result.isValid,
+        error: result.error,
+        inputShape: result.inputShape,
+        outputShape: result.outputShape,
+        inputName: result.inputName || 'input' // Default to 'input' if not found
+      };
+    } catch (error) {
+      logger.error('Error validating ONNX model:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        isValid: false,
+        error: errorMsg
+      };
+    }
+  });
 }

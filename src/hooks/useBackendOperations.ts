@@ -56,7 +56,7 @@ export function useBackendOperations({
     }
   }, [onLog, loadModels, loadUninitializedModels, loadTemplates, setIsReloading]);
 
-  const handleBuildModel = useCallback((model: UninitializedModel): void => {
+  const handleBuildModel = useCallback(async (model: UninitializedModel): Promise<void> => {
     // Use existing metadata from ONNX model if available
     const modelType = model.modelType || 'image';
     const displayTag = model.displayTag || '';
@@ -65,18 +65,32 @@ export function useBackendOperations({
     const modelNameLower = model.name.toLowerCase();
     const useFp32 = modelNameLower.includes('_fp32');
     
-    // Set default shapes based on model type
+    // Extract input name from the model
+    let inputName = 'input'; // Default fallback
+    try {
+      const validation = await window.electronAPI.validateOnnxModel(model.onnxPath);
+      if (validation.isValid && validation.inputName) {
+        inputName = validation.inputName;
+        onLog(`Detected input name: ${inputName}`);
+      }
+    } catch (validationError) {
+      console.warn('Could not validate ONNX model:', validationError);
+    }
+    
+    // Set default shapes based on model type and extracted input name
     const isVideoModel = modelType === 'tspan';
-    const minShapes = isVideoModel ? 'input:1x15x240x240' : 'input:1x3x240x240';
-    const optShapes = isVideoModel ? 'input:1x15x720x1280' : 'input:1x3x720x1280';
-    const maxShapes = isVideoModel ? 'input:1x15x1080x1920' : 'input:1x3x1080x1920';
+    const channels = isVideoModel ? '15' : '3';
+    const minShapes = `${inputName}:1x${channels}x240x240`;
+    const optShapes = `${inputName}:1x${channels}x720x1280`;
+    const maxShapes = `${inputName}:1x${channels}x1080x1920`;
     
     // Generate the trtexec command with proper parameters
-    const customTrtexecParams = generateTrtexecCommand(modelType as 'tspan' | 'image', useFp32, false);
+    const customTrtexecParams = generateTrtexecCommand(modelType as 'tspan' | 'image', useFp32, false, inputName);
     
     setImportForm({
       onnxPath: model.onnxPath,
       modelName: model.name,
+      inputName,
       minShapes,
       optShapes,
       maxShapes,

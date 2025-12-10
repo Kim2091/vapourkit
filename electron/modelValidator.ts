@@ -7,6 +7,7 @@ export interface OnnxModelInfo {
   error?: string;
   inputShape?: number[];
   outputShape?: number[];
+  inputName?: string;
 }
 
 export class ModelValidator {
@@ -71,12 +72,16 @@ export class ModelValidator {
           logger.debug('Could not extract shape information:', shapeError);
         }
         
+        // Get input name (defaults to 'input' if not found)
+        const inputName = inputNames.length > 0 ? inputNames[0] : 'input';
+        logger.model(`Input name: ${inputName}`);
         logger.model('ONNX model validation passed');
         
         return {
           isValid: true,
           inputShape,
-          outputShape
+          outputShape,
+          inputName
         };
         
       } catch (ortError: any) {

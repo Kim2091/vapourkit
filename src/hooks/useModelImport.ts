@@ -4,6 +4,7 @@ import type { ModelImportProgress } from '../electron.d';
 interface ImportForm {
   onnxPath: string;
   modelName: string;
+  inputName: string;
   minShapes: string;
   optShapes: string;
   maxShapes: string;
@@ -17,23 +18,24 @@ interface ImportForm {
 }
 
 // Helper function to generate default trtexec command
-export const generateTrtexecCommand = (modelType: 'tspan' | 'image', useFp32: boolean, useStaticShape: boolean): string => {
+export const generateTrtexecCommand = (modelType: 'tspan' | 'image', useFp32: boolean, useStaticShape: boolean, inputName: string = 'input'): string => {
   const channels = modelType === 'tspan' ? '15' : '3';
   // FP32 is the default in trtexec, so only add --fp16 flag when NOT using FP32
   const precisionFlags = useFp32 ? '' : '--inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --fp16';
   
   if (useStaticShape) {
     // Static shape mode
-    return `--shapes=input:1x${channels}x720x1280 --saveEngine=OUTPUT_PATH --builderOptimizationLevel=5 --useCudaGraph --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT${precisionFlags ? ' ' + precisionFlags : ''}`;
+    return `--shapes=${inputName}:1x${channels}x720x1280 --saveEngine=OUTPUT_PATH --builderOptimizationLevel=5 --useCudaGraph --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT${precisionFlags ? ' ' + precisionFlags : ''}`;
   } else {
     // Dynamic shape mode
-    return `--minShapes=input:1x${channels}x240x240 --optShapes=input:1x${channels}x720x1280 --maxShapes=input:1x${channels}x1080x1920 --saveEngine=OUTPUT_PATH --builderOptimizationLevel=5 --useCudaGraph --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT${precisionFlags ? ' ' + precisionFlags : ''}`;
+    return `--minShapes=${inputName}:1x${channels}x240x240 --optShapes=${inputName}:1x${channels}x720x1280 --maxShapes=${inputName}:1x${channels}x1080x1920 --saveEngine=OUTPUT_PATH --builderOptimizationLevel=5 --useCudaGraph --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT${precisionFlags ? ' ' + precisionFlags : ''}`;
   }
 };
 
 const DEFAULT_IMPORT_FORM: ImportForm = {
   onnxPath: '',
   modelName: '',
+  inputName: 'input',
   minShapes: 'input:1x3x240x240',
   optShapes: 'input:1x3x480x640',
   maxShapes: 'input:1x3x1080x1920',
@@ -43,7 +45,7 @@ const DEFAULT_IMPORT_FORM: ImportForm = {
   displayTag: '',
   useStaticShape: false,
   useCustomTrtexecParams: true, // Always true in refactored UI - the textbox is the main interface
-  customTrtexecParams: generateTrtexecCommand('image', false, false)
+  customTrtexecParams: generateTrtexecCommand('image', false, false, 'input')
 };
 
 export const useModelImport = (
@@ -76,20 +78,43 @@ export const useModelImport = (
         const filename = result.split(/[\\/]/).pop() || '';
         const modelName = filename.replace(/\.onnx$/i, '');
         
-        setImportForm(prev => ({ 
-          ...prev, 
-          onnxPath: result,
-          modelName: modelName // Auto-fill with filename
-        }));
+        // Validate the model to extract input name
+        let extractedInputName = 'input'; // Default fallback
+        try {
+          const validation = await window.electronAPI.validateOnnxModel(result);
+          if (validation.isValid && validation.inputName) {
+            extractedInputName = validation.inputName;
+            addConsoleLog(`[Model] Detected input name: ${extractedInputName}`);
+          }
+        } catch (validationError) {
+          console.warn('Could not validate ONNX model:', validationError);
+        }
+        
+        setImportForm(prev => {
+          const newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, prev.useStaticShape, extractedInputName);
+          const channels = prev.modelType === 'tspan' ? '15' : '3';
+          return { 
+            ...prev, 
+            onnxPath: result,
+            modelName: modelName,
+            inputName: extractedInputName,
+            customTrtexecParams: newCommand,
+            minShapes: `${extractedInputName}:1x${channels}x240x240`,
+            optShapes: prev.useStaticShape 
+              ? `${extractedInputName}:1x${channels}x480x640` 
+              : `${extractedInputName}:1x${channels}x720x1280`,
+            maxShapes: `${extractedInputName}:1x${channels}x1080x1920`,
+          };
+        });
       }
     } catch (error) {
       console.error('Error selecting ONNX file:', error);
     }
-  }, []);
+  }, [addConsoleLog]);
 
   const handleFp32Change = useCallback((useFp32: boolean): void => {
     setImportForm(prev => {
-      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape);
+      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape, prev.inputName);
       return {
         ...prev,
         useFp32,
@@ -101,16 +126,18 @@ export const useModelImport = (
   const handleModelTypeChange = useCallback((modelType: 'tspan' | 'image'): void => {
     setImportForm(prev => {
       const useStatic = prev.useStaticShape;
-      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStatic);
+      const inputName = prev.inputName;
+      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStatic, inputName);
+      const channels = modelType === 'tspan' ? '15' : '3';
       return {
         ...prev,
         modelType,
         customTrtexecParams: newCommand,
-        minShapes: modelType === 'tspan' ? 'input:1x15x240x240' : 'input:1x3x240x240',
-        optShapes: modelType === 'tspan' 
-          ? (useStatic ? 'input:1x15x480x640' : 'input:1x15x720x1280')
-          : (useStatic ? 'input:1x3x480x640' : 'input:1x3x720x1280'),
-        maxShapes: modelType === 'tspan' ? 'input:1x15x1080x1920' : 'input:1x3x1080x1920',
+        minShapes: `${inputName}:1x${channels}x240x240`,
+        optShapes: useStatic 
+          ? `${inputName}:1x${channels}x480x640` 
+          : `${inputName}:1x${channels}x720x1280`,
+        maxShapes: `${inputName}:1x${channels}x1080x1920`,
       };
     });
   }, []);
@@ -118,14 +145,16 @@ export const useModelImport = (
   const handleShapeModeChange = useCallback((useStaticShape: boolean): void => {
     setImportForm(prev => {
       const modelType = prev.modelType;
-      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStaticShape);
+      const inputName = prev.inputName;
+      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStaticShape, inputName);
+      const channels = modelType === 'tspan' ? '15' : '3';
       return {
         ...prev,
         useStaticShape,
         customTrtexecParams: newCommand,
-        optShapes: modelType === 'tspan'
-          ? (useStaticShape ? 'input:1x15x480x640' : 'input:1x15x720x1280')
-          : (useStaticShape ? 'input:1x3x480x640' : 'input:1x3x720x1280'),
+        optShapes: useStaticShape 
+          ? `${inputName}:1x${channels}x480x640` 
+          : `${inputName}:1x${channels}x720x1280`,
       };
     });
   }, []);
@@ -182,11 +211,23 @@ export const useModelImport = (
     const modelType = model.modelType || 'image';
     const displayTag = model.displayTag || '';
     
-    // Set default shapes based on model type
+    // Extract input name from the model
+    let inputName = 'input'; // Default fallback
+    try {
+      const validation = await window.electronAPI.validateOnnxModel(model.onnxPath);
+      if (validation.isValid && validation.inputName) {
+        inputName = validation.inputName;
+      }
+    } catch (validationError) {
+      console.warn('Could not validate ONNX model for auto-build:', validationError);
+    }
+    
+    // Set default shapes based on model type and extracted input name
     const isVideoModel = modelType === 'tspan';
-    const minShapes = isVideoModel ? 'input:1x15x240x240' : 'input:1x3x240x240';
-    const optShapes = isVideoModel ? 'input:1x15x720x1280' : 'input:1x3x720x1280';
-    const maxShapes = isVideoModel ? 'input:1x15x1080x1920' : 'input:1x3x1080x1920';
+    const channels = isVideoModel ? '15' : '3';
+    const minShapes = `${inputName}:1x${channels}x240x240`;
+    const optShapes = `${inputName}:1x${channels}x720x1280`;
+    const maxShapes = `${inputName}:1x${channels}x1080x1920`;
     
     // Show auto-build modal with model info
     setAutoBuildModelName(model.name);

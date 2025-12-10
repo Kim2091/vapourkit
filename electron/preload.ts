@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateModelMetadata: (modelId: string, metadata: any) => ipcRenderer.invoke('update-model-metadata', modelId, metadata),
   deleteModel: (modelPath: string, modelId: string) => ipcRenderer.invoke('delete-model', modelPath, modelId),
   cancelModelImport: () => ipcRenderer.invoke('cancel-model-import'),
+  validateOnnxModel: (onnxPath: string) => ipcRenderer.invoke('validate-onnx-model', onnxPath),
   
   // Upscaling operations
   selectOutputFile: (defaultName: string) => ipcRenderer.invoke('select-output-file', defaultName),
@@ -149,4 +150,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getQueue: () => ipcRenderer.invoke('get-queue'),
   saveQueue: (queue: any[]) => ipcRenderer.invoke('save-queue', queue),
   clearQueue: () => ipcRenderer.invoke('clear-queue'),
+  
+  // vs-mlrt version management
+  checkVsMlrtVersion: () => ipcRenderer.invoke('check-vsmlrt-version'),
+  clearEngineFiles: () => ipcRenderer.invoke('clear-engine-files'),
+  updateVsMlrtVersion: () => ipcRenderer.invoke('update-vsmlrt-version'),
 });

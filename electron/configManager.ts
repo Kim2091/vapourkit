@@ -43,6 +43,7 @@ interface AppConfig {
   ffmpegArgs?: string;
   processingFormat?: string;
   videoCompareArgs?: string;
+  vsMlrtVersion?: string;
   models: {
     [modelName: string]: {
       useFp32: boolean;
@@ -80,6 +81,7 @@ const DEFAULT_CONFIG: AppConfig = {
   ffmpegArgs: DEFAULT_FFMPEG_ARGS,
   processingFormat: 'vs.YUV420P8',
   videoCompareArgs: DEFAULT_VIDEO_COMPARE_ARGS,
+  vsMlrtVersion: undefined,
   models: {}
 };
 
@@ -266,6 +268,15 @@ export class ConfigManager {
 
   getDefaultVideoCompareArgs(): string {
     return DEFAULT_VIDEO_COMPARE_ARGS;
+  }
+
+  getVsMlrtVersion(): string | undefined {
+    return this.config.vsMlrtVersion;
+  }
+
+  async setVsMlrtVersion(version: string): Promise<void> {
+    this.config.vsMlrtVersion = version;
+    await this.save();
   }
 }
 

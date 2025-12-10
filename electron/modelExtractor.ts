@@ -213,13 +213,26 @@ export class ModelExtractor {
         progressCallback?.(`Converting ${onnxFile} to TensorRT engine (${i + 1}/${onnxFiles.length})...`, baseProgress);
         logger.model(`Converting ${onnxFile} to ${engineFile}`);
 
+        // Extract input name from the ONNX model
+        let inputName = 'input'; // Default fallback
+        try {
+          const ort = require('onnxruntime-node');
+          const session = await ort.InferenceSession.create(onnxPath);
+          if (session.inputNames.length > 0) {
+            inputName = session.inputNames[0];
+          }
+          logger.model(`Detected input name: ${inputName}`);
+        } catch (error) {
+          logger.warn(`Could not extract input name from ${onnxFile}, using default 'input'`);
+        }
+
         // Use default shapes for bundled models (FP16 by default)
         await this.convertToEngineWithProgress(
           onnxPath,
           enginePath,
-          'input:1x15x240x240',
-          'input:1x15x720x1280',
-          'input:1x15x1080x1920',
+          `${inputName}:1x15x240x240`,
+          `${inputName}:1x15x720x1280`,
+          `${inputName}:1x15x1080x1920`,
           false, // useFp32
           false, // useStaticShape - use dynamic for bundled models
           baseProgress,
