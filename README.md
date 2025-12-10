@@ -75,7 +75,7 @@ GPL 3.0 - See LICENSE file for details
 
 Kim2091
 
-## 🙏 Credits for included tools and models
+## 🙏 Credits
 
 - [VapourSynth](https://github.com/vapoursynth/vapoursynth/releases) & [vs-mlrt](https://github.com/AmusementClub/vs-mlrt/releases)
 - [tepete](https://github.com/pifroggi)'s work on the filters & his plugins
@@ -86,3 +86,7 @@ Kim2091
 
 ### Other acknowledgments
 - [tepete/pifroggi](https://github.com/pifroggi/), Bendel, leobby, Princess, and Hermes for beta testing!
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Kim2091/vapourkit&type=date&legend=top-left)](https://www.star-history.com/#Kim2091/vapourkit&type=date&legend=top-left)
