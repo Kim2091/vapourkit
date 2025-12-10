@@ -1,44 +1,20 @@
 import React from 'react';
 import { Upload, Info, Loader2, XCircle, FileUp, X } from 'lucide-react';
 import type { ModelImportProgress } from '../electron.d';
+import type { ImportForm } from '../hooks/useModelImport';
 
 interface ImportModelModalProps {
   show: boolean;
   onClose: () => void;
   isImporting: boolean;
-  importForm: {
-    onnxPath: string;
-    modelName: string;
-    minShapes: string;
-    optShapes: string;
-    maxShapes: string;
-    useFp32: boolean;
-    modelType: 'tspan' | 'image';
-    useDirectML: boolean;
-    displayTag: string;
-    useStaticShape: boolean;
-    useCustomTrtexecParams: boolean;
-    customTrtexecParams: string;
-  };
-  setImportForm: React.Dispatch<React.SetStateAction<{
-    onnxPath: string;
-    modelName: string;
-    minShapes: string;
-    optShapes: string;
-    maxShapes: string;
-    useFp32: boolean;
-    modelType: 'tspan' | 'image';
-    useDirectML: boolean;
-    displayTag: string;
-    useStaticShape: boolean;
-    useCustomTrtexecParams: boolean;
-    customTrtexecParams: string;
-  }>>;
+  importForm: ImportForm;
+  setImportForm: React.Dispatch<React.SetStateAction<ImportForm>>;
   handleSelectOnnxFile: () => void;
   handleImportModel: () => void;
   handleModelTypeChange: (modelType: 'tspan' | 'image') => void;
   handleShapeModeChange: (useStaticShape: boolean) => void;
   handleFp32Change: (useFp32: boolean) => void;
+  handlePrecisionChange: (precision: 'fp16' | 'bf16' | 'fp32') => void;
   importProgress: ModelImportProgress | null;
   mode: 'import' | 'build';
   useDirectML: boolean;
@@ -55,6 +31,7 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
   handleModelTypeChange,
   handleShapeModeChange,
   handleFp32Change,
+  handlePrecisionChange,
   importProgress,
   mode,
 }) => {
@@ -219,34 +196,74 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                   <p className="text-xs text-gray-400 mt-0.5">
                     {importForm.useDirectML 
                       ? (importForm.useFp32 ? 'FP32 (inference + RGB format)' : 'FP16 (inference + RGB format)')
-                      : (importForm.useFp32 ? 'FP32 (build + inference)' : 'FP16 (build + inference, recommended)')
+                      : (importForm.useFp32 ? 'FP32 (build + inference)' : importForm.useBf16 ? 'BF16 (build + inference)' : 'FP16 (build + inference, recommended)')
                     }
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleFp32Change(false)}
-                    disabled={isImporting}
-                    className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
-                      !importForm.useFp32
-                        ? 'bg-primary-blue text-white'
-                        : 'bg-dark-elevated text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    FP16
-                  </button>
-                  <button
-                    onClick={() => handleFp32Change(true)}
-                    disabled={isImporting}
-                    className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
-                      importForm.useFp32
-                        ? 'bg-primary-blue text-white'
-                        : 'bg-dark-elevated text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    FP32
-                  </button>
-                </div>
+                {importForm.useDirectML ? (
+                  // DirectML mode: only FP16 and FP32
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleFp32Change(false)}
+                      disabled={isImporting}
+                      className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
+                        !importForm.useFp32
+                          ? 'bg-primary-blue text-white'
+                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      FP16
+                    </button>
+                    <button
+                      onClick={() => handleFp32Change(true)}
+                      disabled={isImporting}
+                      className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
+                        importForm.useFp32
+                          ? 'bg-primary-blue text-white'
+                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      FP32
+                    </button>
+                  </div>
+                ) : (
+                  // TensorRT mode: FP16, BF16, and FP32
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handlePrecisionChange('fp16')}
+                      disabled={isImporting}
+                      className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
+                        !importForm.useFp32 && !importForm.useBf16
+                          ? 'bg-primary-blue text-white'
+                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      FP16
+                    </button>
+                    <button
+                      onClick={() => handlePrecisionChange('bf16')}
+                      disabled={isImporting}
+                      className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
+                        !importForm.useFp32 && importForm.useBf16
+                          ? 'bg-primary-blue text-white'
+                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      BF16
+                    </button>
+                    <button
+                      onClick={() => handlePrecisionChange('fp32')}
+                      disabled={isImporting}
+                      className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
+                        importForm.useFp32
+                          ? 'bg-primary-blue text-white'
+                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      FP32
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

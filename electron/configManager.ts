@@ -47,6 +47,7 @@ interface AppConfig {
   models: {
     [modelName: string]: {
       useFp32: boolean;
+      useBf16?: boolean;
       modelType: ModelType;
       createdAt: string;
       displayTag?: string;
@@ -124,9 +125,10 @@ export class ConfigManager {
     await this.save();
   }
 
-  async setModelMetadata(modelName: string, useFp32: boolean, modelType: ModelType = 'image', displayTag?: string, description?: string): Promise<void> {
+  async setModelMetadata(modelName: string, useFp32: boolean, modelType: ModelType = 'image', displayTag?: string, description?: string, useBf16?: boolean): Promise<void> {
     this.config.models[modelName] = {
       useFp32,
+      useBf16,
       modelType,
       createdAt: new Date().toISOString(),
       displayTag,
@@ -135,13 +137,14 @@ export class ConfigManager {
     await this.save();
   }
 
-  getModelMetadata(modelName: string): { useFp32: boolean; modelType: ModelType; displayTag?: string; description?: string; createdAt?: string } | null {
+  getModelMetadata(modelName: string): { useFp32: boolean; useBf16?: boolean; modelType: ModelType; displayTag?: string; description?: string; createdAt?: string } | null {
     const metadata = this.config.models[modelName];
     if (!metadata) return null;
     
     // Ensure modelType exists (for backward compatibility with old configs)
     return {
       useFp32: metadata.useFp32,
+      useBf16: metadata.useBf16,
       modelType: metadata.modelType || 'image',
       displayTag: metadata.displayTag,
       description: metadata.description,
@@ -149,7 +152,7 @@ export class ConfigManager {
     };
   }
 
-  async updateModelMetadata(modelName: string, updates: Partial<{ useFp32: boolean; modelType: ModelType; displayTag?: string; description?: string }>): Promise<void> {
+  async updateModelMetadata(modelName: string, updates: Partial<{ useFp32: boolean; useBf16?: boolean; modelType: ModelType; displayTag?: string; description?: string }>): Promise<void> {
     const existing = this.config.models[modelName];
     if (!existing) {
       throw new Error(`Model metadata not found for: ${modelName}`);

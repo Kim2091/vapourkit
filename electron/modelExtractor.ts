@@ -267,7 +267,8 @@ export class ModelExtractor {
     baseProgress: number,
     progressRange: number,
     progressCallback?: (message: string, progress: number) => void,
-    customTrtexecParams?: string
+    customTrtexecParams?: string,
+    useBf16?: boolean
   ): Promise<void> {
     const onnxFile = path.basename(onnxPath);
     
@@ -283,7 +284,8 @@ export class ModelExtractor {
         const totalProgress = baseProgress + Math.round((subProgress / 100) * progressRange);
         progressCallback?.(`Converting ${onnxFile}... ${subProgress}%`, Math.min(totalProgress, 99));
       },
-      customTrtexecParams
+      customTrtexecParams,
+      useBf16
     );
   }
 
@@ -330,10 +332,11 @@ export class ModelExtractor {
     useFp32: boolean,
     useStaticShape: boolean,
     progressCallback?: (progress: number) => void,
-    customTrtexecParams?: string
+    customTrtexecParams?: string,
+    useBf16?: boolean
   ): Promise<void> {
     logger.model(`Converting ONNX model: ${path.basename(onnxPath)}`);
-    logger.model(`Precision: ${useFp32 ? 'FP32' : 'FP16'}`);
+    logger.model(`Precision: ${useFp32 ? 'FP32' : useBf16 ? 'BF16' : 'FP16'}`);
     logger.model(`Shape mode: ${useStaticShape ? 'Static' : 'Dynamic'}`);
     
     let args: string[];
@@ -356,7 +359,7 @@ export class ModelExtractor {
       args.push(...paramMatches.map(p => p.replace(/"/g, '')));
       
       // Always add --verbose for progress tracking
-      args.push('--verbose');
+      //args.push('--verbose');
     } else {
       // Use default parameter building logic
       // Quote paths that contain spaces
@@ -381,10 +384,15 @@ export class ModelExtractor {
         args.push(`--maxShapes=${maxShapes}`);
       }
       
-      // Only add precision flags for FP16, FP32 is the default
+      // Only add precision flags for FP16/BF16, FP32 is the default
+      // For BF16: use --bf16 flag but keep fp16 format strings
       if (!useFp32) {
         const precision = 'fp16';
-        args.push('--fp16');
+        if (useBf16) {
+          args.push('--bf16');
+        } else {
+          args.push('--fp16');
+        }
         args.push(`--inputIOFormats=${precision}:chw`);
         args.push(`--outputIOFormats=${precision}:chw`);
       }
@@ -430,7 +438,11 @@ export class ModelExtractor {
         
         if (!useFp32) {
           const precision = 'fp16';
-          argsWithoutShapes.push('--fp16');
+          if (useBf16) {
+            argsWithoutShapes.push('--bf16');
+          } else {
+            argsWithoutShapes.push('--fp16');
+          }
           argsWithoutShapes.push(`--inputIOFormats=${precision}:chw`);
           argsWithoutShapes.push(`--outputIOFormats=${precision}:chw`);
         }

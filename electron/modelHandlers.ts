@@ -133,6 +133,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     optShapes: string;
     maxShapes: string;
     useFp32: boolean;
+    useBf16?: boolean;
     modelType?: string;
     displayTag?: string;
     useStaticShape?: boolean;
@@ -143,7 +144,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       logger.model('Starting model initialization');
       logger.model(`ONNX path: ${params.onnxPath}`);
       logger.model(`Model name: ${params.modelName}`);
-      logger.model(`Precision: ${params.useFp32 ? 'FP32' : 'FP16'}`);
+      logger.model(`Precision: ${params.useFp32 ? 'FP32' : params.useBf16 ? 'BF16' : 'FP16'}`);
       logger.model(`Model type: ${params.modelType || 'image'}`);
       
       try {
@@ -181,7 +182,8 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
             (message: string, progress: number) => {
               sendProgress('converting', progress, message);
             },
-            params.useCustomTrtexecParams ? params.customTrtexecParams : undefined
+            params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
+            params.useBf16
           );
         } catch (conversionError: any) {
           // Check if this is a fallback notification
@@ -208,7 +210,9 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
           modelNameWithPrecision, 
           params.useFp32,
           (params.modelType as 'tspan' | 'image') || 'image',
-          params.displayTag
+          params.displayTag,
+          undefined,
+          params.useBf16
         );
         
         // Complete
@@ -246,6 +250,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     optShapes: string;
     maxShapes: string;
     useFp32: boolean;
+    useBf16?: boolean;
     modelType?: string;
     useDirectML?: boolean;
     displayTag?: string;
@@ -257,7 +262,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       logger.model('Starting custom model import');
       logger.model(`ONNX path: ${params.onnxPath}`);
       logger.model(`Model name: ${params.modelName}`);
-      logger.model(`Precision: ${params.useFp32 ? 'FP32' : 'FP16'}`);
+      logger.model(`Precision: ${params.useFp32 ? 'FP32' : params.useBf16 ? 'BF16' : 'FP16'}`);
       logger.model(`Model type: ${params.modelType || 'image'}`);
       logger.model(`DirectML mode: ${params.useDirectML ? 'enabled' : 'disabled'}`);
       
@@ -310,7 +315,9 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
           modelNameWithPrecision, 
           params.useFp32,
           (params.modelType as 'tspan' | 'image') || 'image',
-          params.displayTag
+          params.displayTag,
+          undefined,
+          params.useBf16
         );
         
         // If DirectML mode is enabled, skip TensorRT conversion
@@ -326,7 +333,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         }
         
         // Convert to engine (TensorRT mode only)
-        sendModelImportProgress(mainWindow, 'converting', 30, `Converting to TensorRT engine (${params.useFp32 ? 'FP32' : 'FP16'})...`);
+        sendModelImportProgress(mainWindow, 'converting', 30, `Converting to TensorRT engine (${params.useFp32 ? 'FP32' : params.useBf16 ? 'BF16' : 'FP16'})...`);
         
         const enginePath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.engine`);
         
@@ -345,7 +352,8 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
               const cleanMessage = message.replace(/\.\.\.\s\d+%$/, '...');
               sendModelImportProgress(mainWindow, 'converting', progress, cleanMessage);
             },
-            params.useCustomTrtexecParams ? params.customTrtexecParams : undefined
+            params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
+            params.useBf16
           );
         } catch (conversionError: any) {
           // Check if this is a fallback notification

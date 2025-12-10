@@ -214,6 +214,7 @@ export interface ModelFile {
 
 export interface ModelMetadata {
   useFp32: boolean;
+  useBf16?: boolean;
   modelType: 'tspan' | 'image';
   displayTag?: string;
   description?: string;
@@ -235,6 +236,7 @@ export interface InitializeModelParams {
   optShapes: string;
   maxShapes: string;
   useFp32: boolean;
+  useBf16?: boolean;
   modelType?: 'tspan' | 'image';
   displayTag?: string;
   useStaticShape?: boolean;
@@ -271,6 +273,7 @@ export interface ImportModelParams {
   optShapes: string;
   maxShapes: string;
   useFp32: boolean;
+  useBf16?: boolean;
   modelType?: 'tspan' | 'image';
   useDirectML?: boolean;
   displayTag?: string;

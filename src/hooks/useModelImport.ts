@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ModelImportProgress } from '../electron.d';
 
-interface ImportForm {
+export interface ImportForm {
   onnxPath: string;
   modelName: string;
   inputName: string;
@@ -9,6 +9,7 @@ interface ImportForm {
   optShapes: string;
   maxShapes: string;
   useFp32: boolean;
+  useBf16: boolean;
   modelType: 'tspan' | 'image';
   useDirectML: boolean;
   displayTag: string;
@@ -18,10 +19,18 @@ interface ImportForm {
 }
 
 // Helper function to generate default trtexec command
-export const generateTrtexecCommand = (modelType: 'tspan' | 'image', useFp32: boolean, useStaticShape: boolean, inputName: string = 'input'): string => {
+export const generateTrtexecCommand = (modelType: 'tspan' | 'image', useFp32: boolean, useStaticShape: boolean, inputName: string = 'input', useBf16: boolean = false): string => {
   const channels = modelType === 'tspan' ? '15' : '3';
-  // FP32 is the default in trtexec, so only add --fp16 flag when NOT using FP32
-  const precisionFlags = useFp32 ? '' : '--inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --fp16';
+  // FP32 is the default in trtexec, so only add --fp16/--bf16 flag when NOT using FP32
+  // For BF16: use --bf16 flag but keep fp16 format strings
+  let precisionFlags = '';
+  if (!useFp32) {
+    if (useBf16) {
+      precisionFlags = '--inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --bf16';
+    } else {
+      precisionFlags = '--inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --fp16';
+    }
+  }
   
   if (useStaticShape) {
     // Static shape mode
@@ -40,12 +49,13 @@ const DEFAULT_IMPORT_FORM: ImportForm = {
   optShapes: 'input:1x3x480x640',
   maxShapes: 'input:1x3x1080x1920',
   useFp32: false,
+  useBf16: false,
   modelType: 'image',
   useDirectML: false,
   displayTag: '',
   useStaticShape: false,
   useCustomTrtexecParams: true, // Always true in refactored UI - the textbox is the main interface
-  customTrtexecParams: generateTrtexecCommand('image', false, false, 'input')
+  customTrtexecParams: generateTrtexecCommand('image', false, false, 'input', false)
 };
 
 export const useModelImport = (
@@ -117,7 +127,7 @@ export const useModelImport = (
             optShapes = `${extractedInputName}:1x${channels}x720x1280`;
           }
           
-          let newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, useStatic, extractedInputName);
+          let newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, useStatic, extractedInputName, prev.useBf16);
           
           // If static model with detected shape, update the command to use the actual detected shape
           if (useStatic && detectedShape && detectedShape.length >= 4) {
@@ -154,10 +164,24 @@ export const useModelImport = (
 
   const handleFp32Change = useCallback((useFp32: boolean): void => {
     setImportForm(prev => {
-      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape, prev.inputName);
+      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape, prev.inputName, prev.useBf16);
       return {
         ...prev,
         useFp32,
+        customTrtexecParams: newCommand,
+      };
+    });
+  }, []);
+
+  const handlePrecisionChange = useCallback((precision: 'fp16' | 'bf16' | 'fp32'): void => {
+    setImportForm(prev => {
+      const useFp32 = precision === 'fp32';
+      const useBf16 = precision === 'bf16';
+      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape, prev.inputName, useBf16);
+      return {
+        ...prev,
+        useFp32,
+        useBf16,
         customTrtexecParams: newCommand,
       };
     });
@@ -167,7 +191,7 @@ export const useModelImport = (
     setImportForm(prev => {
       const useStatic = prev.useStaticShape;
       const inputName = prev.inputName;
-      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStatic, inputName);
+      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStatic, inputName, prev.useBf16);
       const channels = modelType === 'tspan' ? '15' : '3';
       return {
         ...prev,
@@ -186,7 +210,7 @@ export const useModelImport = (
     setImportForm(prev => {
       const modelType = prev.modelType;
       const inputName = prev.inputName;
-      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStaticShape, inputName);
+      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStaticShape, inputName, prev.useBf16);
       const channels = modelType === 'tspan' ? '15' : '3';
       return {
         ...prev,
@@ -214,6 +238,7 @@ export const useModelImport = (
           optShapes: importForm.optShapes,
           maxShapes: importForm.maxShapes,
           useFp32: importForm.useFp32,
+          useBf16: importForm.useBf16,
           modelType: importForm.modelType,
           displayTag: importForm.displayTag || undefined,
           useStaticShape: importForm.useStaticShape,
@@ -228,6 +253,7 @@ export const useModelImport = (
           optShapes: importForm.optShapes,
           maxShapes: importForm.maxShapes,
           useFp32: importForm.useFp32,
+          useBf16: importForm.useBf16,
           modelType: importForm.modelType,
           useDirectML: importForm.useDirectML,
           displayTag: importForm.displayTag || undefined,
@@ -399,6 +425,7 @@ export const useModelImport = (
     handleModelTypeChange,
     handleShapeModeChange,
     handleFp32Change,
+    handlePrecisionChange,
     handleImportModel,
     handleAutoBuildModel,
     resetImportForm,

@@ -14,6 +14,7 @@ interface ModelMetadata {
   description?: string;
   modelType: 'tspan' | 'image';
   useFp32: boolean;
+  useBf16?: boolean;
 }
 
 export function ModelManagerModal({
@@ -28,6 +29,7 @@ export function ModelManagerModal({
     description: '',
     modelType: 'image',
     useFp32: false,
+    useBf16: false,
   });
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -62,6 +64,7 @@ export function ModelManagerModal({
         description: metadata?.description || '',
         modelType: model.modelType || 'image',
         useFp32: metadata?.useFp32 || false,
+        useBf16: metadata?.useBf16 || false,
       });
       setEditingModel(model.id);
     } catch (error) {
@@ -208,19 +211,41 @@ export function ModelManagerModal({
                         <label className="block text-xs text-gray-400 mb-1">
                           Inference Precision
                         </label>
-                        <select
-                          value={editData.useFp32 ? 'fp32' : 'fp16'}
-                          onChange={(e) =>
-                            setEditData({
-                              ...editData,
-                              useFp32: e.target.value === 'fp32',
-                            })
-                          }
-                          className="w-full bg-dark-elevated border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary-purple transition-colors"
-                        >
-                          <option value="fp16">FP16 (RGB format: RGBH)</option>
-                          <option value="fp32">FP32 (RGB format: RGBS)</option>
-                        </select>
+                        {model.backend === 'tensorrt' ? (
+                          // TensorRT models: FP16, BF16, FP32
+                          <select
+                            value={editData.useFp32 ? 'fp32' : editData.useBf16 ? 'bf16' : 'fp16'}
+                            onChange={(e) => {
+                              const precision = e.target.value;
+                              setEditData({
+                                ...editData,
+                                useFp32: precision === 'fp32',
+                                useBf16: precision === 'bf16',
+                              });
+                            }}
+                            className="w-full bg-dark-elevated border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary-purple transition-colors"
+                          >
+                            <option value="fp16">FP16 (RGB format: RGBH)</option>
+                            <option value="bf16">BF16 (RGB format: RGBH)</option>
+                            <option value="fp32">FP32 (RGB format: RGBS)</option>
+                          </select>
+                        ) : (
+                          // ONNX/DirectML models: only FP16, FP32
+                          <select
+                            value={editData.useFp32 ? 'fp32' : 'fp16'}
+                            onChange={(e) =>
+                              setEditData({
+                                ...editData,
+                                useFp32: e.target.value === 'fp32',
+                                useBf16: false,
+                              })
+                            }
+                            className="w-full bg-dark-elevated border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary-purple transition-colors"
+                          >
+                            <option value="fp16">FP16 (RGB format: RGBH)</option>
+                            <option value="fp32">FP32 (RGB format: RGBS)</option>
+                          </select>
+                        )}
                         <p className="text-xs text-gray-500 mt-1">
                           {model.backend === 'tensorrt' 
                             ? 'Controls RGB format only (engine precision is baked in)'

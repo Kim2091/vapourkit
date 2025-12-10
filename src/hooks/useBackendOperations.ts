@@ -64,6 +64,7 @@ export function useBackendOperations({
     // Detect precision from filename
     const modelNameLower = model.name.toLowerCase();
     const useFp32 = modelNameLower.includes('_fp32');
+    const useBf16 = modelNameLower.includes('_bf16');
     
     // Extract input name from the model
     let inputName = 'input'; // Default fallback
@@ -85,7 +86,7 @@ export function useBackendOperations({
     const maxShapes = `${inputName}:1x${channels}x1080x1920`;
     
     // Generate the trtexec command with proper parameters
-    const customTrtexecParams = generateTrtexecCommand(modelType as 'tspan' | 'image', useFp32, false, inputName);
+    const customTrtexecParams = generateTrtexecCommand(modelType as 'tspan' | 'image', useFp32, false, inputName, useBf16);
     
     setImportForm({
       onnxPath: model.onnxPath,
@@ -95,6 +96,7 @@ export function useBackendOperations({
       optShapes,
       maxShapes,
       useFp32: useFp32,
+      useBf16: useBf16,
       modelType,
       useDirectML: useDirectML,
       displayTag,
@@ -105,7 +107,7 @@ export function useBackendOperations({
     setModalMode('build');
     setShowImportModal(true);
     
-    onLog(`Opening build modal for ${model.name} (${modelType}, ${useFp32 ? 'FP32' : 'FP16'})`);
+    onLog(`Opening build modal for ${model.name} (${modelType}, ${useFp32 ? 'FP32' : useBf16 ? 'BF16' : 'FP16'})`);
   }, [setImportForm, setModalMode, setShowImportModal, useDirectML, onLog]);
 
   const handleAutoBuild = useCallback(async (model: UninitializedModel): Promise<void> => {
