@@ -12,7 +12,6 @@ import { ModelManagerModal } from './components/ModelManagerModal';
 import { UpdateNotificationModal } from './components/UpdateNotificationModal';
 import { VsMlrtUpdateModal } from './components/VsMlrtUpdateModal';
 import { QueuePanel } from './components/QueuePanel';
-import { BatchConfigModal } from './components/BatchConfigModal';
 import type { UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
 import { Header } from './components/Header';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
@@ -118,6 +117,18 @@ function App() {
   const [vsMlrtVersionInfo, setVsMlrtVersionInfo] = useState<VsMlrtVersionInfo | null>(null);
   const [showVsMlrtModal, setShowVsMlrtModal] = useState(false);
 
+  // Pre-queue workflow state to restore when queue is closed
+  const [preQueueWorkflow, setPreQueueWorkflow] = useState<{
+    videoPath: string | null;
+    outputPath: string | null;
+    selectedModel: string | null;
+    filters: any[];
+    outputFormat: string;
+    useDirectML: boolean;
+    numStreams: number;
+    segment: SegmentSelection;
+  } | null>(null);
+
   // Queue management state and handlers
   const { state: queueState, actions: queueActions } = useQueueState(addConsoleLog);
 
@@ -164,12 +175,9 @@ function App() {
 
   // Batch configuration hook
   const {
-    showBatchConfig,
-    pendingBatchVideos,
     handleSelectVideoWithQueue,
     handleBatchFiles,
-    handleConfirmBatchConfig,
-    handleCloseBatchConfig,
+    handleAddCurrentVideoToQueue,
   } = useBatchConfig({
     outputFormat,
     selectedModel,
@@ -177,6 +185,7 @@ function App() {
     useDirectML,
     numStreams,
     segment,
+    showQueue: queueState.showQueue,
     onAddToQueue: (videoPaths, workflow, outputPath) => {
       addToQueue(videoPaths, workflow, outputPath);
       queueActions.setShowQueue(true);
@@ -353,6 +362,69 @@ function App() {
       }
     }
   );
+  
+  // Handle queue toggle - save/restore workflow state
+  const handleToggleQueue = async () => {
+    const newShowQueue = !queueState.showQueue;
+    
+    if (newShowQueue) {
+      // Opening queue - save current workflow state
+      setPreQueueWorkflow({
+        videoPath: videoInfo?.path || null,
+        outputPath: outputPath,
+        selectedModel,
+        filters: JSON.parse(JSON.stringify(filters)), // Deep copy
+        outputFormat,
+        useDirectML,
+        numStreams,
+        segment: { ...segment },
+      });
+      
+      // If a video is loaded, add it to the queue
+      if (videoInfo && outputPath) {
+        handleAddCurrentVideoToQueue(videoInfo.path, outputPath);
+      }
+    } else {
+      // Closing queue - restore pre-queue workflow
+      if (preQueueWorkflow) {
+        // Restore all settings
+        if (preQueueWorkflow.selectedModel !== selectedModel) {
+          setSelectedModel(preQueueWorkflow.selectedModel);
+        }
+        if (JSON.stringify(preQueueWorkflow.filters) !== JSON.stringify(filters)) {
+          handleSetFilters(preQueueWorkflow.filters);
+        }
+        if (preQueueWorkflow.outputFormat !== outputFormat) {
+          setOutputFormat(preQueueWorkflow.outputFormat);
+        }
+        if (preQueueWorkflow.useDirectML !== useDirectML) {
+          toggleDirectML(preQueueWorkflow.useDirectML);
+        }
+        if (preQueueWorkflow.numStreams !== numStreams) {
+          updateNumStreams(preQueueWorkflow.numStreams);
+        }
+        if (JSON.stringify(preQueueWorkflow.segment) !== JSON.stringify(segment)) {
+          setSegment(preQueueWorkflow.segment);
+        }
+        
+        // Restore video and output path
+        if (preQueueWorkflow.videoPath) {
+          await loadVideoInfo(preQueueWorkflow.videoPath);
+          if (preQueueWorkflow.outputPath) {
+            setOutputPath(preQueueWorkflow.outputPath);
+          }
+        } else {
+          // No video was loaded - clear current video
+          setVideoInfo(null);
+          setOutputPath('');
+        }
+        
+        setPreQueueWorkflow(null);
+      }
+    }
+    
+    queueActions.setShowQueue(newShowQueue);
+  };
   
   // Output resolution calculation hook
   useOutputResolution({
@@ -729,7 +801,7 @@ function App() {
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
-                    onToggleQueue={() => queueActions.setShowQueue(!queueState.showQueue)}
+                    onToggleQueue={handleToggleQueue}
                   />
                   
                   <ModelSelectionPanel
@@ -983,15 +1055,6 @@ function App() {
             await loadModels();
             await loadUninitializedModels();
           }}
-        />
-      )}
-      
-      {/* Batch Config Modal */}
-      {showBatchConfig && (
-        <BatchConfigModal
-          videos={pendingBatchVideos}
-          onConfirm={handleConfirmBatchConfig}
-          onClose={handleCloseBatchConfig}
         />
       )}
     </div>

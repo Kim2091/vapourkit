@@ -1,7 +1,5 @@
 // src/hooks/useBatchConfig.ts - Batch configuration management
 
-import { useState } from 'react';
-import type { BatchVideoConfig } from '../components/BatchConfigModal';
 import type { SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 
@@ -12,16 +10,14 @@ interface UseBatchConfigOptions {
   useDirectML: boolean;
   numStreams: number;
   segment?: SegmentSelection;
+  showQueue: boolean;
   onAddToQueue: (videoPaths: string[], workflow: any, outputPath?: string) => void;
   onLoadVideoInfo: (path: string) => Promise<void>;
   onLog: (message: string) => void;
 }
 
 export function useBatchConfig(options: UseBatchConfigOptions) {
-  const { outputFormat, selectedModel, filters, useDirectML, numStreams, segment, onAddToQueue, onLoadVideoInfo, onLog } = options;
-  
-  const [showBatchConfig, setShowBatchConfig] = useState(false);
-  const [pendingBatchVideos, setPendingBatchVideos] = useState<BatchVideoConfig[]>([]);
+  const { outputFormat, selectedModel, filters, useDirectML, numStreams, segment, showQueue, onAddToQueue, onLoadVideoInfo, onLog } = options;
 
   const handleSelectVideoWithQueue = async (): Promise<void> => {
     try {
@@ -36,14 +32,14 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
   };
 
   const handleBatchFiles = async (files: string[]): Promise<void> => {
-      // Single file - load it normally
-      if (files.length === 1) {
+      // Single file - load it normally if queue is not shown, otherwise add to queue
+      if (files.length === 1 && !showQueue) {
         await onLoadVideoInfo(files[0]);
         onLog(`Loaded video: ${files[0]}`);
         return;
       }
       
-      // Multiple files - add to queue
+      // Single file with queue shown, or multiple files - add directly to queue
       const currentWorkflowSnapshot = {
         selectedModel,
         filters: JSON.parse(JSON.stringify(filters)), // Deep copy
@@ -53,49 +49,32 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
         segment: segment?.enabled ? { ...segment } : undefined,
       };
       
-      const configs: BatchVideoConfig[] = files.map((videoPath: string) => {
-        const videoName = videoPath.split(/[\\/]/).pop() || 'unknown';
+      // Add each video directly to the queue without showing the modal
+      files.forEach((videoPath: string) => {
         const outputPath = videoPath.replace(/\.[^.]+$/, `_upscaled.${outputFormat}`);
-        
-        return {
-          videoPath,
-          videoName,
-          outputPath,
-          workflow: JSON.parse(JSON.stringify(currentWorkflowSnapshot)) // Deep copy for each
-        };
+        onAddToQueue([videoPath], currentWorkflowSnapshot, outputPath);
       });
       
-      setPendingBatchVideos(configs);
-      setShowBatchConfig(true);
-      onLog(`Selected ${files.length} video(s) for queue`);
+      onLog(`Added ${files.length} video(s) to queue`);
   };
 
-  const handleConfirmBatchConfig = (configs: BatchVideoConfig[]): void => {
-    try {
-      // Add each configured video to the queue
-      configs.forEach(config => {
-        onAddToQueue([config.videoPath], config.workflow, config.outputPath);
-      });
-      
-      onLog(`Added ${configs.length} video(s) to queue`);
-      setShowBatchConfig(false);
-      setPendingBatchVideos([]);
-    } catch (error) {
-      onLog(`Error adding to queue: ${getErrorMessage(error)}`);
-    }
-  };
-
-  const handleCloseBatchConfig = (): void => {
-    setShowBatchConfig(false);
-    setPendingBatchVideos([]);
+  const handleAddCurrentVideoToQueue = (videoPath: string, outputPath: string): void => {
+    const currentWorkflowSnapshot = {
+      selectedModel,
+      filters: JSON.parse(JSON.stringify(filters)), // Deep copy
+      outputFormat,
+      useDirectML,
+      numStreams,
+      segment: segment?.enabled ? { ...segment } : undefined,
+    };
+    
+    onAddToQueue([videoPath], currentWorkflowSnapshot, outputPath);
+    onLog(`Added current video to queue`);
   };
 
   return {
-    showBatchConfig,
-    pendingBatchVideos,
     handleSelectVideoWithQueue,
     handleBatchFiles,
-    handleConfirmBatchConfig,
-    handleCloseBatchConfig,
+    handleAddCurrentVideoToQueue,
   };
 }

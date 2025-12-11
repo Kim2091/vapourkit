@@ -292,17 +292,17 @@ export function QueuePanel({
                     <Film className="w-10 h-10 text-gray-600" />
                   )}
                   {/* Hover Actions Overlay */}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-2">
                         {item.status === 'processing' ? (
                         <button
                             onClick={(e) => {
                             e.stopPropagation();
                             onCancelItem(item.id);
                             }}
-                            className="p-1.5 bg-orange-900/50 hover:bg-orange-900/70 rounded transition-colors"
+                            className="p-2 bg-orange-900/50 hover:bg-orange-900/70 rounded transition-colors"
                             title="Cancel"
                         >
-                            <XCircle className="w-4 h-4 text-orange-400" />
+                            <XCircle className="w-5 h-5 text-orange-400" />
                         </button>
                         ) : item.status === 'pending' && !isQueueStarted ? (
                         <>
@@ -312,10 +312,10 @@ export function QueuePanel({
                                 e.stopPropagation();
                                 onReorder(index, index - 1);
                                 }}
-                                className="p-1.5 bg-dark-surface/80 hover:bg-dark-surface rounded transition-colors"
+                                className="p-2.5 bg-dark-surface/80 hover:bg-dark-surface rounded transition-colors"
                                 title="Move left"
                             >
-                                <ChevronLeft className="w-4 h-4 text-gray-300" />
+                                <ChevronLeft className="w-6 h-6 text-gray-300" />
                             </button>
                             )}
                             {index < queue.length - 1 && (
@@ -324,10 +324,10 @@ export function QueuePanel({
                                 e.stopPropagation();
                                 onReorder(index, index + 1);
                                 }}
-                                className="p-1.5 bg-dark-surface/80 hover:bg-dark-surface rounded transition-colors"
+                                className="p-2.5 bg-dark-surface/80 hover:bg-dark-surface rounded transition-colors"
                                 title="Move right"
                             >
-                                <ChevronRight className="w-4 h-4 text-gray-300" />
+                                <ChevronRight className="w-6 h-6 text-gray-300" />
                             </button>
                             )}
                         </>
@@ -337,29 +337,18 @@ export function QueuePanel({
                             e.stopPropagation();
                             onRequeueItem(item.id);
                             }}
-                            className="p-1.5 bg-blue-900/50 hover:bg-blue-900/70 rounded transition-colors"
+                            className="p-2 bg-blue-900/50 hover:bg-blue-900/70 rounded transition-colors"
                             title="Reprocess"
                         >
-                            <RotateCcw className="w-4 h-4 text-blue-400" />
+                            <RotateCcw className="w-5 h-5 text-blue-400" />
                         </button>
                         ) : null}
-                        {item.status !== 'processing' && (
-                        <button
-                            onClick={(e) => {
-                            e.stopPropagation();
-                            onRemoveItem(item.id);
-                            }}
-                            className="p-1.5 bg-red-900/50 hover:bg-red-900/70 rounded transition-colors"
-                            title="Remove"
-                        >
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                        )}
                   </div>
                 </div>
 
-                {/* Bottom: Workflow info */}
-                <div className="flex items-center gap-2 text-xs text-gray-500 mt-2 flex-wrap">
+                {/* Bottom: Workflow info and delete button */}
+                <div className="flex items-center justify-between gap-2 mt-2">
+                  <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap flex-1 min-w-0">
                     <span className="bg-dark-bg px-1.5 py-0.5 rounded border border-gray-800">
                         {item.workflow.outputFormat.toUpperCase()}
                     </span>
@@ -374,6 +363,20 @@ export function QueuePanel({
                             {item.workflow.segment.startFrame}-{item.workflow.segment.endFrame === -1 ? 'end' : item.workflow.segment.endFrame}
                         </span>
                     )}
+                  </div>
+                  {/* Delete button */}
+                  {item.status !== 'processing' && (
+                  <button
+                      onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveItem(item.id);
+                      }}
+                      className="flex-shrink-0 p-1.5 bg-red-900/20 hover:bg-red-900/40 rounded transition-colors border border-red-900/30"
+                      title="Remove"
+                  >
+                      <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  </button>
+                  )}
                 </div>
                     
                 {/* Error message */}

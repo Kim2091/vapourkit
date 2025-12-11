@@ -15,6 +15,7 @@
 - Add automatic static + shape detection when building TensorRT models
 - Add update system for vs-mlrt plugin
 - Update vs_undistort to version 2.0.0 (thanks tepete!)
+- Update queue panel functionality to be more intuitive
 
 ## 0.10.2
 - Implement segment selection. Users can now select a small segment of a video to process and preview!
