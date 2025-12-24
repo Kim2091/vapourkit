@@ -6,6 +6,9 @@ import { configManager } from './configManager';
 import { VS_MLRT_VERSION, PATHS } from './constants';
 import { VsMlrtManager } from './vsMlrtManager';
 
+// Cache for log file reading - stores last file size for change detection
+let lastLogSize = 0;
+
 /**
  * Registers all configuration-related IPC handlers
  */
@@ -126,6 +129,67 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
 
   ipcMain.handle('get-version', async () => {
     return { version: app.getVersion() };
+  });
+
+  // Read the last N lines from the log file (efficient tail reading)
+  ipcMain.handle('read-log-tail', async (event, maxLines: number = 300) => {
+    try {
+      const logPath = logger.getLogPath();
+      
+      // Check if file exists
+      if (!await fs.pathExists(logPath)) {
+        return { lines: [], hasNewContent: false };
+      }
+      
+      const stats = await fs.stat(logPath);
+      const currentSize = stats.size;
+      
+      // Check if file has changed since last read
+      const hasNewContent = currentSize !== lastLogSize;
+      
+      if (!hasNewContent) {
+        // File hasn't changed, return empty to signal no update needed
+        return { lines: [], hasNewContent: false };
+      }
+      
+      lastLogSize = currentSize;
+      
+      // Read the file efficiently - only read last portion if file is large
+      const MAX_BYTES_TO_READ = 512 * 1024; // 512KB max
+      let content: string;
+      
+      if (currentSize > MAX_BYTES_TO_READ) {
+        // Read only the last portion of the file
+        const fd = await fs.open(logPath, 'r');
+        const buffer = Buffer.alloc(MAX_BYTES_TO_READ);
+        const startPosition = currentSize - MAX_BYTES_TO_READ;
+        await fs.read(fd, buffer, 0, MAX_BYTES_TO_READ, startPosition);
+        await fs.close(fd);
+        content = buffer.toString('utf-8');
+        // Remove potentially incomplete first line
+        const firstNewline = content.indexOf('\n');
+        if (firstNewline > 0) {
+          content = content.substring(firstNewline + 1);
+        }
+      } else {
+        content = await fs.readFile(logPath, 'utf-8');
+      }
+      
+      // Split into lines and take last N
+      const allLines = content.split('\n').filter(line => line.trim().length > 0);
+      const lines = allLines.slice(-maxLines);
+      
+      return { lines, hasNewContent: true };
+    } catch (error) {
+      // Don't log errors here to avoid infinite loops
+      return { lines: [], hasNewContent: false, error: String(error) };
+    }
+  });
+
+  // Reset log read cache (call when user wants to force refresh)
+  ipcMain.handle('reset-log-cache', async () => {
+    lastLogSize = 0;
+    return { success: true };
   });
 
   ipcMain.handle('reload-backend', async () => {

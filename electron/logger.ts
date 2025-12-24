@@ -80,35 +80,36 @@ const formatMessage = (message: string, args: any[]): string => {
     : message;
 };
 
-// Function to send log to renderer (always sends, UI components decide whether to display)
-const sendToRenderer = (level: string, message: string, ...args: any[]) => {
-  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-    mainWindowRef.webContents.send('dev-console-log', {
-      level,
-      message: formatMessage(message, args),
-      timestamp: new Date().toISOString()
-    });
-  }
-};
+// NOTE: Real-time IPC log forwarding has been removed to improve performance.
+// The renderer now polls the log file every second instead.
+// This dramatically reduces IPC traffic during long processing sessions and
+// prevents memory/render issues that could cause the UI to go blank.
+// 
+// The sendToRenderer function is kept but commented out for reference:
+// const sendToRenderer = (level: string, message: string, ...args: any[]) => {
+//   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+//     mainWindowRef.webContents.send('dev-console-log', {
+//       level,
+//       message: formatMessage(message, args),
+//       timestamp: new Date().toISOString()
+//     });
+//   }
+// };
 
 export const logger = {
   info: (message: string, ...args: any[]) => {
     log.info(message, ...args);
-    sendToRenderer('info', message, ...args);
   },
   warn: (message: string, ...args: any[]) => {
     log.warn(message, ...args);
-    sendToRenderer('warn', message, ...args);
   },
   error: (message: string, ...args: any[]) => {
     log.error(message, ...args);
-    sendToRenderer('error', message, ...args);
   },
   
   // Error with user dialog notification
   errorWithDialog: (title: string, message: string, ...args: any[]) => {
     log.error(message, ...args);
-    sendToRenderer('error', message, ...args);
     
     // Show error dialog to user
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
@@ -118,21 +119,17 @@ export const logger = {
   },
   debug: (message: string, ...args: any[]) => {
     log.debug(message, ...args);
-    sendToRenderer('debug', message, ...args);
   },
   
   // Specialized logging methods
   dependency: (message: string, ...args: any[]) => {
     log.info(`[DEPENDENCY] ${message}`, ...args);
-    sendToRenderer('info', `[DEPENDENCY] ${message}`, ...args);
   },
   upscale: (message: string, ...args: any[]) => {
     log.info(`[UPSCALE] ${message}`, ...args);
-    sendToRenderer('info', `[UPSCALE] ${message}`, ...args);
   },
   model: (message: string, ...args: any[]) => {
     log.info(`[MODEL] ${message}`, ...args);
-    sendToRenderer('info', `[MODEL] ${message}`, ...args);
   },
   
   // Get log file path for user access
@@ -144,10 +141,9 @@ export const logger = {
   // Log separator for major operations
   separator: () => {
     log.info('-'.repeat(80));
-    sendToRenderer('info', '-'.repeat(80));
   },
   
-  // Set main window reference for console log forwarding
+  // Set main window reference for error dialogs
   setMainWindow: (window: BrowserWindow | null) => {
     mainWindowRef = window;
   }
@@ -156,12 +152,10 @@ export const logger = {
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
   log.error('Uncaught Exception:', error);
-  sendToRenderer('error', `Uncaught Exception: ${error.message}`, error.stack);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   log.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  sendToRenderer('error', `Unhandled Rejection: ${reason}`);
 });
 
 export default logger;

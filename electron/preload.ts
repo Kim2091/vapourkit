@@ -66,6 +66,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App information
   getVersion: () => ipcRenderer.invoke('get-version'),
   
+  // Log file reading (efficient polling-based console)
+  readLogTail: (maxLines?: number) => ipcRenderer.invoke('read-log-tail', maxLines),
+  resetLogCache: () => ipcRenderer.invoke('reset-log-cache'),
+  
   // Folder access
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
   openConfigFolder: () => ipcRenderer.invoke('open-config-folder'),

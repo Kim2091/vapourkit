@@ -79,6 +79,10 @@ export interface ElectronAPI {
   // App information
   getVersion: () => Promise<{ version: string }>;
   
+  // Log file reading (efficient polling-based console)
+  readLogTail: (maxLines?: number) => Promise<{ lines: string[]; hasNewContent: boolean; error?: string }>;
+  resetLogCache: () => Promise<{ success: boolean }>;
+  
   // Folder access
   openLogsFolder: () => Promise<{ success: boolean }>;
   openConfigFolder: () => Promise<{ success: boolean }>;
