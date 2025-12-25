@@ -5,7 +5,7 @@
 - Remove unused code
 - Hide Validate button during processing
 - Rename Color Matrix to Colorimetry as it does more than the name implies
-- Fix GUI lag!!
+- Improve GUI responsiveness
 - Change the way Developer Log works. It now polls main.log instead of printing directly to the UI
   - This also has the added benefit of fixing formatting issues that were present previously
 - Include 2x_bndl_animefilm_v1.5 FDAT
