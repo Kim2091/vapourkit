@@ -328,7 +328,7 @@ export function FilterStepPanel({
             )}
 
             {/* Code Editor */}
-            <div className="relative rounded-lg overflow-hidden border border-gray-700">
+            <div className="relative rounded-lg overflow-hidden border border-gray-700" style={{ contain: 'layout' }}>
               <PythonCodeEditor
                 value={pendingCode}
                 onChange={handleCodeChange}

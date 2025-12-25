@@ -785,7 +785,7 @@ export function DynamicFilterPanel({
                         )}
 
                         {/* Code Editor */}
-                        <div className="relative rounded-md overflow-hidden border border-gray-600" onMouseDown={(e) => e.stopPropagation()}>
+                        <div className="relative rounded-md overflow-hidden border border-gray-600" onMouseDown={(e) => e.stopPropagation()} style={{ contain: 'layout' }}>
                           <PythonCodeEditor
                             value={pendingFilters.find(f => f.id === filter.id)?.code || ''}
                             onChange={(code) => handleCodeChange(filter.id, code)}

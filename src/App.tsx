@@ -823,7 +823,7 @@ function App() {
 
               {/* Right Panel - Input & Info */}
               <Panel defaultSize={panelSizes.rightPanel} minSize={25}>
-                <div ref={rightPanelRef} className="flex flex-col gap-2 overflow-y-auto h-full min-h-0 pr-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                <div ref={rightPanelRef} className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden h-full min-h-0 pr-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
                   {/* Video Input */}
                   <VideoInputPanel
                     videoInfo={videoInfo}
