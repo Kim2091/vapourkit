@@ -98,10 +98,10 @@ export function ModelManagerModal({
     try {
       await window.electronAPI.deleteModel(model.path, model.id);
       onModelUpdated();
-      setIsDeleting(null);
     } catch (error) {
       console.error('Error deleting model:', error);
       alert('Failed to delete model: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
       setIsDeleting(null);
     }
   };

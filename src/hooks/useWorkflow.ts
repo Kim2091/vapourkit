@@ -50,7 +50,7 @@ export function useWorkflow({
    * Deep copy filters to prevent reference issues
    */
   const deepCopyFilters = useCallback((filters: Filter[]): Filter[] => {
-    return JSON.parse(JSON.stringify(filters));
+    return structuredClone(filters);
   }, []);
 
   /**

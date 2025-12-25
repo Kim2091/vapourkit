@@ -38,7 +38,7 @@ export function useQueueEditing(options: UseQueueEditingOptions) {
     
     const currentWorkflowSnapshot = {
       selectedModel,
-      filters: JSON.parse(JSON.stringify(filters)),
+      filters: structuredClone(filters),
       outputFormat,
       useDirectML,
       numStreams,

@@ -42,7 +42,7 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
       // Single file with queue shown, or multiple files - add directly to queue
       const currentWorkflowSnapshot = {
         selectedModel,
-        filters: JSON.parse(JSON.stringify(filters)), // Deep copy
+        filters: structuredClone(filters), // Deep copy
         outputFormat,
         useDirectML,
         numStreams,
@@ -61,7 +61,7 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
   const handleAddCurrentVideoToQueue = (videoPath: string, outputPath: string): void => {
     const currentWorkflowSnapshot = {
       selectedModel,
-      filters: JSON.parse(JSON.stringify(filters)), // Deep copy
+      filters: structuredClone(filters), // Deep copy
       outputFormat,
       useDirectML,
       numStreams,

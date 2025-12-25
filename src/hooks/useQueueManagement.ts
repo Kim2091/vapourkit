@@ -58,13 +58,30 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
 
   // Auto-save queue whenever it changes (but only after initial load)
   // Debounce saves to prevent excessive disk writes during processing
+  // Use a ref to store the queue for saving to avoid triggering on every progress update
+  const queueForSaveRef = useRef<QueueItem[]>([]);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
   useEffect(() => {
     if (hasLoadedInitially.current && !isLoadingQueue) {
-      const timeoutId = setTimeout(() => {
-        saveQueue(queue);
-      }, 2000); // Debounce by 2 seconds
+      // Store the queue in ref for the timeout callback
+      queueForSaveRef.current = queue;
       
-      return () => clearTimeout(timeoutId);
+      // Clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      
+      // Only save after 2 seconds of inactivity
+      saveTimeoutRef.current = setTimeout(() => {
+        saveQueue(queueForSaveRef.current);
+      }, 2000);
+      
+      return () => {
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+        }
+      };
     }
   }, [queue, isLoadingQueue, saveQueue]);
 
@@ -103,7 +120,7 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
         addedAt: new Date().toISOString(),
         workflow: {
           selectedModel: currentWorkflow.selectedModel,
-          filters: JSON.parse(JSON.stringify(currentWorkflow.filters)), // Deep copy
+          filters: structuredClone(currentWorkflow.filters), // Deep copy
           outputFormat: currentWorkflow.outputFormat,
           useDirectML: currentWorkflow.useDirectML,
           numStreams: currentWorkflow.numStreams,

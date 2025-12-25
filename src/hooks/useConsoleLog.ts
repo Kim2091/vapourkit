@@ -52,10 +52,27 @@ export const useConsoleLog = () => {
   }, []); // Empty deps - only setup once
 
   // Auto-scroll console to bottom when new content arrives
+  // Debounced with 'auto' behavior to prevent continuous animations
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
   useEffect(() => {
-    if (consoleEndRef.current) {
-      consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    // Clear any pending scroll
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
+    
+    // Debounce scrolling to prevent excessive DOM reflows
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (consoleEndRef.current) {
+        consoleEndRef.current.scrollIntoView({ behavior: 'auto' });
+      }
+    }, 100);
+    
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
   }, [consoleOutput]);
 
   return {

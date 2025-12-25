@@ -115,7 +115,7 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
     if (editingQueueItemId) {
       const currentWorkflowSnapshot = {
         selectedModel,
-        filters: JSON.parse(JSON.stringify(filters)),
+        filters: structuredClone(filters),
         outputFormat,
         useDirectML,
         numStreams,

@@ -2,7 +2,8 @@
 import log from 'electron-log';
 import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 
 /**
  * Centralized logging utility for the application
@@ -21,13 +22,22 @@ const appDataPath = app.isPackaged
   : path.join(app.getAppPath(), 'data');
 const logPath = path.join(appDataPath, 'logs', 'main.log');
 
-// Rotate log file if it exceeds 15,000 lines
+// Log rotation state - will be updated asynchronously
 const MAX_LOG_LINES = 15000;
 let logRotated = false;
 let rotatedBackupName = '';
-try {
-  if (fs.existsSync(logPath)) {
-    const logContent = fs.readFileSync(logPath, 'utf-8');
+
+// Async log rotation - runs after logger is configured
+async function rotateLogIfNeeded(): Promise<void> {
+  try {
+    try {
+      await fs.access(logPath);
+    } catch {
+      // File doesn't exist, no rotation needed
+      return;
+    }
+    
+    const logContent = await fs.readFile(logPath, 'utf-8');
     const lineCount = logContent.split('\n').length;
     
     if (lineCount > MAX_LOG_LINES) {
@@ -37,14 +47,16 @@ try {
       const backupPath = path.join(path.dirname(logPath), backupName);
       
       // Rename current log to backup
-      fs.renameSync(logPath, backupPath);
+      await fs.rename(logPath, backupPath);
       logRotated = true;
       rotatedBackupName = backupName;
+      
+      log.info(`Previous log exceeded ${MAX_LOG_LINES} lines - rotated to ${rotatedBackupName}`);
     }
+  } catch (error) {
+    // If rotation fails, continue anyway - better to have logs than crash
+    console.error('Failed to rotate log file:', error);
   }
-} catch (error) {
-  // If rotation fails, continue anyway - better to have logs than crash
-  console.error('Failed to rotate log file:', error);
 }
 
 // Configure electron-log
@@ -68,10 +80,12 @@ log.info(`Platform: ${process.platform} ${process.arch}`);
 log.info(`Electron: ${process.versions.electron}`);
 log.info(`Node: ${process.versions.node}`);
 log.info(`Log file: ${logPath}`);
-if (logRotated) {
-  log.info(`Previous log exceeded ${MAX_LOG_LINES} lines - rotated to ${rotatedBackupName}`);
-}
 log.info('='.repeat(80));
+
+// Perform async log rotation after initial log messages
+rotateLogIfNeeded().catch(err => {
+  console.error('Log rotation failed:', err);
+});
 
 // Helper to format log messages with arguments
 const formatMessage = (message: string, args: any[]): string => {

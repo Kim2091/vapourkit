@@ -374,7 +374,7 @@ function App() {
         videoPath: videoInfo?.path || null,
         outputPath: outputPath,
         selectedModel,
-        filters: JSON.parse(JSON.stringify(filters)), // Deep copy
+        filters: structuredClone(filters), // Deep copy
         outputFormat,
         useDirectML,
         numStreams,
@@ -558,52 +558,67 @@ function App() {
   }, []);
 
   // Focus recovery mechanism for Electron/Chromium focus desync issues
-  // This detects when focus is "stuck" and restores it automatically
+  // Uses event-driven approach instead of polling to prevent GUI freezing
   useEffect(() => {
-    let focusCheckTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastInteractionTime = Date.now();
+    let focusRecoveryPending = false;
 
-    // Track user interactions to know when they're trying to use the app
-    const handleInteraction = () => {
-      lastInteractionTime = Date.now();
+    // Handle focus recovery after user interaction if focus is stuck
+    const handleInteraction = (e: Event) => {
+      // Avoid recursive focus handling
+      if (focusRecoveryPending) return;
+      
+      // Use requestAnimationFrame to check focus after the event completes
+      requestAnimationFrame(() => {
+        const activeElement = document.activeElement;
+        
+        // Only recover focus if it's stuck on body/document and the click was on an interactive element
+        if (!activeElement || activeElement === document.body || activeElement === document.documentElement) {
+          // Check if the event target is or contains a focusable element
+          const target = e.target as HTMLElement;
+          if (target && target.closest) {
+            const focusable = target.closest('button, input, select, textarea, a, [tabindex]:not([tabindex="-1"])');
+            if (focusable instanceof HTMLElement) {
+              focusRecoveryPending = true;
+              focusable.focus({ preventScroll: true });
+              focusRecoveryPending = false;
+              return;
+            }
+          }
+          
+          // Only use window.focus() as a last resort, and never blur first
+          // as that can cause the desync we're trying to fix
+          window.focus();
+        }
+      });
     };
 
-    // Check if focus is in a broken state
-    const checkFocus = () => {
-      // If user recently interacted but nothing has focus, or focus is on body/html, 
-      // the app might be in a stuck state
-      const activeElement = document.activeElement;
-      const timeSinceInteraction = Date.now() - lastInteractionTime;
-      
-      // Only check if user interacted recently (within 100ms)
-      if (timeSinceInteraction < 100) {
-        // If focus is on body, document, or null after a click/keydown, restore it
+    // Handle window blur/focus events for app-level focus recovery
+    const handleWindowBlur = () => {
+      // Mark that we lost focus - used to detect stuck state
+    };
+
+    const handleWindowFocus = () => {
+      // When window regains focus, ensure an element is focused
+      requestAnimationFrame(() => {
+        const activeElement = document.activeElement;
         if (!activeElement || activeElement === document.body || activeElement === document.documentElement) {
-          // Find a focusable element to restore focus to
           const mainContent = document.querySelector('main') || document.querySelector('[role="main"]');
           if (mainContent instanceof HTMLElement) {
             mainContent.focus({ preventScroll: true });
-          } else {
-            // Fallback: blur and re-focus the window
-            window.blur();
-            window.focus();
           }
         }
-      }
+      });
     };
 
-    // Listen for interactions that might expose the focus bug
-    document.addEventListener('mousedown', handleInteraction, true);
-    document.addEventListener('keydown', handleInteraction, true);
-    
-    // Periodically check for stuck focus (every 200ms, only acts if user just interacted)
-    const intervalId = setInterval(checkFocus, 200);
+    // Only listen for mousedown - less intrusive than polling
+    document.addEventListener('mousedown', handleInteraction, { passive: true, capture: true });
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
 
     return () => {
       document.removeEventListener('mousedown', handleInteraction, true);
-      document.removeEventListener('keydown', handleInteraction, true);
-      clearInterval(intervalId);
-      if (focusCheckTimer) clearTimeout(focusCheckTimer);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
     };
   }, []);
 
