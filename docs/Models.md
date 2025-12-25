@@ -10,6 +10,7 @@ Ships with pre-configured upscaling models:
   - AnimeJaNai SD V1 (Classic HQ Anime)
   - AniSD AC/DC SPAN (Classic SD Anime) (License: CC BY-NC 4.0)
   - AnimeSharp V4 (Low Quality Anime)
+  - 2x_bndl_animefilm_v1.5 (Low Quality SD Anime) (License: CC BY 4.0)
 
 ### Model Support
 Vapourkit supports any model that vs-mlrt supports. Refer here for more information: https://github.com/AmusementClub/vs-mlrt/wiki  
