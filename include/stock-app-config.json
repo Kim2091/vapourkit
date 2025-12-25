@@ -55,6 +55,12 @@
       "modelType": "image",
       "createdAt": "2025-10-29T06:30:19.831Z",
       "displayTag": "LQ Anime"
+    },
+    "2x_bndl_animefilm_v1.5_FDAT_fp32": {
+      "useFp32": true,
+      "useBf16": false,
+      "modelType": "image",
+      "createdAt": "2025-12-25T22:41:27.399Z"
     }
   }
 }

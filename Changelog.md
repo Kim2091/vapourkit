@@ -8,6 +8,7 @@
 - Fix GUI lag!!
 - Change the way Developer Log works. It now polls main.log instead of printing directly to the UI
   - This also has the added benefit of fixing formatting issues that were present previously
+- Include 2x_bndl_animefilm_v1.5 FDAT
 
 ## 0.12.1
 - Overhaul validation method. It will no longer automatically run in the background, instead you must manually run it if desired
