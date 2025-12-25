@@ -22,6 +22,7 @@ export const PATHS = {
   CONFIG: path.join(APP_DATA_PATH, 'config'),
   VIDEO_COMPARE: path.join(APP_DATA_PATH, 'video-compare'),
   FILTER_TEMPLATES: path.join(APP_DATA_PATH, 'config', 'filter-templates'),
+  PIP_CACHE: path.join(APP_DATA_PATH, 'pip-cache'),
   
   // Executables
   get VSPIPE() { return path.join(this.VS, 'vspipe.exe'); },

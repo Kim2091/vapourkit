@@ -5,6 +5,9 @@
 - Remove unused code
 - Hide Validate button during processing
 - Rename Color Matrix to Colorimetry as it does more than the name implies
+- Fix GUI lag!!
+- Change the way Developer Log works. It now polls main.log instead of printing directly to the UI
+  - This also has the added benefit of fixing formatting issues that were present previously
 
 ## 0.12.1
 - Overhaul validation method. It will no longer automatically run in the background, instead you must manually run it if desired

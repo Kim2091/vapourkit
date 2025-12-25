@@ -90,7 +90,12 @@ export function ModelManagerModal({
   };
 
   const handleDelete = async (model: ModelFile) => {
-    if (!confirm(`Are you sure you want to delete "${model.name}"? This action cannot be undone.`)) {
+    const confirmed = confirm(`Are you sure you want to delete "${model.name}"? This action cannot be undone.`);
+    
+    // Restore focus to the window after native confirm dialog closes
+    window.focus();
+    
+    if (!confirmed) {
       return;
     }
 
@@ -160,7 +165,7 @@ export function ModelManagerModal({
             <div className="space-y-2">
               {filteredModels.map((model) => (
                 <div
-                  key={model.id}
+                  key={model.path}
                   className="bg-dark-surface rounded-lg border border-gray-700 p-3"
                 >
                   {editingModel === model.id ? (

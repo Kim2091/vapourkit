@@ -42,7 +42,7 @@ export class PluginInstaller {
     progressScale: number,
     extraArgs: string[] = []
   ): Promise<{ success: boolean; error?: string }> {
-    const args = ['-m', 'pip', 'install', '--no-warn-script-location', ...packages, ...extraArgs];
+    const args = ['-m', 'pip', 'install', '--no-warn-script-location', '--cache-dir', PATHS.PIP_CACHE, ...packages, ...extraArgs];
     
     const commandStr = `${PATHS.PYTHON} ${args.join(' ')}`;
     logger.info(`Running command: ${commandStr}`);

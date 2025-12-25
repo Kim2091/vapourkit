@@ -567,6 +567,18 @@ function App() {
       // Avoid recursive focus handling
       if (focusRecoveryPending) return;
       
+      const target = e.target as HTMLElement;
+      
+      // Don't interfere with inputs, textareas, selects - let browser handle focus naturally
+      if (target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      )) {
+        return;
+      }
+      
       // Use requestAnimationFrame to check focus after the event completes
       requestAnimationFrame(() => {
         const activeElement = document.activeElement;
@@ -574,9 +586,8 @@ function App() {
         // Only recover focus if it's stuck on body/document and the click was on an interactive element
         if (!activeElement || activeElement === document.body || activeElement === document.documentElement) {
           // Check if the event target is or contains a focusable element
-          const target = e.target as HTMLElement;
           if (target && target.closest) {
-            const focusable = target.closest('button, input, select, textarea, a, [tabindex]:not([tabindex="-1"])');
+            const focusable = target.closest('button, a, [tabindex]:not([tabindex="-1"])');
             if (focusable instanceof HTMLElement) {
               focusRecoveryPending = true;
               focusable.focus({ preventScroll: true });
