@@ -11,6 +11,7 @@ interface ImportModelModalProps {
   setImportForm: React.Dispatch<React.SetStateAction<ImportForm>>;
   handleSelectOnnxFile: () => void;
   handleImportModel: () => void;
+  handleCancelBuild: () => void;
   handleModelTypeChange: (modelType: 'tspan' | 'image') => void;
   handleShapeModeChange: (useStaticShape: boolean) => void;
   handleFp32Change: (useFp32: boolean) => void;
@@ -28,6 +29,7 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
   setImportForm,
   handleSelectOnnxFile,
   handleImportModel,
+  handleCancelBuild,
   handleModelTypeChange,
   handleShapeModeChange,
   handleFp32Change,
@@ -291,6 +293,22 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                   💡 Tip: Use OUTPUT_PATH as the placeholder for --saveEngine. The switches above will automatically update this command.
                 </p>
               </div>
+              
+              {/* Skip Validation Checkbox */}
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="skipValidation"
+                  checked={importForm.skipValidation}
+                  onChange={(e) => setImportForm(prev => ({ ...prev, skipValidation: e.target.checked }))}
+                  disabled={isImporting}
+                  className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-primary-blue focus:ring-primary-blue focus:ring-offset-0"
+                />
+                <label htmlFor="skipValidation" className="text-sm text-gray-300 cursor-pointer">
+                  Skip ONNX validation before building
+                </label>
+                <span className="text-xs text-gray-500">(use if validation fails but model is known to work)</span>
+              </div>
             </div>
           )}
 
@@ -314,7 +332,18 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
             <div className="bg-dark-surface rounded-lg p-3 border border-gray-700">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-sm font-medium">{importProgress.message}</span>
-                <span className="text-sm text-gray-400">{importProgress.progress}%</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-400">{importProgress.progress}%</span>
+                  {isImporting && importProgress.type === 'converting' && (
+                    <button
+                      onClick={handleCancelBuild}
+                      className="text-xs px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded transition-colors"
+                      title="Cancel engine build"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="w-full bg-dark-bg rounded-full h-1.5">
                 <div 

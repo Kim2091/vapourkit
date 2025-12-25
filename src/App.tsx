@@ -296,6 +296,7 @@ function App() {
     setImportForm,
     handleSelectOnnxFile,
     handleImportModel,
+    handleCancelBuild,
     handleModelTypeChange,
     handleShapeModeChange,
     handleFp32Change,
@@ -1045,6 +1046,7 @@ function App() {
         setImportForm={setImportForm}
         handleSelectOnnxFile={handleSelectOnnxFile}
         handleImportModel={handleImportModel}
+        handleCancelBuild={handleCancelBuild}
         handleModelTypeChange={handleModelTypeChange}
         handleShapeModeChange={handleShapeModeChange}
         handleFp32Change={handleFp32Change}

@@ -257,6 +257,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     useStaticShape?: boolean;
     useCustomTrtexecParams?: boolean;
     customTrtexecParams?: string;
+    skipValidation?: boolean;
   }) => {
     return await withLogSeparator(async () => {
       logger.model('Starting custom model import');
@@ -265,28 +266,33 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       logger.model(`Precision: ${params.useFp32 ? 'FP32' : params.useBf16 ? 'BF16' : 'FP16'}`);
       logger.model(`Model type: ${params.modelType || 'image'}`);
       logger.model(`DirectML mode: ${params.useDirectML ? 'enabled' : 'disabled'}`);
+      logger.model(`Skip validation: ${params.skipValidation ? 'yes' : 'no'}`);
       
       try {
-        const { ModelValidator } = await import('./modelValidator');
-        
-        const validator = new ModelValidator();
         // Use module-level extractor for cancellation support
         activeModelExtractor = new ModelExtractor();
         
-        // Validate
-        sendModelImportProgress(mainWindow, 'validating', 10, 'Validating ONNX model...');
-        const validationResult = await validator.validateOnnxModel(params.onnxPath);
-        
-        if (!validationResult.isValid) {
-          logger.error(`Model validation failed: ${validationResult.error}`);
-          sendModelImportProgress(mainWindow, 'error', 0, validationResult.error || 'Model validation failed');
-          return {
-            success: false,
-            error: validationResult.error || 'Model validation failed'
-          };
+        // Validate ONNX model unless skipValidation is set
+        if (!params.skipValidation) {
+          const { ModelValidator } = await import('./modelValidator');
+          const validator = new ModelValidator();
+          
+          sendModelImportProgress(mainWindow, 'validating', 10, 'Validating ONNX model...');
+          const validationResult = await validator.validateOnnxModel(params.onnxPath);
+          
+          if (!validationResult.isValid) {
+            logger.error(`Model validation failed: ${validationResult.error}`);
+            sendModelImportProgress(mainWindow, 'error', 0, validationResult.error || 'Model validation failed');
+            return {
+              success: false,
+              error: validationResult.error || 'Model validation failed'
+            };
+          }
+          
+          logger.model('Model validation passed');
+        } else {
+          logger.model('Skipping ONNX model validation as requested');
         }
-        
-        logger.model('Model validation passed');
         
         // Copy ONNX
         sendModelImportProgress(mainWindow, 'copying', 30, 'Copying ONNX model to models directory...');
@@ -463,6 +469,15 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
   ipcMain.handle('cancel-model-import', async () => {
     logger.info('Cancelling model import/initialization');
     cancelActiveModelOperation();
+    return { success: true };
+  });
+
+  ipcMain.handle('force-stop-model-import', async () => {
+    logger.info('Force stopping model import/initialization');
+    if (activeModelExtractor) {
+      activeModelExtractor.forceStopConversion();
+      activeModelExtractor = null;
+    }
     return { success: true };
   });
 

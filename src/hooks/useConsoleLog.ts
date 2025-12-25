@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 export const useConsoleLog = () => {
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const consoleEndRef = useRef<HTMLDivElement>(null);
-  const lastLineCountRef = useRef<number>(0);
+  const lastLineRef = useRef<string>('');
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Manual log for UI-only messages (not persisted to file)
@@ -24,11 +24,11 @@ export const useConsoleLog = () => {
         const result = await window.electronAPI.readLogTail(300);
         
         if (result.hasNewContent && result.lines.length > 0) {
-          // Only update if content has actually changed
-          // This prevents unnecessary re-renders
-          if (result.lines.length !== lastLineCountRef.current || 
-              result.lines[result.lines.length - 1] !== consoleOutput[consoleOutput.length - 1]) {
-            lastLineCountRef.current = result.lines.length;
+          const newLastLine = result.lines[result.lines.length - 1];
+          // Only update if the last line has actually changed
+          // Use a ref to avoid stale closure issues
+          if (newLastLine !== lastLineRef.current) {
+            lastLineRef.current = newLastLine;
             setConsoleOutput(result.lines);
           }
         }

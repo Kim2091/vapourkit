@@ -42,6 +42,7 @@ export interface ElectronAPI {
   updateModelMetadata: (modelId: string, metadata: Partial<ModelMetadata>) => Promise<{ success: boolean; error?: string }>;
   deleteModel: (modelPath: string, modelId: string) => Promise<{ success: boolean; error?: string }>;
   cancelModelImport: () => Promise<{ success: boolean }>;
+  forceStopModelImport: () => Promise<{ success: boolean }>;
   validateOnnxModel: (onnxPath: string) => Promise<ValidateOnnxModelResult>;
   
   // Upscaling operations
@@ -295,6 +296,7 @@ export interface ImportModelParams {
   useStaticShape?: boolean;
   useCustomTrtexecParams?: boolean;
   customTrtexecParams?: string;
+  skipValidation?: boolean;
 }
 
 export interface ImportModelResult {

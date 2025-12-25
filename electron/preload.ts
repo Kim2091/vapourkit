@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateModelMetadata: (modelId: string, metadata: any) => ipcRenderer.invoke('update-model-metadata', modelId, metadata),
   deleteModel: (modelPath: string, modelId: string) => ipcRenderer.invoke('delete-model', modelPath, modelId),
   cancelModelImport: () => ipcRenderer.invoke('cancel-model-import'),
+  forceStopModelImport: () => ipcRenderer.invoke('force-stop-model-import'),
   validateOnnxModel: (onnxPath: string) => ipcRenderer.invoke('validate-onnx-model', onnxPath),
   
   // Upscaling operations

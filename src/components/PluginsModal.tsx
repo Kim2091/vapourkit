@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Download, RefreshCw, CheckCircle, XCircle, Loader2, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import { useConsoleLog } from '../hooks/useConsoleLog';
 
 interface PluginDependencyProgress {
   type: 'download' | 'extract' | 'install' | 'complete' | 'error';
@@ -19,10 +20,11 @@ export const PluginsModal: React.FC<PluginsModalProps> = ({ show, onClose, onIns
   const [progress, setProgress] = useState<PluginDependencyProgress | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(true);
-  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
-  const consoleEndRef = useRef<HTMLDivElement>(null);
+  
+  // Use the shared console log hook for polling-based log reading
+  const { consoleOutput, consoleEndRef } = useConsoleLog();
 
   // Check installation status when modal opens
   useEffect(() => {
@@ -66,39 +68,10 @@ export const PluginsModal: React.FC<PluginsModalProps> = ({ show, onClose, onIns
     return unsubscribe;
   }, [show, onInstallationComplete]);
 
-  // Listen to developer console logs (same as developer mode)
-  useEffect(() => {
-    if (!show) return;
-
-    const unsubscribe = window.electronAPI.onDevConsoleLog((log: any) => {
-      const levelPrefix = log.level === 'error' ? '❌' : 
-                         log.level === 'warn' ? '⚠️' : 
-                         log.level === 'debug' ? '🔍' : 'ℹ️';
-      const timestamp = new Date().toLocaleTimeString();
-      const logMessage = `[${timestamp}] ${levelPrefix} [${log.level.toUpperCase()}] ${log.message}`;
-      
-      setConsoleOutput(prev => {
-        const updated = [...prev, logMessage];
-        // Keep only the last 300 lines
-        return updated.length > 300 ? updated.slice(-300) : updated;
-      });
-    });
-
-    return unsubscribe;
-  }, [show]);
-
-  // Auto-scroll console to bottom when new logs arrive
-  useEffect(() => {
-    if (consoleEndRef.current) {
-      consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [consoleOutput]);
-
   const handleInstallDependencies = async () => {
     setIsInstalling(true);
     setProgress(null);
     setInstallError(null);
-    setConsoleOutput([]);
 
     try {
       const result = await window.electronAPI.installPluginDependencies();
@@ -116,7 +89,6 @@ export const PluginsModal: React.FC<PluginsModalProps> = ({ show, onClose, onIns
     setIsInstalling(true);
     setProgress(null);
     setInstallError(null);
-    setConsoleOutput([]);
 
     try {
       const result = await window.electronAPI.uninstallPluginDependencies();

@@ -8,6 +8,7 @@ import { PATHS } from './constants';
 export class ModelExtractor {
   private bundledModelsPath: string;
   private currentTrtexecProcess: any = null;
+  private isForceStopping: boolean = false;
 
   constructor() {
     // Get bundled models path
@@ -295,7 +296,40 @@ export class ModelExtractor {
    */
   cancelConversion(): void {
     if (this.currentTrtexecProcess) {
-      logger.model('Force killing trtexec conversion process');
+      logger.model('Cancelling trtexec conversion process');
+      this.killCurrentProcess();
+    }
+  }
+
+  /**
+   * Force stops the current trtexec conversion process immediately
+   * This sets a flag to ensure any pending operations are also cancelled
+   */
+  forceStopConversion(): void {
+    logger.model('Force stopping trtexec conversion process');
+    this.isForceStopping = true;
+    this.killCurrentProcess();
+  }
+
+  /**
+   * Resets the force stop flag (call before starting a new conversion)
+   */
+  resetForceStop(): void {
+    this.isForceStopping = false;
+  }
+
+  /**
+   * Checks if force stop has been requested
+   */
+  isForceStopRequested(): boolean {
+    return this.isForceStopping;
+  }
+
+  /**
+   * Internal method to kill the current trtexec process
+   */
+  private killCurrentProcess(): void {
+    if (this.currentTrtexecProcess) {
       try {
         // On Windows, we need to kill the entire process tree immediately
         if (process.platform === 'win32') {
@@ -313,7 +347,7 @@ export class ModelExtractor {
         }
         this.currentTrtexecProcess = null;
       } catch (error) {
-        logger.error('Error canceling trtexec process:', error);
+        logger.error('Error killing trtexec process:', error);
       }
     }
   }
@@ -335,6 +369,14 @@ export class ModelExtractor {
     customTrtexecParams?: string,
     useBf16?: boolean
   ): Promise<void> {
+    // Reset force stop flag at the start of a new conversion
+    this.resetForceStop();
+    
+    // Check if force stop was requested before we even start
+    if (this.isForceStopRequested()) {
+      throw new Error('Conversion cancelled before starting');
+    }
+    
     logger.model(`Converting ONNX model: ${path.basename(onnxPath)}`);
     logger.model(`Precision: ${useFp32 ? 'FP32' : useBf16 ? 'BF16' : 'FP16'}`);
     logger.model(`Shape mode: ${useStaticShape ? 'Static' : 'Dynamic'}`);

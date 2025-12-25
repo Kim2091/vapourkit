@@ -16,6 +16,7 @@ export interface ImportForm {
   useStaticShape: boolean;
   useCustomTrtexecParams: boolean;
   customTrtexecParams: string;
+  skipValidation: boolean;
 }
 
 // Helper function to generate default trtexec command
@@ -55,7 +56,8 @@ const DEFAULT_IMPORT_FORM: ImportForm = {
   displayTag: '',
   useStaticShape: false,
   useCustomTrtexecParams: true, // Always true in refactored UI - the textbox is the main interface
-  customTrtexecParams: generateTrtexecCommand('image', false, false, 'input', false)
+  customTrtexecParams: generateTrtexecCommand('image', false, false, 'input', false),
+  skipValidation: false
 };
 
 export const useModelImport = (
@@ -262,6 +264,7 @@ export const useModelImport = (
           useStaticShape: importForm.useStaticShape,
           useCustomTrtexecParams: importForm.useCustomTrtexecParams,
           customTrtexecParams: importForm.customTrtexecParams || undefined,
+          skipValidation: importForm.skipValidation,
         });
       }
     } catch (error) {
@@ -269,6 +272,18 @@ export const useModelImport = (
       setIsImporting(false);
     }
   }, [importForm, modalMode]);
+
+  const handleCancelBuild = useCallback(async (): Promise<void> => {
+    try {
+      addConsoleLog('[Model] Cancelling build...');
+      await window.electronAPI.cancelModelImport();
+      setIsImporting(false);
+      setImportProgress(null);
+      addConsoleLog('[Model] Build cancelled');
+    } catch (error) {
+      console.error('Error cancelling build:', error);
+    }
+  }, [addConsoleLog]);
 
   const resetImportForm = useCallback((): void => {
     setImportForm({ ...DEFAULT_IMPORT_FORM, useDirectML });
@@ -455,6 +470,7 @@ export const useModelImport = (
     handleFp32Change,
     handlePrecisionChange,
     handleImportModel,
+    handleCancelBuild,
     handleAutoBuildModel,
     resetImportForm,
     showAutoBuildModal,
