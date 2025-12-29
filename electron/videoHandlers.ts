@@ -552,6 +552,79 @@ export function registerVideoHandlers(
       return null;
     }
   });
+
+  // Extract a frame at a specific frame number from video
+  ipcMain.handle('get-video-frame-at', async (
+    event, 
+    videoPath: string, 
+    frameNumber: number, 
+    fps: number
+  ): Promise<string | null> => {
+    try {
+      const ffmpegPath = FFmpegManager.getFFmpegPath();
+      if (!ffmpegPath) {
+        logger.warn('FFmpeg not available for frame extraction');
+        return null;
+      }
+
+      // Check if video file exists
+      if (!fs.existsSync(videoPath)) {
+        logger.warn(`Video file not found for frame extraction: ${videoPath}`);
+        return null;
+      }
+
+      // Calculate timestamp from frame number and fps
+      const timestamp = frameNumber / (fps || 24);
+      
+      // Create a unique temp file for this frame
+      const crypto = require('crypto');
+      const frameHash = crypto.createHash('md5').update(`${videoPath}-${frameNumber}`).digest('hex');
+      const frameDir = path.join(os.tmpdir(), 'vapourkit_frames');
+      const framePath = path.join(frameDir, `${frameHash}.jpg`);
+
+      // Ensure frame directory exists
+      await fs.ensureDir(frameDir);
+
+      // Extract frame using ffmpeg with fast seeking
+      return new Promise((resolve) => {
+        const proc = spawn(ffmpegPath, [
+          '-ss', timestamp.toFixed(3),  // Seek to timestamp (fast seek before input)
+          '-i', videoPath,
+          '-frames:v', '1',             // Only one frame
+          '-vf', 'scale=640:-1',        // Scale to 640px width, maintain aspect ratio
+          '-q:v', '3',                  // Quality (2-31, lower is better)
+          '-y',                         // Overwrite
+          framePath
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        proc.on('close', async (code) => {
+          if (code === 0 && fs.existsSync(framePath)) {
+            try {
+              const frameData = await fs.readFile(framePath);
+              // Clean up temp file
+              await fs.remove(framePath).catch(() => {});
+              resolve(`data:image/jpeg;base64,${frameData.toString('base64')}`);
+            } catch (err) {
+              resolve(null);
+            }
+          } else {
+            resolve(null);
+          }
+        });
+
+        proc.on('error', () => resolve(null));
+        
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          proc.kill();
+          resolve(null);
+        }, 5000);
+      });
+    } catch (error) {
+      logger.warn('Error extracting video frame:', error);
+      return null;
+    }
+  });
 }
 
 /**

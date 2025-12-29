@@ -153,6 +153,7 @@ function App() {
     handleVideoError,
     loadCompletedVideo,
     setCompletedVideoPath,
+    updatePreviewFrame,
   } = useVideoProcessing({ outputFormat, onLog: addConsoleLog });
   
   // Queue management hook
@@ -690,6 +691,26 @@ function App() {
     }
   }, [videoInfo, selectedModel, useDirectML, filters, numStreams, addConsoleLog, loadCompletedVideo, setCompletedVideoPath]);
 
+  // Seek to a specific frame in the video preview (used by segment selector)
+  const handleSeekFrame = useCallback(async (frameNumber: number) => {
+    if (!videoInfo) return;
+    
+    try {
+      const frameImage = await window.electronAPI.getVideoFrameAt(
+        videoInfo.path,
+        frameNumber,
+        videoInfo.fps || 24
+      );
+      
+      if (frameImage) {
+        updatePreviewFrame(frameImage);
+      }
+    } catch (error) {
+      // Silently fail - frame extraction is non-critical
+      console.warn('Failed to extract frame:', error);
+    }
+  }, [videoInfo, updatePreviewFrame]);
+
   // Determine if processing should be disabled
   const isStartDisabled = (() => {
     // Disable if stopping
@@ -869,6 +890,7 @@ function App() {
                     onDeleteTemplate={deleteTemplate}
                     onSegmentChange={handleSegmentChange}
                     onPreviewSegment={handlePreviewSegment}
+                    onSeekFrame={handleSeekFrame}
                   />
 
                   {/* Output Settings */}

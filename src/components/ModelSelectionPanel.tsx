@@ -20,6 +20,7 @@ interface ModelSelectionPanelProps {
   onDeleteTemplate?: (name: string) => Promise<boolean>;
   onSegmentChange?: (segment: SegmentSelection) => void;
   onPreviewSegment?: (startFrame: number, endFrame: number) => void;
+  onSeekFrame?: (frameNumber: number) => void;
 }
 
 export function ModelSelectionPanel({
@@ -39,6 +40,7 @@ export function ModelSelectionPanel({
   onManageModels,
   onSegmentChange,
   onPreviewSegment,
+  onSeekFrame,
 }: ModelSelectionPanelProps) {
   return (
     <>
@@ -58,6 +60,7 @@ export function ModelSelectionPanel({
           isProcessing={isProcessing}
           onSegmentChange={onSegmentChange}
           onPreview={onPreviewSegment}
+          onSeekFrame={onSeekFrame}
         />
       )}
 

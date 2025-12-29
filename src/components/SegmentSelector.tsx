@@ -10,6 +10,7 @@ interface SegmentSelectorProps {
   isProcessing: boolean;
   onSegmentChange: (segment: SegmentSelection) => void;
   onPreview?: (startFrame: number, endFrame: number) => void;
+  onSeekFrame?: (frameNumber: number) => void;
 }
 
 // Helper to convert frame number to timecode string
@@ -80,6 +81,7 @@ export function SegmentSelector({
   isProcessing,
   onSegmentChange,
   onPreview,
+  onSeekFrame,
 }: SegmentSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [startInput, setStartInput] = useState('');
@@ -89,6 +91,48 @@ export function SegmentSelector({
   
   const fps = videoInfo?.fps || 24;
   const totalFrames = getTotalFrames(videoInfo);
+  
+  // Throttle frame seeking during drag to avoid overwhelming the system
+  const lastSeekTimeRef = useRef<number>(0);
+  const pendingSeekRef = useRef<number | null>(null);
+  const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  const throttledSeekFrame = useCallback((frameNumber: number) => {
+    if (!onSeekFrame) return;
+    
+    const now = Date.now();
+    const throttleMs = 100; // Seek at most every 100ms during drag
+    
+    if (now - lastSeekTimeRef.current >= throttleMs) {
+      // Enough time has passed, seek immediately
+      lastSeekTimeRef.current = now;
+      pendingSeekRef.current = null;
+      onSeekFrame(frameNumber);
+    } else {
+      // Store the pending frame and schedule it
+      pendingSeekRef.current = frameNumber;
+      
+      if (!seekTimeoutRef.current) {
+        seekTimeoutRef.current = setTimeout(() => {
+          seekTimeoutRef.current = null;
+          if (pendingSeekRef.current !== null) {
+            lastSeekTimeRef.current = Date.now();
+            onSeekFrame(pendingSeekRef.current);
+            pendingSeekRef.current = null;
+          }
+        }, throttleMs - (now - lastSeekTimeRef.current));
+      }
+    }
+  }, [onSeekFrame]);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (seekTimeoutRef.current) {
+        clearTimeout(seekTimeoutRef.current);
+      }
+    };
+  }, []);
   
   // Update inputs when segment changes or video changes
   useEffect(() => {
@@ -151,7 +195,12 @@ export function SegmentSelector({
       ...segment,
       startFrame: frame,
     });
-  }, [startInput, inputMode, fps, totalFrames, segment, onSegmentChange]);
+    
+    // Seek to the new start frame
+    if (onSeekFrame) {
+      onSeekFrame(frame);
+    }
+  }, [startInput, inputMode, fps, totalFrames, segment, onSegmentChange, onSeekFrame]);
   
   const handleEndBlur = useCallback(() => {
     let frame: number;
@@ -173,7 +222,12 @@ export function SegmentSelector({
       ...segment,
       endFrame: frame,
     });
-  }, [endInput, inputMode, fps, totalFrames, segment, onSegmentChange]);
+    
+    // Seek to the new end frame
+    if (onSeekFrame) {
+      onSeekFrame(frame);
+    }
+  }, [endInput, inputMode, fps, totalFrames, segment, onSegmentChange, onSeekFrame]);
   
   const handleReset = useCallback(() => {
     onSegmentChange({
@@ -221,12 +275,16 @@ export function SegmentSelector({
           ...segment,
           startFrame: newStart,
         });
+        // Seek to the new start frame (throttled)
+        throttledSeekFrame(newStart);
       } else {
         const newEnd = Math.max(segment.startFrame + 1, Math.min(frame, totalFrames));
         onSegmentChange({
           ...segment,
           endFrame: newEnd,
         });
+        // Seek to the new end frame (throttled)
+        throttledSeekFrame(newEnd);
       }
     };
     
@@ -248,7 +306,7 @@ export function SegmentSelector({
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleEnd);
     };
-  }, [dragging, totalFrames, segment, onSegmentChange]);
+  }, [dragging, totalFrames, segment, onSegmentChange, throttledSeekFrame]);
   
   // Calculate segment duration and frame count
   const segmentEndFrame = segment.endFrame === -1 ? totalFrames : segment.endFrame;

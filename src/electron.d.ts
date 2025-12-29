@@ -13,6 +13,7 @@ export interface ElectronAPI {
   getVideoInfo: (filePath: string) => Promise<VideoInfo>;
   readVideoFile: (filePath: string) => Promise<ArrayBuffer>;
   getVideoThumbnail: (filePath: string) => Promise<string | null>;
+  getVideoFrameAt: (filePath: string, frameNumber: number, fps: number) => Promise<string | null>;
   getOutputResolution: (
     videoPath: string,
     modelPath: string | null,

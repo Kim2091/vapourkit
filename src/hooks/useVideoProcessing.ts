@@ -303,6 +303,11 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     setVideoLoadError(true);
   };
 
+  // Set a preview frame image directly (used by segment selector)
+  const updatePreviewFrame = useCallback((frame: string | null) => {
+    setPreviewFrame(frame);
+  }, []);
+
   return {
     videoInfo,
     setVideoInfo,
@@ -326,5 +331,6 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     handleVideoError,
     loadCompletedVideo,
     setCompletedVideoPath,
+    updatePreviewFrame,
   };
 }
