@@ -429,7 +429,7 @@ function App() {
   };
   
   // Output resolution validation hook (manual trigger only)
-  const { isValidating, validationStatus, validationError, validateWorkflow, clearValidationStatus } = useOutputResolution({
+  const { isValidating, validationStatus, validationError, validateWorkflow, cancelValidation, clearValidationStatus } = useOutputResolution({
     videoInfo,
     selectedModel: selectedModel || '',
     useDirectML,
@@ -954,23 +954,23 @@ function App() {
                     {/* Validate Workflow Button - hidden during processing */}
                     {!isProcessing && (
                       <button
-                        onClick={validateWorkflow}
-                        disabled={!videoInfo || isValidating}
+                        onClick={isValidating ? cancelValidation : validateWorkflow}
+                        disabled={!videoInfo && !isValidating}
                         className={`font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
                           isValidating
-                            ? 'bg-blue-600 cursor-wait text-white'
+                            ? 'bg-orange-600 hover:bg-orange-700 cursor-pointer text-white'
                             : validationStatus === 'success'
                             ? 'bg-green-600 hover:bg-green-700 text-white border border-green-500'
                             : validationStatus === 'error'
                             ? 'bg-red-600 hover:bg-red-700 text-white border border-red-500'
                             : 'bg-dark-surface hover:bg-dark-bg border border-gray-700 hover:border-primary-blue disabled:border-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed'
                         }`}
-                        title={validationStatus === 'error' && validationError ? `Error: ${validationError}` : 'Validate the current workflow by testing script generation'}
+                        title={isValidating ? 'Click to cancel validation' : validationStatus === 'error' && validationError ? `Error: ${validationError}` : 'Validate the current workflow by processing first 5 seconds'}
                       >
                         {isValidating ? (
                           <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            Validating...
+                            <XCircle className="w-5 h-5" />
+                            Cancel
                           </>
                         ) : validationStatus === 'success' ? (
                           <>

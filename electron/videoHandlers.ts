@@ -102,9 +102,10 @@ export function registerVideoHandlers(
     upscalingEnabled?: boolean,
     filters?: any[],
     upscalePosition?: number,
-    numStreams?: number
+    numStreams?: number,
+    sourceFps?: number
   ) => {
-    logger.info(`Getting output info for: ${videoPath}`);
+    logger.info(`Getting output info for: ${videoPath} (validation mode - first 5 seconds)`);
     try {
       // Cancel any previous info extraction
       if (infoExecutor) {
@@ -119,7 +120,10 @@ export function registerVideoHandlers(
         useDirectML,
         upscalingEnabled,
         filters,
-        numStreams
+        numStreams,
+        undefined, // segment
+        true, // validationMode - always enabled for get-output-resolution
+        sourceFps
       );
       
       const scriptPath = await scriptGenerator.generateScript(config);
@@ -166,6 +170,16 @@ export function registerVideoHandlers(
       logger.error('Error getting output info:', errorMsg);
       return { resolution: null, fps: null, error: errorMsg };
     }
+  });
+
+  // Cancel validation handler
+  ipcMain.handle('cancel-validation', async () => {
+    logger.info('Cancelling workflow validation');
+    if (infoExecutor) {
+      infoExecutor.cancelInfoExtraction();
+      infoExecutor = null;
+    }
+    return { success: true, cancelled: true };
   });
 
   ipcMain.handle('start-upscale', async (
@@ -638,7 +652,9 @@ function createScriptConfig(
   upscalingEnabled?: boolean,
   filters?: any[],
   numStreams?: number,
-  segment?: { enabled: boolean; startFrame: number; endFrame: number }
+  segment?: { enabled: boolean; startFrame: number; endFrame: number },
+  validationMode?: boolean,
+  sourceFps?: number
 ) {
   const isUpscaling = upscalingEnabled !== false;
   
@@ -681,6 +697,8 @@ function createScriptConfig(
     filters: filters,
     numStreams: numStreams,
     outputFormat: outputFormat,
-    segment: segment?.enabled ? segment : undefined
+    segment: segment?.enabled ? segment : undefined,
+    validationMode: validationMode,
+    sourceFps: sourceFps
   };
 }

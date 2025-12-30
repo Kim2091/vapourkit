@@ -12,9 +12,6 @@ export interface OutputInfo {
   error?: string | null;
 }
 
-// Default timeout for vspipe info commands (30 seconds)
-const VSPIPE_INFO_TIMEOUT_MS = 30000;
-
 /**
  * Force kills a process and its children on Windows using taskkill
  */
@@ -96,13 +93,6 @@ export class VapourSynthInfoExtractor {
       // Track the process for cleanup
       this.trackProcess(vspipe);
 
-      // Set timeout to prevent hanging
-      const timeout = setTimeout(() => {
-        logger.warn(`vspipe info timed out after ${VSPIPE_INFO_TIMEOUT_MS}ms, force killing`);
-        forceKillProcess(vspipe);
-        resolve(0);
-      }, VSPIPE_INFO_TIMEOUT_MS);
-
       let output = '';
       let stderrOutput = '';
       
@@ -121,7 +111,6 @@ export class VapourSynthInfoExtractor {
       }
 
       vspipe.on('close', (code) => {
-        clearTimeout(timeout);
         if (code === 0) {
           const match = output.match(/Frames:\s*(\d+)/i);
           if (match) {
@@ -143,7 +132,6 @@ export class VapourSynthInfoExtractor {
       });
 
       vspipe.on('error', (error) => {
-        clearTimeout(timeout);
         logger.error('vspipe info error:', error);
         resolve(0);
       });
@@ -169,13 +157,6 @@ export class VapourSynthInfoExtractor {
       // Track the process for cleanup
       this.trackProcess(vspipe);
 
-      // Set timeout to prevent hanging
-      const timeout = setTimeout(() => {
-        logger.warn(`vspipe info timed out after ${VSPIPE_INFO_TIMEOUT_MS}ms, force killing`);
-        forceKillProcess(vspipe);
-        resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null, error: `Workflow validation timed out after ${VSPIPE_INFO_TIMEOUT_MS / 1000} seconds` });
-      }, VSPIPE_INFO_TIMEOUT_MS);
-
       let output = '';
       let stderrOutput = '';
       
@@ -194,7 +175,6 @@ export class VapourSynthInfoExtractor {
       }
 
       vspipe.on('close', (code) => {
-        clearTimeout(timeout);
         if (code === 0) {
           // Always log the full vspipe output for debugging
           logger.upscale('=== vspipe -i output ===');
@@ -250,7 +230,6 @@ export class VapourSynthInfoExtractor {
       });
 
       vspipe.on('error', (error) => {
-        clearTimeout(timeout);
         logger.error('vspipe info error:', error);
         resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null, error: error.message });
       });

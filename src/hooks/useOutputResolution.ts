@@ -19,6 +19,7 @@ interface UseOutputResolutionReturn {
   validationStatus: ValidationStatus;
   validationError: string | null;
   validateWorkflow: () => Promise<boolean>;
+  cancelValidation: () => Promise<void>;
   clearValidationStatus: () => void;
 }
 
@@ -36,11 +37,33 @@ export function useOutputResolution({
   const [validationStatus, setValidationStatus] = useState<ValidationStatus>('idle');
   const [validationError, setValidationError] = useState<string | null>(null);
   const isValidatingRef = useRef(false);
+  const isCancelledRef = useRef(false);
 
   const clearValidationStatus = useCallback(() => {
     setValidationStatus('idle');
     setValidationError(null);
   }, []);
+
+  const cancelValidation = useCallback(async (): Promise<void> => {
+    if (!isValidatingRef.current) {
+      return;
+    }
+    
+    onLog('Cancelling validation...');
+    isCancelledRef.current = true;
+    
+    try {
+      await window.electronAPI.cancelValidation();
+      onLog('Validation cancelled');
+    } catch (error) {
+      console.error('Error cancelling validation:', error);
+    }
+    
+    isValidatingRef.current = false;
+    setIsValidating(false);
+    setValidationStatus('idle');
+    setValidationError(null);
+  }, [onLog]);
 
   const validateWorkflow = useCallback(async (): Promise<boolean> => {
     if (!videoInfo) {
@@ -59,10 +82,11 @@ export function useOutputResolution({
     }
     
     isValidatingRef.current = true;
+    isCancelledRef.current = false;
     setIsValidating(true);
     setValidationStatus('validating');
     setValidationError(null);
-    onLog('Validating workflow...');
+    onLog('Validating workflow (processing first 5 seconds)...');
     
     try {
       const info = await window.electronAPI.getOutputResolution(
@@ -72,8 +96,14 @@ export function useOutputResolution({
         true,
         filters,
         0,
-        numStreams
+        numStreams,
+        videoInfo.fps || undefined // Pass source FPS for validation frame calculation
       );
+      
+      // Check if validation was cancelled
+      if (isCancelledRef.current) {
+        return false;
+      }
       
       // Check if backend returned an error
       if (info.error) {
@@ -110,6 +140,11 @@ export function useOutputResolution({
         return false;
       }
     } catch (error) {
+      // Check if validation was cancelled
+      if (isCancelledRef.current) {
+        return false;
+      }
+      
       const errorMsg = error instanceof Error ? error.message : String(error);
       onLog(`Workflow validation failed: ${errorMsg}`);
       console.error('Error validating workflow:', error);
@@ -128,6 +163,7 @@ export function useOutputResolution({
     validationStatus,
     validationError,
     validateWorkflow,
+    cancelValidation,
     clearValidationStatus,
   };
 }

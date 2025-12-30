@@ -46,6 +46,8 @@ export interface ScriptConfig {
   numStreams?: number;
   outputFormat?: string;
   segment?: SegmentSelection;
+  validationMode?: boolean; // If true, only process first 5 seconds for validation
+  sourceFps?: number; // Source video FPS for validation frame calculation
 }
 
 export class VapourSynthScriptGenerator {
@@ -73,8 +75,17 @@ export class VapourSynthScriptGenerator {
     
     let filterCode = '';
     
-    // Add segment trimming if enabled
-    if (config.segment?.enabled) {
+    // Add validation mode trimming (first 5 seconds only)
+    if (config.validationMode) {
+      // Calculate frames for 5 seconds based on source FPS (default to 30 if unknown)
+      const fps = config.sourceFps || 30;
+      const validationFrames = Math.ceil(fps * 5);
+      filterCode += '# Validation Mode - Only process first 5 seconds\n';
+      filterCode += `clip = core.std.Trim(clip, first=0, last=${validationFrames - 1})\n`;
+      filterCode += `original_clip = core.std.Trim(original_clip, first=0, last=${validationFrames - 1})\n\n`;
+    }
+    // Add segment trimming if enabled (and not in validation mode)
+    else if (config.segment?.enabled) {
       const startFrame = config.segment.startFrame;
       const endFrame = config.segment.endFrame;
       

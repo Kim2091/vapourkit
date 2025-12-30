@@ -21,7 +21,8 @@ export interface ElectronAPI {
     upscalingEnabled?: boolean,
     filters?: Filter[],
     upscalePosition?: number,
-    numStreams?: number
+    numStreams?: number,
+    sourceFps?: number
   ) => Promise<{ 
     resolution: string | null; 
     fps: number | null;
@@ -30,6 +31,7 @@ export interface ElectronAPI {
     scanType?: string;
     error?: string;
   }>;
+  cancelValidation: () => Promise<{ success: boolean; cancelled?: boolean }>;
   getFilePathFromFile: (file: File) => string;
   
   // Model operations
