@@ -118,21 +118,23 @@ export class VideoMetadataExtractor {
       ffprobe.on('close', () => {
         // Extract resolution
         const resolutionMatch = output.match(/Stream.*Video.*?[,\s](\d{2,5})x(\d{2,5})[,\s]/i);
+
+        // Temporarily disable check as it doesn't consider how filters affect the video
         
-        if (resolutionMatch) {
-          const width = parseInt(resolutionMatch[1]);
-          const height = parseInt(resolutionMatch[2]);
+        // if (resolutionMatch) {
+        //   const width = parseInt(resolutionMatch[1]);
+        //   const height = parseInt(resolutionMatch[2]);
           
-          // Check for odd dimensions - AI models require even dimensions
-          if (width % 2 !== 0 || height % 2 !== 0) {
-            const errorMsg = `Invalid resolution ${width}x${height}. AI upscaling models require both width and height to be even numbers.\n\nCurrent dimensions:\n- Width: ${width} (${width % 2 === 0 ? 'even ✓' : 'ODD ✗'})\n- Height: ${height} (${height % 2 === 0 ? 'even ✓' : 'ODD ✗'})\n\nPlease resize your video to even dimensions before upscaling.`;
-            logger.error(`Resolution validation failed: ${errorMsg}`);
-            resolve({ valid: false, error: errorMsg });
-            return;
-          }
+        //   // Check for odd dimensions - AI models require even dimensions
+        //   if (width % 2 !== 0 || height % 2 !== 0) {
+        //     const errorMsg = `Invalid resolution ${width}x${height}. AI upscaling models require both width and height to be even numbers.\n\nCurrent dimensions:\n- Width: ${width} (${width % 2 === 0 ? 'even ✓' : 'ODD ✗'})\n- Height: ${height} (${height % 2 === 0 ? 'even ✓' : 'ODD ✗'})\n\nPlease resize your video to even dimensions before upscaling.`;
+        //     logger.error(`Resolution validation failed: ${errorMsg}`);
+        //     resolve({ valid: false, error: errorMsg });
+        //     return;
+        //   }
           
-          logger.upscale(`Resolution validation passed: ${width}x${height} (both dimensions are even)`);
-        }
+        //   logger.upscale(`Resolution validation passed: ${width}x${height} (both dimensions are even)`);
+        // }
         
         resolve({ valid: true });
       });

@@ -97,6 +97,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVideoFilter: () => ipcRenderer.invoke('get-video-filter'),
   setVideoFilter: (filter: string) => ipcRenderer.invoke('set-video-filter', filter),
   
+  // Output format
+  getOutputFormat: () => ipcRenderer.invoke('get-output-format'),
+  setOutputFormat: (format: string) => ipcRenderer.invoke('set-output-format', format),
+  
   // Processing format
   getProcessingFormat: () => ipcRenderer.invoke('get-processing-format'),
   setProcessingFormat: (format: string) => ipcRenderer.invoke('set-processing-format', format),

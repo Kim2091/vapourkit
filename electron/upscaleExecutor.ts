@@ -410,7 +410,8 @@ export class UpscaleExecutor {
     let previewFrameBuffer = Buffer.alloc(0);
     const MAX_PREVIEW_BUFFER_SIZE = 5 * 1024 * 1024; // 5MB max buffer
     let lastPreviewSentTime = 0;
-    const MIN_PREVIEW_INTERVAL_MS = 500; // Throttle to max 2 previews per second
+    const MIN_PREVIEW_INTERVAL_MS = 750; // Throttle to ~1.3 previews per second to reduce GUI blocking
+    let isProcessingPreview = false; // Prevent concurrent preview processing
 
     // Capture preview frames from ffmpeg stdout
     if (ffmpeg.stdout) {
@@ -437,21 +438,32 @@ export class UpscaleExecutor {
           
           // Throttle preview sending to prevent overwhelming the renderer
           const now = Date.now();
-          if (now - lastPreviewSentTime >= MIN_PREVIEW_INTERVAL_MS) {
-            const base64Frame = pngFrame.toString('base64');
-            
-            // Send preview frame
-            this.sendProgress({
-              type: 'preview-frame',
-              currentFrame,
-              totalFrames,
-              fps: currentFPS,
-              percentage: totalFrames > 0 ? Math.round((currentFrame / totalFrames) * 100) : 0,
-              message: '',
-              previewFrame: base64Frame
-            });
-            
+          if (now - lastPreviewSentTime >= MIN_PREVIEW_INTERVAL_MS && !isProcessingPreview) {
             lastPreviewSentTime = now;
+            isProcessingPreview = true;
+            
+            // Copy frame data and current state for async processing
+            const frameData = Buffer.from(pngFrame);
+            const frameInfo = { currentFrame, totalFrames, fps: currentFPS };
+            
+            // Use setImmediate to defer base64 encoding and IPC send,
+            // preventing GUI blocking during video processing
+            setImmediate(() => {
+              const base64Frame = frameData.toString('base64');
+              
+              // Send preview frame asynchronously
+              this.sendProgress({
+                type: 'preview-frame',
+                currentFrame: frameInfo.currentFrame,
+                totalFrames: frameInfo.totalFrames,
+                fps: frameInfo.fps,
+                percentage: frameInfo.totalFrames > 0 ? Math.round((frameInfo.currentFrame / frameInfo.totalFrames) * 100) : 0,
+                message: '',
+                previewFrame: base64Frame
+              });
+              
+              isProcessingPreview = false;
+            });
           }
           
           // Remove processed frame from buffer

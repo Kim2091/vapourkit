@@ -64,11 +64,28 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     loadCompletedVideoRef.current = loadCompletedVideo;
   }, [loadCompletedVideo]);
 
+  // Pending preview frame ref for requestAnimationFrame batching
+  const pendingPreviewFrameRef = useRef<string | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+
   // Upscale progress listener - subscribe once and use refs to access current values
   useEffect(() => {
     const unsubscribe = window.electronAPI.onUpscaleProgress((progress: UpscaleProgress) => {
       if (progress.type === 'preview-frame' && progress.previewFrame) {
-        setPreviewFrame(`data:image/png;base64,${progress.previewFrame}`);
+        // Store the pending frame and schedule update via requestAnimationFrame
+        // This decouples the IPC handler from the React render cycle,
+        // preventing GUI lag during video processing
+        pendingPreviewFrameRef.current = `data:image/png;base64,${progress.previewFrame}`;
+        
+        if (rafIdRef.current === null) {
+          rafIdRef.current = requestAnimationFrame(() => {
+            if (pendingPreviewFrameRef.current) {
+              setPreviewFrame(pendingPreviewFrameRef.current);
+              pendingPreviewFrameRef.current = null;
+            }
+            rafIdRef.current = null;
+          });
+        }
       } else {
         setUpscaleProgress(progress);
         onLog(`[Upscale] ${progress.message}`);
@@ -98,7 +115,14 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
       }
     });
 
-    return unsubscribe;
+    // Cleanup RAF on unmount
+    return () => {
+      unsubscribe();
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
   }, [onLog]); // Only re-subscribe if onLog changes (which it shouldn't)
 
   // Cleanup blob URL when component unmounts or new video starts
