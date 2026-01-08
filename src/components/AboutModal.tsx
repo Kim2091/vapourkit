@@ -114,6 +114,17 @@ export const AboutModal: React.FC<AboutModalProps> = ({ show, onClose }) => {
             <p className="text-gray-400 text-sm">
               Made by Kim2091
             </p>
+            
+            {/* Credits */}
+            <div className="mt-6 pt-5 border-t border-gray-800/50">
+              <div className="text-center space-y-2">
+                <p className="text-sm font-medium text-gray-300 italic">In loving memory of my Mom</p>
+                <p className="text-xs text-gray-400 leading-relaxed max-w-md mx-auto">
+                  Thank you for your love, support, and encouragement in everything I do
+                </p>
+                <p className="text-xs text-gray-450 pt-1">Rest in peace</p>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-3">
