@@ -128,7 +128,7 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                 <div className="mb-2">
                   <p className="text-sm font-medium text-white">Model Type</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {importForm.modelType === 'tspan' ? 'TSPAN (5-frame temporal)' : 'Image (single frame)'}
+                    {importForm.modelType === 'tspan' ? 'VSR (5-frame temporal)' : 'Image (single frame)'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -152,7 +152,7 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                         : 'bg-dark-elevated text-gray-400 hover:text-white'
                     }`}
                   >
-                    TSPAN
+                    VSR
                   </button>
                 </div>
               </div>

@@ -1,0 +1,16 @@
+name = "Fine Dehalo"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-dehalo/
+# Advanced halo removal based on dehalo_alpha with additional masking
+# brightstr: strength for bright halos (0.0-1.0+)
+# darkstr: strength for dark halos (0.0-1.0+)
+# rx/ry: horizontal/vertical radius for halo removal
+# ss: supersampling factor to reduce aliasing (1.0 = off)
+# lowsens/highsens: sensitivity thresholds (lower values = more aggressive)
+
+import vsdehalo
+clip = vsdehalo.fine_dehalo(clip, rx=2, brightstr=1.0, darkstr=0.0, ss=1.5, lowsens=50, highsens=50)"""
+description = "Advanced halo removal with masking and optional contra-sharpening to preserve line detail."
+
+[metadata]
+createdAt = "2025-01-11T00:00:00.000Z"

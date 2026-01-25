@@ -1,0 +1,15 @@
+name = "LGhost Deghost"
+code = """
+# Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-LGhost
+# Removes ghosting/halos offset to the right
+# mode: 1=edge, 2=luminance, 3=rising edge, 4=falling edge
+# shift: negative values shift left to counteract rightward ghosts
+# intensity: positive values remove bright ghosts, negative for dark ghosts
+# planes: [0] processes only luma to avoid color issues
+# Start with lower intensity values and increase if needed
+
+clip = core.lghost.LGhost(clip, mode=[1, 1], shift=[-3, -6], intensity=[10, 6], planes=[0])"""
+description = "Removes ghosting artifacts (halos offset to the side). Adjust shift values to match ghost positions."
+
+[metadata]
+createdAt = "2025-01-11T00:00:00.000Z"

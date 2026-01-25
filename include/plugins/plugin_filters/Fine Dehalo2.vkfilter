@@ -1,0 +1,13 @@
+name = "Fine Dehalo2"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-dehalo/
+# Halo removal function for 2nd order halos
+# mode: 0=Horizontal, 1=Vertical, 2=Both (HV)
+# dark: True=filter dark halos, False=filter bright halos, None=disable merging with source
+
+import vsdehalo
+clip = vsdehalo.fine_dehalo2(clip, mode=2, radius=2, mask_radius=2, brightstr=1.0, darkstr=1.0, dark=True)"""
+description = "Removes 2nd order halos (both bright and dark) from the clip."
+
+[metadata]
+createdAt = "2025-01-11T00:00:00.000Z"
