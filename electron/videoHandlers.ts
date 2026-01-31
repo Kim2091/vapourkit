@@ -658,7 +658,7 @@ function createScriptConfig(
 ) {
   const isUpscaling = upscalingEnabled !== false;
   
-  let modelType: 'tspan' | 'image' = 'image';
+  let modelType: 'vsr' | 'image' = 'image';
   let useFp32 = false;
   
   if (isUpscaling && modelPath) {

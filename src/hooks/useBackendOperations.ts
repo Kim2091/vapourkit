@@ -79,14 +79,14 @@ export function useBackendOperations({
     }
     
     // Set default shapes based on model type and extracted input name
-    const isVideoModel = modelType === 'tspan';
+    const isVideoModel = modelType === 'vsr';
     const channels = isVideoModel ? '15' : '3';
     const minShapes = `${inputName}:1x${channels}x240x240`;
     const optShapes = `${inputName}:1x${channels}x720x1280`;
     const maxShapes = `${inputName}:1x${channels}x1080x1920`;
     
     // Generate the trtexec command with proper parameters
-    const customTrtexecParams = generateTrtexecCommand(modelType as 'tspan' | 'image', useFp32, false, inputName, useBf16);
+    const customTrtexecParams = generateTrtexecCommand(modelType as 'vsr' | 'image', useFp32, false, inputName, useBf16);
     
     setImportForm({
       onnxPath: model.onnxPath,

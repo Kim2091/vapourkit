@@ -7,7 +7,7 @@ import { PATHS } from './constants';
 import { configManager } from './configManager';
 import { logger } from './logger';
 
-export type ModelType = 'tspan' | 'image';
+export type ModelType = 'vsr' | 'image';
 
 export interface Filter {
   id: string;
@@ -17,7 +17,7 @@ export interface Filter {
   code: string;
   order: number;
   modelPath?: string;
-  modelType?: 'tspan' | 'image';
+  modelType?: 'vsr' | 'image';
 }
 
 export interface SegmentSelection {
@@ -129,7 +129,7 @@ export class VapourSynthScriptGenerator {
     // Use timestamp + random string for unique script path to avoid collisions in batch processing
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(2, 9);
-    const tempScriptPath = path.join(os.tmpdir(), `tspan_upscale_${timestamp}_${randomId}.vpy`);
+    const tempScriptPath = path.join(os.tmpdir(), `VSR_upscale_${timestamp}_${randomId}.vpy`);
     await fs.writeFile(tempScriptPath, template, 'utf-8');
     
     logger.info(`Generated script: ${tempScriptPath}`);
@@ -182,8 +182,8 @@ export class VapourSynthScriptGenerator {
     const streams = numStreams ?? 2;
     
     // Generate model inference code based on model type
-    if (modelType === 'tspan') {
-      code += '# Temporal upscaling (5-frame TSPAN architecture)\n';
+    if (modelType === 'vsr') {
+      code += '# Temporal upscaling (5-frame VSR architecture)\n';
       code += `${M2} = ${CLIP}[:2] + ${CLIP}[:-2]   # shift -2\n`;
       code += `${M1} = ${CLIP}[:1] + ${CLIP}[:-1]   # shift -1\n`;
       code += `${P1} = ${CLIP}[1:] + ${CLIP}[-1:]   # shift +1\n`;

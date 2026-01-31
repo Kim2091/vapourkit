@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { EditorView, Decoration, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
@@ -83,7 +83,7 @@ const linkPlugin = ViewPlugin.fromClass(
   }
 );
 
-export function PythonCodeEditor({
+export const PythonCodeEditor = memo(({
   value,
   onChange,
   onBlur,
@@ -91,11 +91,12 @@ export function PythonCodeEditor({
   placeholder = '# Enter custom VapourSynth code here\n# Example: clip = core.resize.Bilinear(clip, width=720, height=540)',
   minHeight = '120px',
   className = '',
-}: PythonCodeEditorProps) {
+}: PythonCodeEditorProps) => {
+  console.log('rerendering PythonCodeEditor');
   const editorRef = useRef<any>(null);
 
   // Create custom dark theme with syntax highlighting
-  const customDarkTheme = EditorView.theme({
+  const customDarkTheme = useMemo(() => EditorView.theme({
     '&': {
       fontSize: '14px',
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -145,10 +146,10 @@ export function PythonCodeEditor({
     '.cm-variable, .cm-variableName, .cm-property': {
       color: '#ffffff !important',
     },
-  }, { dark: true });
+  }, { dark: true }), [minHeight]);
 
   // Syntax highlighting colors using proper HighlightStyle
-  const customHighlightStyle = HighlightStyle.define([
+  const customHighlightStyle = useMemo(() => HighlightStyle.define([
     { tag: t.keyword, color: '#c678dd' },
     { tag: [t.name, t.deleted, t.character, t.macroName], color: '#ffffff' },
     { tag: [t.variableName, t.propertyName, t.attributeName], color: '#ffffff' },
@@ -166,7 +167,7 @@ export function PythonCodeEditor({
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: '#d19a66' },
     { tag: [t.processingInstruction, t.string, t.inserted], color: '#98c379' },
     { tag: t.invalid, color: '#ff0000' },
-  ]);
+  ]), []);
 
   // Create extensions array
   const extensions: Extension[] = [
@@ -230,4 +231,4 @@ export function PythonCodeEditor({
       />
     </div>
   );
-}
+});

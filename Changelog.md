@@ -29,7 +29,7 @@
 - Change the way file names are handled for models
 - Overhaul the design of the header to save space
 - Move the DirectML toggle from Settings to the header
-- Change the default model type from `tspan` to `image` to reduce chance of error for models without metadata
+- Change the default model type from `vsr` to `image` to reduce chance of error for models without metadata
 - Fix audio clipping when using segments
 - Allow users to customize video-compare settings in the Settings menu
 - Force kill trtexec and vspipe processes when beginning workflow processing

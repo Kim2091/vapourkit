@@ -226,7 +226,7 @@ export interface ModelFile {
   precision: string;
   backend: 'tensorrt' | 'onnx';
   hasEngine?: boolean;
-  modelType?: 'tspan' | 'image';
+  modelType?: 'vsr' | 'image';
   displayTag?: string;
   description?: string;
 }
@@ -234,7 +234,7 @@ export interface ModelFile {
 export interface ModelMetadata {
   useFp32: boolean;
   useBf16?: boolean;
-  modelType: 'tspan' | 'image';
+  modelType: 'vsr' | 'image';
   displayTag?: string;
   description?: string;
   createdAt?: string;
@@ -244,7 +244,7 @@ export interface UninitializedModel {
   id: string;
   name: string;
   onnxPath: string;
-  modelType?: 'tspan' | 'image';
+  modelType?: 'vsr' | 'image';
   displayTag?: string;
 }
 
@@ -256,7 +256,7 @@ export interface InitializeModelParams {
   maxShapes: string;
   useFp32: boolean;
   useBf16?: boolean;
-  modelType?: 'tspan' | 'image';
+  modelType?: 'vsr' | 'image';
   displayTag?: string;
   useStaticShape?: boolean;
   useCustomTrtexecParams?: boolean;
@@ -293,7 +293,7 @@ export interface ImportModelParams {
   maxShapes: string;
   useFp32: boolean;
   useBf16?: boolean;
-  modelType?: 'tspan' | 'image';
+  modelType?: 'vsr' | 'image';
   useDirectML?: boolean;
   displayTag?: string;
   useStaticShape?: boolean;
@@ -342,7 +342,7 @@ export interface Filter {
   code: string;
   order: number;
   modelPath?: string;
-  modelType?: 'tspan' | 'image';
+  modelType?: 'vsr' | 'image';
 }
 
 export interface SegmentSelection {
@@ -382,7 +382,7 @@ export interface WorkflowData {
     order: number;
     filterType: 'aiModel' | 'custom';
     modelPath?: string;
-    modelType?: 'tspan' | 'image';
+    modelType?: 'vsr' | 'image';
   }[];
   createdAt?: string;
   description?: string;

@@ -12,7 +12,7 @@ interface ImportModelModalProps {
   handleSelectOnnxFile: () => void;
   handleImportModel: () => void;
   handleCancelBuild: () => void;
-  handleModelTypeChange: (modelType: 'tspan' | 'image') => void;
+  handleModelTypeChange: (modelType: 'vsr' | 'image') => void;
   handleShapeModeChange: (useStaticShape: boolean) => void;
   handleFp32Change: (useFp32: boolean) => void;
   handlePrecisionChange: (precision: 'fp16' | 'bf16' | 'fp32') => void;
@@ -128,7 +128,7 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                 <div className="mb-2">
                   <p className="text-sm font-medium text-white">Model Type</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {importForm.modelType === 'tspan' ? 'VSR (5-frame temporal)' : 'Image (single frame)'}
+                    {importForm.modelType === 'vsr' ? 'VSR (5-frame temporal)' : 'Image (single frame)'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -144,10 +144,10 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
                     Image
                   </button>
                   <button
-                    onClick={() => handleModelTypeChange('tspan')}
+                    onClick={() => handleModelTypeChange('vsr')}
                     disabled={isImporting}
                     className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
-                      importForm.modelType === 'tspan'
+                      importForm.modelType === 'vsr'
                         ? 'bg-primary-blue text-white'
                         : 'bg-dark-elevated text-gray-400 hover:text-white'
                     }`}

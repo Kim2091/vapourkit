@@ -128,8 +128,8 @@ export function getEnabledAIModelPaths(filters: Array<{
  * Removes the precision suffix (_fp16, _fp32) and file extension (.onnx, .engine).
  * 
  * Examples:
- * - "C:\...\2x-AniRemaster_TSPAN_fp16.onnx" -> "2x-AniRemaster_TSPAN"
- * - "C:\...\2x-AniRemaster_TSPAN_fp16_fp16.engine" -> "2x-AniRemaster_TSPAN"
+ * - "C:\...\2x-AniRemaster_VSR_fp16.onnx" -> "2x-AniRemaster_VSR"
+ * - "C:\...\2x-AniRemaster_VSR_fp16_fp16.engine" -> "2x-AniRemaster_VSR"
  * - "2x-AnimeSharpV4_Fast_fp16.onnx" -> "2x-AnimeSharpV4_Fast"
  */
 export function getPortableModelName(modelPath: string): string {
@@ -151,7 +151,7 @@ export function getPortableModelName(modelPath: string): string {
  * Looks for any model that matches the base name, regardless of precision or extension.
  * Prefers TensorRT engines over ONNX models when both are available.
  * 
- * @param portableModelName - The portable model name (e.g., "2x-AniRemaster_TSPAN")
+ * @param portableModelName - The portable model name (e.g., "2x-AniRemaster_VSR")
  * @param availableModels - List of available models
  * @returns The full path to the matching model, or null if not found
  */

@@ -10,7 +10,7 @@ export interface ImportForm {
   maxShapes: string;
   useFp32: boolean;
   useBf16: boolean;
-  modelType: 'tspan' | 'image';
+  modelType: 'vsr' | 'image';
   useDirectML: boolean;
   displayTag: string;
   useStaticShape: boolean;
@@ -20,8 +20,8 @@ export interface ImportForm {
 }
 
 // Helper function to generate default trtexec command
-export const generateTrtexecCommand = (modelType: 'tspan' | 'image', useFp32: boolean, useStaticShape: boolean, inputName: string = 'input', useBf16: boolean = false): string => {
-  const channels = modelType === 'tspan' ? '15' : '3';
+export const generateTrtexecCommand = (modelType: 'vsr' | 'image', useFp32: boolean, useStaticShape: boolean, inputName: string = 'input', useBf16: boolean = false): string => {
+  const channels = modelType === 'vsr' ? '15' : '3';
   // FP32 is the default in trtexec, so only add --fp16/--bf16 flag when NOT using FP32
   // For BF16: use --bf16 flag but keep fp16 format strings
   let precisionFlags = '';
@@ -73,7 +73,7 @@ export const useModelImport = (
   // Auto-build modal state
   const [showAutoBuildModal, setShowAutoBuildModal] = useState(false);
   const [autoBuildModelName, setAutoBuildModelName] = useState('');
-  const [autoBuildModelType, setAutoBuildModelType] = useState<'tspan' | 'image'>('image');
+  const [autoBuildModelType, setAutoBuildModelType] = useState<'vsr' | 'image'>('image');
   const [autoBuildIsStatic, setAutoBuildIsStatic] = useState(false);
   const [autoBuildStaticShape, setAutoBuildStaticShape] = useState<string | null>(null);
   // Guard to ensure completion handlers run only once per import/build
@@ -116,7 +116,7 @@ export const useModelImport = (
         setImportForm(prev => {
           // If static model detected, use static mode and the detected shape
           const useStatic = detectedIsStatic;
-          const channels = prev.modelType === 'tspan' ? '15' : '3';
+          const channels = prev.modelType === 'vsr' ? '15' : '3';
           
           addConsoleLog(`[Model] Form update - useStatic: ${useStatic}, channels: ${channels}`);
           
@@ -191,12 +191,12 @@ export const useModelImport = (
     });
   }, []);
 
-  const handleModelTypeChange = useCallback((modelType: 'tspan' | 'image'): void => {
+  const handleModelTypeChange = useCallback((modelType: 'vsr' | 'image'): void => {
     setImportForm(prev => {
       const useStatic = prev.useStaticShape;
       const inputName = prev.inputName;
       const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStatic, inputName, prev.useBf16);
-      const channels = modelType === 'tspan' ? '15' : '3';
+      const channels = modelType === 'vsr' ? '15' : '3';
       return {
         ...prev,
         modelType,
@@ -215,7 +215,7 @@ export const useModelImport = (
       const modelType = prev.modelType;
       const inputName = prev.inputName;
       const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStaticShape, inputName, prev.useBf16);
-      const channels = modelType === 'tspan' ? '15' : '3';
+      const channels = modelType === 'vsr' ? '15' : '3';
       return {
         ...prev,
         useStaticShape,
@@ -314,7 +314,7 @@ export const useModelImport = (
     }
     
     // Set shapes based on whether model is static or dynamic
-    const isVideoModel = modelType === 'tspan';
+    const isVideoModel = modelType === 'vsr';
     const channels = isVideoModel ? '15' : '3';
     
     let minShapes: string;
@@ -337,7 +337,7 @@ export const useModelImport = (
     
     // Show auto-build modal with model info
     setAutoBuildModelName(model.name);
-    setAutoBuildModelType(modelType as 'tspan' | 'image');
+    setAutoBuildModelType(modelType as 'vsr' | 'image');
     setAutoBuildIsStatic(isStaticModel);
     setAutoBuildStaticShape(isStaticModel && detectedShape ? detectedShape.join('x') : null);
     setShowAutoBuildModal(true);
@@ -352,7 +352,7 @@ export const useModelImport = (
         optShapes,
         maxShapes,
         useFp32: false,
-        modelType: modelType as 'tspan' | 'image',
+        modelType: modelType as 'vsr' | 'image',
         displayTag: displayTag || undefined,
         useStaticShape: isStaticModel,
       });
@@ -372,7 +372,7 @@ export const useModelImport = (
       // Update form if static model is detected
       if (progress.detectedStatic && progress.detectedShape) {
         setImportForm(prev => {
-          const channels = prev.modelType === 'tspan' ? '15' : '3';
+          const channels = prev.modelType === 'vsr' ? '15' : '3';
           const newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, true, prev.inputName);
           // Replace the default shape with the detected shape
           const updatedCommand = newCommand.replace(
@@ -413,7 +413,7 @@ export const useModelImport = (
       // Update form if static model is detected
       if (progress.detectedStatic && progress.detectedShape) {
         setImportForm(prev => {
-          const channels = prev.modelType === 'tspan' ? '15' : '3';
+          const channels = prev.modelType === 'vsr' ? '15' : '3';
           const newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, true, prev.inputName);
           // Replace the default shape with the detected shape
           const updatedCommand = newCommand.replace(

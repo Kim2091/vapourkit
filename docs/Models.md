@@ -2,9 +2,9 @@
 __Please note:__ All included models follow the original licenses they were published with! Most are licensed as CC BY-NC-SA 4.0, unless stated otherwise!
 
 Ships with pre-configured upscaling models:
-- **Video Models (TSPAN)**: Temporally-aware models for video
-  - AniRemaster TSPAN (Classic Anime)
-  - AnimeUpV2 TSPAN (Low Quality Anime)
+- **Video Models (VSR)**: Temporally-aware models for video
+  - AniRemaster VSR (Classic Anime)
+  - AnimeUpV2 VSR (Low Quality Anime)
 - **Image Based Models**: Frame-by-frame processing (still works on videos, but is not temporally stable/will shimmer)
   - AnimeJaNai HD V3 variants (Modern Anime)
   - AnimeJaNai SD V1 (Classic HQ Anime)

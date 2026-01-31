@@ -12,7 +12,7 @@ interface ModelManagerModalProps {
 interface ModelMetadata {
   displayTag?: string;
   description?: string;
-  modelType: 'tspan' | 'image';
+  modelType: 'vsr' | 'image';
   useFp32: boolean;
   useBf16?: boolean;
 }
@@ -201,12 +201,12 @@ export function ModelManagerModal({
                             onChange={(e) =>
                               setEditData({
                                 ...editData,
-                                modelType: e.target.value as 'tspan' | 'image',
+                                modelType: e.target.value as 'vsr' | 'image',
                               })
                             }
                             className="w-full bg-dark-elevated border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary-purple transition-colors"
                           >
-                            <option value="tspan">Video</option>
+                            <option value="vsr">Video</option>
                             <option value="image">Image</option>
                           </select>
                         </div>

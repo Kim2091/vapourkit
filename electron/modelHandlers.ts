@@ -209,7 +209,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         await configManager.setModelMetadata(
           modelNameWithPrecision, 
           params.useFp32,
-          (params.modelType as 'tspan' | 'image') || 'image',
+          (params.modelType as 'vsr' | 'image') || 'image',
           params.displayTag,
           undefined,
           params.useBf16
@@ -320,7 +320,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         await configManager.setModelMetadata(
           modelNameWithPrecision, 
           params.useFp32,
-          (params.modelType as 'tspan' | 'image') || 'image',
+          (params.modelType as 'vsr' | 'image') || 'image',
           params.displayTag,
           undefined,
           params.useBf16

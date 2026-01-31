@@ -5,7 +5,7 @@ import type { ModelImportProgress } from '../electron.d';
 interface AutoBuildModalProps {
   show: boolean;
   modelName: string;
-  modelType: 'tspan' | 'image';
+  modelType: 'vsr' | 'image';
   progress: ModelImportProgress | null;
   isStatic?: boolean;
   staticShape?: string | null;
@@ -21,7 +21,7 @@ export const AutoBuildModal: React.FC<AutoBuildModalProps> = ({
 }) => {
   if (!show) return null;
 
-  const isVideoModel = modelType === 'tspan';
+  const isVideoModel = modelType === 'vsr';
   
   // Parse static shape to extract resolution (format: 1x3x720x1280 or 1x15x720x1280)
   const getStaticResolution = (): string | null => {
@@ -60,7 +60,7 @@ export const AutoBuildModal: React.FC<AutoBuildModalProps> = ({
               <div className="flex justify-between">
                 <span className="text-gray-400">Type:</span>
                 <span className="text-white font-medium">
-                  {isVideoModel ? 'TSPAN (Video)' : 'Image (Single Frame)'}
+                  {isVideoModel ? 'VSR (Video)' : 'Image (Single Frame)'}
                 </span>
               </div>
               <div className="flex justify-between">

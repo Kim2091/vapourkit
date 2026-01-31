@@ -8,31 +8,31 @@ interface AboutModalProps {
 
 interface ModelLicense {
   name: string;
-  category: 'Video Models (TSPAN)' | 'Image Based Models';
+  category: 'Video Models (VSR)' | 'Image Based Models';
   license: string;
   url?: string;
 }
 
 const MODEL_LICENSES: ModelLicense[] = [
-  // Video Models (TSPAN)
+  // Video Models (VSR)
   {
-    name: 'AniRemaster TSPAN',
-    category: 'Video Models (TSPAN)',
+    name: 'AniRemaster VSR',
+    category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
   },
   {
-    name: 'AnimeUpV2 TSPAN',
-    category: 'Video Models (TSPAN)',
+    name: 'AnimeUpV2 VSR',
+    category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
   },
   {
-    name: 'AniDenoise TSPANV2',
-    category: 'Video Models (TSPAN)',
+    name: 'AniDenoise VSRV2',
+    category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
   },
   {
-    name: 'GameUp TSPANV2',
-    category: 'Video Models (TSPAN)',
+    name: 'GameUp VSRV2',
+    category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
   },
   // Image Based Models

@@ -2,15 +2,15 @@
   "developerMode": false,
   "ffmpegArgs": "-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1 -movflags +faststart",
   "models": {
-    "2x-AniRemaster_TSPAN_fp16": {
+    "2x-AniRemaster_VSR_fp16": {
       "useFp32": false,
-      "modelType": "tspan",
+      "modelType": "vsr",
       "createdAt": "2025-10-29T06:27:58.864Z",
       "displayTag": "Classic Anime"
     },
-    "2x-AnimeUpV2_TSPAN_fp16": {
+    "2x-AnimeUpV2_VSR_fp16": {
       "useFp32": false,
-      "modelType": "tspan",
+      "modelType": "vsr",
       "createdAt": "2025-10-29T06:27:58.864Z",
       "displayTag": "LQ Anime"
     },
