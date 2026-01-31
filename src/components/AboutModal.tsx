@@ -16,22 +16,22 @@ interface ModelLicense {
 const MODEL_LICENSES: ModelLicense[] = [
   // Video Models (VSR)
   {
-    name: 'AniRemaster VSR',
+    name: 'AniRemaster TSPAN',
     category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
   },
   {
-    name: 'AnimeUpV2 VSR',
+    name: 'AnimeUpV2 TSPAN',
     category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
   },
   {
-    name: 'AniDenoise VSRV2',
+    name: 'AniDenoise TSPANV2',
     category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
   },
   {
-    name: 'GameUp VSRV2',
+    name: 'GameUp TSPANV2',
     category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
   },
