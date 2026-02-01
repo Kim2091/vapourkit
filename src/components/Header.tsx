@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu } from 'lucide-react';
+import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu, FileCheck2 } from 'lucide-react';
 import { Logo } from './Logo';
 
 interface HeaderProps {
@@ -90,6 +90,30 @@ export const Header = memo<HeaderProps>(({
 
         {/* Right side buttons */}
         <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Active Workflow Badge */}
+          {workflowName && (
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-primary-purple/30 via-primary-blue/30 to-accent-cyan/30 border border-primary-purple/60 shadow-lg shadow-primary-purple/20">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center w-5 h-5 rounded bg-primary-purple/40 border border-primary-purple/60">
+                  <FileCheck2 className="w-3.5 h-3.5 text-primary-purple" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-300 leading-none font-medium">Workflow</span>
+                  <span className="text-xs font-semibold bg-gradient-to-r from-primary-purple via-primary-blue to-accent-cyan bg-clip-text text-transparent leading-tight">{workflowName}</span>
+                </div>
+              </div>
+              {onClearWorkflow && (
+                <button
+                  onClick={onClearWorkflow}
+                  className="ml-1 text-gray-400 hover:text-white transition-colors p-1 hover:bg-dark-surface/50 rounded"
+                  title="Clear Workflow and Restore Previous Settings"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+          
           {(onLoadWorkflow || onImportWorkflow || onExportWorkflow) && (
             <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-700/50 rounded-lg bg-gray-800/30">
               <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Workflow:</span>
@@ -141,24 +165,5 @@ export const Header = memo<HeaderProps>(({
         </div>
       </div>
     </div>
-    {workflowName && (
-      <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-6 py-2">
-        <div className="flex items-center justify-center gap-2">
-          <p className="text-yellow-400 text-sm font-medium">
-            Current workflow: {workflowName}
-          </p>
-          {onClearWorkflow && (
-            <button
-              onClick={onClearWorkflow}
-              className="text-yellow-400 hover:text-yellow-300 transition-colors p-1 hover:bg-yellow-500/20 rounded flex items-center gap-1"
-              title="Clear Workflow and Restore Previous Settings"
-            >
-              <X className="w-4 h-4" />
-              <span className="text-xs">Clear</span>
-            </button>
-          )}
-        </div>
-      </div>
-    )}
   </div>
 ));
