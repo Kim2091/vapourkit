@@ -1,5 +1,5 @@
 // src/components/ColorimetryPanel.tsx
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Palette, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import type { ColorimetrySettings, VideoInfo } from '../electron';
 
@@ -10,12 +10,12 @@ interface ColorimetryPanelProps {
   onSettingsChange: (settings: ColorimetrySettings) => void;
 }
 
-export function ColorimetryPanel({
+export const ColorimetryPanel = memo<ColorimetryPanelProps>(({
   settings,
   isProcessing,
   videoInfo,
   onSettingsChange,
-}: ColorimetryPanelProps) {
+}: ColorimetryPanelProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Check if video format is RGB
@@ -99,4 +99,4 @@ export function ColorimetryPanel({
       )}
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Upload, Info, Loader2, XCircle, FileUp, X } from 'lucide-react';
 import type { ModelImportProgress } from '../electron.d';
 import type { ImportForm } from '../hooks/useModelImport';
@@ -21,7 +21,7 @@ interface ImportModelModalProps {
   useDirectML: boolean;
 }
 
-export const ImportModelModal: React.FC<ImportModelModalProps> = ({
+export const ImportModelModal = memo<ImportModelModalProps>(({
   show,
   onClose,
   isImporting,
@@ -413,4 +413,4 @@ export const ImportModelModal: React.FC<ImportModelModalProps> = ({
       </div>
     </div>
   );
-};
+});

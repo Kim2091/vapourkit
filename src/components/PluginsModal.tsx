@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { memo, useState, useEffect } from 'react';
 import { X, Download, RefreshCw, CheckCircle, XCircle, Loader2, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { useConsoleLog } from '../hooks/useConsoleLog';
 
@@ -15,7 +15,7 @@ interface PluginsModalProps {
   onInstallationComplete?: () => void;
 }
 
-export const PluginsModal: React.FC<PluginsModalProps> = ({ show, onClose, onInstallationComplete }) => {
+export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstallationComplete }) => {
   const [isInstalling, setIsInstalling] = useState(false);
   const [progress, setProgress] = useState<PluginDependencyProgress | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
@@ -359,4 +359,4 @@ export const PluginsModal: React.FC<PluginsModalProps> = ({ show, onClose, onIns
       </div>
     </div>
   );
-};
+});

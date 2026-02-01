@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Sparkles, Github, Heart, X, FileText, ChevronDown, ChevronUp, Book } from 'lucide-react';
 
 interface AboutModalProps {
@@ -58,7 +58,7 @@ const MODEL_LICENSES: ModelLicense[] = [
   },
 ];
 
-export const AboutModal: React.FC<AboutModalProps> = ({ show, onClose }) => {
+export const AboutModal = memo<AboutModalProps>(({ show, onClose }) => {
   const [version, setVersion] = useState<string>('');
   const [licensesExpanded, setLicensesExpanded] = useState<boolean>(false);
 
@@ -200,4 +200,4 @@ export const AboutModal: React.FC<AboutModalProps> = ({ show, onClose }) => {
       </div>
     </div>
   );
-};
+});

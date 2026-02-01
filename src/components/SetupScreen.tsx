@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Loader2, Download, XCircle } from 'lucide-react';
 import type { SetupProgress } from '../electron.d';
 import { Logo } from './Logo';
@@ -11,14 +12,14 @@ interface SetupScreenProps {
   onSetup: () => Promise<void>;
 }
 
-export function SetupScreen({
+export const SetupScreen = memo<SetupScreenProps>(({
   isCheckingDeps,
   isSetupComplete,
   hasCudaSupport,
   setupProgress,
   isSettingUp,
   onSetup,
-}: SetupScreenProps) {
+}: SetupScreenProps) => {
   // Checking dependencies screen
   if (isCheckingDeps) {
     return (
@@ -146,4 +147,4 @@ export function SetupScreen({
   }
 
   return null;
-}
+});

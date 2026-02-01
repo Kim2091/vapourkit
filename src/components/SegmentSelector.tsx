@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { memo, useState, useEffect, useCallback, useRef } from 'react';
 import { Scissors, Play, SkipBack, SkipForward, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import type { VideoInfo, SegmentSelection } from '../electron.d';
 
@@ -75,14 +75,14 @@ function getTotalFrames(videoInfo: VideoInfo | null): number {
   return Math.ceil(durationSeconds * fps);
 }
 
-export function SegmentSelector({
+export const SegmentSelector = memo<SegmentSelectorProps>(({
   videoInfo,
   segment,
   isProcessing,
   onSegmentChange,
   onPreview,
   onSeekFrame,
-}: SegmentSelectorProps) {
+}: SegmentSelectorProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [startInput, setStartInput] = useState('');
   const [endInput, setEndInput] = useState('');
@@ -552,4 +552,4 @@ export function SegmentSelector({
       )}
     </div>
   );
-}
+});

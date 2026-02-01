@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Loader2, Info, Sparkles, Lock } from 'lucide-react';
 import type { ModelImportProgress } from '../electron.d';
 
@@ -11,7 +11,7 @@ interface AutoBuildModalProps {
   staticShape?: string | null;
 }
 
-export const AutoBuildModal: React.FC<AutoBuildModalProps> = ({
+export const AutoBuildModal = memo<AutoBuildModalProps>(({
   show,
   modelName,
   modelType,
@@ -148,4 +148,4 @@ export const AutoBuildModal: React.FC<AutoBuildModalProps> = ({
       </div>
     </div>
   );
-};
+});

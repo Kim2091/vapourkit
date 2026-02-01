@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { Download, X, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 interface UpdateInfo {
@@ -15,7 +15,7 @@ interface UpdateNotificationModalProps {
   onClose: () => void;
 }
 
-export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = ({ 
+export const UpdateNotificationModal = memo<UpdateNotificationModalProps>(({ 
   updateInfo, 
   onClose 
 }) => {
@@ -193,4 +193,4 @@ export const UpdateNotificationModal: React.FC<UpdateNotificationModalProps> = (
       </div>
     </div>
   );
-};
+});

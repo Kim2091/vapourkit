@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { AlertTriangle, X, RefreshCw, Loader2, ChevronDown, ChevronUp, Download, Check } from 'lucide-react';
 import type { VsMlrtVersionInfo } from '../electron';
 
@@ -8,7 +8,7 @@ interface VsMlrtUpdateModalProps {
   onEnginesCleared: () => void;
 }
 
-export const VsMlrtUpdateModal: React.FC<VsMlrtUpdateModalProps> = ({
+export const VsMlrtUpdateModal = memo<VsMlrtUpdateModalProps>(({
   versionInfo,
   onClose,
   onEnginesCleared,
@@ -255,4 +255,4 @@ export const VsMlrtUpdateModal: React.FC<VsMlrtUpdateModalProps> = ({
       </div>
     </div>
   );
-};
+});

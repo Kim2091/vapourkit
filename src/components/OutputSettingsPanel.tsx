@@ -1,5 +1,5 @@
 // OutputSettingsPanel.tsx
-import { useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { Download, ChevronDown, ChevronUp, Sliders } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
 import type { Codec, Preset, Encoder } from '../utils/ffmpegConfig';
@@ -29,7 +29,7 @@ interface OutputSettingsPanelProps {
   onProcessingFormatChange: (format: string) => void;
 }
 
-export function OutputSettingsPanel({
+export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   videoInfo,
   outputPath,
   outputFormat,
@@ -40,7 +40,7 @@ export function OutputSettingsPanel({
   onSelectOutputFile,
   onFfmpegArgsChange,
   onProcessingFormatChange,
-}: OutputSettingsPanelProps) {
+}: OutputSettingsPanelProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [advancedMode, setAdvancedMode] = useState(false);
   // Store advanced args separately so they persist when toggling modes
@@ -464,4 +464,4 @@ export function OutputSettingsPanel({
       )}
     </div>
   );
-}
+});

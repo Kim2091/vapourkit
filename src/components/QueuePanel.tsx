@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { memo, useState, useEffect, useMemo, useRef } from 'react';
 import { List, Trash2, ChevronLeft, ChevronRight, PlayCircle, XCircle, RotateCcw, FolderOpen, SplitSquareHorizontal, Scissors, Film, Loader2, GripVertical } from 'lucide-react';
 import type { QueueItem } from '../electron.d';
 
@@ -18,7 +18,7 @@ interface QueuePanelProps {
   onDropFiles?: (files: string[]) => void;
 }
 
-export function QueuePanel({
+export const QueuePanel = memo<QueuePanelProps>(({
   queue,
   isQueueStarted,
   editingItemId,
@@ -32,7 +32,7 @@ export function QueuePanel({
   onCompareItem,
   onOpenItemFolder,
   onDropFiles,
-}: QueuePanelProps) {
+}: QueuePanelProps) => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
@@ -518,4 +518,4 @@ export function QueuePanel({
       </div>
     </div>
   );
-}
+});

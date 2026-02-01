@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { memo, useState } from 'react';
 import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -15,7 +15,7 @@ interface SettingsModalProps {
 
 type Tab = 'general' | 'processing';
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ 
+export const SettingsModal = memo<SettingsModalProps>(({ 
   show, 
   onClose, 
   useDirectML, 
@@ -355,4 +355,4 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       </div>
     </div>
   );
-};
+});

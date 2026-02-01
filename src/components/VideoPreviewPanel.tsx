@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 import { Video, Loader2, CheckCircle, XCircle, FolderOpen, GitCompare } from 'lucide-react';
 
 interface VideoPreviewPanelProps {
@@ -13,7 +13,7 @@ interface VideoPreviewPanelProps {
   onVideoError: () => void;
 }
 
-export function VideoPreviewPanel({
+export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   previewFrame,
   completedVideoPath,
   completedVideoBlobUrl,
@@ -23,7 +23,7 @@ export function VideoPreviewPanel({
   onCompareVideos,
   onOpenOutputFolder,
   onVideoError,
-}: VideoPreviewPanelProps) {
+}: VideoPreviewPanelProps) => {
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
 
   return (
@@ -115,4 +115,4 @@ export function VideoPreviewPanel({
       </div>
     </div>
   );
-}
+});

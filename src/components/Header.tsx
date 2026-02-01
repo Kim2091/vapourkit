@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu } from 'lucide-react';
 import { Logo } from './Logo';
 
@@ -17,7 +18,7 @@ interface HeaderProps {
   isReloading?: boolean;
 }
 
-export const Header = ({ 
+export const Header = memo<HeaderProps>(({ 
   isProcessing, 
   useDirectML,
   onSettingsClick, 
@@ -160,4 +161,4 @@ export const Header = ({
       </div>
     )}
   </div>
-);
+));

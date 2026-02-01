@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import type { SegmentSelection } from '../electron.d';
 
@@ -22,11 +22,11 @@ interface BatchConfigModalProps {
   onClose: () => void;
 }
 
-export function BatchConfigModal({
+export const BatchConfigModal = memo<BatchConfigModalProps>(({
   videos,
   onConfirm,
   onClose,
-}: BatchConfigModalProps) {
+}: BatchConfigModalProps) => {
   const [configs, setConfigs] = useState<BatchVideoConfig[]>(videos);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
 
@@ -155,4 +155,4 @@ export function BatchConfigModal({
       </div>
     </div>
   );
-}
+});

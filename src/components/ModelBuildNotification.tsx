@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { AlertCircle, Sparkles } from 'lucide-react';
 import type { ModelFile, UninitializedModel, Filter } from '../electron.d';
 import { shouldShowBuildNotification, getEnabledAIModelPaths } from '../utils/modelUtils';
@@ -10,7 +11,7 @@ interface ModelBuildNotificationProps {
   onBuildModel: (model: UninitializedModel) => void;
 }
 
-export const ModelBuildNotification = ({
+export const ModelBuildNotification = memo<ModelBuildNotificationProps>(({
   useDirectML,
   filteredModels,
   uninitializedModels,
@@ -64,4 +65,4 @@ export const ModelBuildNotification = ({
       </div>
     </div>
   );
-};
+});

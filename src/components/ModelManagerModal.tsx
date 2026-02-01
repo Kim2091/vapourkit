@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { memo, useState, useEffect, useMemo } from 'react';
 import { X, Edit2, Trash2, Save, XCircle, Sparkles, Search } from 'lucide-react';
 import type { ModelFile } from '../electron.d';
 
@@ -17,12 +17,12 @@ interface ModelMetadata {
   useBf16?: boolean;
 }
 
-export function ModelManagerModal({
+export const ModelManagerModal = memo<ModelManagerModalProps>(({
   isOpen,
   models,
   onClose,
   onModelUpdated,
-}: ModelManagerModalProps) {
+}: ModelManagerModalProps) => {
   const [editingModel, setEditingModel] = useState<string | null>(null);
   const [editData, setEditData] = useState<ModelMetadata>({
     displayTag: '',
@@ -355,4 +355,4 @@ export function ModelManagerModal({
       </div>
     </div>
   );
-}
+});

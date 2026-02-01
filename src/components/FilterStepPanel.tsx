@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { Save, ChevronDown, ChevronUp, Filter, Trash2, Pencil, Upload } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
 import { PythonCodeEditor } from './PythonCodeEditor';
@@ -17,7 +17,7 @@ interface FilterStepPanelProps {
   onDeleteTemplate?: (name: string) => Promise<boolean>;
 }
 
-export function FilterStepPanel({
+export const FilterStepPanel = memo<FilterStepPanelProps>(({
   title,
   enabled,
   selectedPreset,
@@ -29,7 +29,7 @@ export function FilterStepPanel({
   onCodeChange,
   onSaveTemplate,
   onDeleteTemplate,
-}: FilterStepPanelProps) {
+}: FilterStepPanelProps) => {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [presetName, setPresetName] = useState('');
@@ -352,4 +352,4 @@ export function FilterStepPanel({
       </div>
     </div>
   );
-}
+});

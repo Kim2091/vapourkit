@@ -1,4 +1,5 @@
 // VideoInfoPanel.tsx
+import { memo } from 'react';
 import { Info, ChevronUp, ChevronDown } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
 
@@ -8,11 +9,11 @@ interface VideoInfoPanelProps {
   onToggle: (value: boolean) => void;
 }
 
-export function VideoInfoPanel({
+export const VideoInfoPanel = memo<VideoInfoPanelProps>(({
   videoInfo,
   showVideoInfo,
   onToggle,
-}: VideoInfoPanelProps) {
+}: VideoInfoPanelProps) => {
   return (
     <div className="flex-shrink-0 bg-dark-elevated rounded-xl border border-gray-800 overflow-hidden">
       <button
@@ -100,4 +101,4 @@ export function VideoInfoPanel({
       )}
     </div>
   );
-}
+});

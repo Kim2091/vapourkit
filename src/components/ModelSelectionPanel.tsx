@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { ModelFile, ColorimetrySettings, FilterTemplate, VideoInfo, Filter } from '../electron.d';
 import { DynamicFilterPanel } from './DynamicFilterPanel';
 import { ColorimetryPanel } from './ColorimetryPanel';
@@ -23,7 +24,7 @@ interface ModelSelectionPanelProps {
   onSeekFrame?: (frameNumber: number) => void;
 }
 
-export function ModelSelectionPanel({
+export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
   filteredModels,
   isProcessing,
   useDirectML,
@@ -41,7 +42,7 @@ export function ModelSelectionPanel({
   onSegmentChange,
   onPreviewSegment,
   onSeekFrame,
-}: ModelSelectionPanelProps) {
+}: ModelSelectionPanelProps) => {
   return (
     <>
       {/* Colorimetry Panel */}
@@ -80,4 +81,4 @@ export function ModelSelectionPanel({
       />
     </>
   );
-}
+});

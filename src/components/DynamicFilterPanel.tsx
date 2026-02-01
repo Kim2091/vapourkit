@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Settings } from 'lucide-react';
 import type { Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { getModelDisplayName } from '../utils/modelUtils';
@@ -22,7 +22,7 @@ interface DynamicFilterPanelProps {
   onManageModels?: () => void;
 }
 
-export function DynamicFilterPanel({
+export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   title = 'Filters',
   filters,
   filterTemplates,
@@ -38,7 +38,7 @@ export function DynamicFilterPanel({
   draggedFilterId,
   onImportClick,
   onManageModels,
-}: DynamicFilterPanelProps) {
+}: DynamicFilterPanelProps) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [expandedFilters, setExpandedFilters] = useState<Set<string>>(new Set());
@@ -807,4 +807,4 @@ export function DynamicFilterPanel({
       </div>
     </div>
   );
-}
+});

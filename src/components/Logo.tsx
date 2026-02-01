@@ -1,4 +1,6 @@
-export const Logo = ({ className = "w-6 h-6" }: { className?: string }) => (
+import { memo } from 'react';
+
+export const Logo = memo<{ className?: string }>(({ className = "w-6 h-6" }) => (
   <svg className={className} viewBox="0 0 392 371" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="sparkle1" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(2.93953,2.18819,-2.50017,3.35864,292.163,691.186)">
@@ -33,4 +35,4 @@ export const Logo = ({ className = "w-6 h-6" }: { className?: string }) => (
       </g>
     </g>
   </svg>
-);
+));

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Upload, Video, List, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
 
@@ -14,7 +15,7 @@ interface VideoInputPanelProps {
   onToggleQueue: () => void;
 }
 
-export function VideoInputPanel({
+export const VideoInputPanel = memo<VideoInputPanelProps>(({
   videoInfo,
   isDragging,
   isProcessing,
@@ -25,7 +26,7 @@ export function VideoInputPanel({
   onDragLeave,
   onDrop,
   onToggleQueue,
-}: VideoInputPanelProps) {
+}: VideoInputPanelProps) => {
   return (
     <div className="flex-shrink-0 bg-dark-elevated rounded-xl border border-gray-800 p-4">
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -76,4 +77,4 @@ export function VideoInputPanel({
       </div>
     </div>
   );
-}
+});
