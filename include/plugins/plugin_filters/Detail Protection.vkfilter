@@ -1,0 +1,17 @@
+name = "Detail Protection"
+category = "Limiting"
+code = """
+# Protect detail when filtering (limit changes)
+
+from vstools import vs, core
+
+# Apply filter (example: blur)
+filtered = core.std.BoxBlur(clip, hradius=2, vradius=2)
+
+# Limit changes to protect detail
+thr = 8  # Threshold
+clip = core.rgvs.Repair(filtered, clip, mode=1)"""
+description = "Protects fine detail by limiting filtering changes"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

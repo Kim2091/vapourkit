@@ -1,0 +1,27 @@
+name = "Convert Format"
+category = "Color Space"
+code = """
+# Convert clip to different format
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/resize.html
+
+# Valid formats:
+# RGB: RGB24, RGB27, RGB30, RGB48
+# YUV 4:2:0: YUV420P8, YUV420P10, YUV420P16
+# YUV 4:2:2: YUV422P8, YUV422P10, YUV422P16
+# YUV 4:4:4: YUV444P8, YUV444P10, YUV444P16
+# Grayscale: GRAY8, GRAY16
+# Special: GRAYH (half-precision float), GRAYS (single-precision float)
+
+format_out = "YUV420P10"  # Target format
+matrix_in_s = "709"  # Input matrix (709 for HD, 170m for SD, 2020ncl for UHD)
+matrix_s = "709"  # Output matrix
+
+# For grayscale conversion (no matrix needed)
+# clip = core.std.ShufflePlanes(clip, planes=0, colorfamily=vs.GRAY)
+
+# For format conversion with matrix
+clip = core.resize.Bicubic(clip, format=eval(f"vs.{format_out}"), matrix_in_s=matrix_in_s, matrix_s=matrix_s)"""
+description = "Converts clip to different color format (RGB/YUV/Grayscale with various bit depths)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

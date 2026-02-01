@@ -1,0 +1,15 @@
+name = "Fine Sharp"
+category = "Sharpening"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/sharp/
+
+from vsrgtools import fine_sharp
+
+# Apply FineSharp - realtime sharpening for high quality sources
+mode = 0  # 0 or 1, weakest to strongest
+sstr = 2.0  # Sharpening strength
+clip = fine_sharp(clip, mode=mode, sstr=sstr)"""
+description = "Applies FineSharp - fast realtime sharpening optimized for 1080p"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

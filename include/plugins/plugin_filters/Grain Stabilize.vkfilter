@@ -1,0 +1,13 @@
+name = "Grain Stabilize"
+category = "Grain/Noise"
+code = """
+# Stabilize grain (make it less flickery)
+
+from vstools import vs, core
+
+# Temporal smoothing of grain
+clip = core.rgvs.RemoveGrain(clip, mode=19)"""
+description = "Stabilizes film grain to reduce temporal flickering"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

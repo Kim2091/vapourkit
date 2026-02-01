@@ -1,0 +1,15 @@
+name = "Transfer Curve"
+category = "Color Space"
+code = """
+# Convert between transfer curves (gamma/PQ/HLG)
+
+from vstools import vs, core
+
+transfer_in = "709"  # Input transfer: 709, 601, linear, 2020_10, smpte2084 (PQ), arib-std-b67 (HLG)
+transfer_out = "709"  # Output transfer
+
+clip = core.resize.Bicubic(clip, transfer_in_s=transfer_in, transfer_s=transfer_out)"""
+description = "Converts between different transfer curves (gamma, PQ, HLG, linear)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

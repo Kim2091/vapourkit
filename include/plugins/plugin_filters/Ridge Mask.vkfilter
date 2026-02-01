@@ -1,0 +1,14 @@
+name = "Ridge Mask"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/edge/
+
+from vsmasktools import RidgeDetect
+
+# Create ridge mask for line detection
+mask = RidgeDetect().ridgemask(clip, lthr=0.0, hthr=65535, multi=1.0)
+clip = mask"""
+description = "Creates a ridge mask for detecting lines and edges from vsmasktools"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,17 @@
+name = "Chroma Shift"
+category = "Color Correction"
+code = """
+# Shift chroma planes (fix chroma alignment issues)
+
+from vstools import vs, core
+
+# Shift amounts in pixels
+shift_h = 0  # Horizontal shift
+shift_v = -0.5  # Vertical shift (common for 4:2:0)
+
+clip = core.resize.Spline36(clip, src_left=shift_h, src_top=shift_v, 
+                             chromaloc_in_s="center", chromaloc_s="center")"""
+description = "Shifts chroma planes to fix alignment issues (common in 4:2:0 video)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,15 @@
+name = "Freeze Frame"
+category = "Utility"
+code = """
+# Freeze on a specific frame
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/freezeframes.html
+
+first = 0  # First frame to freeze
+last = 10  # Last frame to freeze
+replacement = 0  # Frame to use as replacement
+
+clip = core.std.FreezeFrames(clip, first=[first], last=[last], replacement=[replacement])"""
+description = "Freezes frames in specified ranges using a replacement frame"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

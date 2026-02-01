@@ -1,0 +1,15 @@
+name = "Guided Filter"
+category = "Blurring"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/#vsrgtools.blur.guided_filter
+
+from vsrgtools import guided_filter
+
+# Apply edge-preserving guided filter
+radius = 4
+thr = 0.01  # Threshold (epsilon)
+clip = guided_filter(clip, radius=radius, thr=thr)"""
+description = "Edge-preserving guided filter for smoothing while maintaining edges"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,14 @@
+name = "Expression"
+category = "Utility"
+code = """
+# Apply custom expression to pixels
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/expr.html
+
+# Example: increase brightness by 10%
+expr = "x 1.1 *"
+
+clip = core.std.Expr(clip, expr=[expr])"""
+description = "Applies custom mathematical expressions to pixel values"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

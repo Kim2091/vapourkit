@@ -1,0 +1,15 @@
+name = "Color Matrix"
+category = "Color Space"
+code = """
+# Convert between different color matrices (BT.601/709/2020)
+
+from vstools import vs, core
+
+matrix_in = "709"  # Input matrix: 709, 170m, 240m, 2020ncl, 2020cl
+matrix_out = "709"  # Output matrix
+
+clip = core.resize.Bicubic(clip, matrix_in_s=matrix_in, matrix_s=matrix_out)"""
+description = "Converts between different color matrices (BT.601/709/2020 etc.)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

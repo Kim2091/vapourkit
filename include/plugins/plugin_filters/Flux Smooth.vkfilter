@@ -1,0 +1,15 @@
+name = "Flux Smooth"
+category = "Temporal Smoothing"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/
+
+from vsrgtools import flux_smooth
+
+# Apply temporal and spatial smoothing
+temporal_threshold = 7
+spatial_threshold = 7
+clip = flux_smooth(clip, temporal_threshold=temporal_threshold, spatial_threshold=spatial_threshold)"""
+description = "Applies temporal and spatial smoothing to reduce flickering and noise"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

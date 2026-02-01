@@ -1,0 +1,14 @@
+name = "Splice Clips"
+category = "Utility"
+code = """
+# Concatenate clips end-to-end
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/splice.html
+
+clip_a = clip
+clip_b = clip  # Replace with your second clip
+
+clip = core.std.Splice([clip_a, clip_b])"""
+description = "Splices/concatenates multiple clips together end-to-end"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

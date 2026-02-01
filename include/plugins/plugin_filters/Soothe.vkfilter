@@ -1,0 +1,21 @@
+name = "Soothe"
+category = "Sharpening"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/sharp/
+
+from vsrgtools import soothe
+
+# Temporally stabilize a sharpened clip
+# Apply your sharpening first, then use this to reduce temporal instability
+original = clip
+# sharpened = your_sharpen_filter(clip)
+# clip = soothe(sharpened, original, temporal_strength=0.75)
+
+# For demonstration, we'll just pass through
+temporal_strength = 0.75
+spatial_strength = 0.0
+clip = soothe(clip, clip, spatial_strength=spatial_strength, temporal_strength=temporal_strength)"""
+description = "Reduces temporal instability and aliasing caused by sharpening filters"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

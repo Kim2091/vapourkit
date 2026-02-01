@@ -1,0 +1,13 @@
+name = "Normalize Mask"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/utils/
+
+from vsmasktools import normalize_mask
+
+# Normalize a mask to full range
+clip = normalize_mask(clip)"""
+description = "Normalizes a mask to use the full value range (stretches contrast)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

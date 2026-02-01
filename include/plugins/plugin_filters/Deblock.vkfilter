@@ -1,0 +1,17 @@
+name = "Deblock"
+category = "Cleaning"
+code = """
+# Remove blocking artifacts from compression
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdenoise/deblock/
+
+from vsdenoise import deblock_qed
+
+quant = 25  # Quantizer strength (higher = stronger deblocking)
+alpha = 1  # Alpha parameter for deblocking
+beta = 2  # Beta parameter for deblocking
+
+clip = deblock_qed(clip, quant=(quant, quant), alpha=(alpha, alpha), beta=(beta, beta))"""
+description = "Removes blocking artifacts caused by video compression"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

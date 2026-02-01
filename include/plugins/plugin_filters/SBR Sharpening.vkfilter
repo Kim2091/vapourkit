@@ -1,0 +1,14 @@
+name = "SBR Sharpening"
+category = "Sharpening"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/
+
+from vsrgtools import sbr
+
+# Apply SBR (Subtract Blurred, then Re-blur) sharpening
+radius = 1
+clip = sbr(clip, radius=radius)"""
+description = "Applies SBR sharpening - high-pass filter with re-blurred difference subtraction"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,14 @@
+name = "Shift Clip"
+category = "Utility"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vstools/functions/clips/
+
+from vstools import shift_clip
+
+# Shift clip forward or backward by N frames
+offset = 1  # Positive = forward, negative = backward
+clip = shift_clip(clip, offset=offset)"""
+description = "Shifts clip forward or backward by N frames for temporal operations"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

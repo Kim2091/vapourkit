@@ -1,0 +1,14 @@
+name = "Text Overlay"
+category = "Analysis"
+code = """
+# Add text overlay to clip
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/text.html
+
+text = "Sample Text"
+alignment = 7  # 1-9 (numpad layout: 7=top-left, 5=center, 3=bottom-right)
+
+clip = core.text.Text(clip, text=text, alignment=alignment)"""
+description = "Adds text overlay to the clip for annotations or debugging"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,20 @@
+name = "Vivid Sharpen"
+category = "Sharpening"
+code = """
+# Vivid sharpening with noise reduction
+# Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-TCanny
+
+from vstools import vs, core
+
+strength = 2.0  # Sharpening strength
+rg = 4  # RemoveGrain mode for noise reduction
+
+# Denoise first
+denoised = core.rgvs.RemoveGrain(clip, mode=rg)
+
+# Sharpen
+clip = core.std.Expr([clip, denoised], expr=f"x x y - {strength} * +")"""
+description = "Vivid sharpening that enhances detail without amplifying noise"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

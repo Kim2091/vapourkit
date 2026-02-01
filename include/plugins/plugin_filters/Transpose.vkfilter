@@ -1,0 +1,10 @@
+name = "Transpose"
+category = "Transform"
+code = """
+# Transpose clip (swap width and height)
+
+clip = core.std.Transpose(clip)"""
+description = "Transposes the clip (rotates 90 degrees and flips)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

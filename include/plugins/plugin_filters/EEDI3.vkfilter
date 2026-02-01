@@ -1,0 +1,16 @@
+name = "EEDI3"
+category = "Deinterlacing"
+code = """
+# High-quality deinterlacing with EEDI3
+# Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-EEDI3
+
+from vstools import vs, core
+
+field = 1  # Field to keep (0=bottom, 1=top)
+dh = True  # Double height
+
+clip = core.eedi3m.EEDI3(clip, field=field, dh=dh)"""
+description = "High-quality edge-directed deinterlacing using EEDI3 algorithm"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

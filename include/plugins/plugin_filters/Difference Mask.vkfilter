@@ -1,0 +1,16 @@
+name = "Difference Mask"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/diff/
+
+from vsmasktools import diff_mask
+
+# Create a mask from the difference between two clips
+clip_a = clip
+clip_b = clip  # Replace with your second clip
+thr = 0  # Threshold for differences
+clip = diff_mask(clip_a, clip_b, thr=thr)"""
+description = "Creates a mask showing the difference between two clips"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

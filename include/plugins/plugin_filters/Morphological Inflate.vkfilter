@@ -1,0 +1,14 @@
+name = "Morphological Inflate"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/morpho/
+
+from vsmasktools import inflate
+
+# Inflate a mask (expand followed by inpand)
+iterations = 2
+clip = inflate(clip, iterations=iterations)"""
+description = "Inflates a mask by expanding then inpanding to smooth edges"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

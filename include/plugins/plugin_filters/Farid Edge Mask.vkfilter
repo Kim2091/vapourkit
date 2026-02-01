@@ -1,0 +1,14 @@
+name = "Farid Edge Mask"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/edge/
+
+from vsmasktools import Farid
+
+# Create edge mask using Farid edge detection (high quality)
+mask = Farid().edgemask(clip, lthr=0.0, hthr=65535, multi=1.0)
+clip = mask"""
+description = "Creates high-quality edge mask using Farid 5x5 edge detection"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

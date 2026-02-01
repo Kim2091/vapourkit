@@ -1,0 +1,13 @@
+name = "Initialize Clip"
+category = "Utility"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vstools/functions/clips/
+
+from vstools import initialize_clip
+
+# Initialize clip with proper frame properties and convert to 16-bit
+clip = initialize_clip(clip, bits=16)"""
+description = "Initializes clip with proper frame properties and optional bitdepth conversion"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

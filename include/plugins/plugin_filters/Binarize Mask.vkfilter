@@ -1,0 +1,14 @@
+name = "Binarize Mask"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/utils/
+
+from vsmasktools import binarize
+
+# Binarize a mask to pure black and white
+thr = 32768  # Threshold (middle value for 16-bit)
+clip = binarize(clip, thr=thr)"""
+description = "Converts a mask to pure black and white based on threshold"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

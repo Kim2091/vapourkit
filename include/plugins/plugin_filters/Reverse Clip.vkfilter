@@ -1,0 +1,11 @@
+name = "Reverse Clip"
+category = "Utility"
+code = """
+# Reverse the clip (play backwards)
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/reverse.html
+
+clip = core.std.Reverse(clip)"""
+description = "Reverses the clip to play backwards"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

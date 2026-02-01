@@ -1,0 +1,14 @@
+name = "Temporal Median"
+category = "Temporal Smoothing"
+code = """
+# Temporal median filter (removes outliers)
+
+from vstools import vs, core
+
+radius = 1  # Temporal radius (frames before/after)
+
+clip = core.tmedian.TemporalMedian(clip, radius=radius)"""
+description = "Applies temporal median filtering to remove outlier frames/pixels"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

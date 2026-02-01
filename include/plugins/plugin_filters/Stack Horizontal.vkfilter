@@ -1,0 +1,14 @@
+name = "Stack Horizontal"
+category = "Comparison"
+code = """
+# Stack two clips side-by-side horizontally
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/stackvertical.html
+
+clip_left = clip
+clip_right = clip  # Replace with your second clip
+
+clip = core.std.StackHorizontal([clip_left, clip_right])"""
+description = "Stacks two clips side-by-side horizontally for comparison"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

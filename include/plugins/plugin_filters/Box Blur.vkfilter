@@ -1,13 +1,15 @@
 name = "Box Blur"
 category = "Blurring"
 code = """
-# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/BoxBlur
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/#vsrgtools.blur.box_blur
+
+from vsrgtools import box_blur
 
 radius = 15
 passes = 3
 
-clip = core.vszip.BoxBlur(clip, hradius=radius, vradius=radius, hpasses=passes, vpasses=passes)"""
-description = "Blurs the clip with a Box Blur"
+clip = box_blur(clip, radius=radius, passes=passes)"""
+description = "Applies a box blur to the clip"
 
 [metadata]
 createdAt = "2025-11-02T20:01:13.777Z"

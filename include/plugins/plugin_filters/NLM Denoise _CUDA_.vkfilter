@@ -1,10 +1,11 @@
 name = "NLM Denoise (CUDA)"
 category = "Denoising"
 code = """
-# Full Docs: https://github.com/AmusementClub/vs-nlm-cuda
-# This can be used as parameters explanation: https://github.com/Khanattila/KNLMeansCL/wiki/Filter-description
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdenoise/nlm/
 
-clip = core.nlm_cuda.NLMeans(clip, d=1, a=2, s=4, h=1.2)"""
+from vsdenoise import nl_means
+
+clip = nl_means(clip, h=1.2, tr=1, a=2, s=4, backend=nl_means.Backend.CUDA)"""
 description = "Non-Local Means Spatial Denoising Filter. Requires an Nvidia GPU."
 
 [metadata]

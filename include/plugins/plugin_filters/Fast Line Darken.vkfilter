@@ -1,0 +1,15 @@
+name = "Fast Line Darken"
+category = "Sharpening"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/sharp/
+
+from vsrgtools import fast_line_darken
+
+# Sharpen by darkening lines
+strength = 48  # Line darkening amount
+protection = 5  # Protect darkest lines
+clip = fast_line_darken(clip, strength=strength, protection=protection)"""
+description = "Sharpens by selectively darkening lines while protecting dark areas"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

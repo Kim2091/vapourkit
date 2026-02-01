@@ -1,0 +1,16 @@
+name = "Change FPS"
+category = "Frame Rate"
+code = """
+# Change FPS by duplicating or dropping frames
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vstools/utils/misc/#vstools.utils.misc.change_fps
+
+from fractions import Fraction
+from vstools import change_fps
+
+fps = Fraction(60000, 1001)  # Target FPS (59.94 fps)
+
+clip = change_fps(clip, fps)"""
+description = "Changes FPS by duplicating or dropping frames as needed"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

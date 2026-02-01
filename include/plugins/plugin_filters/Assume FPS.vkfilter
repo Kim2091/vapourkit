@@ -1,0 +1,14 @@
+name = "Assume FPS"
+category = "Frame Rate"
+code = """
+# Change the FPS without dropping or duplicating frames
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/assumefps.html
+
+fpsnum = 24000
+fpsden = 1001  # 23.976 fps
+
+clip = core.std.AssumeFPS(clip, fpsnum=fpsnum, fpsden=fpsden)"""
+description = "Changes the reported FPS without modifying frames (reinterprets timing)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,17 @@
+name = "Edge Enhancement"
+category = "Sharpening"
+code = """
+# Enhance edges without over-sharpening
+
+from vstools import vs, core
+
+# Create edge mask
+edges = core.std.Sobel(clip)
+
+# Sharpen only edges
+sharpened = core.std.Expr([clip], expr="x 1.5 *")
+clip = core.std.MaskedMerge(clip, sharpened, edges)"""
+description = "Selectively enhances edges using edge masking"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,18 @@
+name = "Deinterlace BWDIF"
+category = "Deinterlacing"
+code = """
+# BWDIF deinterlacing (motion adaptive with w3fdif and cubic interpolation)
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsaa/deinterlacers/#vsaa.deinterlacers.BWDIF
+
+from vstools import vs, core
+from vsaa import BWDIF
+
+tff = True  # Field order (True=top field first, False=bottom field first)
+double_rate = False  # Output frame rate (False=same rate, True=double rate)
+
+deinterlacer = BWDIF(tff=tff, double_rate=double_rate)
+clip = deinterlacer.deinterlace(clip)"""
+description = "Motion-adaptive deinterlacing using BWDIF with w3fdif and cubic interpolation algorithms"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

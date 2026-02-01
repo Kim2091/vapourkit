@@ -1,0 +1,20 @@
+name = "Limit Filter"
+category = "Limiting"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/limit/
+
+from vsrgtools import limit_filter
+
+# Limit the difference between filtered and original clip
+original = clip
+# filtered = your_filter(clip)
+# Limit how much the filter can change from original
+thr = 1.0  # Threshold for limiting
+elast = 2.0  # Elasticity
+# clip = limit_filter(filtered, original, thr=thr, elast=elast)
+
+clip = limit_filter(clip, clip, thr=thr, elast=elast)"""
+description = "Limits the difference between a filtered clip and its original to prevent over-filtering"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

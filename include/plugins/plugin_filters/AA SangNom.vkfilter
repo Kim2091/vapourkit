@@ -1,0 +1,17 @@
+name = "AA SangNom"
+category = "Anti-Aliasing"
+code = """
+# Anti-aliasing using SangNom (via vs-jetpack)
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsaa/deinterlacers/#vsaa.deinterlacers.SangNom
+
+from vsaa import SangNom
+
+# Anti-aliasing strength (0-128 for 8-bit)
+aa_strength = 48
+
+# Apply anti-aliasing in both directions using SangNom
+clip = SangNom(aa=aa_strength).antialias(clip)"""
+description = "Single field anti-aliasing using SangNom edge-directed interpolation"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

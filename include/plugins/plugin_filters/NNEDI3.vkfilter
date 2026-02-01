@@ -1,0 +1,21 @@
+name = "NNEDI3"
+category = "Deinterlacing"
+code = """
+# Neural network deinterlacer
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsaa/deinterlacers/#vsaa.deinterlacers.NNEDI3
+
+from vstools import vs, core
+from vsaa import NNEDI3
+
+tff = True  # Field order (True=top field first, False=bottom field first)
+double_rate = True  # Double frame rate output
+nsize = 4  # Network size (0-6, larger=slower but better quality)
+nns = 4  # Number of neurons (1-4, more neurons=better quality but slower)
+qual = 2  # Quality (1=fast, 2=slow)
+
+deinterlacer = NNEDI3(nsize=nsize, nns=nns, qual=qual, tff=tff, double_rate=double_rate)
+clip = deinterlacer.deinterlace(clip)"""
+description = "Neural network-based deinterlacing/upscaling using NNEDI3"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

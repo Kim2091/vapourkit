@@ -1,0 +1,16 @@
+name = "Warp Sharp"
+category = "Sharpening"
+code = """
+# Warp-based sharpening (strong effect)
+# Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-AWarpSharp2
+
+from vstools import vs, core
+
+blur = 2  # Pre-blur amount (0-3)
+depth = 16  # Warp depth (strength)
+
+clip = core.warp.AWarpSharp2(clip, blur=blur, depth=depth)"""
+description = "Aggressive edge-based sharpening using warp algorithm"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

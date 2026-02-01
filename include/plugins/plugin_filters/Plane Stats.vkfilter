@@ -1,0 +1,12 @@
+name = "Plane Stats"
+category = "Utility"
+code = """
+# Add statistics as frame properties
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/planestats.html
+
+# Adds PlaneStatsMin, PlaneStatsMax, PlaneStatsAverage properties
+clip = core.std.PlaneStats(clip)"""
+description = "Calculates and adds min/max/average statistics as frame properties"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

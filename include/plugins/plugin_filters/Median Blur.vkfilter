@@ -1,0 +1,14 @@
+name = "Median Blur"
+category = "Blurring"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/
+
+from vsrgtools import median_blur
+
+# Apply median blur for noise reduction
+radius = 1
+clip = median_blur(clip, radius=radius)"""
+description = "Applies median blur for noise reduction and artifact removal"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

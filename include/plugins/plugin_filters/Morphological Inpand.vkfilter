@@ -1,0 +1,14 @@
+name = "Morphological Inpand"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/morpho/
+
+from vsmasktools import inpand
+
+# Inpand (erode) a mask
+iterations = 2
+clip = inpand(clip, iterations=iterations)"""
+description = "Inpands (erodes) a mask by shrinking bright regions"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

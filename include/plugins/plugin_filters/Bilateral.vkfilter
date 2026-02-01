@@ -1,10 +1,17 @@
 name = "Bilateral"
 category = "Blurring"
 code = """
-# Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/Bilateral
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/#vsrgtools.blur.bilateral
 
-clip = core.vszip.Bilateral(clip, sigmaS=3.0, sigmaR=0.02, algorithm=0)"""
-description = "Spatial smoother or denoiser that preserves edges."
+from vsrgtools import bilateral
+
+# Spatial sigma (controls spatial smoothing extent)
+sigmaS = 3.0
+# Range sigma (controls sensitivity to intensity differences)
+sigmaR = 0.02
+
+clip = bilateral(clip, sigmaS=sigmaS, sigmaR=sigmaR)"""
+description = "Edge-preserving and noise-reducing smoothing using bilateral filter"
 
 [metadata]
 createdAt = "2025-11-02T20:04:12.607Z"

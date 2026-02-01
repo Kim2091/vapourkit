@@ -1,0 +1,14 @@
+name = "Unsharp Mask"
+category = "Sharpening"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/sharp/
+
+from vsrgtools import unsharpen
+
+# Apply unsharp mask sharpening
+strength = 1.0
+clip = unsharpen(clip, strength=strength)"""
+description = "Applies classic unsharp mask sharpening with adjustable strength"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

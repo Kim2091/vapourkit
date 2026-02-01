@@ -1,0 +1,14 @@
+name = "FreyChen Edge Mask"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/edge/
+
+from vsmasktools import FreyChenG41
+
+# Create edge mask using Frei-Chen edge detection
+mask = FreyChenG41().edgemask(clip, lthr=0.0, hthr=65535, multi=1.0)
+clip = mask"""
+description = "Creates edge mask using Frei-Chen G41 edge detection operator"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

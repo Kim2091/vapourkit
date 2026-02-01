@@ -1,0 +1,18 @@
+name = "Blank Clip"
+category = "Utility"
+code = """
+# Generate blank/solid color clip
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/blankclip.html
+
+from vstools import vs, core
+
+width = 1920
+height = 1080
+length = 240  # Frames
+color = [0, 128, 128]  # YUV color values
+
+clip = core.std.BlankClip(clip, width=width, height=height, length=length, color=color)"""
+description = "Generates a blank clip with solid color"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

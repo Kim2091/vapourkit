@@ -1,0 +1,15 @@
+name = "Detail Mask"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/details/
+
+from vsmasktools import detail_mask
+
+# Create a mask highlighting detailed areas
+sigma = 1.0
+rxsigma = 1.0
+clip = detail_mask(clip, sigma=sigma, rxsigma=rxsigma)"""
+description = "Creates a mask highlighting detailed/textured areas in the clip"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,25 @@
+name = "Deinterlace IVTC"
+category = "Deinterlacing"
+code = """
+# Inverse telecine (30i to 24p conversion)
+# Full Docs: https://github.com/vapoursynth/vivtc
+
+from vstools import vs, core
+
+order = 1  # Field order (0=bottom first, 1=top first)
+
+# Convert to YUV420P8 if needed (VFM only supports specific formats)
+original_clip = clip
+if clip.format.id not in [vs.YUV420P8, vs.YUV422P8, vs.YUV440P8, vs.YUV444P8, vs.GRAY8]:
+    clip = core.resize.Bicubic(clip, format=vs.YUV422P8)
+
+clip = core.vivtc.VFM(clip, order=order)
+clip = core.vivtc.VDecimate(clip)
+
+# Convert back to original format if it was changed
+if original_clip.format.id != clip.format.id:
+    clip = core.resize.Bicubic(clip, format=original_clip.format)"""
+description = "Inverse telecine to convert 30i/60i back to original 24p film"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,19 @@
+name = "Descale"
+category = "Scaling"
+code = """
+# Reverse upscale to recover native resolution
+# Full Docs: https://github.com/Irrational-Encoding-Wizardry/descale
+
+from vstools import vs, core
+
+width = 1280
+height = 720
+kernel = "bicubic"  # bicubic, bilinear, lanczos, spline16, spline36
+b = 0  # Bicubic b parameter
+c = 0.5  # Bicubic c parameter
+
+clip = core.descale.Debicubic(clip, width, height, b=b, c=c)"""
+description = "Reverses upscaling to recover original native resolution (useful for anime)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

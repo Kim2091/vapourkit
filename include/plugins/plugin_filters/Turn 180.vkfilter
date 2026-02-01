@@ -1,0 +1,10 @@
+name = "Turn 180"
+category = "Transform"
+code = """
+# Rotate clip 180 degrees
+
+clip = core.std.Turn180(clip)"""
+description = "Rotates the clip 180 degrees (upside down)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,13 @@
+name = "Loop Clip"
+category = "Utility"
+code = """
+# Loop a clip N times
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/loop.html
+
+times = 2  # Number of times to loop
+
+clip = core.std.Loop(clip, times=times)"""
+description = "Loops the clip a specified number of times"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

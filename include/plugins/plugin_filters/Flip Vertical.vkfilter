@@ -1,0 +1,10 @@
+name = "Flip Vertical"
+category = "Transform"
+code = """
+# Flip clip vertically (mirror top-bottom)
+
+clip = core.std.FlipVertical(clip)"""
+description = "Flips the clip vertically (mirrors top to bottom)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

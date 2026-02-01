@@ -1,0 +1,13 @@
+name = "Clamp Values"
+category = "Color Correction"
+code = """
+# Clamp values to specified range
+
+min_value = 0
+max_value = 65535
+
+clip = core.std.Expr(clip, expr=f"x {min_value} max {max_value} min")"""
+description = "Clamps pixel values to stay within specified min/max range"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

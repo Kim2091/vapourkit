@@ -1,0 +1,14 @@
+name = "Morphological Deflate"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/morpho/
+
+from vsmasktools import deflate
+
+# Deflate a mask (inpand followed by expand)
+iterations = 2
+clip = deflate(clip, iterations=iterations)"""
+description = "Deflates a mask by inpanding then expanding to remove small details"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

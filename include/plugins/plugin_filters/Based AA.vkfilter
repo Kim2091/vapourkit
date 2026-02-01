@@ -1,0 +1,16 @@
+name = "Based AA"
+category = "Anti-Aliasing"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsaa/funcs/?h=based#vsaa.funcs.based_aa
+
+from vsaa import based_aa
+
+# Based anti-aliasing - supersampling-based AA with edge detection
+rfactor = 2.0  # Resize factor for supersampling (higher = better quality but slower)
+mask_thr = 60  # Edge detection threshold (higher = less AA applied)
+
+clip = based_aa(clip, rfactor=rfactor, mask_thr=mask_thr)"""
+description = "Advanced anti-aliasing using supersampling with edge detection masking"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

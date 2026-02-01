@@ -1,0 +1,10 @@
+name = "Invert Mask"
+category = "Masking"
+code = """
+# Invert a mask (black becomes white, white becomes black)
+
+clip = core.std.Invert(clip)"""
+description = "Inverts a mask (black becomes white, white becomes black)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

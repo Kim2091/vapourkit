@@ -1,0 +1,14 @@
+name = "Convert Bit Depth"
+category = "Color Space"
+code = """
+# Convert clip bit depth
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/bitdepth.html
+
+bits = 10  # Target bit depth (8, 10, 16, 32)
+dither_type = "error_diffusion"  # none, ordered, random, error_diffusion
+
+clip = core.resize.Bicubic(clip, format=vs.YUV420P10 if bits == 10 else vs.YUV420P16, dither_type=dither_type)"""
+description = "Converts clip to a different bit depth with optional dithering"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

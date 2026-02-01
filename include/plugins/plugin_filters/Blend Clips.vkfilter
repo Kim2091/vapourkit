@@ -1,0 +1,15 @@
+name = "Blend Clips"
+category = "Utility"
+code = """
+# Blend two clips together
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/merge.html
+
+clip_a = clip
+clip_b = clip  # Replace with your second clip
+weight = 0.5  # 0.0 = all clip_a, 1.0 = all clip_b
+
+clip = core.std.Merge(clip_a, clip_b, weight=weight)"""
+description = "Blends two clips together with adjustable weight"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

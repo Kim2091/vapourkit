@@ -1,0 +1,19 @@
+name = "Dehalo Alpha"
+category = "Dehalo"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdehalo/alpha/
+
+from vsdehalo import dehalo_alpha
+
+# Reduce halo artifacts from edge processing
+lowsens = 50.0  # Lower sensitivity threshold (0-100)
+highsens = 50.0  # Upper sensitivity threshold (0-100)
+ss = 1.5  # Supersampling factor to reduce aliasing
+darkstr = 0.0  # Strength for suppressing dark halos (0.0-1.0)
+brightstr = 1.0  # Strength for suppressing bright halos (0.0-1.0)
+
+clip = dehalo_alpha(clip, lowsens=lowsens, highsens=highsens, ss=ss, darkstr=darkstr, brightstr=brightstr)"""
+description = "Reduces halo artifacts by aggressively processing edges and surroundings"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

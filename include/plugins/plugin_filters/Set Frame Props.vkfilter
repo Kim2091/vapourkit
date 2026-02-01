@@ -1,0 +1,14 @@
+name = "Set Frame Props"
+category = "Utility"
+code = """
+# Set frame properties
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/setframeprops.html
+
+from vstools import vs, core
+
+# Example: Mark as progressive
+clip = core.std.SetFrameProp(clip, prop="_FieldBased", intval=0)"""
+description = "Sets frame properties (metadata) on clip"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

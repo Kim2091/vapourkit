@@ -1,0 +1,12 @@
+name = "Make Writable"
+category = "Utility"
+code = """
+# Make clip writable (for frame property modification)
+
+from vstools import vs, core
+
+clip = core.std.ModifyFrame(clip, clip, lambda n, f: f.copy())"""
+description = "Makes clip writable for frame property modifications"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

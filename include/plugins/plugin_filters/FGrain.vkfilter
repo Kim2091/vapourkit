@@ -1,0 +1,7 @@
+name = "FGrain"
+code = """
+import vs_grain
+clip = vs_grain.fgrain(clip, iterations=800, size=0.5, deviation=0.0, blur_strength=0.9, opacity=0.1)"""
+
+[metadata]
+createdAt = "2025-12-29T06:29:35.243Z"

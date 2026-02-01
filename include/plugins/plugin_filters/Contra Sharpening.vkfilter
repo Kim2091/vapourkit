@@ -1,0 +1,19 @@
+name = "Contra Sharpening"
+category = "Sharpening"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/contra/
+
+from vsrgtools import contrasharpening
+
+# Apply contra-sharpening to prevent over-sharpening
+# Typically used after upscaling
+original = clip  # Store original or downscaled version
+# sharpened = your_sharpen_filter(clip)
+# clip = contrasharpening(sharpened, original)
+
+# For demonstration
+clip = contrasharpening(clip, clip)"""
+description = "Applies contra-sharpening to limit sharpening and prevent over-sharpening artifacts"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

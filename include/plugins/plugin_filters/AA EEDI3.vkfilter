@@ -1,0 +1,14 @@
+name = "AA EEDI3"
+category = "Anti-Aliasing"
+code = """
+# Anti-aliasing using EEDI3 (via vs-jetpack)
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsaa/deinterlacers/#vsaa.deinterlacers.EEDI3
+
+from vsaa import EEDI3
+
+# Apply anti-aliasing in both directions using EEDI3
+clip = EEDI3().antialias(clip)"""
+description = "Anti-aliasing using EEDI3 edge-directed interpolation"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

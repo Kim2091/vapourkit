@@ -1,0 +1,15 @@
+name = "Limiter"
+category = "Color Correction"
+code = """
+# Limit values to TV range or custom range
+
+min_luma = 4096  # 16 in 8-bit
+max_luma = 60160  # 235 in 8-bit
+min_chroma = 4096  # 16 in 8-bit
+max_chroma = 61440  # 240 in 8-bit
+
+clip = core.std.Limiter(clip, min=[min_luma, min_chroma], max=[max_luma, max_chroma])"""
+description = "Limits pixel values to TV range or custom range (for legal broadcast values)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

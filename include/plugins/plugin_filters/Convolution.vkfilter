@@ -1,0 +1,18 @@
+name = "Convolution"
+category = "Utility"
+code = """
+# Custom convolution kernel
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/convolution.html
+
+from vstools import vs, core
+
+# Example: Edge detection kernel
+matrix = [1, 1, 1, 1, -8, 1, 1, 1, 1]
+divisor = 1
+bias = 128
+
+clip = core.std.Convolution(clip, matrix=matrix, divisor=divisor, bias=bias)"""
+description = "Applies custom convolution kernel for custom filtering effects"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

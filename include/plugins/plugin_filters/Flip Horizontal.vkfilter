@@ -1,0 +1,10 @@
+name = "Flip Horizontal"
+category = "Transform"
+code = """
+# Flip clip horizontally (mirror left-right)
+
+clip = core.std.FlipHorizontal(clip)"""
+description = "Flips the clip horizontally (mirrors left to right)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,16 @@
+name = "Trim Clip"
+category = "Utility"
+code = """
+# Trim clip to specific frame range
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/trim.html
+
+from vstools import vs, core
+
+first_frame = 0  # First frame to keep
+last_frame = 1000  # Last frame to keep
+
+clip = core.std.Trim(clip, first=first_frame, last=last_frame)"""
+description = "Trims clip to keep only specified frame range"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

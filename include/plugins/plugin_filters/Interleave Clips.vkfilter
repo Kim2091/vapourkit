@@ -1,0 +1,15 @@
+name = "Interleave Clips"
+category = "Comparison"
+code = """
+# Interleave frames from multiple clips
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/interleave.html
+
+clip_a = clip
+clip_b = clip  # Replace with your second clip
+
+# Alternates: frame 0 from clip_a, frame 0 from clip_b, frame 1 from clip_a, etc.
+clip = core.std.Interleave([clip_a, clip_b])"""
+description = "Interleaves frames from multiple clips for comparison"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

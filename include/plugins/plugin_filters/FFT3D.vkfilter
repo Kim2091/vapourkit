@@ -1,0 +1,18 @@
+name = "FFT3D"
+category = "Denoising"
+code = """
+# 3D frequency-domain denoising
+# Full Docs: https://github.com/myrsloik/VapourSynth-FFT3DFilter
+
+from vstools import vs, core
+
+sigma = 2.0  # Noise level
+bt = 3  # Temporal block size
+bw = 32  # Block width
+bh = 32  # Block height
+
+clip = core.fft3dfilter.FFT3DFilter(clip, sigma=sigma, bt=bt, bw=bw, bh=bh)"""
+description = "3D frequency-domain denoising using FFT (temporal + spatial)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

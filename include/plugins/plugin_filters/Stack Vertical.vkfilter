@@ -1,0 +1,14 @@
+name = "Stack Vertical"
+category = "Comparison"
+code = """
+# Stack two clips vertically (top and bottom)
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/stackvertical.html
+
+clip_top = clip
+clip_bottom = clip  # Replace with your second clip
+
+clip = core.std.StackVertical([clip_top, clip_bottom])"""
+description = "Stacks two clips vertically (top and bottom) for comparison"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,14 @@
+name = "Select Every"
+category = "Frame Rate"
+code = """
+# Select every Nth frame
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/selectevery.html
+
+cycle = 5  # Take 1 frame every N frames
+offsets = 0  # Which frame in the cycle to take
+
+clip = core.std.SelectEvery(clip, cycle=cycle, offsets=[offsets])"""
+description = "Selects every Nth frame from the clip to reduce frame rate"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

@@ -1,0 +1,14 @@
+name = "FDoG Edge Mask"
+category = "Masking"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/edge/
+
+from vsmasktools import FDoG
+
+# Create edge mask using Flow-based Difference of Gaussians
+mask = FDoG().edgemask(clip, lthr=0.0, hthr=65535, multi=1.0)
+clip = mask"""
+description = "Creates stylized edge mask using Flow-based Difference of Gaussians (FDoG)"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

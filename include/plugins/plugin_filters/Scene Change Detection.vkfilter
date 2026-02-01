@@ -1,0 +1,14 @@
+name = "Scene Change Detection"
+category = "Utility"
+code = """
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vstools/functions/clips/
+
+from vstools import sc_detect
+
+# Detect scene changes and add frame properties
+threshold = 0.1  # Higher = less sensitive
+clip = sc_detect(clip, threshold=threshold)"""
+description = "Detects scene changes and adds _SceneChangePrev and _SceneChangeNext frame properties"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"
