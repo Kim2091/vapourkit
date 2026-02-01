@@ -102,12 +102,47 @@ export class FFmpegManager {
       const extractPath = path.dirname(FFmpegManager.FFMPEG_DIR);
       await fs.ensureDir(extractPath);
       
-      await new Promise<void>((resolve, reject) => {
-        _7z.unpack(archivePath, extractPath, (err: Error | null) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      // Retry logic for file locking issues on Windows
+      const maxRetries = 5;
+      const retryDelay = 2000; // 2 seconds
+      let lastError: any = null;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            _7z.unpack(archivePath, extractPath, (err: Error | null) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+          
+          // Success, break out of retry loop
+          break;
+        } catch (err: any) {
+          lastError = err;
+          const errorMessage = err.message || String(err);
+          
+          // Check if it's a file locking error
+          const isFileLockError = 
+            errorMessage.includes('Can not open the file as archive') ||
+            errorMessage.includes('The process cannot access the file because it is being used by another process') ||
+            errorMessage.includes("Can't open as archive");
+          
+          if (isFileLockError && attempt < maxRetries) {
+            logger.dependency(`File locked during extraction (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}ms...`);
+            onProgress?.(`FFmpeg - file locked, retrying (${attempt}/${maxRetries})...`, 80 + Math.round((attempt / maxRetries) * 10));
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          }
+          
+          // If it's not a file lock error, or we've exhausted retries, throw
+          if (attempt === maxRetries) {
+            logger.error(`Failed to extract ffmpeg after ${maxRetries} attempts`);
+            throw lastError;
+          }
+          throw err;
+        }
+      }
 
       // Find the extracted ffmpeg folder (it has a version number in the name)
       const extractedContents = await fs.readdir(extractPath);

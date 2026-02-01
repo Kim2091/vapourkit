@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { Loader2, Download, XCircle } from 'lucide-react';
+import { memo, useMemo } from 'react';
+import { Loader2, Download, XCircle, CheckCircle2 } from 'lucide-react';
 import type { SetupProgress } from '../electron.d';
 import { Logo } from './Logo';
 
@@ -20,13 +20,95 @@ export const SetupScreen = memo<SetupScreenProps>(({
   isSettingUp,
   onSetup,
 }: SetupScreenProps) => {
+  // Define the setup steps with their expected component names
+  // Note: component names must use startsWith matching because backend sends versioned names
+  // e.g., backend sends 'vs-mlrt TensorRT v15.13' but we match against 'vs-mlrt TensorRT'
+  const setupSteps = useMemo(() => {
+    const steps = [
+      { id: 'vapoursynth', name: 'VapourSynth Portable R72', description: 'Video processing framework', component: 'VapourSynth R72' },
+      { id: 'bestsource', name: 'BestSource R13', description: 'Video source filter', component: 'BestSource R13' },
+      { id: 'video-compare', name: 'Video Compare Tool', description: 'Side-by-side comparison viewer', component: 'Video Compare Tool' },
+      { id: 'onnx', name: 'vs-mlrt ONNX Runtime Plugin v15.13', description: 'DirectML support (AMD/Intel/NVIDIA GPUs)', component: 'vs-mlrt ONNX Runtime' },
+    ];
+
+    if (hasCudaSupport) {
+      steps.splice(3, 0, {
+        id: 'tensorrt',
+        name: 'vs-mlrt TensorRT Plugin v15.13',
+        description: 'AI inference engine (NVIDIA GPUs)',
+        component: 'vs-mlrt TensorRT'
+      });
+    }
+
+    steps.push(
+      { id: 'python', name: 'Python Embedded', description: 'Python runtime for VapourSynth', component: 'Python Embedded' },
+      { id: 'models', name: 'ONNX Models', description: 'Bundled AI upscaling models', component: 'ONNX Models' },
+      { id: 'ffmpeg', name: 'FFmpeg', description: 'Video encoding/decoding', component: 'FFmpeg' }
+    );
+
+    return steps;
+  }, [hasCudaSupport]);
+
+  // Track which steps are completed, in progress, or pending
+  const stepStatuses = useMemo(() => {
+    if (!setupProgress || !isSettingUp) {
+      return setupSteps.reduce((acc, step) => {
+        acc[step.id] = 'pending';
+        return acc;
+      }, {} as Record<string, 'pending' | 'in-progress' | 'completed'>);
+    }
+
+    const statuses: Record<string, 'pending' | 'in-progress' | 'completed'> = {};
+    const currentComponent = setupProgress.component;
+    
+    // Check if all setup is complete (not just one component)
+    const isFullyComplete = setupProgress.type === 'complete' && setupProgress.component === 'All Dependencies';
+
+    if (isFullyComplete) {
+      // Mark all steps as completed
+      setupSteps.forEach(step => {
+        statuses[step.id] = 'completed';
+      });
+      return statuses;
+    }
+
+    // Find the index of the current component
+    // Use startsWith matching because backend sends versioned names (e.g., 'vs-mlrt TensorRT v15.13')
+    // but our step components are base names (e.g., 'vs-mlrt TensorRT')
+    const currentIndex = setupSteps.findIndex(step => currentComponent.startsWith(step.component));
+
+    for (let i = 0; i < setupSteps.length; i++) {
+      const step = setupSteps[i];
+      
+      if (i < currentIndex) {
+        // Steps before current are completed
+        statuses[step.id] = 'completed';
+      } else if (i === currentIndex) {
+        // Current step is in progress (unless it just completed)
+        statuses[step.id] = setupProgress.type === 'complete' ? 'completed' : 'in-progress';
+      } else {
+        // Steps after current are pending
+        statuses[step.id] = 'pending';
+      }
+    }
+
+    // If current component wasn't found, mark all as pending
+    if (currentIndex === -1) {
+      setupSteps.forEach(step => {
+        statuses[step.id] = 'pending';
+      });
+    }
+
+    return statuses;
+  }, [setupProgress, setupSteps, isSettingUp]);
+
   // Checking dependencies screen
   if (isCheckingDeps) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-dark-bg via-dark-surface to-dark-bg flex items-center justify-center">
+      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-16 h-16 text-primary-purple animate-spin mx-auto mb-4" />
-          <p className="text-xl text-gray-300">Checking dependencies...</p>
+          <Loader2 className="w-12 h-12 text-primary-purple animate-spin mx-auto mb-4" />
+          <p className="text-lg text-gray-300">Checking dependencies...</p>
         </div>
       </div>
     );
@@ -35,10 +117,11 @@ export const SetupScreen = memo<SetupScreenProps>(({
   // Setup required screen
   if (!isSetupComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-dark-bg via-dark-surface to-dark-bg flex items-center justify-center p-8">
-        <div className="max-w-2xl w-full">
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-2 mb-2">
+      <div className="min-h-screen bg-dark-bg flex items-center justify-center p-6">
+        <div className="max-w-lg w-full">
+          {/* Header */}
+          <div className="text-center mb-6">
+            <div className="flex items-center justify-center gap-2 mb-1">
               <Logo className="w-6 h-6" />
               <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-blue via-primary-purple to-accent-cyan bg-clip-text text-transparent">
                 Vapourkit
@@ -47,86 +130,100 @@ export const SetupScreen = memo<SetupScreenProps>(({
             <p className="text-gray-400">First-time setup required</p>
           </div>
 
-          <div className="bg-dark-elevated rounded-2xl p-8 border border-gray-800 shadow-xl">
-            <h2 className="text-2xl font-semibold mb-4">Download Required Components</h2>
-            <p className="text-gray-400 mb-6">
+          {/* Main Card */}
+          <div className="bg-dark-elevated rounded-xl p-6 border border-gray-800">
+            <h2 className="text-lg font-semibold mb-2">Download Required Components</h2>
+            <p className="text-gray-400 text-sm mb-4">
               The following components will be downloaded and installed to the application's data folder:
             </p>
 
-            <div className="space-y-3 mb-6">
-              <div className="flex items-center gap-3 p-3 bg-dark-surface rounded-lg">
-                <Download className="w-5 h-5 text-primary-blue" />
-                <div className="flex-1">
-                  <p className="font-medium">VapourSynth Portable R72</p>
-                  <p className="text-sm text-gray-500">Video processing framework</p>
-                </div>
-              </div>
-              {hasCudaSupport && (
-                <div className="flex items-center gap-3 p-3 bg-dark-surface rounded-lg">
-                  <Download className="w-5 h-5 text-primary-purple" />
-                  <div className="flex-1">
-                    <p className="font-medium">vs-mlrt TensorRT Plugin v15.13</p>
-                    <p className="text-sm text-gray-500">AI inference engine (NVIDIA GPUs)</p>
+            {/* Component List */}
+            <div className="space-y-2 mb-6">
+              {setupSteps.map((step) => {
+                const status = stepStatuses[step.id];
+                const isCurrentStep = setupProgress?.component.startsWith(step.component) ?? false;
+                
+                return (
+                  <div 
+                    key={step.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                      status === 'completed' ? 'bg-green-500/10 border border-green-500/20' :
+                      status === 'in-progress' ? 'bg-dark-surface border border-primary-purple/50' :
+                      'bg-dark-surface border border-transparent'
+                    }`}
+                  >
+                    {/* Status Icon */}
+                    {status === 'completed' ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                    ) : status === 'in-progress' ? (
+                      <Loader2 className="w-5 h-5 text-primary-purple animate-spin flex-shrink-0" />
+                    ) : (
+                      <Download className={`w-5 h-5 flex-shrink-0 ${
+                        step.id === 'vapoursynth' ? 'text-primary-blue' :
+                        step.id === 'tensorrt' ? 'text-primary-purple' :
+                        step.id === 'onnx' ? 'text-accent-cyan' :
+                        step.id === 'bestsource' ? 'text-green-400' :
+                        step.id === 'video-compare' ? 'text-yellow-400' :
+                        step.id === 'python' ? 'text-orange-400' :
+                        step.id === 'models' ? 'text-pink-400' :
+                        step.id === 'ffmpeg' ? 'text-blue-400' :
+                        'text-gray-400'
+                      }`} />
+                    )}
+                    
+                    {/* Name & Progress */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-medium ${
+                            status === 'completed' ? 'text-green-300' :
+                            status === 'in-progress' ? 'text-white' :
+                            'text-gray-300'
+                          }`}>
+                            {step.name}
+                          </p>
+                          <p className="text-sm text-gray-500">{step.description}</p>
+                        </div>
+                        {status === 'completed' && (
+                          <span className="text-xs text-green-400 ml-3 flex-shrink-0">Done</span>
+                        )}
+                        {status === 'in-progress' && isCurrentStep && setupProgress && (
+                          <span className="text-xs text-primary-purple font-medium ml-3 flex-shrink-0">
+                            {Math.round(setupProgress.progress)}%
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Progress bar for current step */}
+                      {status === 'in-progress' && isCurrentStep && setupProgress && (
+                        <div className="mt-1.5 h-1 bg-dark-bg rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-primary-blue to-primary-purple transition-all duration-300"
+                            style={{ width: `${setupProgress.progress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-              {!hasCudaSupport && hasCudaSupport !== null && (
-                <div className="flex items-center gap-3 p-3 bg-dark-surface rounded-lg opacity-50">
-                  <XCircle className="w-5 h-5 text-gray-600" />
-                  <div className="flex-1">
-                    <p className="font-medium">vs-mlrt TensorRT Plugin v15.13</p>
-                    <p className="text-sm text-gray-500">Skipped - No NVIDIA GPU detected</p>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-3 p-3 bg-dark-surface rounded-lg">
-                <Download className="w-5 h-5 text-accent-cyan" />
-                <div className="flex-1">
-                  <p className="font-medium">vs-mlrt ONNX Runtime Plugin v15.13</p>
-                  <p className="text-sm text-gray-500">DirectML support (AMD/Intel/NVIDIA GPUs)</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-dark-surface rounded-lg">
-                <Download className="w-5 h-5 text-green-400" />
-                <div className="flex-1">
-                  <p className="font-medium">BestSource R13</p>
-                  <p className="text-sm text-gray-500">Video source filter</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-dark-surface rounded-lg">
-                <Download className="w-5 h-5 text-yellow-400" />
-                <div className="flex-1">
-                  <p className="font-medium">Video Compare Tool</p>
-                  <p className="text-sm text-gray-500">Side-by-side comparison viewer for input/output videos</p>
-                </div>
-              </div>
+                );
+              })}
             </div>
 
-            {setupProgress && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">{setupProgress.message.replace(/\.\.\.\s*\d+\.?\d*%?$/, '...')}</span>
-                  <span className="text-base font-medium text-white">{Math.round(setupProgress.progress)}%</span>
-                </div>
-                <div className="w-full bg-dark-surface rounded-full h-2">
-                  <div 
-                    className="bg-gradient-to-r from-primary-blue to-primary-purple h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${setupProgress.progress}%` }}
-                  />
-                </div>
-                {setupProgress.type === 'error' && (
-                  <p className="text-red-400 text-sm mt-2 flex items-center gap-2">
-                    <XCircle className="w-4 h-4" />
-                    {setupProgress.message}
-                  </p>
-                )}
+            {/* Error Message */}
+            {setupProgress?.type === 'error' && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <p className="text-red-400 text-sm flex items-center gap-2">
+                  <XCircle className="w-4 h-4 flex-shrink-0" />
+                  {setupProgress.message}
+                </p>
               </div>
             )}
-            
+
+            {/* Action Button */}
             <button
               onClick={onSetup}
               disabled={isSettingUp}
-              className="w-full bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3"
+              className="w-full bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
             >
               {isSettingUp ? (
                 <>

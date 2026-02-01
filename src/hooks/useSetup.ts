@@ -8,6 +8,7 @@ export function useSetup(onLog: (message: string) => void) {
   const [hasCudaSupport, setHasCudaSupport] = useState<boolean | null>(null);
   const [setupProgress, setSetupProgress] = useState<SetupProgress | null>(null);
   const [isSettingUp, setIsSettingUp] = useState(false);
+  const [showPluginPrompt, setShowPluginPrompt] = useState(false);
 
   // Setup progress listener
   useEffect(() => {
@@ -17,6 +18,15 @@ export function useSetup(onLog: (message: string) => void) {
       if (progress.type === 'complete') {
         setIsSetupComplete(true);
         setIsSettingUp(false);
+        
+        // Check if we should show the plugin prompt
+        // Only show if this is the first time setup completed
+        const hasShownPluginPrompt = localStorage.getItem('hasShownPluginPrompt');
+        if (!hasShownPluginPrompt) {
+          setShowPluginPrompt(true);
+          localStorage.setItem('hasShownPluginPrompt', 'true');
+          onLog('First-time setup complete - prompting for plugin installation');
+        }
       }
     });
 
@@ -48,8 +58,13 @@ export function useSetup(onLog: (message: string) => void) {
     setIsSettingUp(true);
     
     // Clear all localStorage to prevent persistence issues from previous installations
+    // but preserve any existing plugin prompt flag (shouldn't exist for first-time setups anyway)
     onLog('Clearing previous application data...');
+    const hasShownPluginPrompt = localStorage.getItem('hasShownPluginPrompt');
     localStorage.clear();
+    if (hasShownPluginPrompt) {
+      localStorage.setItem('hasShownPluginPrompt', hasShownPluginPrompt);
+    }
     
     onLog('Starting dependency setup...');
     await window.electronAPI.setupDependencies();
@@ -67,5 +82,7 @@ export function useSetup(onLog: (message: string) => void) {
     setupProgress,
     isSettingUp,
     handleSetup,
+    showPluginPrompt,
+    setShowPluginPrompt,
   };
 }

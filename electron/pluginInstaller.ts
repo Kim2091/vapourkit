@@ -687,14 +687,43 @@ export class PluginInstaller {
     logger.info(`Extracting ${componentName} from ${archivePath} to ${outputPath}`);
     await fs.ensureDir(outputPath);
 
-    try {
-      await _7z.unpack(archivePath, outputPath);
-      logger.info(`Extraction completed: ${componentName}`);
-    } catch (err: any) {
-      const errorMsg = `Error extracting ${componentName}: ${err.message}`;
-      logger.error(errorMsg);
-      throw err;
+    const maxRetries = 5;
+    const retryDelay = 2000; // 2 seconds
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await _7z.unpack(archivePath, outputPath);
+        logger.info(`Extraction completed: ${componentName}`);
+        return; // Success, exit the function
+      } catch (err: any) {
+        lastError = err;
+        const errorMessage = err.message || String(err);
+        
+        // Check if it's a file locking error
+        const isFileLockError = 
+          errorMessage.includes('Can not open the file as archive') ||
+          errorMessage.includes('The process cannot access the file because it is being used by another process') ||
+          errorMessage.includes("Can't open as archive");
+        
+        if (isFileLockError && attempt < maxRetries) {
+          logger.info(`File locked during extraction (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          continue;
+        }
+        
+        // If it's not a file lock error, or we've exhausted retries, throw
+        const errorMsg = `Error extracting ${componentName}: ${errorMessage}`;
+        logger.error(errorMsg);
+        if (attempt === maxRetries) {
+          logger.error(`Failed after ${maxRetries} attempts`);
+        }
+        throw err;
+      }
     }
+
+    // Should never reach here, but just in case
+    throw lastError;
   }
 
   private async copyFilterTemplates(): Promise<void> {

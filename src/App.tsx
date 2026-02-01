@@ -52,7 +52,7 @@ function App() {
 
   // Setup and initialization hooks
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
-  const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup } = useSetup(addConsoleLog);
+  const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup, showPluginPrompt, setShowPluginPrompt } = useSetup(addConsoleLog);
   const { useDirectML, toggleDirectML, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
   const { 
     ffmpegArgs, 
@@ -1131,8 +1131,13 @@ function App() {
       />
 
       <PluginsModal
-        show={showPlugins}
-        onClose={() => closeModalWithFocusRestore(() => setShowPlugins(false))}
+        show={showPlugins || showPluginPrompt}
+        onClose={() => {
+          closeModalWithFocusRestore(() => {
+            setShowPlugins(false);
+            setShowPluginPrompt(false);
+          });
+        }}
         onInstallationComplete={loadTemplates}
       />
 
