@@ -1,4 +1,5 @@
 name = "NLM Denoise (CUDA)"
+category = "Denoising"
 code = """
 # Full Docs: https://github.com/AmusementClub/vs-nlm-cuda
 # This can be used as parameters explanation: https://github.com/Khanattila/KNLMeansCL/wiki/Filter-description

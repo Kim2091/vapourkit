@@ -1,4 +1,5 @@
 name = "Untile"
+category = "Tiling"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#untile
 # If fade is True, the overlap will be used to feather/blend between the tiles to remove visible seams. If False, it will simply be cropped.

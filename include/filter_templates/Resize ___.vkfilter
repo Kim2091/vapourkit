@@ -1,4 +1,5 @@
 name = "Resize (%)"
+category = "Resizing"
 code = """
 # Use 0.5 for 50%, 2.0 for 200%, etc.
 # Kernerls: point, bilinear, bicubic, lanczos, spline16, spline36, spline64

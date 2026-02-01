@@ -1,4 +1,5 @@
 name = "Shift Chroma"
+category = "Color Correction"
 code = """
 # Shifts just the chroma in case it is misaligned.
 # Positive values go up/left, negative down/right.

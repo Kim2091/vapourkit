@@ -1,4 +1,5 @@
 name = "Motion Mask"
+category = "Masking"
 code = """
 # Full Docs: https://github.com/dubhater/vapoursynth-motionmask
 

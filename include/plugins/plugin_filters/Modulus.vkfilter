@@ -1,4 +1,5 @@
 name = "Modulus"
+category = "Padding/Cropping"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#mod
 # Modes to reach the next upper multiple via padding can be mirror, repeat, fillmargins, black, a custom color in 8-bit scale [128, 128, 128], or discard to crop to the next lower multiple.

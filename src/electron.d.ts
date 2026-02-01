@@ -362,6 +362,7 @@ export interface ColorimetrySettings {
 export interface FilterTemplate {
   name: string;
   code: string;
+  category?: string;
   description?: string;
   metadata?: {
     author?: string;

@@ -1,4 +1,5 @@
 name = "Duplicate Frames"
+category = "Frame Manipulation"
 code = """
 # Full Docs: https://www.vapoursynth.com/doc/functions/video/duplicateframes.html
 

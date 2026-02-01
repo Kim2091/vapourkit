@@ -1,4 +1,5 @@
 name = "Comb Mask MT"
+category = "Masking"
 code = """
 # Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/CombMaskMT
 

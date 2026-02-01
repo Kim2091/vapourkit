@@ -1,4 +1,5 @@
 name = "Resize (px)"
+category = "Resizing"
 code = """
 # Enter a new width and height. Either both or just one.
 # Kernerls: point, bilinear, bicubic, lanczos, spline16, spline36, spline64

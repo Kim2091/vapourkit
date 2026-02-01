@@ -1,4 +1,5 @@
 name = "Crop"
+category = "Padding/Cropping"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#crop
 # If only "clip" is provided, this will automatically crop what was added via the Pad or the Modulus filter, even if the clip was since resized (after upscaling for example).

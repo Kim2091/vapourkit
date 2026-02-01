@@ -1,4 +1,5 @@
 name = "Fine Dehalo2"
+category = "Restoration"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-dehalo/
 # Halo removal function for 2nd order halos

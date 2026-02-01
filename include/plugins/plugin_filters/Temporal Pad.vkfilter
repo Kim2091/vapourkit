@@ -1,4 +1,5 @@
 name = "Temporal Pad"
+category = "Frame Manipulation"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#tpad
 # Padding mode can be mirror, repeat, black, or a custom color in 8-bit scale [128, 128, 128].

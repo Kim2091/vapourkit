@@ -1,4 +1,5 @@
 name = "Move Original Clip Reference"
+category = "Utility"
 code = "original_clip = clip"
 description = 'Moves the "original_clip" variable to here. That means, if it is later used (for example in the Color Fix filter), it will refer to this position in the workflow. Else it will refer to the very start of the workflow.'
 

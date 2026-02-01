@@ -45,9 +45,20 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const [showSaveDialog, setShowSaveDialog] = useState<string | null>(null);
   const [presetName, setPresetName] = useState('');
   const [presetDescription, setPresetDescription] = useState('');
+  const [presetCategory, setPresetCategory] = useState('');
   const [hoveredDragHandle, setHoveredDragHandle] = useState<string | null>(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyDuplicatedId, setNewlyDuplicatedId] = useState<string | null>(null);
+
+  // Group filter templates by category
+  const groupedTemplates = filterTemplates.reduce((acc, template) => {
+    const category = template.category || 'Uncategorized';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(template);
+    return acc;
+  }, {} as Record<string, FilterTemplate[]>);
   const [pendingFilters, setPendingFilters] = useState<Filter[]>(filters);
   const previousExpandedCountRef = useRef<number>(expandedFilters.size);
   const previousProcessingRef = useRef<boolean>(isProcessing);
@@ -252,11 +263,13 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       const success = await onSaveTemplate({
         name: presetName.trim(),
         code: filter.code,
+        category: presetCategory.trim() || undefined,
         description: presetDescription.trim() || undefined,
       });
       if (success) {
         setPresetName('');
         setPresetDescription('');
+        setPresetCategory('');
         setShowSaveDialog(null);
       }
     }
@@ -694,7 +707,19 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                         {onSaveTemplate && (
                           <div className="flex gap-3 pt-1">
                             <button
-                              onClick={() => setShowSaveDialog(showSaveDialog === filter.id ? null : filter.id)}
+                              onClick={() => {
+                                if (showSaveDialog === filter.id) {
+                                  setShowSaveDialog(null);
+                                  setPresetName('');
+                                  setPresetDescription('');
+                                  setPresetCategory('');
+                                } else {
+                                  setShowSaveDialog(filter.id);
+                                  setPresetName('');
+                                  setPresetDescription('');
+                                  setPresetCategory('');
+                                }
+                              }}
                               className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
                               disabled={isProcessing}
                             >
@@ -726,6 +751,20 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             />
                             <input
                               type="text"
+                              placeholder="Category (e.g., Resizing, Blurring, etc.)"
+                              value={presetCategory}
+                              onChange={(e) => setPresetCategory(e.target.value)}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              list="category-suggestions"
+                              className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5 mb-2 text-sm focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
+                            />
+                            <datalist id="category-suggestions">
+                              {Object.keys(groupedTemplates).sort().map(category => (
+                                <option key={category} value={category} />
+                              ))}
+                            </datalist>
+                            <input
+                              type="text"
                               placeholder="Description (optional)"
                               value={presetDescription}
                               onChange={(e) => setPresetDescription(e.target.value)}
@@ -741,7 +780,12 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                 Save
                               </button>
                               <button
-                                onClick={() => setShowSaveDialog(null)}
+                                onClick={() => {
+                                  setShowSaveDialog(null);
+                                  setPresetName('');
+                                  setPresetDescription('');
+                                  setPresetCategory('');
+                                }}
                                 className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-1.5 rounded transition-colors"
                               >
                                 Cancel
@@ -759,10 +803,14 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             className="flex-1 bg-gray-900/90 border border-gray-600 rounded-md px-2.5 py-1.5 text-base focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
                           >
                             <option value="">Custom</option>
-                            {filterTemplates.map((template) => (
-                              <option key={template.name} value={template.name}>
-                                {template.name}
-                              </option>
+                            {Object.keys(groupedTemplates).sort().map((category) => (
+                              <optgroup key={category} label={category}>
+                                {groupedTemplates[category].map((template) => (
+                                  <option key={template.name} value={template.name}>
+                                    {template.name}
+                                  </option>
+                                ))}
+                              </optgroup>
                             ))}
                           </select>
                           {filter.preset && onDeleteTemplate && (

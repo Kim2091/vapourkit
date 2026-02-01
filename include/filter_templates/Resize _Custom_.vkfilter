@@ -1,4 +1,5 @@
 name = "Resize (Custom)"
+category = "Resizing"
 code = """
 # The resizers have many additional resize parameters for advanced users.
 # Full Docs: https://www.vapoursynth.com/doc/functions/video/resize.html

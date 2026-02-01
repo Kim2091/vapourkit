@@ -1,4 +1,5 @@
 name = "Read Image"
+category = "Utility"
 code = """
 # Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/ImageRead
 # Length is how long the image clip should be in frames.

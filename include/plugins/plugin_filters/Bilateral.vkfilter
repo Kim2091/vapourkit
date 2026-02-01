@@ -1,4 +1,5 @@
 name = "Bilateral"
+category = "Blurring"
 code = """
 # Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/Bilateral
 

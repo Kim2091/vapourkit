@@ -1,4 +1,5 @@
 name = "Retinex"
+category = "Color Correction"
 code = """
 # Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-Retinex
 

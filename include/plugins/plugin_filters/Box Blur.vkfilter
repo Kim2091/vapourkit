@@ -1,4 +1,5 @@
 name = "Box Blur"
+category = "Blurring"
 code = """
 # Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/BoxBlur
 

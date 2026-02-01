@@ -1,4 +1,5 @@
 name = "Trim"
+category = "Frame Manipulation"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#tpad
 # If only "clip" is provided, this will automatically trim what was added via Temporal Pad. You can also replace "start" and "end" with "length", which trims to the specified amount of frames, beginning from the start.

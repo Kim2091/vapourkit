@@ -1,4 +1,5 @@
 name = "Gauss Blur"
+category = "Blurring"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/?h=gauss_bl#vsrgtools.blur.gauss_blur
 

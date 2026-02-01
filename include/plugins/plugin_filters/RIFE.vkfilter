@@ -1,4 +1,5 @@
 name = "RIFE"
+category = "Frame Interpolation"
 code = """
 from vsmlrt import RIFE, RIFEModel, Backend
 from vstools import sc_detect

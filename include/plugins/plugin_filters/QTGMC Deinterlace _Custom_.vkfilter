@@ -1,4 +1,5 @@
 name = "QTGMC Deinterlace (Custom)"
+category = "Deinterlacing"
 code = """
 # All default parameters for each stage exposed to see what is adjustable. These default are for best quality, not highest speed.
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdeinterlace/qtgmc/?h=sharpe#vsdeinterlace.qtgmc

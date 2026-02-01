@@ -1,4 +1,5 @@
 name = "Levels"
+category = "Color Correction"
 code = """
 # Full Docs: https://www.vapoursynth.com/doc/functions/video/levels.html
 

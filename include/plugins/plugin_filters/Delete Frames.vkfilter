@@ -1,4 +1,5 @@
 name = "Delete Frames"
+category = "Frame Manipulation"
 code = """
 # Full Docs: https://www.vapoursynth.com/doc/functions/video/deleteframes.html
 

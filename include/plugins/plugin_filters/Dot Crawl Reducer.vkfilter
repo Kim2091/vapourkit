@@ -1,4 +1,5 @@
 name = "Dot Crawl Reducer"
+category = "Restoration"
 code = """
 # Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/Checkmate
 # This filter will reduce the depth to 8-bit during processing.

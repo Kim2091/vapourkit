@@ -1,4 +1,5 @@
 name = "CLAHE"
+category = "Color Correction"
 code = """
 # Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/CLAHE
 

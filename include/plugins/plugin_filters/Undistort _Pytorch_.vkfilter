@@ -1,4 +1,5 @@
 name = "Undistort (PyTorch)"
+category = "Restoration"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_undistort?tab=readme-ov-file#pytorch-backend
 

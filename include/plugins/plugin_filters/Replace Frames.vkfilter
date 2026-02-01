@@ -1,4 +1,5 @@
 name = "Replace Frames"
+category = "Frame Manipulation"
 code = """
 # Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/RFS
 

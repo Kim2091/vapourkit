@@ -1,4 +1,5 @@
 name = "Deep Deinterlace"
+category = "Deinterlacing"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_deepdeinterlace?tab=readme-ov-file#usage
 # Available deinterlacers are 1 (DDD) and 2 (DeF).

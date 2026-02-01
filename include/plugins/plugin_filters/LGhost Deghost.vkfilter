@@ -1,4 +1,5 @@
 name = "LGhost Deghost"
+category = "Restoration"
 code = """
 # Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-LGhost
 # Removes ghosting/halos offset to the right
