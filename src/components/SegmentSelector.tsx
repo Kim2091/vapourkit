@@ -510,10 +510,10 @@ export const SegmentSelector = memo<SegmentSelectorProps>(({
                       onClick={handlePreview}
                       disabled={isProcessing || segmentFrameCount < 1}
                       className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-500/50 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={`Preview ${previewDuration} seconds from start point`}
+                      title={`Render a ${previewDuration} second test clip from start point`}
                     >
                       <Play className="w-4 h-4" />
-                      Preview
+                      Render Test Clip
                     </button>
                     <div className="flex items-center gap-2">
                       <input
@@ -545,7 +545,7 @@ export const SegmentSelector = memo<SegmentSelectorProps>(({
               <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
                 <p className="text-xs text-gray-400">
                   <strong className="text-gray-300">Tip:</strong> Drag the green and red bracket handles on the timeline to adjust the segment, or enter values directly.
-                  Use Preview to test your filter settings on a short sample (1-15 seconds) before processing the full segment.
+                  Use Render Test Clip to test your filter settings on a short sample (1-15 seconds) before processing the full segment.
                 </p>
               </div>
         </div>

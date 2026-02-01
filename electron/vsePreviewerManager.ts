@@ -7,6 +7,11 @@ import { setupVSEnvironment } from './utils';
 
 /**
  * Manager for VSE-Previewer - VapourSynth script previewer tool
+ * 
+ * The VSE-Previewer allows users to preview VapourSynth scripts in real-time
+ * with full playback controls and scrubbing capabilities. A bundled configuration
+ * file (vse-previewer.conf) is automatically copied to the installation directory
+ * during setup, which configures default preview settings like zoom mode and FPS limits.
  */
 export class VsePreviewerManager {
   private static readonly VSE_PREVIEWER_DIR = path.join(PATHS.APP_DATA, 'vse-previewer');

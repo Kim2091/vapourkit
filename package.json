@@ -72,6 +72,7 @@
             "include/filter_templates/**/*.vkfilter",
             "include/vapoursynth_template.vpy",
             "include/stock-app-config.json",
+            "include/vse-previewer.conf",
             "package.json",
             "!data/**/*"
         ],
@@ -83,6 +84,7 @@
             "include/filter_templates/**/*.vkfilter",
             "include/vapoursynth_template.vpy",
             "include/stock-app-config.json",
+            "include/vse-previewer.conf",
             "node_modules/7zip-bin/**/*"
         ],
         "win": {

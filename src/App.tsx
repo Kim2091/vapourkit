@@ -1,7 +1,7 @@
 // src/App.tsx - Refactored with extracted components and hooks
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, XCircle, ChevronDown, ChevronUp, Terminal, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Sparkles, XCircle, ChevronDown, ChevronUp, Terminal, Loader2, CheckCircle, AlertCircle, Play } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ImportModelModal } from './components/ImportModelModal';
 import { AboutModal } from './components/AboutModal';
@@ -831,7 +831,6 @@ function App() {
                     hasVideoInfo={!!videoInfo}
                     onCompareVideos={handleCompareVideos}
                     onOpenOutputFolder={handleOpenOutputFolder}
-                    onLaunchPreviewer={handleLaunchPreviewer}
                     onVideoError={handleVideoError}
                   />
 
@@ -1018,6 +1017,18 @@ function App() {
                             Validate
                           </>
                         )}
+                      </button>
+                    )}
+
+                    {/* Preview Script Button - hidden during processing */}
+                    {!isProcessing && videoInfo && (
+                      <button
+                        onClick={handleLaunchPreviewer}
+                        className="font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 bg-dark-surface hover:bg-dark-bg border border-accent-cyan/50 hover:border-accent-cyan text-accent-cyan"
+                        title="Preview VapourSynth script with current workflow in VSE-Previewer"
+                      >
+                        <Play className="w-5 h-5" />
+                        Preview
                       </button>
                     )}
 

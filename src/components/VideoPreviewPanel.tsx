@@ -11,7 +11,6 @@ interface VideoPreviewPanelProps {
   hasVideoInfo: boolean;
   onCompareVideos: () => Promise<void>;
   onOpenOutputFolder: () => Promise<void>;
-  onLaunchPreviewer: () => Promise<void>;
   onVideoError: () => void;
 }
 
@@ -25,7 +24,6 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   hasVideoInfo,
   onCompareVideos,
   onOpenOutputFolder,
-  onLaunchPreviewer,
   onVideoError,
 }: VideoPreviewPanelProps) => {
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
@@ -38,17 +36,6 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           <h2 className="font-semibold text-base">Output Preview</h2>
         </div>
         <div className="flex items-center gap-2">
-          {/* Preview Script Button - Always visible when video is loaded */}
-          {hasVideoInfo && (
-            <button
-              onClick={onLaunchPreviewer}
-              className="text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-accent-cyan hover:text-cyan-400 hover:bg-accent-cyan/10"
-              title="Preview VapourSynth script with current workflow in VSE-Previewer"
-            >
-              <Play className="w-3.5 h-3.5" />
-              <span>Preview Script</span>
-            </button>
-          )}
           {/* Compare and Open Folder buttons - Only visible after processing */}
           {completedVideoPath && (
             <>

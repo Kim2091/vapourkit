@@ -377,6 +377,41 @@ export class DependencyManager {
       await this.extractArchive(archivePath, config.extractTo, config.name);
       await fs.remove(archivePath);
     }
+    
+    // Post-installation: Copy VSE-Previewer config if this is VSE-Previewer
+    if (config.name === 'VSE-Previewer') {
+      await this.copyVsePreviewerConfig();
+    }
+  }
+  
+  private async copyVsePreviewerConfig(): Promise<void> {
+    try {
+      const appPath = app.getAppPath();
+      let bundledBasePath: string;
+      
+      if (appPath.includes('.asar')) {
+        // In production with ASAR, templates are unpacked
+        bundledBasePath = appPath.replace('app.asar', 'app.asar.unpacked');
+      } else {
+        // In development or non-ASAR build
+        bundledBasePath = appPath;
+      }
+      
+      const bundledConfigPath = path.join(bundledBasePath, 'include', 'vse-previewer.conf');
+      const targetConfigPath = path.join(PATHS.VSE_PREVIEWER, 'vse-previewer.conf');
+      
+      // Check if bundled config exists
+      if (await fs.pathExists(bundledConfigPath)) {
+        // Copy config file to VSE-Previewer directory
+        await fs.copy(bundledConfigPath, targetConfigPath, { overwrite: true });
+        logger.dependency('Copied VSE-Previewer configuration file');
+      } else {
+        logger.warn(`Bundled VSE-Previewer config not found at: ${bundledConfigPath}`);
+      }
+    } catch (error) {
+      logger.error('Failed to copy VSE-Previewer config:', error);
+      // Don't throw - this is not critical
+    }
   }
 
   async setupDependencies(): Promise<void> {
