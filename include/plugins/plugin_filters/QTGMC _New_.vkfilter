@@ -1,4 +1,4 @@
-name = "QTGMC Deinterlace (Custom)"
+name = "QTGMC (New)"
 category = "Deinterlacing"
 code = """
 # All default parameters for each stage exposed to see what is adjustable. These default are for best quality, not highest speed.

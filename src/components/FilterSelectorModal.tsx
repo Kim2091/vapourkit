@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X, Star, Clock, Filter as FilterIcon, ChevronRight, Trash2, Edit3 } from 'lucide-react';
+import { Search, X, Star, Clock, Filter as FilterIcon, ChevronRight, Trash2, Edit3, Plus } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
 
 interface FilterSelectorModalProps {
@@ -80,7 +80,9 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
   const groupedTemplates = useMemo(() => {
     return filterTemplates.reduce((acc, template) => {
       // Support both single category and multiple categories
-      const categories = template.categories || (template.category ? [template.category] : ['Uncategorized']);
+      const categories = Array.isArray(template.category)
+        ? template.category
+        : (template.category ? [template.category] : ['Uncategorized']);
       
       categories.forEach(category => {
         const cat = category || 'Uncategorized';
@@ -108,7 +110,9 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
     // Filter by category
     if (selectedCategory !== 'All') {
       templates = templates.filter(t => {
-        const categories = t.categories || (t.category ? [t.category] : ['Uncategorized']);
+        const categories = Array.isArray(t.category)
+          ? t.category
+          : (t.category ? [t.category] : ['Uncategorized']);
         return categories.includes(selectedCategory);
       });
     }
@@ -116,11 +120,16 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
+      const categoryMatches = (cat: string | string[] | undefined) => {
+        if (!cat) return false;
+        if (Array.isArray(cat)) return cat.some(c => c.toLowerCase().includes(query));
+        return cat.toLowerCase().includes(query);
+      };
+      
       templates = templates.filter(t => 
         t.name.toLowerCase().includes(query) ||
         (t.description?.toLowerCase().includes(query)) ||
-        (t.category?.toLowerCase().includes(query)) ||
-        (t.categories?.some(cat => cat.toLowerCase().includes(query))) ||
+        categoryMatches(t.category) ||
         (t.metadata?.tags?.some(tag => tag.toLowerCase().includes(query)))
       );
     }
@@ -226,7 +235,9 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
     setEditName(template.name);
     setEditDescription(template.description || '');
     // Support both single category and multiple categories
-    const categories = template.categories || (template.category ? [template.category] : []);
+    const categories = Array.isArray(template.category)
+      ? template.category
+      : (template.category ? [template.category] : []);
     setEditCategories(categories);
     setNewCategoryInput('');
   };
@@ -238,9 +249,7 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
       ...editingTemplate,
       name: editName.trim(),
       description: editDescription.trim() || undefined,
-      categories: editCategories.length > 0 ? editCategories : undefined,
-      // Keep legacy category field for backward compatibility (use first category)
-      category: editCategories.length > 0 ? editCategories[0] : undefined,
+      category: editCategories.length > 0 ? editCategories : undefined,
     };
 
     const success = await onEditTemplate(editingTemplate.name, updatedTemplate);
@@ -519,6 +528,22 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
 
           {/* Filter List */}
           <div className="flex-1 overflow-y-auto p-4">
+            {/* Custom/New Button */}
+            <div className="mb-4">
+              <button
+                onClick={() => handleSelectTemplate('')}
+                className={`w-full px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 text-sm font-medium ${
+                  currentSelection === ''
+                    ? 'bg-primary-blue/20 border-primary-blue text-primary-blue'
+                    : 'bg-primary-blue/10 border-primary-blue/40 hover:bg-primary-blue/15 hover:border-primary-blue/60 text-primary-blue'
+                }`}
+                title="Start with a blank filter"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Custom/New Filter</span>
+              </button>
+            </div>
+
             {/* Current Selection */}
             {currentSelection && (
               <div className="mb-4 p-3 bg-dark-surface border border-primary-blue/50 rounded-lg">
@@ -683,9 +708,9 @@ const FilterItem = memo<FilterItemProps>(({
             }`}>
               {template.name}
             </h4>
-            {/* Display multiple categories or fallback to single category */}
-            {(template.categories && template.categories.length > 0) ? (
-              template.categories.map((cat, index) => (
+            {/* Display category/categories */}
+            {Array.isArray(template.category) ? (
+              template.category.map((cat, index) => (
                 <span key={index} className="text-xs px-2 py-1 bg-dark-bg text-gray-400 rounded flex-shrink-0">
                   {cat}
                 </span>

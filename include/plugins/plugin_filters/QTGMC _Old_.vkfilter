@@ -1,4 +1,4 @@
-name = "QTGMC"
+name = "QTGMC (Old)"
 category = ["Hybrid", "Deinterlacing"]
 code = """
 # High-quality deinterlacing with motion compensation

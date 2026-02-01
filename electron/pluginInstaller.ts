@@ -3,6 +3,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { BrowserWindow, app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs-extra';
+import * as https from 'https';
 import { logger } from './logger';
 import { PATHS } from './constants';
 import { configManager } from './configManager';
@@ -296,20 +297,28 @@ export class PluginInstaller {
         return { success: false, error: 'Installation cancelled by user' };
       }
 
-      // Step 4: Extract all scripts from scripts folder (90-95% progress)
-      logger.info('=== Step 4: Extracting scripts from scripts folder ===');
+      // Step 4: Download and extract VapourSynth scripts from GitHub (90-92% progress)
+      logger.info('=== Step 4: Downloading VapourSynth scripts from GitHub ===');
+      await this.downloadAndExtractVSScripts();
+
+      if (this.isCancelled) {
+        return { success: false, error: 'Installation cancelled by user' };
+      }
+
+      // Step 5: Extract all scripts from scripts folder (92-95% progress)
+      logger.info('=== Step 5: Extracting scripts from scripts folder ===');
       await this.extractAllScripts();
 
       if (this.isCancelled) {
         return { success: false, error: 'Installation cancelled by user' };
       }
 
-      // Step 5: Copy filter templates (95-100% progress)
-      logger.info('=== Step 5: Copying filter templates ===');
+      // Step 6: Copy filter templates (95-100% progress)
+      logger.info('=== Step 6: Copying filter templates ===');
       await this.copyFilterTemplates();
 
-      // Step 6: Reload backend to refresh models and configs
-      logger.info('=== Step 6: Reloading backend ===');
+      // Step 7: Reload backend to refresh models and configs
+      logger.info('=== Step 7: Reloading backend ===');
       try {
         await configManager.load();
         logger.info('Backend reloaded successfully');
@@ -619,6 +628,121 @@ export class PluginInstaller {
     logger.info('Plugin extraction completed');
   }
 
+  private async downloadAndExtractVSScripts(): Promise<void> {
+    const downloadUrl = 'https://github.com/Selur/VapoursynthScriptsInHybrid/archive/d430e1973a78c2dc52a6e4aa58e5f89cc0093ae9.zip';
+    const tempDir = path.join(PATHS.APP_DATA, 'temp');
+    const zipPath = path.join(tempDir, 'vs-scripts.zip');
+    const extractPath = path.join(tempDir, 'vs-scripts-extracted');
+
+    logger.info('Downloading VapourSynth scripts from GitHub');
+    this.sendProgress({
+      type: 'installing',
+      progress: 90,
+      message: 'Downloading VapourSynth scripts...'
+    });
+
+    try {
+      // Ensure temp directory exists
+      await fs.ensureDir(tempDir);
+
+      // Download the zip file
+      await new Promise<void>((resolve, reject) => {
+        const file = fs.createWriteStream(zipPath);
+        https.get(downloadUrl, (response) => {
+          if (response.statusCode === 302 || response.statusCode === 301) {
+            // Handle redirect
+            const redirectUrl = response.headers.location;
+            if (redirectUrl) {
+              https.get(redirectUrl, (redirectResponse) => {
+                redirectResponse.pipe(file);
+                file.on('finish', () => {
+                  file.close();
+                  resolve();
+                });
+              }).on('error', (err) => {
+                fs.unlink(zipPath, () => {});
+                reject(err);
+              });
+            } else {
+              reject(new Error('Redirect without location'));
+            }
+          } else {
+            response.pipe(file);
+            file.on('finish', () => {
+              file.close();
+              resolve();
+            });
+          }
+        }).on('error', (err) => {
+          fs.unlink(zipPath, () => {});
+          reject(err);
+        });
+
+        file.on('error', (err) => {
+          fs.unlink(zipPath, () => {});
+          reject(err);
+        });
+      });
+
+      logger.info('Download completed, extracting...');
+      this.sendProgress({
+        type: 'installing',
+        progress: 91,
+        message: 'Extracting VapourSynth scripts...'
+      });
+
+      // Extract the zip file
+      await fs.ensureDir(extractPath);
+      await _7z.unpack(zipPath, extractPath);
+
+      // Find all .py files in the extracted directory and move them to PATHS.SCRIPTS
+      logger.info('Moving .py files to vs-scripts folder');
+      await fs.ensureDir(PATHS.SCRIPTS);
+
+      const findPyFiles = async (dir: string): Promise<string[]> => {
+        const pyFiles: string[] = [];
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            pyFiles.push(...await findPyFiles(fullPath));
+          } else if (entry.isFile() && entry.name.endsWith('.py')) {
+            pyFiles.push(fullPath);
+          }
+        }
+        
+        return pyFiles;
+      };
+
+      const pyFiles = await findPyFiles(extractPath);
+      logger.info(`Found ${pyFiles.length} .py file(s)`);
+
+      for (const pyFile of pyFiles) {
+        const fileName = path.basename(pyFile);
+        const destPath = path.join(PATHS.SCRIPTS, fileName);
+        await fs.copy(pyFile, destPath, { overwrite: true });
+        logger.info(`Copied ${fileName} to vs-scripts folder`);
+      }
+
+      // Clean up temp files
+      await fs.remove(zipPath);
+      await fs.remove(extractPath);
+      logger.info('VapourSynth scripts download and extraction completed');
+
+    } catch (error) {
+      logger.error('Failed to download and extract VapourSynth scripts:', error);
+      // Clean up on error
+      try {
+        await fs.remove(zipPath);
+        await fs.remove(extractPath);
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
+  }
+
   private async extractAllScripts(): Promise<void> {
     logger.info('Extracting all scripts from scripts folder');
     
@@ -643,7 +767,7 @@ export class PluginInstaller {
 
     this.sendProgress({
       type: 'installing',
-      progress: 90,
+      progress: 92,
       message: 'Extracting scripts...'
     });
 
@@ -661,7 +785,7 @@ export class PluginInstaller {
     for (let i = 0; i < archiveFiles.length; i++) {
       const archiveFile = archiveFiles[i];
       const archivePath = path.join(scriptsFolder, archiveFile);
-      const progress = 90 + Math.floor((i / archiveFiles.length) * 5);
+      const progress = 92 + Math.floor((i / archiveFiles.length) * 3);
       
       logger.info(`Extracting ${archiveFile} (${i + 1}/${archiveFiles.length})`);
       

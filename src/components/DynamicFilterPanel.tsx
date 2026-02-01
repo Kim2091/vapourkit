@@ -56,7 +56,9 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   // Group filter templates by category (templates can appear in multiple categories)
   const groupedTemplates = filterTemplates.reduce((acc, template) => {
     // Support both single category and multiple categories
-    const categories = template.categories || (template.category ? [template.category] : ['Uncategorized']);
+    const categories = Array.isArray(template.category) 
+      ? template.category 
+      : (template.category ? [template.category] : ['Uncategorized']);
     
     categories.forEach(category => {
       const cat = category || 'Uncategorized';
@@ -144,6 +146,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     onFiltersChange(updatedFilters);
     setExpandedFilters(prev => new Set([...prev, newFilter.id]));
     setShowAddMenu(false);
+    // Immediately open the filter selector modal for the new filter
+    setShowFilterSelector(newFilter.id);
   };
 
   const handleAddAIModelFilter = () => {
@@ -274,8 +278,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       const success = await onSaveTemplate({
         name: presetName.trim(),
         code: filter.code,
-        categories: presetCategories.length > 0 ? presetCategories : undefined,
-        category: presetCategories.length > 0 ? presetCategories[0] : undefined, // Legacy field
+        category: presetCategories.length > 0 ? presetCategories : undefined,
         description: presetDescription.trim() || undefined,
       });
       if (success) {
@@ -765,8 +768,9 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                     if (existingTemplate) {
                                       setPresetName(existingTemplate.name);
                                       setPresetDescription(existingTemplate.description || '');
-                                      const categories = existingTemplate.categories || 
-                                        (existingTemplate.category ? [existingTemplate.category] : []);
+                                      const categories = Array.isArray(existingTemplate.category)
+                                        ? existingTemplate.category
+                                        : (existingTemplate.category ? [existingTemplate.category] : []);
                                       setPresetCategories(categories);
                                     } else {
                                       setPresetName('');

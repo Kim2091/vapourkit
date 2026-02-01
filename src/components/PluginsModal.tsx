@@ -146,13 +146,10 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
               <h3 className="text-lg font-semibold mb-2">Install Plugins & Dependencies</h3>
               <div className="text-gray-300 text-sm mb-4 space-y-2 leading-relaxed">
                 <p>
-                  Install plugins and dependencies to enable usage of pifroggi's vapoursynth filters (such as vs_temporalfix) and vs-jetpack plugins.
+                  Install plugins and dependencies to get a lot of filters to enhance your workflows!
                 </p>
                 <p>
                   This will install PyTorch with CUDA, vsjetpack, and all required dependencies. It will also extract all plugins and scripts to vs-plugins and vs-scripts.
-                </p>
-                <p>
-                  Click the button below to install these into VapourSynth's Python environment.
                 </p>
                 <p>
                   NOTE: PyTorch-based filters do not work on AMD or Intel GPUs due to reliance on CUDA.
@@ -339,6 +336,20 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
                       className="text-primary-blue hover:text-primary-purple underline transition-colors"
                     >
                       https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack/
+                    </a>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-400 min-w-fit">•</span>
+                  <div>
+                    <span className="text-gray-300">The filters from Hybrid hosted here: </span>
+                    <a 
+                      href="https://github.com/Selur/VapoursynthScriptsInHybrid//" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary-blue hover:text-primary-purple underline transition-colors"
+                    >
+                      https://github.com/Selur/VapoursynthScriptsInHybrid/
                     </a>
                   </div>
                 </div>

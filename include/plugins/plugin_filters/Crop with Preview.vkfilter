@@ -1,4 +1,4 @@
-name = "CPreview"
+name = "Crop with Preview"
 category = ["Hybrid", "Preview"]
 code = """
 # Preview crop regions with visual guides

@@ -8,7 +8,7 @@ import { logger } from './logger';
 export interface FilterTemplate {
   name: string;
   code: string;
-  category?: string;
+  category?: string | string[]; // Can be a single category or multiple categories
   description?: string;
   metadata?: {
     author?: string;
