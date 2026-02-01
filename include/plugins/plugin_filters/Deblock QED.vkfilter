@@ -1,0 +1,14 @@
+name = "Deblock QED"
+category = ["Hybrid", "Deblocking"]
+code = """
+# Advanced deblocking with DCT-lowpass filtering
+# From hybrid_filters/deblock.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from deblock import Deblock_QED
+
+clip = Deblock_QED(clip, quant1=24, quant2=26, aOff1=1, bOff1=2, aOff2=1, bOff2=2, uv=3)"""
+description = "Postprocessed deblocking using full frequencies on edges, DCT-lowpassed on interiors"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

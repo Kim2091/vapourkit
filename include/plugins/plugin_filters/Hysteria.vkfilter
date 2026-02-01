@@ -1,0 +1,14 @@
+name = "Hysteria"
+category = ["Hybrid", "Enhancement"]
+code = """
+# Line darkening with edge masking
+# From hybrid_filters/hysteria.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from hysteria import Hysteria
+
+clip = Hysteria(clip, strength=1.0, usemask=True, lowthresh=6, highthresh=20, luma_cap=191)"""
+description = "Darkens lines using edge detection and masking"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

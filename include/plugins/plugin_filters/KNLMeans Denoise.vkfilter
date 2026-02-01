@@ -1,0 +1,14 @@
+name = "KNLMeans Denoise"
+category = ["Hybrid", "Denoising"]
+code = """
+# Non-local means denoising
+# From hybrid_filters/denoise.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from denoise import KNLMeansCL
+
+clip = KNLMeansCL(clip, d=None, a=None, s=None, h=None)"""
+description = "Non-local means denoising with GPU acceleration support"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

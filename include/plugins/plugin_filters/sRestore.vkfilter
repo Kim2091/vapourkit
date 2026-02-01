@@ -1,0 +1,14 @@
+name = "sRestore"
+category = ["Hybrid", "Frame Rate"]
+code = """
+# Restore original framerate from telecined/decimated content
+# From hybrid_filters/srestore.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from srestore import sRestoreMUVs
+
+clip = sRestoreMUVs(clip, frate=None, omode=6, mode=2, thresh=16)"""
+description = "Restores original framerate by detecting and removing duplicate frames"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

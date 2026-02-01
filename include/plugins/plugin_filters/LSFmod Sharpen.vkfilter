@@ -1,0 +1,14 @@
+name = "LSFmod Sharpen"
+category = ["Hybrid", "Sharpening"]
+code = """
+# Limited sharpening with multiple modes
+# From hybrid_filters/sharpen.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from sharpen import LSFmod
+
+clip = LSFmod(clip, strength=100, Smode=2, Lmode=1, edgemode=1, overshoot=1, undershoot=1)"""
+description = "Limited sharpening with range and nonlinear modes to avoid oversharpening"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

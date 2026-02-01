@@ -1,0 +1,14 @@
+name = "DAA Anti-Aliasing"
+category = ["Hybrid", "Anti-Aliasing"]
+code = """
+# Didée's anti-aliasing with contra-sharpening
+# From hybrid_filters/antiAliasing.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from antiAliasing import daa
+
+clip = daa(clip)"""
+description = "Anti-aliasing with contra-sharpening by Didée, averages two independent interpolations"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

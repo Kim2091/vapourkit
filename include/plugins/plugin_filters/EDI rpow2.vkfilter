@@ -1,0 +1,18 @@
+name = "EDI rpow2"
+category = ["Hybrid", "Resizing"]
+code = """
+# Scales clip by power of 2 using EDI
+# From hybrid_filters/edi_rpow2.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from edi_rpow2 import edi_rpow2
+
+# Define your EDI function first
+def my_edi(clip, field, dh):
+    return clip.znedi3.nnedi3(field=field, dh=dh)
+
+clip = edi_rpow2(clip, rfactor=2, correct_shift="fmtconv", edi=my_edi)"""
+description = "Scales clip by power of two using edge-directed interpolation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

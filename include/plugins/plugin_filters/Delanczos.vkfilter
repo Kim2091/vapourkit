@@ -1,0 +1,14 @@
+name = "Delanczos"
+category = ["Hybrid", "Descale"]
+code = """
+# Reverse Lanczos upscaling
+# From hybrid_filters/descale.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from descale import Delanczos
+
+clip = Delanczos(clip, width=1280, height=720, taps=3, yuv444=False, gray=False)"""
+description = "Reverses Lanczos upscaling to restore original resolution"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

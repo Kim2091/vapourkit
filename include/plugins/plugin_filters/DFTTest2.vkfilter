@@ -1,0 +1,14 @@
+name = "DFTTest2"
+category = ["Hybrid", "Denoising"]
+code = """
+# Frequency domain denoising
+# From hybrid_filters/dfttest2.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from dfttest2 import DFTTest
+
+clip = DFTTest(clip, sigma=8.0)"""
+description = "Frequency domain denoising using DFT (Discrete Fourier Transform)"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

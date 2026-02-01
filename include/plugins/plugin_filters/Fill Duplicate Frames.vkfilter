@@ -1,0 +1,15 @@
+name = "Fill Duplicate Frames"
+category = ["Hybrid", "Frame Recovery"]
+code = """
+# Replace duplicate frames with interpolations
+# From hybrid_filters/FillDuplicateFrames.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from FillDuplicateFrames import FillDuplicateFrames
+
+fdf = FillDuplicateFrames(clip, mode='FillDuplicate', thresh=0.001, method='SVP', debug=False)
+clip = fdf.out"""
+description = "Detects and replaces duplicate frames with interpolated frames"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

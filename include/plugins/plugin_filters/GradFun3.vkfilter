@@ -1,0 +1,14 @@
+name = "GradFun3"
+category = ["Hybrid", "Debanding"]
+code = """
+# Advanced debanding with resizing support (GradFun3mod)
+# From hybrid_filters/deband.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from deband import GradFun3
+
+clip = GradFun3(clip, thr=0.35, radius=16, elast=3.0, mask=2, mode=2, ampo=1, ampn=0, pat=32, dyn=False, staticnoise=False, smode=2, thr_det=2 + round(max(thr - 0.35, 0) / 0.3), debug=False, plane=0, bits=None, dyn_resize=False)"""
+description = "Advanced debanding combined with resizers for better detail preservation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

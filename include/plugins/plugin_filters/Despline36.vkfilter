@@ -1,0 +1,14 @@
+name = "Despline36"
+category = ["Hybrid", "Descale"]
+code = """
+# Reverse Spline36 upscaling
+# From hybrid_filters/descale.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from descale import Despline36
+
+clip = Despline36(clip, width=1280, height=720, yuv444=False, gray=False)"""
+description = "Reverses Spline36 upscaling to restore original resolution"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

@@ -1,0 +1,23 @@
+name = "Animate"
+category = ["Hybrid", "Effects"]
+code = """
+# Apply animated effects and transitions
+# From hybrid_filters/animate.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+import animate
+
+# Define your animation functions
+# def effect1(clip): return clip.std.Convolution([1,2,1,2,4,2,1,2,1])
+# def effect2(clip): return clip.std.Sobel()
+
+# MAP = [
+#     (0, 100), [effect1],
+#     (101, 150), [animate.Crossfade(effect1, effect2)],
+#     (151, 200), [effect2]
+# ]
+# clip = animate.run(clip, MAP)"""
+description = "Framework for animated effects and crossfade transitions between filters"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

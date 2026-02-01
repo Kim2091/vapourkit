@@ -1,0 +1,14 @@
+name = "Fix Chroma Bleeding"
+category = ["Hybrid", "Chroma"]
+code = """
+# Fix chroma bleeding artifacts
+# From hybrid_filters/chromaBleeding.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from chromaBleeding import FixChromaBleedingMod
+
+clip = FixChromaBleedingMod(clip, cx=4, cy=4, thr=4.0, strength=0.8, blur=False)"""
+description = "Fixes chroma bleeding artifacts with adjustable strength and blur options"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

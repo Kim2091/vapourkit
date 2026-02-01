@@ -1,16 +1,14 @@
 name = "Change FPS"
-category = "Frame Rate"
+category = ["Hybrid", "Frame Rate"]
 code = """
-# Change FPS by duplicating or dropping frames
-# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vstools/utils/misc/#vstools.utils.misc.change_fps
+# Efficient framerate conversion for very long clips
+# From hybrid_filters/ChangeFPS.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from ChangeFPS import ChangeFPS
 
-from fractions import Fraction
-from vstools import change_fps
-
-fps = Fraction(60000, 1001)  # Target FPS (59.94 fps)
-
-clip = change_fps(clip, fps)"""
-description = "Changes FPS by duplicating or dropping frames as needed"
+clip = ChangeFPS(clip, target_fps_num=60, target_fps_den=1)"""
+description = "Convert framerate efficiently using precomputed lookup table for long clips"
 
 [metadata]
-createdAt = "2026-01-31T00:00:00.000Z"
+createdAt = "2026-02-01T00:00:00.000Z"

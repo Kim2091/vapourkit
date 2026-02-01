@@ -1,0 +1,14 @@
+name = "Kirsch Edge Mask (Old)"
+category = ["Hybrid", "Masking"]
+code = """
+# 8-directional edge detection
+# From hybrid_filters/masked.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from masked import kirsch
+
+clip = kirsch(clip)"""
+description = "Edge detection using 8 directions for better accuracy than Sobel"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

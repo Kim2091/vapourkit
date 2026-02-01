@@ -1,0 +1,14 @@
+name = "ProToon"
+category = ["Hybrid", "Animation"]
+code = """
+# Cartoon/anime processing with line darkening
+# From hybrid_filters/proToon.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from proToon import proToon
+
+clip = proToon(clip, strength=48, luma_cap=191, threshold=4, thinning=24, sharpen=True, mask=True)"""
+description = "Processes cartoons/anime with line darkening, thinning and sharpening"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

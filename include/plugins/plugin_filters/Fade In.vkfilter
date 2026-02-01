@@ -1,0 +1,14 @@
+name = "Fade In"
+category = ["Hybrid", "Effects"]
+code = """
+# Fade from black at the start of clip
+# From hybrid_filters/fade.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from fade import fadein
+
+clip = fadein(clip, fadeframes=30)"""
+description = "Fades in from black over specified number of frames"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

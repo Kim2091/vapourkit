@@ -1,0 +1,14 @@
+name = "NNEDI3 Resample"
+category = ["Hybrid", "Resizing"]
+code = """
+# High-quality resampling using NNEDI3
+# From hybrid_filters/nnedi3_resample.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from nnedi3_resample import nnedi3_resample
+
+clip = nnedi3_resample(clip, target_width=1920, target_height=1080)"""
+description = "High-quality resampling using NNEDI3 edge-directed interpolation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

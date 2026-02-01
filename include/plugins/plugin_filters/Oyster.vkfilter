@@ -1,0 +1,14 @@
+name = "Oyster"
+category = ["Hybrid", "Denoising"]
+code = """
+# High-quality denoising using BM3D
+# From hybrid_filters/Oyster.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from Oyster import Super_OYSTER
+
+clip = Super_OYSTER(clip, sfMode=3, prefilter=False)"""
+description = "High-quality denoising using BM3D with motion compensation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

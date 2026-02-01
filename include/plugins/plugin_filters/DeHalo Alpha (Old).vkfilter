@@ -1,0 +1,14 @@
+name = "DeHalo Alpha (Old)"
+category = ["Hybrid", "Dehalo"]
+code = """
+# Reduce halo artifacts from sharpening
+# From hybrid_filters/dehalo.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from dehalo import DeHalo_alpha
+
+clip = DeHalo_alpha(clip, rx=2.0, ry=2.0, darkstr=1.0, brightstr=1.0, lowsens=50.0, highsens=50.0, ss=1.5)"""
+description = "Reduces halo artifacts with separate controls for dark and bright halos"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

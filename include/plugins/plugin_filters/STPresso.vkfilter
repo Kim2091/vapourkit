@@ -1,0 +1,14 @@
+name = "STPresso"
+category = ["Hybrid", "Denoising"]
+code = """
+# Spatiotemporal grain dampening
+# From hybrid_filters/degrain.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from degrain import STPresso
+
+clip = STPresso(clip, limit=3, bias=24, RGmode=4, tthr=12, tlimit=3, tbias=49, back=1)"""
+description = "Dampens grain slightly while maintaining original look using spatial and temporal filtering"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

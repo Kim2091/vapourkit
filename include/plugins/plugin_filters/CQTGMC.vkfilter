@@ -1,0 +1,14 @@
+name = "CQTGMC"
+category = ["Hybrid", "Deinterlacing"]
+code = """
+# Fast deinterlacing with QTGMC-like quality
+# From hybrid_filters/cqtgmc.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from cqtgmc import CQTGMC
+
+clip = CQTGMC(clip, Sharpness=0.25, thSAD1=192, thSAD2=320, tff=True, openCL=False)"""
+description = "Fast deinterlacing combining spatial and temporal methods"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

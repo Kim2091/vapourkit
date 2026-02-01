@@ -1,0 +1,14 @@
+name = "Frame Rate Converter"
+category = ["Hybrid", "Frame Rate"]
+code = """
+# Advanced frame rate conversion with artifact removal
+# From hybrid_filters/FrameRateConverter.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from FrameRateConverter import FrameRateConverter
+
+clip = FrameRateConverter(clip, NewNum=60, NewDen=1, Preset='normal')"""
+description = "Increases frame rate with interpolation and fine artifact removal"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

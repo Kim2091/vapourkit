@@ -1,0 +1,14 @@
+name = "Fill Drops SVP"
+category = ["Hybrid", "Frame Recovery"]
+code = """
+# Fill dropped frames using SVP interpolation
+# From hybrid_filters/filldrops.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from filldrops import fillWithSVP
+
+clip = fillWithSVP(clip, firstframe=100, gpu=False)"""
+description = "Fills dropped frames using SVP (SmoothVideo Project) interpolation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

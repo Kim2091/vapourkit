@@ -1,0 +1,14 @@
+name = "Tweak"
+category = ["Hybrid", "Color"]
+code = """
+# Adjust hue, saturation, brightness and contrast
+# From hybrid_filters/color.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from color import Tweak
+
+clip = Tweak(clip, hue=None, sat=None, bright=None, cont=None, coring=True)"""
+description = "Adjusts hue, saturation, brightness and contrast with coring support"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

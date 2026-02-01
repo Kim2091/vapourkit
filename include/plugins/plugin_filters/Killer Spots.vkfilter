@@ -1,0 +1,14 @@
+name = "Killer Spots"
+category = ["Hybrid", "Cleaning"]
+code = """
+# Aggressive spot removal for primitive videos
+# From hybrid_filters/killerspots.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from killerspots import KillerSpots
+
+clip = KillerSpots(clip, limit=10, advanced=False)"""
+description = "Removes spots from primitive videos using motion compensation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

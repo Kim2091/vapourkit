@@ -1,0 +1,14 @@
+name = "Fill Drops RIFE"
+category = ["Hybrid", "Frame Recovery"]
+code = """
+# Fill dropped frames using RIFE AI interpolation
+# From hybrid_filters/filldrops.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from filldrops import fillWithRIFE
+
+clip = fillWithRIFE(clip, firstframe=100, rifeModel=22, rifeTTA=False, rifeUHD=False)"""
+description = "Fills dropped frames using RIFE AI-based interpolation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

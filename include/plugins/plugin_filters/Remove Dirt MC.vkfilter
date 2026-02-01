@@ -1,0 +1,14 @@
+name = "Remove Dirt MC"
+category = ["Hybrid", "Cleaning"]
+code = """
+# Motion-compensated dirt removal
+# From hybrid_filters/removeDirt.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from removeDirt import RemoveDirtMC
+
+clip = RemoveDirtMC(clip, limit=6, repmode=16, remgrainmode=17, block_size=8, block_over=4, gpu=False)"""
+description = "Removes dirt using motion-compensated temporal cleaning"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

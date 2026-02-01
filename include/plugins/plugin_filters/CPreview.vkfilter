@@ -1,0 +1,14 @@
+name = "CPreview"
+category = ["Hybrid", "Preview"]
+code = """
+# Preview crop regions with visual guides
+# From hybrid_filters/CPreview.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from CPreview import CPreview
+
+clip = CPreview(clip, CL=10, CR=10, CT=10, CB=10, Frame=False, Time=False, Type=1)"""
+description = "Previews crop regions with visual overlay guides"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

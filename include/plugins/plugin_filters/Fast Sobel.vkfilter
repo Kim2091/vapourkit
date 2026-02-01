@@ -1,0 +1,14 @@
+name = "Fast Sobel"
+category = ["Hybrid", "Masking"]
+code = """
+# Fast Sobel edge detection
+# From hybrid_filters/masked.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from masked import fast_sobel
+
+clip = fast_sobel(clip)"""
+description = "Fast Sobel edge detection without additional highpass or lowpass filtering"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

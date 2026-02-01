@@ -1,0 +1,14 @@
+name = "Retinex Edge Mask"
+category = ["Hybrid", "Masking"]
+code = """
+# Improved edge detection for dark scenes using retinex
+# From hybrid_filters/masked.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from masked import retinex_edgemask
+
+clip = retinex_edgemask(clip, sigma=1, draft=False)"""
+description = "Greatly improves edge detection accuracy in dark scenes using retinex algorithm"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

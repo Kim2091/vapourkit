@@ -1,0 +1,14 @@
+name = "NNEDI3 rpow2"
+category = ["Hybrid", "Resizing"]
+code = """
+# Enlarge images by powers of 2 using NNEDI3
+# From hybrid_filters/nnedi3_rpow2.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from nnedi3_rpow2 import nnedi3_rpow2
+
+clip = nnedi3_rpow2(clip, rfactor=2, correct_shift=True, kernel="spline36")"""
+description = "Enlarges images by powers of 2 using NNEDI3 with optional shift correction"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

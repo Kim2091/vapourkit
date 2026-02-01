@@ -1,0 +1,14 @@
+name = "Add Duplicates"
+category = ["Hybrid", "Frame Manipulation"]
+code = """
+# Add duplicate frames when temporal difference is below threshold
+# From hybrid_filters/AddDuplicates.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from AddDuplicates import addDup
+
+clip = addDup(clip, thresh=0.3, debug=False)"""
+description = "Detects frames with low temporal difference and duplicates the previous frame if below threshold"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

@@ -1,0 +1,15 @@
+name = "Replace Multiple Frames"
+category = ["Hybrid", "Frame Recovery"]
+code = """
+# Replace specified frame intervals with interpolation
+# From hybrid_filters/ReplaceMultipleFrames.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from ReplaceMultipleFrames import ReplaceMultipleFrames
+
+rmf = ReplaceMultipleFrames(clip, intervals=[[100, 105], [200, 210]], method='SVP', debug=False)
+clip = rmf.out"""
+description = "Replaces specified frame intervals with interpolated frames"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

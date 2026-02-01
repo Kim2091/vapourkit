@@ -1,0 +1,14 @@
+name = "TFMBobN"
+category = ["Hybrid", "Deinterlacing"]
+code = """
+# TFM + NNEDI3 bobbing deinterlace
+# From hybrid_filters/TFMBob.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from TFMBob import TFMBobN
+
+clip = TFMBobN(clip, pp=6, cthresh=9, MI=80, chroma=False, openCL=False)"""
+description = "Deinterlaces using TFM with NNEDI3 bobbing for field reconstruction"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

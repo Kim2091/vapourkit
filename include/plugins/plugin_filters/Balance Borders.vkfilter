@@ -1,0 +1,14 @@
+name = "Balance Borders"
+category = ["Hybrid", "Borders"]
+code = """
+# Balance border brightness (bbmod)
+# From hybrid_filters/edge.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from edge import bbmod
+
+clip = bbmod(clip, cTop=0, cBottom=0, cLeft=0, cRight=0, thresh=128, blur=999)"""
+description = "Balances brightness at clip borders to fix edge artifacts"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

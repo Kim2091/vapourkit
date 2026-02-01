@@ -1,0 +1,14 @@
+name = "LUTDeRainbow"
+category = ["Hybrid", "Cleaning"]
+code = """
+# Remove rainbow artifacts
+# From hybrid_filters/derainbow.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from derainbow import LUTDeRainbow
+
+clip = LUTDeRainbow(clip, cthresh=10, ythresh=10, y=True, linkUV=True)"""
+description = "Removes rainbow artifacts from video"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

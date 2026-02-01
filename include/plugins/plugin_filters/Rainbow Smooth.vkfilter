@@ -1,0 +1,14 @@
+name = "Rainbow Smooth"
+category = ["Hybrid", "Chroma"]
+code = """
+# Remove rainbow artifacts with edge-aware smoothing
+# From hybrid_filters/RainbowSmooth.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from RainbowSmooth import RainbowSmooth
+
+clip = RainbowSmooth(clip, radius=3, lthresh=0, hthresh=220, mask="original")"""
+description = "Removes rainbow artifacts using edge-aware chroma smoothing"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

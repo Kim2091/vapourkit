@@ -1,0 +1,14 @@
+name = "LUTDeCrawl"
+category = ["Hybrid", "Cleaning"]
+code = """
+# Remove dot crawl artifacts
+# From hybrid_filters/decrawl.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from decrawl import LUTDeCrawl
+
+clip = LUTDeCrawl(clip, ythresh=10, cthresh=10, maxdiff=50, scnchg=25, usemaxdiff=True)"""
+description = "Removes dot crawl artifacts from video"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

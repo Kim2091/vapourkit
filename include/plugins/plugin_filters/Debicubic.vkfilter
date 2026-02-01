@@ -1,0 +1,14 @@
+name = "Debicubic"
+category = ["Hybrid", "Descale"]
+code = """
+# Reverse bicubic upscaling
+# From hybrid_filters/descale.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from descale import Debicubic
+
+clip = Debicubic(clip, width=1280, height=720, b=0.0, c=0.5, yuv444=False, gray=False)"""
+description = "Reverses bicubic upscaling to restore original resolution"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

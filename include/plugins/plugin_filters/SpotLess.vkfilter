@@ -1,0 +1,14 @@
+name = "SpotLess"
+category = ["Hybrid", "Denoising"]
+code = """
+# Strong temporal denoising using MVTools
+# From hybrid_filters/SpotLess.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from SpotLess import SpotLess
+
+clip = SpotLess(clip, radT=1, thsad=10000, chroma=True, truemotion=True)"""
+description = "Strong temporal denoising optimized for removing spots and noise"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

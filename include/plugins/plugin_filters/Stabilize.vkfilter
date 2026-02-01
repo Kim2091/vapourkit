@@ -1,0 +1,14 @@
+name = "Stabilize"
+category = ["Hybrid", "Stabilization"]
+code = """
+# Video stabilization using motion compensation
+# From hybrid_filters/stabilize.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from stabilize import Stab
+
+clip = Stab(clip, range=1, dxmax=4, dymax=4, mirror=0)"""
+description = "Stabilizes shaky video using motion estimation and compensation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

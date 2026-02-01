@@ -1,17 +1,14 @@
 name = "Chroma Shift"
-category = "Color Correction"
+category = ["Hybrid", "Chroma"]
 code = """
-# Shift chroma planes (fix chroma alignment issues)
+# Shift chroma planes horizontally and vertically
+# From hybrid_filters/chromashift.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from chromashift import ChromaShift
 
-from vstools import vs, core
-
-# Shift amounts in pixels
-shift_h = 0  # Horizontal shift
-shift_v = -0.5  # Vertical shift (common for 4:2:0)
-
-clip = core.resize.Spline36(clip, src_left=shift_h, src_top=shift_v, 
-                             chromaloc_in_s="center", chromaloc_s="center")"""
-description = "Shifts chroma planes to fix alignment issues (common in 4:2:0 video)"
+clip = ChromaShift(clip, shift_left=0, shift_right=0, shift_top=0, shift_bottom=0)"""
+description = "Shifts chroma planes to correct chroma misalignment"
 
 [metadata]
-createdAt = "2026-01-31T00:00:00.000Z"
+createdAt = "2026-02-01T00:00:00.000Z"

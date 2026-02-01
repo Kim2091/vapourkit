@@ -1,0 +1,14 @@
+name = "Duplicate Aware Resize"
+category = ["Hybrid", "Resizing"]
+code = """
+# Resize only unique frames, duplicate the result
+# From hybrid_filters/DuplicateAwareResizing.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from DuplicateAwareResizing import daResizer
+
+clip = daResizer(clip, tWidth=1920, tHeight=1080, thresh=0.001, method='Bicubic', debug=False)"""
+description = "Resizes efficiently by processing only unique frames and duplicating results"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

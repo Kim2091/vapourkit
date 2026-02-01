@@ -1,0 +1,14 @@
+name = "Fade Out"
+category = ["Hybrid", "Effects"]
+code = """
+# Fade to black at the end of clip
+# From hybrid_filters/fade.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from fade import fadeout
+
+clip = fadeout(clip, fadeframes=30)"""
+description = "Fades clip to black over specified number of frames"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

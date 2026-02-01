@@ -1,0 +1,14 @@
+name = "Remove Dirt"
+category = ["Hybrid", "Cleaning"]
+code = """
+# Remove dirt and specks from video
+# From hybrid_filters/removeDirt.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from removeDirt import RemoveDirt
+
+clip = RemoveDirt(clip, repmode=16, remgrainmode=17, limit=10)"""
+description = "Removes dirt and specks from video using temporal cleaning"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

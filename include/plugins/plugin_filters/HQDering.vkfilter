@@ -1,0 +1,14 @@
+name = "HQDering"
+category = ["Hybrid", "Dering"]
+code = """
+# High-quality deringing using smart edge smoothing
+# From hybrid_filters/dering.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from dering import HQDeringmod
+
+clip = HQDeringmod(clip, mrad=1, msmooth=1, incedge=False, mthr=60, thr=12.0, elast=2.0, show=False)"""
+description = "Applies deringing using a smart smoother near edges where ringing occurs"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

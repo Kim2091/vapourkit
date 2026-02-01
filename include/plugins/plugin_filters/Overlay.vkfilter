@@ -1,0 +1,15 @@
+name = "Overlay"
+category = ["Hybrid", "Compositing"]
+code = """
+# Overlay clips with different blend modes
+# From hybrid_filters/misc.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from misc import Overlay
+
+# overlay_clip = ...
+# clip = Overlay(clip, overlay_clip, x=0, y=0, opacity=1.0, mode='normal')"""
+description = "Overlays clips with various blend modes and positioning options"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

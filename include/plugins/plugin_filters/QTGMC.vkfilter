@@ -1,0 +1,14 @@
+name = "QTGMC"
+category = ["Hybrid", "Deinterlacing"]
+code = """
+# High-quality deinterlacing with motion compensation
+# From hybrid_filters/qtgmc.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from qtgmc import QTGMC
+
+clip = QTGMC(clip, Preset='Slower', FPSDivisor=1, TFF=None)"""
+description = "High-quality motion-compensated deinterlacing (QTGMC)"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

@@ -1,0 +1,14 @@
+name = "DeSpot"
+category = ["Hybrid", "Cleaning"]
+code = """
+# Remove temporal spots and artifacts using motion compensation
+# From hybrid_filters/artifacts.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from artifacts import DeSpot
+
+clip = DeSpot(clip)"""
+description = "Removes temporal spots and artifacts using motion-compensated cleaning"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

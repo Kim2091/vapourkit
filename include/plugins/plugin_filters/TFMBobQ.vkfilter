@@ -1,0 +1,14 @@
+name = "TFMBobQ"
+category = ["Hybrid", "Deinterlacing"]
+code = """
+# TFM + QTGMC bobbing deinterlace
+# From hybrid_filters/TFMBob.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from TFMBob import TFMBobQ
+
+clip = TFMBobQ(clip, pp=6, cthresh=9, MI=80, chroma=False, openCL=False)"""
+description = "Deinterlaces using TFM with QTGMC bobbing for field reconstruction"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

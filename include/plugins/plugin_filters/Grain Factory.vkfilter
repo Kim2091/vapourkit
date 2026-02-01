@@ -1,0 +1,15 @@
+name = "Grain Factory"
+category = ["Hybrid", "Grain"]
+code = """
+# Add customizable film grain with separate controls for dark, midtone, and bright areas
+# From hybrid_filters/addGrain.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from addGrain import GrainFactory3
+
+clip = GrainFactory3(clip, g1str=7.0, g2str=5.0, g3str=3.0, g1shrp=60, g2shrp=66, g3shrp=80, 
+                     g1size=1.5, g2size=1.2, g3size=0.9, temp_avg=0, ontop_grain=0.0)"""
+description = "Advanced grain generation with separate controls for dark, midtone, and bright areas"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

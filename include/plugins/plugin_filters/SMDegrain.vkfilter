@@ -1,0 +1,14 @@
+name = "SMDegrain"
+category = ["Hybrid", "Denoising"]
+code = """
+# Simple MDegrain - Motion-compensated temporal denoising
+# From hybrid_filters/smdegrain.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from smdegrain import SMDegrain
+
+clip = SMDegrain(clip, tr=2, thSAD=300, RefineMotion=False, contrasharp=None, plane=4)"""
+description = "Pure temporal denoiser using MVTools with motion compensation"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

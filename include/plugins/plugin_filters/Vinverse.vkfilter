@@ -1,0 +1,14 @@
+name = "Vinverse"
+category = ["Hybrid", "Cleaning"]
+code = """
+# Remove residual combing artifacts
+# From hybrid_filters/residual.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from residual import Vinverse
+
+clip = Vinverse(clip, sstr=2.7, amnt=255, chroma=True, scl=0.25)"""
+description = "Small but effective function against residual combing by Didée"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"

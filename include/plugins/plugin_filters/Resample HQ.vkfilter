@@ -1,0 +1,14 @@
+name = "Resample HQ"
+category = ["Hybrid", "Resizing"]
+code = """
+# Gamma-correct resizing in linear light
+# From hybrid_filters/resamplehq.py
+import sys
+sys.path.insert(0, r'hybrid_filters')
+from resamplehq import resample_hq
+
+clip = resample_hq(clip, width=1920, height=1080, kernel='spline36')"""
+description = "High-quality gamma-correct resizing in linear light (RGB)"
+
+[metadata]
+createdAt = "2026-02-01T00:00:00.000Z"
