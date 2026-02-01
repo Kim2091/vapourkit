@@ -985,7 +985,7 @@ function App() {
                       <button
                         onClick={isValidating ? cancelValidation : validateWorkflow}
                         disabled={!videoInfo && !isValidating}
-                        className={`font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
+                        className={`font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${
                           isValidating
                             ? 'bg-orange-600 hover:bg-orange-700 cursor-pointer text-white'
                             : validationStatus === 'success'
@@ -998,22 +998,22 @@ function App() {
                       >
                         {isValidating ? (
                           <>
-                            <XCircle className="w-5 h-5" />
+                            <XCircle className="w-4 h-4" />
                             Cancel
                           </>
                         ) : validationStatus === 'success' ? (
                           <>
-                            <CheckCircle className="w-5 h-5" />
+                            <CheckCircle className="w-4 h-4" />
                             Valid
                           </>
                         ) : validationStatus === 'error' ? (
                           <>
-                            <AlertCircle className="w-5 h-5" />
+                            <AlertCircle className="w-4 h-4" />
                             Failed
                           </>
                         ) : (
                           <>
-                            <CheckCircle className="w-5 h-5" />
+                            <CheckCircle className="w-4 h-4" />
                             Validate
                           </>
                         )}
@@ -1024,10 +1024,10 @@ function App() {
                     {!isProcessing && videoInfo && (
                       <button
                         onClick={handleLaunchPreviewer}
-                        className="font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 bg-dark-surface hover:bg-dark-bg border border-accent-cyan/50 hover:border-accent-cyan text-accent-cyan"
+                        className="font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm bg-dark-surface hover:bg-dark-bg border border-accent-cyan/50 hover:border-accent-cyan text-accent-cyan"
                         title="Preview VapourSynth script with current workflow in VSE-Previewer"
                       >
-                        <Play className="w-5 h-5" />
+                        <Play className="w-4 h-4" />
                         Preview
                       </button>
                     )}
