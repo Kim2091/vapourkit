@@ -213,6 +213,7 @@ export class DependencyManager {
     const pythonExists = await fs.pathExists(PATHS.PYTHON);
     const modelsExtracted = !(await this.modelExtractor.needsExtraction());
     const videoCompareExists = await fs.pathExists(PATHS.VIDEO_COMPARE_EXE);
+    const vsePreviewerExists = await fs.pathExists(PATHS.VSE_PREVIEWER_EXE);
     const ffmpegExists = await FFmpegManager.isInstalled();
     // NOTE: No longer checking if models are converted - they will be initialized on-demand
     
@@ -224,9 +225,10 @@ export class DependencyManager {
     logger.dependency(`Python: ${pythonExists}`);
     logger.dependency(`Models extracted: ${modelsExtracted}`);
     logger.dependency(`Video Compare: ${videoCompareExists}`);
+    logger.dependency(`VSE-Previewer: ${vsePreviewerExists}`);
     logger.dependency(`FFmpeg: ${ffmpegExists}`);
     
-    const allPresent = vsExists && mlrtExists && ortExists && bsExists && pythonExists && modelsExtracted && videoCompareExists && ffmpegExists;
+    const allPresent = vsExists && mlrtExists && ortExists && bsExists && pythonExists && modelsExtracted && videoCompareExists && vsePreviewerExists && ffmpegExists;
     logger.dependency(`All dependencies present: ${allPresent}`);
     
     return allPresent;
@@ -410,6 +412,13 @@ export class DependencyManager {
           archiveName: 'video-compare.zip',
           checkPath: PATHS.VIDEO_COMPARE_EXE,
           extractTo: PATHS.VIDEO_COMPARE
+        },
+        {
+          name: 'VSE-Previewer',
+          url: 'https://github.com/YomikoR/VapourSynth-Editor/releases/download/VSE-Previewer-R5/vse-previewer.7z',
+          archiveName: 'vse-previewer.7z',
+          checkPath: PATHS.VSE_PREVIEWER_EXE,
+          extractTo: PATHS.VSE_PREVIEWER
         }
       ];
 

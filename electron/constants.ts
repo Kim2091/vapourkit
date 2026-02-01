@@ -21,6 +21,7 @@ export const PATHS = {
   MODELS: path.join(APP_DATA_PATH, 'models'),
   CONFIG: path.join(APP_DATA_PATH, 'config'),
   VIDEO_COMPARE: path.join(APP_DATA_PATH, 'video-compare'),
+  VSE_PREVIEWER: path.join(APP_DATA_PATH, 'vse-previewer'),
   FILTER_TEMPLATES: path.join(APP_DATA_PATH, 'config', 'filter-templates'),
   PIP_CACHE: path.join(APP_DATA_PATH, 'pip-cache'),
   
@@ -29,6 +30,7 @@ export const PATHS = {
   get PYTHON() { return path.join(this.VS, 'python.exe'); },
   get TRTEXEC() { return path.join(this.MLRT_PLUGIN, 'trtexec.exe'); },
   get VIDEO_COMPARE_EXE() { return path.join(this.VIDEO_COMPARE, 'video-compare.exe'); },
+  get VSE_PREVIEWER_EXE() { return path.join(this.VSE_PREVIEWER, 'vse-previewer.exe'); },
   
   // FFmpeg
   FFMPEG_DIR: path.join(APP_DATA_PATH, 'ffmpeg'),

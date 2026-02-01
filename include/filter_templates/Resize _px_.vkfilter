@@ -2,7 +2,7 @@ name = "Resize (px)"
 category = "Resizing"
 code = """
 # Enter a new width and height. Either both or just one.
-# Kernerls: point, bilinear, bicubic, lanczos, spline16, spline36, spline64
+# Kernels: point, bilinear, bicubic, lanczos, spline16, spline36, spline64
 
 import basic_resize
 clip = basic_resize.pixel(clip, width=720, height=480, kernel="bilinear")"""

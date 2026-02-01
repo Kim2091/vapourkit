@@ -76,6 +76,15 @@ export interface ElectronAPI {
   onUpscaleProgress: (callback: (progress: UpscaleProgress) => void) => () => void;
   openOutputFolder: (filePath: string) => Promise<void>;
   compareVideos: (inputPath: string, outputPath: string) => Promise<{ success: boolean; error?: string }>;
+  launchVsePreviewer: (
+    videoPath: string,
+    modelPath: string | null,
+    useDirectML?: boolean,
+    upscalingEnabled?: boolean,
+    filters?: Filter[],
+    numStreams?: number,
+    segment?: SegmentSelection
+  ) => Promise<{ success: boolean; error?: string }>;
   
   // Shell operations
   openExternal: (url: string) => Promise<void>;

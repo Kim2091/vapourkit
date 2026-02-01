@@ -691,6 +691,34 @@ function App() {
     }
   }, [videoInfo, selectedModel, useDirectML, filters, numStreams, addConsoleLog, loadCompletedVideo, setCompletedVideoPath]);
 
+  // Launch VSE-Previewer with current workflow
+  const handleLaunchPreviewer = useCallback(async () => {
+    if (!videoInfo) return;
+    
+    addConsoleLog('Launching VSE-Previewer with current workflow...');
+    try {
+      const result = await window.electronAPI.launchVsePreviewer(
+        videoInfo.path,
+        selectedModel,
+        useDirectML,
+        true,
+        filters,
+        numStreams,
+        segment
+      );
+      
+      if (result.success) {
+        addConsoleLog('VSE-Previewer launched successfully');
+      } else {
+        addConsoleLog(`Failed to launch previewer: ${result.error}`);
+        alert(`Failed to launch previewer: ${result.error}`);
+      }
+    } catch (error) {
+      addConsoleLog(`Error launching previewer: ${getErrorMessage(error)}`);
+      alert(`Error: ${getErrorMessage(error)}`);
+    }
+  }, [videoInfo, selectedModel, useDirectML, filters, numStreams, segment, addConsoleLog]);
+
   // Seek to a specific frame in the video preview (used by segment selector)
   const handleSeekFrame = useCallback(async (frameNumber: number) => {
     if (!videoInfo) return;
@@ -800,8 +828,10 @@ function App() {
                     videoLoadError={videoLoadError}
                     isProcessing={isProcessing}
                     segmentEnabled={segment.enabled}
+                    hasVideoInfo={!!videoInfo}
                     onCompareVideos={handleCompareVideos}
                     onOpenOutputFolder={handleOpenOutputFolder}
+                    onLaunchPreviewer={handleLaunchPreviewer}
                     onVideoError={handleVideoError}
                   />
 

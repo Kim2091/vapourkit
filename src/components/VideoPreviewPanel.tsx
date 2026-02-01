@@ -1,5 +1,5 @@
 import { memo, useRef } from 'react';
-import { Video, Loader2, CheckCircle, XCircle, FolderOpen, GitCompare } from 'lucide-react';
+import { Video, Loader2, CheckCircle, XCircle, FolderOpen, GitCompare, Play } from 'lucide-react';
 
 interface VideoPreviewPanelProps {
   previewFrame: string | null;
@@ -8,8 +8,10 @@ interface VideoPreviewPanelProps {
   videoLoadError: boolean;
   isProcessing: boolean;
   segmentEnabled?: boolean;
+  hasVideoInfo: boolean;
   onCompareVideos: () => Promise<void>;
   onOpenOutputFolder: () => Promise<void>;
+  onLaunchPreviewer: () => Promise<void>;
   onVideoError: () => void;
 }
 
@@ -20,8 +22,10 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   videoLoadError,
   isProcessing,
   segmentEnabled,
+  hasVideoInfo,
   onCompareVideos,
   onOpenOutputFolder,
+  onLaunchPreviewer,
   onVideoError,
 }: VideoPreviewPanelProps) => {
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
@@ -33,30 +37,44 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           <Video className="w-4 h-4 text-primary-purple" />
           <h2 className="font-semibold text-base">Output Preview</h2>
         </div>
-        {completedVideoPath && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {/* Preview Script Button - Always visible when video is loaded */}
+          {hasVideoInfo && (
             <button
-              onClick={onCompareVideos}
-              disabled={segmentEnabled}
-              className={`text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${
-                segmentEnabled 
-                  ? 'text-gray-500 cursor-not-allowed bg-dark-surface/50' 
-                  : 'text-primary-purple hover:text-purple-400 hover:bg-primary-purple/10'
-              }`}
-              title={segmentEnabled ? "Compare not available for segment-processed videos" : "Compare input and output videos side-by-side"}
+              onClick={onLaunchPreviewer}
+              className="text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-accent-cyan hover:text-cyan-400 hover:bg-accent-cyan/10"
+              title="Preview VapourSynth script with current workflow in VSE-Previewer"
             >
-              <GitCompare className="w-3.5 h-3.5" />
-              <span>Compare</span>
+              <Play className="w-3.5 h-3.5" />
+              <span>Preview Script</span>
             </button>
-            <button
-              onClick={onOpenOutputFolder}
-              className="text-xs text-accent-cyan hover:text-cyan-400 transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-accent-cyan/10"
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-              <span>Open Folder</span>
-            </button>
-          </div>
-        )}
+          )}
+          {/* Compare and Open Folder buttons - Only visible after processing */}
+          {completedVideoPath && (
+            <>
+              <button
+                onClick={onCompareVideos}
+                disabled={segmentEnabled}
+                className={`text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${
+                  segmentEnabled 
+                    ? 'text-gray-500 cursor-not-allowed bg-dark-surface/50' 
+                    : 'text-primary-purple hover:text-purple-400 hover:bg-primary-purple/10'
+                }`}
+                title={segmentEnabled ? "Compare not available for segment-processed videos" : "Compare input and output videos side-by-side"}
+              >
+                <GitCompare className="w-3.5 h-3.5" />
+                <span>Compare</span>
+              </button>
+              <button
+                onClick={onOpenOutputFolder}
+                className="text-xs text-accent-cyan hover:text-cyan-400 transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-accent-cyan/10"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>Open Folder</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
       <div className="flex-1 flex items-center justify-center p-3 min-h-0">
         {previewFrame ? (

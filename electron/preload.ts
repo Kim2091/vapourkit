@@ -62,6 +62,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   openOutputFolder: (filePath: string) => ipcRenderer.invoke('open-output-folder', filePath),
   compareVideos: (inputPath: string, outputPath: string) => ipcRenderer.invoke('compare-videos', inputPath, outputPath),
+  launchVsePreviewer: (
+    videoPath: string,
+    modelPath: string | null,
+    useDirectML?: boolean,
+    upscalingEnabled?: boolean,
+    filters?: any[],
+    numStreams?: number,
+    segment?: { enabled: boolean; startFrame: number; endFrame: number }
+  ) => ipcRenderer.invoke('launch-vse-previewer', videoPath, modelPath, useDirectML, upscalingEnabled, filters, numStreams, segment),
   
   // Shell operations
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),

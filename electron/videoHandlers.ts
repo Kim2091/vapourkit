@@ -14,6 +14,7 @@ import { UpscaleExecutor } from './upscaleExecutor';
 import { DependencyManager } from './dependencyManager';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 import { FFmpegManager } from './ffmpegManager';
+import { VsePreviewerManager } from './vsePreviewerManager';
 
 let upscaleExecutor: UpscaleExecutor | null = null;
 let previewExecutor: UpscaleExecutor | null = null;
@@ -361,6 +362,59 @@ export function registerVideoHandlers(
       return { success: true };
     } catch (error) {
       logger.error('Error launching video comparison tool:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: errorMsg };
+    }
+  });
+
+  // Launch VSE-Previewer with a VapourSynth script
+  ipcMain.handle('launch-vse-previewer', async (
+    event,
+    videoPath: string,
+    modelPath: string | null,
+    useDirectML?: boolean,
+    upscalingEnabled?: boolean,
+    filters?: any[],
+    numStreams?: number,
+    segment?: { enabled: boolean; startFrame: number; endFrame: number }
+  ) => {
+    logger.info(`Launching VSE-Previewer for video: ${videoPath}`);
+    try {
+      // Generate VapourSynth script with the current workflow
+      const metadata = await extractVideoMetadata(videoPath);
+      
+      const scriptConfig = {
+        inputVideo: videoPath,
+        enginePath: PATHS.MLRT_PLUGIN,
+        pluginsPath: PATHS.PLUGINS,
+        useDirectML: useDirectML || false,
+        useFp32: modelPath ? configManager.isModelFp32(modelPath) : false,
+        modelType: modelPath ? configManager.getModelType(modelPath) : 'image' as const,
+        upscalingEnabled: upscalingEnabled || false,
+        colorimetry: configManager.getColorimetrySettings(),
+        filters: filters || [],
+        numStreams: numStreams || 2,
+        outputFormat: 'vs.YUV420P8',
+        segment: segment,
+        sourceFps: metadata.fps,
+        generatePreviewOutputs: true // Enable multi-output generation for filter comparison
+      };
+
+      const scriptPath = await scriptGenerator.generateScript(scriptConfig);
+      logger.info(`Generated preview script: ${scriptPath}`);
+
+      // Launch VSE-Previewer with the generated script
+      const result = await VsePreviewerManager.launch(scriptPath);
+      
+      if (result.success) {
+        logger.info('VSE-Previewer launched successfully');
+      } else {
+        logger.error(`Failed to launch VSE-Previewer: ${result.error}`);
+      }
+
+      return result;
+    } catch (error) {
+      logger.error('Error launching VSE-Previewer:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
       return { success: false, error: errorMsg };
     }

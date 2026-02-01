@@ -48,6 +48,7 @@ export interface ScriptConfig {
   segment?: SegmentSelection;
   validationMode?: boolean; // If true, only process first 5 seconds for validation
   sourceFps?: number; // Source video FPS for validation frame calculation
+  generatePreviewOutputs?: boolean; // If true, add output nodes after each filter for VSE-Previewer
 }
 
 export class VapourSynthScriptGenerator {
@@ -101,7 +102,12 @@ export class VapourSynthScriptGenerator {
       }
     }
     
-    for (const filter of enabledFilters) {
+    // Process filters and optionally add output nodes for preview
+    const totalFilters = enabledFilters.length;
+    
+    for (let i = 0; i < enabledFilters.length; i++) {
+      const filter = enabledFilters[i];
+      
       if (filter.filterType === 'aiModel' && filter.modelPath) {
         // Generate AI model upscaling code
         // Check precision and model type for THIS specific model from config, not filter state
@@ -112,6 +118,13 @@ export class VapourSynthScriptGenerator {
         // Insert custom filter code
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';
         filterCode += filter.code.trim() + '\n\n';
+      }
+      
+      // Add output node after each filter if generatePreviewOutputs is enabled
+      if (config.generatePreviewOutputs) {
+        // Output index: last filter gets index 0, second-to-last gets 1, etc.
+        const outputIndex = totalFilters - 1 - i;
+        filterCode += `clip.set_output(${outputIndex})\n\n`;
       }
     }
     
