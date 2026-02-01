@@ -3,6 +3,7 @@ import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, 
 import type { Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { getModelDisplayName } from '../utils/modelUtils';
 import { PythonCodeEditor } from './PythonCodeEditor';
+import { FilterSelectorModal } from './FilterSelectorModal';
 
 interface DynamicFilterPanelProps {
   title?: string;
@@ -45,18 +46,28 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const [showSaveDialog, setShowSaveDialog] = useState<string | null>(null);
   const [presetName, setPresetName] = useState('');
   const [presetDescription, setPresetDescription] = useState('');
-  const [presetCategory, setPresetCategory] = useState('');
+  const [presetCategories, setPresetCategories] = useState<string[]>([]);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
   const [hoveredDragHandle, setHoveredDragHandle] = useState<string | null>(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyDuplicatedId, setNewlyDuplicatedId] = useState<string | null>(null);
+  const [showFilterSelector, setShowFilterSelector] = useState<string | null>(null);
 
-  // Group filter templates by category
+  // Group filter templates by category (templates can appear in multiple categories)
   const groupedTemplates = filterTemplates.reduce((acc, template) => {
-    const category = template.category || 'Uncategorized';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(template);
+    // Support both single category and multiple categories
+    const categories = template.categories || (template.category ? [template.category] : ['Uncategorized']);
+    
+    categories.forEach(category => {
+      const cat = category || 'Uncategorized';
+      if (!acc[cat]) {
+        acc[cat] = [];
+      }
+      // Avoid duplicates if template is already in this category
+      if (!acc[cat].find(t => t.name === template.name)) {
+        acc[cat].push(template);
+      }
+    });
     return acc;
   }, {} as Record<string, FilterTemplate[]>);
   const [pendingFilters, setPendingFilters] = useState<Filter[]>(filters);
@@ -263,13 +274,15 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       const success = await onSaveTemplate({
         name: presetName.trim(),
         code: filter.code,
-        category: presetCategory.trim() || undefined,
+        categories: presetCategories.length > 0 ? presetCategories : undefined,
+        category: presetCategories.length > 0 ? presetCategories[0] : undefined, // Legacy field
         description: presetDescription.trim() || undefined,
       });
       if (success) {
         setPresetName('');
         setPresetDescription('');
-        setPresetCategory('');
+        setPresetCategories([]);
+        setNewCategoryInput('');
         setShowSaveDialog(null);
       }
     }
@@ -305,6 +318,36 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       if (filter?.preset === name) {
         handlePresetChange(filterId, '');
       }
+    }
+  };
+
+  const handleEditTemplate = async (oldName: string, updatedTemplate: FilterTemplate): Promise<boolean> => {
+    if (!onSaveTemplate) return false;
+    
+    try {
+      // If name changed, delete the old template first
+      if (oldName !== updatedTemplate.name && onDeleteTemplate) {
+        await onDeleteTemplate(oldName);
+      }
+      
+      // Save the updated template
+      const success = await onSaveTemplate(updatedTemplate);
+      
+      if (success && oldName !== updatedTemplate.name) {
+        // Update any filters using the old template name to use the new name
+        const updatedFilters = pendingFilters.map(f =>
+          f.preset === oldName ? { ...f, preset: updatedTemplate.name } : f
+        );
+        if (JSON.stringify(updatedFilters) !== JSON.stringify(pendingFilters)) {
+          setPendingFilters(updatedFilters);
+          onFiltersChange(updatedFilters);
+        }
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('Error editing template:', error);
+      return false;
     }
   };
 
@@ -712,12 +755,30 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                   setShowSaveDialog(null);
                                   setPresetName('');
                                   setPresetDescription('');
-                                  setPresetCategory('');
+                                  setPresetCategories([]);
+                                  setNewCategoryInput('');
                                 } else {
                                   setShowSaveDialog(filter.id);
-                                  setPresetName('');
-                                  setPresetDescription('');
-                                  setPresetCategory('');
+                                  // Pre-fill with existing template data if one is selected
+                                  if (filter.preset) {
+                                    const existingTemplate = filterTemplates.find(t => t.name === filter.preset);
+                                    if (existingTemplate) {
+                                      setPresetName(existingTemplate.name);
+                                      setPresetDescription(existingTemplate.description || '');
+                                      const categories = existingTemplate.categories || 
+                                        (existingTemplate.category ? [existingTemplate.category] : []);
+                                      setPresetCategories(categories);
+                                    } else {
+                                      setPresetName('');
+                                      setPresetDescription('');
+                                      setPresetCategories([]);
+                                    }
+                                  } else {
+                                    setPresetName('');
+                                    setPresetDescription('');
+                                    setPresetCategories([]);
+                                  }
+                                  setNewCategoryInput('');
                                 }
                               }}
                               className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
@@ -749,20 +810,68 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               onMouseDown={(e) => e.stopPropagation()}
                               className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5 mb-2 text-sm focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
                             />
-                            <input
-                              type="text"
-                              placeholder="Category (e.g., Resizing, Blurring, etc.)"
-                              value={presetCategory}
-                              onChange={(e) => setPresetCategory(e.target.value)}
-                              onMouseDown={(e) => e.stopPropagation()}
-                              list="category-suggestions"
-                              className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5 mb-2 text-sm focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
-                            />
-                            <datalist id="category-suggestions">
-                              {Object.keys(groupedTemplates).sort().map(category => (
-                                <option key={category} value={category} />
-                              ))}
-                            </datalist>
+                            
+                            {/* Categories */}
+                            <div className="mb-2">
+                              {presetCategories.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {presetCategories.map((cat, index) => (
+                                    <span
+                                      key={index}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600/20 border border-blue-500/50 rounded text-xs text-blue-300"
+                                    >
+                                      {cat}
+                                      <button
+                                        onClick={() => setPresetCategories(prev => prev.filter((_, i) => i !== index))}
+                                        className="hover:text-red-400 transition-colors"
+                                        type="button"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex gap-1">
+                                <input
+                                  type="text"
+                                  placeholder="Add category (press Enter)"
+                                  value={newCategoryInput}
+                                  onChange={(e) => setNewCategoryInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && newCategoryInput.trim()) {
+                                      e.preventDefault();
+                                      if (!presetCategories.includes(newCategoryInput.trim())) {
+                                        setPresetCategories([...presetCategories, newCategoryInput.trim()]);
+                                      }
+                                      setNewCategoryInput('');
+                                    }
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  list="category-suggestions"
+                                  className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 transition-colors text-gray-200"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (newCategoryInput.trim() && !presetCategories.includes(newCategoryInput.trim())) {
+                                      setPresetCategories([...presetCategories, newCategoryInput.trim()]);
+                                      setNewCategoryInput('');
+                                    }
+                                  }}
+                                  disabled={!newCategoryInput.trim()}
+                                  className="px-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-xs rounded transition-colors"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                              <datalist id="category-suggestions">
+                                {Object.keys(groupedTemplates).sort().map(category => (
+                                  <option key={category} value={category} />
+                                ))}
+                              </datalist>
+                            </div>
+                            
                             <input
                               type="text"
                               placeholder="Description (optional)"
@@ -784,7 +893,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                   setShowSaveDialog(null);
                                   setPresetName('');
                                   setPresetDescription('');
-                                  setPresetCategory('');
+                                  setPresetCategories([]);
+                                  setNewCategoryInput('');
                                 }}
                                 className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-1.5 rounded transition-colors"
                               >
@@ -794,25 +904,18 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                           </div>
                         )}
 
-                        {/* Template Dropdown with Delete */}
+                        {/* Template Selector Button with Delete */}
                         <div className="flex gap-2">
-                          <select
-                            value={filter.preset}
-                            onChange={(e) => handlePresetChange(filter.id, e.target.value)}
+                          <button
+                            onClick={() => setShowFilterSelector(filter.id)}
                             disabled={isProcessing}
-                            className="flex-1 bg-gray-900/90 border border-gray-600 rounded-md px-2.5 py-1.5 text-base focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
+                            className="flex-1 bg-gray-900/90 border border-gray-600 rounded-md px-2.5 py-1.5 text-base focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200 text-left flex items-center justify-between hover:bg-gray-800/90"
                           >
-                            <option value="">Custom</option>
-                            {Object.keys(groupedTemplates).sort().map((category) => (
-                              <optgroup key={category} label={category}>
-                                {groupedTemplates[category].map((template) => (
-                                  <option key={template.name} value={template.name}>
-                                    {template.name}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ))}
-                          </select>
+                            <span className={filter.preset ? 'text-gray-200' : 'text-gray-500'}>
+                              {filter.preset || 'Custom - Click to select template'}
+                            </span>
+                            <LucideFilter className="w-4 h-4 text-gray-400" />
+                          </button>
                           {filter.preset && onDeleteTemplate && (
                             <button
                               onClick={() => handleDeleteTemplate(filter.preset, filter.id)}
@@ -853,6 +956,33 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
           );
         })}
       </div>
+
+      {/* Filter Selector Modal */}
+      {showFilterSelector && (
+        <FilterSelectorModal
+          isOpen={true}
+          onClose={() => setShowFilterSelector(null)}
+          filterTemplates={filterTemplates}
+          currentSelection={pendingFilters.find(f => f.id === showFilterSelector)?.preset || ''}
+          onSelectTemplate={(templateName) => {
+            if (showFilterSelector) {
+              handlePresetChange(showFilterSelector, templateName);
+            }
+          }}
+          onDeleteTemplate={onDeleteTemplate ? async (name: string) => {
+            const success = await onDeleteTemplate(name);
+            if (success && showFilterSelector) {
+              // Reset selection if deleted template was selected
+              const filter = pendingFilters.find(f => f.id === showFilterSelector);
+              if (filter?.preset === name) {
+                handlePresetChange(showFilterSelector, '');
+              }
+            }
+            return success;
+          } : undefined}
+          onEditTemplate={onSaveTemplate ? handleEditTemplate : undefined}
+        />
+      )}
     </div>
   );
 });

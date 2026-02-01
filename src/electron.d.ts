@@ -362,7 +362,8 @@ export interface ColorimetrySettings {
 export interface FilterTemplate {
   name: string;
   code: string;
-  category?: string;
+  category?: string; // Legacy single category for backward compatibility
+  categories?: string[]; // New multi-category support
   description?: string;
   metadata?: {
     author?: string;

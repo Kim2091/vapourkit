@@ -8,3 +8,5 @@
 /main.log
 /package-lock.json
 /*.png
+/include/plugins/plugins
+/include/scripts/extra_scripts
