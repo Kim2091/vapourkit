@@ -29,7 +29,7 @@ clip = vsdehalo.fine_dehalo(
     clip,
     blur=1.4,       lowsens=50.0,     highsens=50.0,
     ss=1.5,         darkstr=0.0,      brightstr=1.0,
-    rx=2,           ry=None,          edgemask=None,
+    rx=2,           ry=None,
     thmi=80,        thma=128,         thlimi=50,        thlima=100,
     exclude=True,   edgeproc=0.0,     contra=0.0,
     pre_ss=1,       planes=0,         attach_masks=False,

@@ -99,7 +99,7 @@ export const Header = memo<HeaderProps>(({
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[10px] text-gray-300 leading-none font-medium">Workflow</span>
-                  <span className="text-xs font-semibold bg-gradient-to-r from-primary-purple via-primary-blue to-accent-cyan bg-clip-text text-transparent leading-tight">{workflowName}</span>
+                  <span className="text-xs font-bold text-white leading-tight">{workflowName}</span>
                 </div>
               </div>
               {onClearWorkflow && (
