@@ -1,7 +1,8 @@
 // Non-blocking notification toast component
-import { X, AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
+import { X, AlertCircle, CheckCircle, Info, AlertTriangle, Copy } from 'lucide-react';
 import { useNotifications } from '../hooks/useNotifications';
 import { Notification, NotificationType } from '../utils/notifications';
+import { useState } from 'react';
 
 const notificationStyles: Record<NotificationType, { bg: string; border: string; icon: JSX.Element }> = {
   error: {
@@ -46,6 +47,17 @@ export function NotificationContainer() {
 
 function NotificationToast({ notification, onDismiss }: { notification: Notification; onDismiss: () => void }) {
   const style = notificationStyles[notification.type];
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(`${notification.title}\n\n${notification.message}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   return (
     <div
@@ -57,13 +69,29 @@ function NotificationToast({ notification, onDismiss }: { notification: Notifica
         <h4 className="font-semibold text-white text-sm mb-1">{notification.title}</h4>
         <p className="text-gray-200 text-sm whitespace-pre-wrap break-words">{notification.message}</p>
       </div>
-      <button
-        onClick={onDismiss}
-        className="text-gray-400 hover:text-white transition-colors flex-shrink-0 p-1"
-        aria-label="Dismiss notification"
-      >
-        <X className="w-4 h-4" />
-      </button>
+      <div className="flex gap-1 flex-shrink-0">
+        {(notification.type === 'error' || notification.type === 'warning') && (
+          <button
+            onClick={handleCopy}
+            className="text-gray-400 hover:text-white transition-colors p-1"
+            aria-label="Copy error message"
+            title={copied ? 'Copied!' : 'Copy to clipboard'}
+          >
+            {copied ? (
+              <CheckCircle className="w-4 h-4 text-green-400" />
+            ) : (
+              <Copy className="w-4 h-4" />
+            )}
+          </button>
+        )}
+        <button
+          onClick={onDismiss}
+          className="text-gray-400 hover:text-white transition-colors p-1"
+          aria-label="Dismiss notification"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }

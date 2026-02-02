@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.14.0
+This release in in dedication to my Mom. She passed away on 1/1/26 after a long battle with small cell lung cancer. Rest in peace
+- Adds over 150 new filters, including many from Hybrid!
+- Replaces the filter selection dropdown with a new modal
+  - This has a tag system to make finding filters easier
+  - It also has a search!
+- Fixes the lag and focus issues present in previous versions of Vapourkit
+  - You can now have 20+ filters expanded in your workflow and it will not slow down!
+  - The bug that required alt tabbing is no longer present
+- Adds vs-previewer! This allows for realtime previewing of how your video will turn out without having to render the whole thing
+- Adds ESC button support to all pop up modals
+- Added [vs_grain](https://github.com/pifroggi/vs_grain)
+- Replaces pop up dialogs with notifications within the GUI
+- Change legacy "TSPAN" text to "VSR". This change was made in conjunction with releasing [TFDAT](https://github.com/Kim2091/TFDAT), which effectively replaces TSPAN + TSPANv2
+
 ## 0.12.2
 - Fix BF16 engine names (previously appended _fp16 when it's _bf16)
 - Remove unused code
