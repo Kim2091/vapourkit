@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ModelImportProgress } from '../electron.d';
+import { notify } from '../utils/notifications';
 
 export interface ImportForm {
   onnxPath: string;
@@ -398,11 +399,11 @@ export const useModelImport = (
         // Pass the enginePath to the completion handler
         onImportComplete(progress.enginePath);
         resetImportForm();
-        alert('Model built successfully!');
+        notify.success('Model Built', 'Model built successfully!');
       } else if (progress.type === 'error') {
         setIsImporting(false);
         setShowAutoBuildModal(false);
-        alert(`Model Build Failed\n\n${progress.message}`);
+        notify.error('Model Build Failed', progress.message);
       }
     };
 
@@ -438,10 +439,10 @@ export const useModelImport = (
         // Pass the enginePath to the completion handler
         onImportComplete(progress.enginePath);
         resetImportForm();
-        alert('Model imported successfully!');
+        notify.success('Model Imported', 'Model imported successfully!');
       } else if (progress.type === 'error') {
         setIsImporting(false);
-        alert(`Model Import Failed\n\n${progress.message}`);
+        notify.error('Model Import Failed', progress.message);
       }
     };
 

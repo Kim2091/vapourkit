@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useMemo } from 'react';
 import { X, Edit2, Trash2, Save, XCircle, Sparkles, Search } from 'lucide-react';
 import type { ModelFile } from '../electron.d';
+import { notify } from '../utils/notifications';
 
 interface ModelManagerModalProps {
   isOpen: boolean;
@@ -94,29 +95,21 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
       onModelUpdated();
     } catch (error) {
       console.error('Error saving model metadata:', error);
-      alert('Failed to save model metadata: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      notify.error('Save Error', 'Failed to save model metadata: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (model: ModelFile) => {
-    const confirmed = confirm(`Are you sure you want to delete "${model.name}"? This action cannot be undone.`);
-    
-    // Restore focus to the window after native confirm dialog closes
-    window.focus();
-    
-    if (!confirmed) {
-      return;
-    }
-
     setIsDeleting(model.id);
     try {
       await window.electronAPI.deleteModel(model.path, model.id);
       onModelUpdated();
+      notify.success('Model Deleted', `Successfully deleted "${model.name}"`);
     } catch (error) {
       console.error('Error deleting model:', error);
-      alert('Failed to delete model: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      notify.error('Delete Error', 'Failed to delete model: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsDeleting(null);
     }

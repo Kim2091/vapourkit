@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { VideoInfo, UpscaleProgress, Filter, SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
+import { notify } from '../utils/notifications';
 
 interface UseVideoProcessingProps {
   outputFormat: string;
@@ -313,11 +314,11 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
           onLog('Video comparison tool launched successfully');
         } else {
           onLog(`Error: ${result.error}`);
-          alert(`Failed to launch comparison tool: ${result.error}`);
+          notify.error('Comparison Tool Error', `Failed to launch comparison tool: ${result.error}`);
         }
       } catch (error) {
         onLog(`Error launching comparison tool: ${getErrorMessage(error)}`);
-        alert(`Error: ${getErrorMessage(error)}`);
+        notify.error('Comparison Tool Error', getErrorMessage(error));
       }
     }
   };

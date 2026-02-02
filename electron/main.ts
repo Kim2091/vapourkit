@@ -70,13 +70,14 @@ app.whenReady().then(() => {
 // Global error handler for main process
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught exception:', error);
-  dialog.showErrorBox('Error', error.message || 'An unknown error occurred');
+  // Removed dialog.showErrorBox to prevent focus stealing issues
+  // Critical errors are logged and can be reviewed in log files
 });
 
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled rejection:', reason);
-  const message = reason instanceof Error ? reason.message : String(reason);
-  dialog.showErrorBox('Error', message || 'An unknown error occurred');
+  // Removed dialog.showErrorBox to prevent focus stealing issues
+  // Critical errors are logged and can be reviewed in log files
 });
 
 // ============================================================================

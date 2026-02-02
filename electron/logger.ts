@@ -121,15 +121,11 @@ export const logger = {
     log.error(message, ...args);
   },
   
-  // Error with user dialog notification
+  // Error with user dialog notification (now just logs - renderer handles UI)
   errorWithDialog: (title: string, message: string, ...args: any[]) => {
-    log.error(message, ...args);
-    
-    // Show error dialog to user
-    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      const { dialog } = require('electron');
-      dialog.showErrorBox(title, formatMessage(message, args));
-    }
+    log.error(`[${title}] ${message}`, ...args);
+    // Removed dialog.showErrorBox to prevent focus stealing issues
+    // Error messages should be sent through IPC channels to renderer
   },
   debug: (message: string, ...args: any[]) => {
     log.debug(message, ...args);

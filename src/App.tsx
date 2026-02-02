@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, XCircle, ChevronDown, ChevronUp, Terminal, Loader2, CheckCircle, AlertCircle, Play } from 'lucide-react';
+import { NotificationContainer } from './components/NotificationContainer';
+import { notify } from './utils/notifications';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ImportModelModal } from './components/ImportModelModal';
 import { AboutModal } from './components/AboutModal';
@@ -437,7 +439,7 @@ function App() {
     numStreams,
     onLog: addConsoleLog,
     onUpdateVideoInfo: setVideoInfo,
-    onError: (message) => alert(`Workflow Validation Error:\n\n${message}`),
+    onError: (message) => notify.error('Workflow Validation Error', message),
   });
 
   // Clear validation status when workflow or loaded video changes
@@ -540,13 +542,13 @@ function App() {
     const handleError = (event: ErrorEvent): void => {
       event.preventDefault();
       const message = getErrorMessage(event.error || event.message);
-      alert(`Error: ${message}`);
+      notify.error('Error', message);
     };
 
     const handleRejection = (event: PromiseRejectionEvent): void => {
       event.preventDefault();
       const message = getErrorMessage(event.reason);
-      alert(`Error: ${message}`);
+      notify.error('Error', message);
     };
 
     window.addEventListener('error', handleError);
@@ -711,11 +713,11 @@ function App() {
         addConsoleLog('VSE-Previewer launched successfully');
       } else {
         addConsoleLog(`Failed to launch previewer: ${result.error}`);
-        alert(`Failed to launch previewer: ${result.error}`);
+        notify.error('Previewer Error', `Failed to launch previewer: ${result.error}`);
       }
     } catch (error) {
       addConsoleLog(`Error launching previewer: ${getErrorMessage(error)}`);
-      alert(`Error: ${getErrorMessage(error)}`);
+      notify.error('Previewer Error', getErrorMessage(error));
     }
   }, [videoInfo, selectedModel, useDirectML, filters, numStreams, segment, addConsoleLog]);
 
@@ -785,6 +787,7 @@ function App() {
   // Main App UI
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-dark-bg via-dark-surface to-dark-bg overflow-hidden">
+      <NotificationContainer />
       {/* Header */}
       <Header
         isProcessing={isProcessing}

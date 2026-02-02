@@ -4,6 +4,7 @@ import type { Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { getModelDisplayName } from '../utils/modelUtils';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import { FilterSelectorModal } from './FilterSelectorModal';
+import { notify } from '../utils/notifications';
 
 interface DynamicFilterPanelProps {
   title?: string;
@@ -298,7 +299,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
 
       const result = await window.electronAPI.importTemplateFile(filePath);
       if (!result.success || !result.template) {
-        alert(`Failed to import template: ${result.error || 'Unknown error'}`);
+        notify.error('Import Error', `Failed to import template: ${result.error || 'Unknown error'}`);
         return;
       }
 
@@ -308,13 +309,13 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
         await onSaveTemplate(template);
       }
     } catch (err) {
-      alert('Failed to import template. Please check the file format.');
+      notify.error('Import Error', 'Failed to import template. Please check the file format.');
       console.error('Import error:', err);
     }
   };
 
   const handleDeleteTemplate = async (name: string, filterId: string) => {
-    if (onDeleteTemplate && confirm(`Delete template "${name}"?`)) {
+    if (onDeleteTemplate) {
       await onDeleteTemplate(name);
       // Reset selection if deleted template was selected
       const filter = pendingFilters.find(f => f.id === filterId);

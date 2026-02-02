@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import type { Filter, WorkflowData } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
+import { notify } from '../utils/notifications';
 
 interface WorkflowState {
   currentWorkflow: string | null;
@@ -76,7 +77,7 @@ export function useWorkflow({
       const result = await window.electronAPI.importWorkflow(filePath);
       if (!result.success || !result.workflow) {
         addConsoleLog(`Error loading workflow: ${result.error}`);
-        alert(`Failed to load workflow: ${result.error}`);
+        notify.error('Workflow Error', `Failed to load workflow: ${result.error}`);
         return;
       }
 
@@ -131,11 +132,11 @@ export function useWorkflow({
       // Alert user if any models are missing
       if (missingModels.length > 0) {
         const modelList = missingModels.join('\n- ');
-        alert(`Warning: The following model(s) could not be found and will need to be reconfigured:\n\n- ${modelList}`);
+        notify.warning('Missing Models', `The following model(s) could not be found and will need to be reconfigured:\n\n- ${modelList}`);
       }
     } catch (error) {
       addConsoleLog(`Error loading workflow: ${getErrorMessage(error)}`);
-      alert(`Error: ${getErrorMessage(error)}`);
+      notify.error('Workflow Error', getErrorMessage(error));
     }
   }, [
     workflowState.currentWorkflow,
@@ -220,11 +221,11 @@ export function useWorkflow({
         addConsoleLog(`Workflow exported successfully: ${filePath}`);
       } else {
         addConsoleLog(`Error exporting workflow: ${result.error}`);
-        alert(`Failed to export workflow: ${result.error}`);
+        notify.error('Export Error', `Failed to export workflow: ${result.error}`);
       }
     } catch (error) {
       addConsoleLog(`Error exporting workflow: ${getErrorMessage(error)}`);
-      alert(`Error: ${getErrorMessage(error)}`);
+      notify.error('Export Error', getErrorMessage(error));
     }
   }, [filters, deepCopyFilters, addConsoleLog]);
 
@@ -239,7 +240,7 @@ export function useWorkflow({
       const result = await window.electronAPI.importWorkflow(filePath);
       if (!result.success || !result.workflow) {
         addConsoleLog(`Error importing workflow: ${result.error}`);
-        alert(`Failed to import workflow: ${result.error}`);
+        notify.error('Import Error', `Failed to import workflow: ${result.error}`);
         return;
       }
 
@@ -263,10 +264,10 @@ export function useWorkflow({
         await refreshFilterTemplates();
       }
       
-      alert(`Successfully imported ${customFilters.length} custom filters with " (${workflow.name})" suffix.`);
+      notify.success('Filters Imported', `Successfully imported ${customFilters.length} custom filters with " (${workflow.name})" suffix.`);
     } catch (error) {
       addConsoleLog(`Error importing workflow: ${getErrorMessage(error)}`);
-      alert(`Error: ${getErrorMessage(error)}`);
+      notify.error('Import Error', getErrorMessage(error));
     }
   }, [addConsoleLog, refreshFilterTemplates]);
 

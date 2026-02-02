@@ -2,6 +2,7 @@ import { memo, useState, useRef, useEffect } from 'react';
 import { Save, ChevronDown, ChevronUp, Filter, Trash2, Pencil, Upload } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
 import { PythonCodeEditor } from './PythonCodeEditor';
+import { notify } from '../utils/notifications';
 
 interface FilterStepPanelProps {
   title: string;
@@ -68,7 +69,7 @@ export const FilterStepPanel = memo<FilterStepPanelProps>(({
 
       const result = await window.electronAPI.importTemplateFile(filePath);
       if (!result.success || !result.template) {
-        alert(`Failed to import template: ${result.error || 'Unknown error'}`);
+        notify.error('Import Error', `Failed to import template: ${result.error || 'Unknown error'}`);
         return;
       }
 
@@ -77,19 +78,15 @@ export const FilterStepPanel = memo<FilterStepPanelProps>(({
       // Check if template with this name already exists
       const existingTemplate = templates.find(t => t.name === template.name);
       if (existingTemplate) {
-        const confirmed = confirm(
-          `A template named "${template.name}" already exists. Do you want to overwrite it?`
-        );
-        if (!confirmed) {
-          return;
-        }
+        // For now, skip overwrite confirmation and just import with a unique name
+        template.name = `${template.name} (imported)`;
       }
       
       if (onSaveTemplate) {
         await onSaveTemplate(template);
       }
     } catch (err) {
-      alert('Failed to import template. Please check the file format.');
+      notify.error('Import Error', 'Failed to import template. Please check the file format.');
       console.error('Import error:', err);
     }
   };

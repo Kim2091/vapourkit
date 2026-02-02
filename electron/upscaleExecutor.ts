@@ -80,12 +80,8 @@ export class UpscaleExecutor {
   private sendProgress(progress: UpscaleProgress) {
     if (this.mainWindow) {
       this.mainWindow.webContents.send('upscale-progress', progress);
-      
-      // Show error dialog for error progress
-      if (progress.type === 'error') {
-        const { dialog } = require('electron');
-        dialog.showErrorBox('Upscale Error', progress.message);
-      }
+      // Error messages are now handled entirely in the renderer process
+      // to avoid blocking focus issues with dialog.showErrorBox
     }
   }
 
