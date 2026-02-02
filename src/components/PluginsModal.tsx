@@ -1,4 +1,4 @@
-import React, { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { X, Download, RefreshCw, CheckCircle, XCircle, Loader2, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { useConsoleLog } from '../hooks/useConsoleLog';
 

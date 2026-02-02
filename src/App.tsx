@@ -828,7 +828,6 @@ function App() {
                     videoLoadError={videoLoadError}
                     isProcessing={isProcessing}
                     segmentEnabled={segment.enabled}
-                    hasVideoInfo={!!videoInfo}
                     onCompareVideos={handleCompareVideos}
                     onOpenOutputFolder={handleOpenOutputFolder}
                     onVideoError={handleVideoError}

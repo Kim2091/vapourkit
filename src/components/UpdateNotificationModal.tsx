@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react';
+import { memo, useState } from 'react';
 import { Download, X, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 interface UpdateInfo {

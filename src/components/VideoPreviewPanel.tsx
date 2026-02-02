@@ -1,5 +1,5 @@
 import { memo, useRef } from 'react';
-import { Video, Loader2, CheckCircle, XCircle, FolderOpen, GitCompare, Play } from 'lucide-react';
+import { Video, Loader2, CheckCircle, XCircle, FolderOpen, GitCompare } from 'lucide-react';
 
 interface VideoPreviewPanelProps {
   previewFrame: string | null;
@@ -8,7 +8,6 @@ interface VideoPreviewPanelProps {
   videoLoadError: boolean;
   isProcessing: boolean;
   segmentEnabled?: boolean;
-  hasVideoInfo: boolean;
   onCompareVideos: () => Promise<void>;
   onOpenOutputFolder: () => Promise<void>;
   onVideoError: () => void;
@@ -21,7 +20,6 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   videoLoadError,
   isProcessing,
   segmentEnabled,
-  hasVideoInfo,
   onCompareVideos,
   onOpenOutputFolder,
   onVideoError,

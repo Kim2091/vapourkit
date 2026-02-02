@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import { memo } from 'react';
 import { Loader2, Info, Sparkles, Lock } from 'lucide-react';
 import type { ModelImportProgress } from '../electron.d';
 
