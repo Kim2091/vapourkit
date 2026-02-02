@@ -1,5 +1,5 @@
 name = "Temporal Fix"
-category = "Restoration"
+category = ["Temporal Smoothing", "Restoration"]
 code = """
 # Full Docs: https://github.com/pifroggi/vs_temporalfix?tab=readme-ov-file#usage
 # Increase strength if the effect is not strong enough. Check the docs for a full explanation.

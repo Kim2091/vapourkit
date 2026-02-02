@@ -1,5 +1,5 @@
 name = "DPIR Denoise/Deblock"
-category = "Denoising"
+category = ["Denoising", "Deblocking"]
 code = """
 from vsmlrt import DPIR, DPIRModel, Backend
 # Full Docs: https://github.com/AmusementClub/vs-mlrt/wiki/DPIR

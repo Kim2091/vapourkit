@@ -1,4 +1,4 @@
-name = "Sharpen"
+name = "CAS Sharpen"
 category = "Sharpening"
 code = """
 # Full Docs: https://github.com/HomeOfVapourSynthEvolution/VapourSynth-CAS
