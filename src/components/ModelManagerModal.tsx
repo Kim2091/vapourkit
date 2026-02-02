@@ -53,6 +53,17 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
     setSearchQuery('');
   }, [isOpen]);
 
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleEdit = async (model: ModelFile) => {
@@ -347,10 +358,16 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-800 p-3">
-          <p className="text-xs text-gray-400 text-center">
-            {models.length} model{models.length !== 1 ? 's' : ''} available
-          </p>
+        <div className="border-t border-gray-800 px-4 py-3">
+          <div className="flex items-center justify-between text-sm text-gray-400">
+            <span className="text-xs">
+              {models.length} model{models.length !== 1 ? 's' : ''} available
+            </span>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-0.5 bg-dark-elevated border border-gray-700 rounded text-gray-300">Esc</kbd>
+              <span>to close</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -271,7 +271,7 @@ export class PluginInstaller {
       // Step 2: Install numpy, positional-encodings, einops, timm, and vsjetpack (70-85% progress)
       logger.info('=== Step 2: Installing numpy, positional-encodings, einops, timm, and vsjetpack ===');
       const additionalResult = await this.runPipInstall(
-        ['numpy==2.3.3', 'positional-encodings', 'einops', 'timm', 'vsjetpack'],
+        ['numpy==2.3.3', 'positional-encodings', 'einops', 'timm', 'vsjetpack==1.1.0'],
         70,
         15
       );

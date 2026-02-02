@@ -77,6 +77,17 @@ export const AboutModal = memo<AboutModalProps>(({ show, onClose }) => {
     }
   }, [show]);
 
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && show) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [show, onClose]);
+
   if (!show) return null;
 
   const openExternal = (url: string): void => {
@@ -195,6 +206,12 @@ export const AboutModal = memo<AboutModalProps>(({ show, onClose }) => {
                 </div>
               </>
             )}
+          </div>
+          
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 pt-6 text-sm text-gray-400">
+            <kbd className="px-2 py-0.5 bg-dark-elevated border border-gray-700 rounded text-gray-300">Esc</kbd>
+            <span>to close</span>
           </div>
         </div>
       </div>

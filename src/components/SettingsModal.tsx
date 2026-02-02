@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -28,6 +28,17 @@ export const SettingsModal = memo<SettingsModalProps>(({
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [showVideoCompareOptions, setShowVideoCompareOptions] = useState(false);
+
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && show) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [show, onClose]);
 
   if (!show) return null;
 
@@ -344,13 +355,11 @@ export const SettingsModal = memo<SettingsModalProps>(({
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-gray-800">
-          <button
-            onClick={onClose}
-            className="flex-1 bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 text-white font-semibold py-3 px-6 rounded-lg transition-all"
-          >
-            Close
-          </button>
+        <div className="flex items-center justify-end p-6 border-t border-gray-800">
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <kbd className="px-2 py-0.5 bg-dark-elevated border border-gray-700 rounded text-gray-300">Esc</kbd>
+            <span>to close</span>
+          </div>
         </div>
       </div>
     </div>
