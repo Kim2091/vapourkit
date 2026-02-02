@@ -1,16 +1,39 @@
 name = "Fine Dehalo"
 category = "Restoration"
 code = """
-# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-dehalo/
-# Advanced halo removal based on dehalo_alpha with additional masking
-# brightstr: strength for bright halos (0.0-1.0+)
-# darkstr: strength for dark halos (0.0-1.0+)
-# rx/ry: horizontal/vertical radius for halo removal
-# ss: supersampling factor to reduce aliasing (1.0 = off)
-# lowsens/highsens: sensitivity thresholds (lower values = more aggressive)
-
 import vsdehalo
-clip = vsdehalo.fine_dehalo(clip, rx=2, brightstr=1.0, darkstr=0.0, ss=1.5, lowsens=50, highsens=50)"""
+
+# Full docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsdehalo/mask/?h=fined#vsdehalo.mask.fine_dehalo
+# blur        Gaussian sigma or custom blur func. Tuple = per-iter,
+#             list inside tuple = per-plane. Default: 1.4
+# lowsens     Dehalo fully applied below this.  Default: 50.0
+# highsens    Dehalo fully skipped above this.  Default: 50.0
+# ss          Supersampling factor (1.0 = off). Tuple = per-iter. Default: 1.5
+# darkstr     Dark halo strength (0.0–1.0+).    Default: 0.0
+# brightstr   Bright halo strength (0.0–1.0+).  Default: 1.0
+# rx / ry     Halo removal radius H/V (ry defaults to rx). Default: 2
+# edgemask    Edge detector (default: Robinson3)
+# thmi / thma Sharp edge selection ramp (strongest edges). Default: 80 / 128
+# thlimi/thlima Weaker edge ramp for exclusion zones.       Default: 50 / 100
+# exclude     Exclude close-together edges to avoid oversmooth. Default: True
+# edgeproc    Blend raw edges back into mask (0 = off).     Default: 0.0
+# contra      Contra-sharpening after dehalo (0 = off).     Default: 0.0
+# pre_ss      NNEDI3 pre-upscale factor (power of 2).       Default: 1
+# planes      Planes to process (0 = luma).                 Default: 0
+# attach_masks Bake intermediate masks as frame props.      Default: False
+#
+# Masks after call: fine_dehalo.masks.MAIN | .EDGES | .SHARP_EDGES
+#   .LARGE_EDGES | .IGNORE_DETAILS | .SHRINK | .SHRINK_EDGES_EXCL
+
+clip = vsdehalo.fine_dehalo(
+    clip,
+    blur=1.4,       lowsens=50.0,     highsens=50.0,
+    ss=1.5,         darkstr=0.0,      brightstr=1.0,
+    rx=2,           ry=None,          edgemask=None,
+    thmi=80,        thma=128,         thlimi=50,        thlima=100,
+    exclude=True,   edgeproc=0.0,     contra=0.0,
+    pre_ss=1,       planes=0,         attach_masks=False,
+)"""
 description = "Advanced halo removal with masking and optional contra-sharpening to preserve line detail."
 
 [metadata]

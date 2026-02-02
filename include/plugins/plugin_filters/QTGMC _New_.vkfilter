@@ -23,12 +23,11 @@ clip = (
         strength=(1.9, 0.1),
         limit=(3, 7, 2),
         range_expansion_args=None,
-        mask_shimmer_args=None,
+        mask_shimmer_args={"erosion_distance": 0},  # ← was None
     )
     .analyze(
         force_tr=1,
         preset=MVToolsPreset.HQ_SAD,
-        chroma=True,
         blksize=16,
         overlap=2,
         refine=1,
@@ -67,7 +66,7 @@ clip = (
     )
     .sharpen(
         mode=None,
-        strength=(1, 1.0),
+        strength=1.0,
         clamp=1,
         thin=0.0,
     )
@@ -86,7 +85,7 @@ clip = (
         thsad=256,
         noise_restore=0.0,
         degrain_args=None,
-        mask_shimmer_args=None,
+        mask_shimmer_args={"erosion_distance": 0},  # ← was None
     )
     .motion_blur(
         shutter_angle=(180, 180),
