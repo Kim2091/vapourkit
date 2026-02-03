@@ -30,7 +30,7 @@ export const PATHS = {
   get PYTHON() { return path.join(this.VS, 'python.exe'); },
   get TRTEXEC() { return path.join(this.MLRT_PLUGIN, 'trtexec.exe'); },
   get VIDEO_COMPARE_EXE() { return path.join(this.VIDEO_COMPARE, 'video-compare.exe'); },
-  get VSE_PREVIEWER_EXE() { return path.join(this.VSE_PREVIEWER, 'vse-previewer.exe'); },
+  get VSE_PREVIEWER_EXE() { return path.join(this.VS, 'vse-previewer.exe'); },
   
   // FFmpeg
   FFMPEG_DIR: path.join(APP_DATA_PATH, 'ffmpeg'),

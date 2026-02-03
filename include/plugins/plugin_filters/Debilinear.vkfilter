@@ -1,5 +1,5 @@
 name = "Debilinear"
-category = ["Hybrid", "Descale"]
+category = ["Hybrid", "Unresize"]
 code = """
 # Reverse bilinear upscaling
 # From hybrid_filters/descale.py

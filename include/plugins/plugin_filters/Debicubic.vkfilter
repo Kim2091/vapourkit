@@ -1,5 +1,5 @@
 name = "Debicubic"
-category = ["Hybrid", "Descale"]
+category = ["Hybrid", "Unresize"]
 code = """
 # Reverse bicubic upscaling
 # From hybrid_filters/descale.py

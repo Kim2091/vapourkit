@@ -14,7 +14,7 @@ import { setupVSEnvironment } from './utils';
  * during setup, which configures default preview settings like zoom mode and FPS limits.
  */
 export class VsePreviewerManager {
-  private static readonly VSE_PREVIEWER_DIR = path.join(PATHS.APP_DATA, 'vse-previewer');
+  private static readonly VSE_PREVIEWER_DIR = PATHS.VS;
   private static readonly VSE_PREVIEWER_EXE = path.join(this.VSE_PREVIEWER_DIR, 'vse-previewer.exe');
   
   /**
@@ -67,17 +67,14 @@ export class VsePreviewerManager {
         return { success: false, error };
       }
       
-      // Setup VapourSynth environment (VSE-Previewer needs access to Python and VS plugins)
-      const env = setupVSEnvironment(PATHS.PYTHON);
-      
       // Launch VSE-Previewer with the script
+      // VSE-Previewer will auto-detect Python and VapourSynth since it's in the same directory
       logger.info(`Launching: ${this.VSE_PREVIEWER_EXE} -p ${scriptPath}`);
       
       const child = spawn(this.VSE_PREVIEWER_EXE, ['-p', scriptPath], {
         detached: true,
         stdio: 'pipe', // Capture output to detect launch errors
-        cwd: this.VSE_PREVIEWER_DIR,
-        env: env  // Pass VapourSynth environment
+        cwd: this.VSE_PREVIEWER_DIR
       });
       
       // Create a promise to wait briefly and check if the process crashes immediately

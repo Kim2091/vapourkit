@@ -398,11 +398,11 @@ export class DependencyManager {
       }
       
       const bundledConfigPath = path.join(bundledBasePath, 'include', 'vse-previewer.conf');
-      const targetConfigPath = path.join(PATHS.VSE_PREVIEWER, 'vse-previewer.conf');
+      const targetConfigPath = path.join(PATHS.VS, 'vse-previewer.conf');
       
       // Check if bundled config exists
       if (await fs.pathExists(bundledConfigPath)) {
-        // Copy config file to VSE-Previewer directory
+        // Copy config file to vapoursynth-portable directory
         await fs.copy(bundledConfigPath, targetConfigPath, { overwrite: true });
         logger.dependency('Copied VSE-Previewer configuration file');
       } else {
@@ -453,7 +453,7 @@ export class DependencyManager {
           url: 'https://github.com/YomikoR/VapourSynth-Editor/releases/download/VSE-Previewer-R5/vse-previewer.7z',
           archiveName: 'vse-previewer.7z',
           checkPath: PATHS.VSE_PREVIEWER_EXE,
-          extractTo: PATHS.VSE_PREVIEWER
+          extractTo: PATHS.VS
         }
       ];
 

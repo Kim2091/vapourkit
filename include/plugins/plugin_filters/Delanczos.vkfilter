@@ -1,5 +1,5 @@
 name = "Delanczos"
-category = ["Hybrid", "Descale"]
+category = ["Hybrid", "Unresize"]
 code = """
 # Reverse Lanczos upscaling
 # From hybrid_filters/descale.py
