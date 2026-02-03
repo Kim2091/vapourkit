@@ -1,7 +1,8 @@
-name = "Deinterlace IVTC"
-category = "Deinterlacing"
+name = "VIVTC"
+category = ["Deinterlacing", "Telecine"]
 code = """
 # Inverse telecine (30i to 24p conversion)
+# Converts to 8 bit colors to function
 # Full Docs: https://github.com/vapoursynth/vivtc
 
 from vstools import vs, core

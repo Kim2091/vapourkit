@@ -1,5 +1,5 @@
 name = "Average Color Fix"
-category = "Color Correction"
+category = "Color Modification"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_colorfix?tab=readme-ov-file#average-color-fix
 

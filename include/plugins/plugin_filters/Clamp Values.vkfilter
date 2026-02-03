@@ -1,5 +1,5 @@
 name = "Clamp Values"
-category = "Color Correction"
+category = "Color Modification"
 code = """
 # Clamp values to specified range
 

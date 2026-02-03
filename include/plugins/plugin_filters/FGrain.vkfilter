@@ -1,8 +1,11 @@
 name = "FGrain"
 category = "Grain"
 code = """
+# Full Docs: https://github.com/pifroggi/vs_grain
+
 import vs_grain
 clip = vs_grain.fgrain(clip, iterations=800, size=0.5, deviation=0.0, blur=0.9, opacity=0.1)"""
+
 description = "Very high quality and realistic grain generator that animates the grain, adds opacity options, and support for YUV. Grain is only applied to luma. Requires an Nvidia GPU."
 
 [metadata]

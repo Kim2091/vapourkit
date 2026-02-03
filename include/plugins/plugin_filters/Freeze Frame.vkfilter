@@ -1,5 +1,5 @@
 name = "Freeze Frame"
-category = "Utility"
+category = "Frame Manipulation"
 code = """
 # Freeze on a specific frame
 # Full Docs: https://www.vapoursynth.com/doc/functions/video/freezeframes.html

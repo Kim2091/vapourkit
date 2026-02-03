@@ -389,7 +389,7 @@ export class ModelExtractor {
       logger.model(`Custom params: ${customTrtexecParams}`);
       
       // Start with ONNX path - quote it if it contains spaces
-      const quotedOnnxPath = onnxPath.includes(' ') ? `"${onnxPath}` : onnxPath;
+      const quotedOnnxPath = onnxPath.includes(' ') ? `"${onnxPath}"` : onnxPath;
       args = [`--onnx=${quotedOnnxPath}`];
       
       // Replace OUTPUT_PATH placeholder with actual engine path (quoted if needed)

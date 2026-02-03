@@ -1,5 +1,5 @@
 name = "Side by Side"
-category = "Utility"
+category = ["Utility", "Comparison"]
 code = """
 # Full Docs: https://www.vapoursynth.com/doc/functions/video/stackvertical_stackhorizontal.html
 

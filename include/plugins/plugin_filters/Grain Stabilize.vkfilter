@@ -1,5 +1,5 @@
 name = "Grain Stabilize"
-category = ["Grain", "Noise"]
+category = ["Grain"]
 code = """
 # Stabilize grain (make it less flickery)
 

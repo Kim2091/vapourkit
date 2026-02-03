@@ -1,0 +1,10 @@
+name = "Invert"
+category = "Color Modification"
+code = """
+# Invert all colors
+
+clip = core.std.Invert(clip)"""
+description = "Inverts all colors"
+
+[metadata]
+createdAt = "2026-01-31T00:00:00.000Z"

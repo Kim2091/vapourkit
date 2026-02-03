@@ -1,5 +1,5 @@
 name = "ProToon"
-category = ["Hybrid", "Animation"]
+category = ["Hybrid", "Lines"]
 code = """
 # Cartoon/anime processing with line darkening
 # From hybrid_filters/proToon.py

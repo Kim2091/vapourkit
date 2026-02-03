@@ -1,5 +1,5 @@
 name = "Crop with Preview"
-category = ["Hybrid", "Preview"]
+category = ["Hybrid", "Padding/Cropping"]
 code = """
 # Preview crop regions with visual guides
 # From hybrid_filters/CPreview.py

@@ -1,5 +1,5 @@
 name = "Shift Chroma"
-category = "Color Correction"
+category = "Color Modification"
 code = """
 # Shifts just the chroma in case it is misaligned.
 # Positive values go up/left, negative down/right.

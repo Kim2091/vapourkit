@@ -1,5 +1,5 @@
 name = "Hysteria"
-category = ["Hybrid", "Enhancement"]
+category = ["Hybrid", "Lines"]
 code = """
 # Line darkening with edge masking
 # From hybrid_filters/hysteria.py

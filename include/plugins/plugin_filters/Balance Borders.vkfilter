@@ -1,5 +1,5 @@
 name = "Balance Borders"
-category = ["Hybrid", "Borders"]
+category = ["Hybrid", "Padding/Cropping"]
 code = """
 # Balance border brightness (bbmod)
 # From hybrid_filters/edge.py

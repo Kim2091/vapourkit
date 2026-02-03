@@ -48,12 +48,23 @@ export class VsePreviewerManager {
     try {
       // Check if VSE-Previewer exists
       if (!this.isInstalled()) {
-        throw new Error('VSE-Previewer not found. Please run setup again.');
+        const error = 'VSE-Previewer executable not found. Please run setup again to install required components.';
+        logger.error(error);
+        return { success: false, error };
       }
       
       // Check if script file exists
       if (!fs.existsSync(scriptPath)) {
-        throw new Error(`Script file not found: ${scriptPath}`);
+        const error = `Script file not found at: ${scriptPath}. The VapourSynth script may have failed to generate.`;
+        logger.error(error);
+        return { success: false, error };
+      }
+      
+      // Verify Python executable exists
+      if (!fs.existsSync(PATHS.PYTHON)) {
+        const error = 'Python executable not found. VapourSynth dependencies may not be installed correctly.';
+        logger.error(error);
+        return { success: false, error };
       }
       
       // Setup VapourSynth environment (VSE-Previewer needs access to Python and VS plugins)
@@ -64,20 +75,49 @@ export class VsePreviewerManager {
       
       const child = spawn(this.VSE_PREVIEWER_EXE, ['-p', scriptPath], {
         detached: true,
-        stdio: 'ignore',
+        stdio: 'pipe', // Capture output to detect launch errors
         cwd: this.VSE_PREVIEWER_DIR,
         env: env  // Pass VapourSynth environment
       });
       
-      // Detach the child process so it runs independently
-      child.unref();
-      
-      logger.info('VSE-Previewer launched successfully');
-      return { success: true };
+      // Create a promise to wait briefly and check if the process crashes immediately
+      return new Promise((resolve) => {
+        let errorOutput = '';
+        
+        // Collect stderr output
+        child.stderr?.on('data', (data) => {
+          errorOutput += data.toString();
+        });
+        
+        // Check if the process exits immediately (indicates a launch failure)
+        child.on('exit', (code, signal) => {
+          if (code !== null && code !== 0) {
+            const errorMsg = errorOutput 
+              ? `VSE-Previewer failed to start: ${errorOutput.trim()}`
+              : `VSE-Previewer exited with code ${code}. This may indicate a missing dependency or configuration issue.`;
+            logger.error(errorMsg);
+            resolve({ success: false, error: errorMsg });
+          }
+        });
+        
+        child.on('error', (err) => {
+          const errorMsg = `Failed to spawn VSE-Previewer: ${err.message}`;
+          logger.error(errorMsg);
+          resolve({ success: false, error: errorMsg });
+        });
+        
+        // If the process is still running after a short delay, consider it successful
+        setTimeout(() => {
+          // Detach the child process so it runs independently
+          child.unref();
+          logger.info('VSE-Previewer launched successfully');
+          resolve({ success: true });
+        }, 1000); // Wait 1 second to check for immediate failures
+      });
     } catch (error) {
       logger.error('Error launching VSE-Previewer:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
-      return { success: false, error: errorMsg };
+      return { success: false, error: `Unexpected error: ${errorMsg}` };
     }
   }
 }

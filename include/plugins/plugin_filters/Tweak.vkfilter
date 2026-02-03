@@ -1,5 +1,5 @@
 name = "Tweak"
-category = ["Hybrid", "Color"]
+category = ["Hybrid", "Color Modification"]
 code = """
 # Adjust hue, saturation, brightness and contrast
 # From hybrid_filters/color.py

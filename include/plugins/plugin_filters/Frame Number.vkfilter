@@ -1,5 +1,5 @@
 name = "Frame Number"
-category = "Analysis"
+category = "Overlays"
 code = """
 # Display frame number on clip
 

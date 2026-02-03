@@ -8,8 +8,8 @@ This release in in dedication to my Mom. She passed away on 1/1/26 after a long 
   - It also has a search!
 - Fixes the lag and focus issues present in previous versions of Vapourkit
   - You can now have 20+ filters expanded in your workflow and it will not slow down!
-  - The bug that required alt tabbing is no longer present
-- Adds vs-previewer! This allows for realtime previewing of how your video will turn out without having to render the whole thing
+  - The bug that required alt tabbing to fix is no longer present
+- Adds vse-previewer! This allows for realtime previewing of how your video will turn out without having to render the whole thing
 - Adds ESC button support to all pop up modals
 - Added [vs_grain](https://github.com/pifroggi/vs_grain)
 - Replaces pop up dialogs with notifications within the GUI

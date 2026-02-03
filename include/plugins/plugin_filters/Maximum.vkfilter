@@ -1,4 +1,4 @@
-name = "Morphological Expand"
+name = "Maximum"
 category = "Masking"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/morpho/

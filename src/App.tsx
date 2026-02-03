@@ -117,6 +117,10 @@ function App() {
   const [vsMlrtVersionInfo, setVsMlrtVersionInfo] = useState<VsMlrtVersionInfo | null>(null);
   const [showVsMlrtModal, setShowVsMlrtModal] = useState(false);
 
+  // VSE-Previewer loading state
+  const [isLaunchingPreviewer, setIsLaunchingPreviewer] = useState(false);
+  const [previewerStatus, setPreviewerStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
   // Pre-queue workflow state to restore when queue is closed
   const [preQueueWorkflow, setPreQueueWorkflow] = useState<{
     videoPath: string | null;
@@ -445,6 +449,7 @@ function App() {
   // Clear validation status when workflow or loaded video changes
   useEffect(() => {
     clearValidationStatus();
+    setPreviewerStatus('idle');
   }, [filters, selectedModel, useDirectML, numStreams, videoInfo?.path, clearValidationStatus]);
 
   // Reset segment selection when video changes (but not when loading a queue item)
@@ -695,9 +700,12 @@ function App() {
 
   // Launch VSE-Previewer with current workflow
   const handleLaunchPreviewer = useCallback(async () => {
-    if (!videoInfo) return;
+    if (!videoInfo || isLaunchingPreviewer) return;
     
+    setIsLaunchingPreviewer(true);
+    setPreviewerStatus('idle');
     addConsoleLog('Launching VSE-Previewer with current workflow...');
+    
     try {
       const result = await window.electronAPI.launchVsePreviewer(
         videoInfo.path,
@@ -711,15 +719,23 @@ function App() {
       
       if (result.success) {
         addConsoleLog('VSE-Previewer launched successfully');
+        notify.success('Previewer Launched', 'VSE-Previewer opened successfully');
+        setPreviewerStatus('success');
       } else {
-        addConsoleLog(`Failed to launch previewer: ${result.error}`);
-        notify.error('Previewer Error', `Failed to launch previewer: ${result.error}`);
+        const errorMsg = result.error || 'Unknown error occurred';
+        addConsoleLog(`Failed to launch previewer: ${errorMsg}`);
+        notify.error('Previewer Launch Failed', errorMsg);
+        setPreviewerStatus('error');
       }
     } catch (error) {
-      addConsoleLog(`Error launching previewer: ${getErrorMessage(error)}`);
-      notify.error('Previewer Error', getErrorMessage(error));
+      const errorMsg = getErrorMessage(error);
+      addConsoleLog(`Error launching previewer: ${errorMsg}`);
+      notify.error('Previewer Error', errorMsg);
+      setPreviewerStatus('error');
+    } finally {
+      setIsLaunchingPreviewer(false);
     }
-  }, [videoInfo, selectedModel, useDirectML, filters, numStreams, segment, addConsoleLog]);
+  }, [videoInfo, selectedModel, useDirectML, filters, numStreams, segment, addConsoleLog, isLaunchingPreviewer]);
 
   // Seek to a specific frame in the video preview (used by segment selector)
   const handleSeekFrame = useCallback(async (frameNumber: number) => {
@@ -987,35 +1003,35 @@ function App() {
                       <button
                         onClick={isValidating ? cancelValidation : validateWorkflow}
                         disabled={!videoInfo && !isValidating}
-                        className={`font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${
+                        className={`font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
                           isValidating
                             ? 'bg-orange-600 hover:bg-orange-700 cursor-pointer text-white'
                             : validationStatus === 'success'
-                            ? 'bg-green-600 hover:bg-green-700 text-white border border-green-500'
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
                             : validationStatus === 'error'
-                            ? 'bg-red-600 hover:bg-red-700 text-white border border-red-500'
-                            : 'bg-dark-surface hover:bg-dark-bg border border-gray-700 hover:border-primary-blue disabled:border-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed'
+                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                            : 'bg-dark-surface hover:bg-dark-bg border border-violet-500/50 hover:border-violet-400 text-violet-300 disabled:border-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
                         }`}
                         title={isValidating ? 'Click to cancel validation' : validationStatus === 'error' && validationError ? `Error: ${validationError}` : 'Validate the current workflow by processing first 5 seconds'}
                       >
                         {isValidating ? (
                           <>
-                            <XCircle className="w-4 h-4" />
+                            <XCircle className="w-5 h-5" />
                             Cancel
                           </>
                         ) : validationStatus === 'success' ? (
                           <>
-                            <CheckCircle className="w-4 h-4" />
+                            <CheckCircle className="w-5 h-5" />
                             Valid
                           </>
                         ) : validationStatus === 'error' ? (
                           <>
-                            <AlertCircle className="w-4 h-4" />
+                            <AlertCircle className="w-5 h-5" />
                             Failed
                           </>
                         ) : (
                           <>
-                            <CheckCircle className="w-4 h-4" />
+                            <CheckCircle className="w-5 h-5" />
                             Validate
                           </>
                         )}
@@ -1023,14 +1039,42 @@ function App() {
                     )}
 
                     {/* Preview Script Button - hidden during processing */}
-                    {!isProcessing && videoInfo && (
+                    {!isProcessing && (
                       <button
                         onClick={handleLaunchPreviewer}
-                        className="font-semibold py-2.5 px-4 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm bg-dark-surface hover:bg-dark-bg border border-accent-cyan/50 hover:border-accent-cyan text-accent-cyan"
+                        disabled={!videoInfo || isLaunchingPreviewer}
+                        className={`font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
+                          isLaunchingPreviewer
+                            ? 'bg-teal-700 border border-teal-500/50 text-white cursor-wait'
+                            : previewerStatus === 'success'
+                            ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                            : previewerStatus === 'error'
+                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                            : 'bg-dark-surface hover:bg-dark-bg border border-teal-500/50 hover:border-teal-400 text-teal-300 disabled:border-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
+                        }`}
                         title="Preview VapourSynth script with current workflow in VSE-Previewer"
                       >
-                        <Play className="w-4 h-4" />
-                        Preview
+                        {isLaunchingPreviewer ? (
+                          <>
+                            <Play className="w-5 h-5 animate-spin" />
+                            Launching...
+                          </>
+                        ) : previewerStatus === 'success' ? (
+                          <>
+                            <CheckCircle className="w-5 h-5" />
+                            Launched
+                          </>
+                        ) : previewerStatus === 'error' ? (
+                          <>
+                            <XCircle className="w-5 h-5" />
+                            Failed
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-5 h-5" />
+                            Preview
+                          </>
+                        )}
                       </button>
                     )}
 

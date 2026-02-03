@@ -1,5 +1,5 @@
 name = "Text Overlay"
-category = "Analysis"
+category = "Overlays"
 code = """
 # Add text overlay to clip
 # Full Docs: https://www.vapoursynth.com/doc/functions/video/text.html

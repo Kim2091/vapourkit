@@ -56,13 +56,15 @@ export const Header = memo<HeaderProps>(({
           </button>
           <button
             onClick={() => onToggleDirectML(!useDirectML)}
-            className={`transition-colors p-2 hover:bg-dark-surface rounded-lg flex flex-col items-center gap-0.5 min-w-[56px] ${
-              useDirectML ? 'text-accent-cyan' : 'text-gray-400 hover:text-white'
-            }`}
-            title={useDirectML ? "DirectML: ON (ONNX Runtime)" : "DirectML: OFF (TensorRT)"}
+            className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg flex flex-col items-center gap-0.5 min-w-[70px]"
+            title={useDirectML ? "Currently using DirectML - Click to switch to TensorRT" : "Currently using TensorRT - Click to switch to DirectML"}
           >
             <Cpu className="w-5 h-5" />
-            <span className="text-xs">DirectML</span>
+            <div className="flex items-center gap-1 text-xs">
+              <span className={useDirectML ? 'text-accent-cyan font-semibold' : 'text-gray-500'}>DML</span>
+              <span className="text-gray-600">|</span>
+              <span className={!useDirectML ? 'text-primary-blue font-semibold' : 'text-gray-500'}>TRT</span>
+            </div>
           </button>
           <button
             onClick={onReloadBackend}
