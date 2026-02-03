@@ -1,5 +1,5 @@
 name = "HQDering"
-category = ["Hybrid", "Dering"]
+category = ["Hybrid", "Dehalo"]
 code = """
 # High-quality deringing using smart edge smoothing
 # From hybrid_filters/dering.py
