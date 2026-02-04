@@ -396,6 +396,17 @@ export interface WorkflowData {
   }[];
   createdAt?: string;
   description?: string;
+  // Encoding settings
+  encodingSettings?: {
+    ffmpegArgs?: string;
+    processingFormat?: string;
+    outputFormat?: string;
+    videoCompareArgs?: string;
+    useDirectML?: boolean;
+    numStreams?: number;
+    segment?: SegmentSelection;
+    colorimetry?: ColorimetrySettings;
+  };
 }
 
 export interface PluginDependencyProgress {

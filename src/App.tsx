@@ -289,6 +289,23 @@ function App() {
     availableModels: availableModels.map(m => m.path),
     addConsoleLog,
     refreshFilterTemplates: loadTemplates,
+    // Encoding settings
+    ffmpegArgs,
+    processingFormat,
+    outputFormat,
+    videoCompareArgs,
+    useDirectML,
+    numStreams,
+    segment,
+    colorimetry: colorimetrySettings,
+    setFfmpegArgs: handleUpdateFfmpegArgs,
+    setProcessingFormat: handleUpdateProcessingFormat,
+    setOutputFormat: handleUpdateOutputFormat,
+    setVideoCompareArgs: handleUpdateVideoCompareArgs,
+    toggleDirectML,
+    updateNumStreams,
+    setSegment,
+    handleColorimetryChange,
   });
 
   // Model import hook

@@ -79,6 +79,10 @@ export const Header = memo<HeaderProps>(({
             disabled={isProcessing || isReloading}
             className="text-gray-400 hover:text-accent-cyan transition-colors p-2 hover:bg-dark-surface rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-0.5 min-w-[56px]"
             title="Reload Backend"
+          >
+            <RefreshCw className={`w-5 h-5 ${isReloading ? 'animate-spin' : ''}`} />
+            <span className="text-xs">Reload</span>
+          </button>
           
           {/* Undo/Redo buttons */}
           <div className="flex items-center gap-1 px-2 py-1 border-l border-gray-700/50 ml-1">
@@ -103,10 +107,6 @@ export const Header = memo<HeaderProps>(({
               </button>
             )}
           </div>
-          >
-            <RefreshCw className={`w-5 h-5 ${isReloading ? 'animate-spin' : ''}`} />
-            <span className="text-xs">Reload</span>
-          </button>
         </div>
 
         {/* Center content - hides on smaller screens */}
