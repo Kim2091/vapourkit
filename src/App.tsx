@@ -81,7 +81,7 @@ function App() {
   const { templates: filterTemplates, saveTemplate, deleteTemplate, loadTemplates } = useFilterTemplates(isSetupComplete);
   
   // State management hooks
-  const { filters, handleSetFilters } = useFilterConfig(isSetupComplete, addConsoleLog);
+  const { filters, handleSetFilters, canUndo, canRedo, handleUndo, handleRedo } = useFilterConfig(isSetupComplete, addConsoleLog);
   const { colorimetrySettings, handleColorimetryChange } = useColorimetry(isSetupComplete, addConsoleLog);
   const { panelSizes, panelSizesLoaded, handlePanelResize } = usePanelLayout(isSetupComplete, addConsoleLog);
   const {
@@ -819,6 +819,10 @@ function App() {
         onClearWorkflow={handleClearWorkflow}
         workflowName={currentWorkflow}
         isReloading={isReloading}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
 
       {/* Notification Bar for Uninitialized Models */}

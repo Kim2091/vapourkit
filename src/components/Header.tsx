@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu, FileCheck2 } from 'lucide-react';
+import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu, FileCheck2, Undo, Redo } from 'lucide-react';
 import { Logo } from './Logo';
 
 interface HeaderProps {
@@ -16,6 +16,10 @@ interface HeaderProps {
   onClearWorkflow?: () => void;
   workflowName?: string | null;
   isReloading?: boolean;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 export const Header = memo<HeaderProps>(({ 
@@ -31,7 +35,11 @@ export const Header = memo<HeaderProps>(({
   onExportWorkflow,
   onClearWorkflow,
   workflowName,
-  isReloading
+  isReloading,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
 }: HeaderProps) => (
   <div className="flex-shrink-0">
     <div className="py-3 px-6 border-b border-gray-800/50">
@@ -71,6 +79,30 @@ export const Header = memo<HeaderProps>(({
             disabled={isProcessing || isReloading}
             className="text-gray-400 hover:text-accent-cyan transition-colors p-2 hover:bg-dark-surface rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center gap-0.5 min-w-[56px]"
             title="Reload Backend"
+          
+          {/* Undo/Redo buttons */}
+          <div className="flex items-center gap-1 px-2 py-1 border-l border-gray-700/50 ml-1">
+            {onUndo && (
+              <button
+                onClick={onUndo}
+                disabled={!canUndo || isProcessing}
+                className="text-gray-400 hover:text-white transition-colors p-1.5 hover:bg-dark-surface rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo className="w-4 h-4" />
+              </button>
+            )}
+            {onRedo && (
+              <button
+                onClick={onRedo}
+                disabled={!canRedo || isProcessing}
+                className="text-gray-400 hover:text-white transition-colors p-1.5 hover:bg-dark-surface rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Redo (Ctrl+Y)"
+              >
+                <Redo className="w-4 h-4" />
+              </button>
+            )}
+          </div>
           >
             <RefreshCw className={`w-5 h-5 ${isReloading ? 'animate-spin' : ''}`} />
             <span className="text-xs">Reload</span>
