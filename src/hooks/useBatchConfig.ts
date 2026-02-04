@@ -4,12 +4,16 @@ import type { SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 
 interface UseBatchConfigOptions {
+  ffmpegArgs: string;
+  processingFormat: string;
   outputFormat: string;
+  videoCompareArgs: string;
   selectedModel: string | null;
   filters: any[];
   useDirectML: boolean;
   numStreams: number;
   segment?: SegmentSelection;
+  colorimetry?: any;
   showQueue: boolean;
   onAddToQueue: (videoPaths: string[], workflow: any, outputPath?: string) => void;
   onLoadVideoInfo: (path: string) => Promise<void>;
@@ -17,7 +21,7 @@ interface UseBatchConfigOptions {
 }
 
 export function useBatchConfig(options: UseBatchConfigOptions) {
-  const { outputFormat, selectedModel, filters, useDirectML, numStreams, segment, showQueue, onAddToQueue, onLoadVideoInfo, onLog } = options;
+  const { ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, selectedModel, filters, useDirectML, numStreams, segment, colorimetry, showQueue, onAddToQueue, onLoadVideoInfo, onLog } = options;
 
   const handleSelectVideoWithQueue = async (): Promise<void> => {
     try {
@@ -43,10 +47,14 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
       const currentWorkflowSnapshot = {
         selectedModel,
         filters: structuredClone(filters), // Deep copy
+        ffmpegArgs,
+        processingFormat,
         outputFormat,
+        videoCompareArgs,
         useDirectML,
         numStreams,
         segment: segment?.enabled ? { ...segment } : undefined,
+        colorimetry,
       };
       
       // Add each video directly to the queue without showing the modal
@@ -62,10 +70,14 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
     const currentWorkflowSnapshot = {
       selectedModel,
       filters: structuredClone(filters), // Deep copy
+      ffmpegArgs,
+      processingFormat,
       outputFormat,
+      videoCompareArgs,
       useDirectML,
       numStreams,
       segment: segment?.enabled ? { ...segment } : undefined,
+      colorimetry,
     };
     
     onAddToQueue([videoPath], currentWorkflowSnapshot, outputPath);

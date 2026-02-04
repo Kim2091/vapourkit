@@ -38,7 +38,6 @@ export function registerWorkflowHandlers() {
           processing_format: workflow.encodingSettings.processingFormat,
           output_format: workflow.encodingSettings.outputFormat,
           video_compare_args: workflow.encodingSettings.videoCompareArgs,
-          use_directml: workflow.encodingSettings.useDirectML,
           num_streams: workflow.encodingSettings.numStreams,
         };
 
@@ -106,7 +105,6 @@ export function registerWorkflowHandlers() {
           processingFormat: data.encoding_settings.processing_format,
           outputFormat: data.encoding_settings.output_format,
           videoCompareArgs: data.encoding_settings.video_compare_args,
-          useDirectML: data.encoding_settings.use_directml,
           numStreams: data.encoding_settings.num_streams,
         };
 

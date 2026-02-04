@@ -91,10 +91,14 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     currentWorkflow: {
       selectedModel: string | null;
       filters: Filter[];
+      ffmpegArgs: string;
+      processingFormat: string;
       outputFormat: string;
+      videoCompareArgs: string;
       useDirectML: boolean;
       numStreams: number;
       segment?: SegmentSelection;
+      colorimetry?: any;
     },
     customOutputPath?: string
   ) => {
@@ -121,10 +125,14 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
         workflow: {
           selectedModel: currentWorkflow.selectedModel,
           filters: structuredClone(currentWorkflow.filters), // Deep copy
+          ffmpegArgs: currentWorkflow.ffmpegArgs,
+          processingFormat: currentWorkflow.processingFormat,
           outputFormat: currentWorkflow.outputFormat,
+          videoCompareArgs: currentWorkflow.videoCompareArgs,
           useDirectML: currentWorkflow.useDirectML,
           numStreams: currentWorkflow.numStreams,
           segment: currentWorkflow.segment ? { ...currentWorkflow.segment } : undefined,
+          colorimetry: currentWorkflow.colorimetry,
         },
       };
     });

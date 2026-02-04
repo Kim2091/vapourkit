@@ -8,10 +8,14 @@ interface UseQueueHandlersOptions {
   editingQueueItemId: string | null;
   selectedModel: string | null;
   filters: any[];
+  ffmpegArgs: string;
+  processingFormat: string;
   outputFormat: string;
+  videoCompareArgs: string;
   useDirectML: boolean;
   numStreams: number;
   segment: SegmentSelection;
+  colorimetry: any;
   isProcessingQueueItem: boolean;
   setEditingQueueItemId: (id: string | null) => void;
   setIsQueueStarted: (started: boolean) => void;
@@ -41,10 +45,14 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
     editingQueueItemId,
     selectedModel,
     filters,
+    ffmpegArgs,
+    processingFormat,
     outputFormat,
+    videoCompareArgs,
     useDirectML,
     numStreams,
     segment,
+    colorimetry,
     isProcessingQueueItem,
     setEditingQueueItemId,
     setIsQueueStarted,
@@ -116,10 +124,14 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
       const currentWorkflowSnapshot = {
         selectedModel,
         filters: structuredClone(filters),
+        ffmpegArgs,
+        processingFormat,
         outputFormat,
+        videoCompareArgs,
         useDirectML,
         numStreams,
         segment: segment.enabled ? { ...segment } : undefined,
+        colorimetry,
       };
       updateItemWorkflow(editingQueueItemId, currentWorkflowSnapshot);
       onLog(`Auto-saved changes to queue item`);

@@ -14,7 +14,6 @@ interface WorkflowState {
     processingFormat: string;
     outputFormat: string;
     videoCompareArgs: string;
-    useDirectML: boolean;
     numStreams: number;
     segment: SegmentSelection;
     colorimetry: ColorimetrySettings;
@@ -105,14 +104,14 @@ export function useWorkflow({
       ...prev,
       previousFilters: deepCopyFilters(filters),
       previousModel: selectedModel,
-      previousEncodingSettings: ffmpegArgs && processingFormat && outputFormat && videoCompareArgs && 
-        useDirectML !== undefined && numStreams && segment && colorimetry
+      previousEncodingSettings: ffmpegArgs !== undefined && processingFormat !== undefined && 
+        outputFormat !== undefined && videoCompareArgs !== undefined && 
+        numStreams !== undefined && segment !== undefined && colorimetry !== undefined
         ? {
             ffmpegArgs,
             processingFormat,
             outputFormat,
             videoCompareArgs,
-            useDirectML,
             numStreams,
             segment,
             colorimetry,
@@ -121,7 +120,7 @@ export function useWorkflow({
     }));
     addConsoleLog('Saved current settings before loading workflow');
   }, [filters, selectedModel, deepCopyFilters, addConsoleLog, ffmpegArgs, processingFormat, 
-      outputFormat, videoCompareArgs, useDirectML, numStreams, segment, colorimetry]);
+      outputFormat, videoCompareArgs, numStreams, segment, colorimetry]);
 
   /**
    * Load a workflow from file
@@ -202,11 +201,6 @@ export function useWorkflow({
           setVideoCompareArgs(workflow.encodingSettings.videoCompareArgs);
           addConsoleLog(`Applied video compare args from workflow`);
         }
-        if (workflow.encodingSettings.useDirectML !== undefined && toggleDirectML && 
-            workflow.encodingSettings.useDirectML !== useDirectML) {
-          toggleDirectML();
-          addConsoleLog(`Applied DirectML setting: ${workflow.encodingSettings.useDirectML}`);
-        }
         if (workflow.encodingSettings.numStreams && updateNumStreams) {
           updateNumStreams(workflow.encodingSettings.numStreams);
           addConsoleLog(`Applied num streams: ${workflow.encodingSettings.numStreams}`);
@@ -242,11 +236,9 @@ export function useWorkflow({
     setProcessingFormat,
     setOutputFormat,
     setVideoCompareArgs,
-    toggleDirectML,
     updateNumStreams,
     setSegment,
     handleColorimetryChange,
-    useDirectML,
   ]);
 
   /**
@@ -275,7 +267,6 @@ export function useWorkflow({
       if (setProcessingFormat) setProcessingFormat(prev.processingFormat);
       if (setOutputFormat) setOutputFormat(prev.outputFormat);
       if (setVideoCompareArgs) setVideoCompareArgs(prev.videoCompareArgs);
-      if (toggleDirectML && prev.useDirectML !== useDirectML) toggleDirectML();
       if (updateNumStreams) updateNumStreams(prev.numStreams);
       if (setSegment) setSegment(prev.segment);
       if (handleColorimetryChange) handleColorimetryChange(prev.colorimetry);
@@ -300,11 +291,9 @@ export function useWorkflow({
     setProcessingFormat,
     setOutputFormat,
     setVideoCompareArgs,
-    toggleDirectML,
     updateNumStreams,
     setSegment,
     handleColorimetryChange,
-    useDirectML,
   ]);
 
   /**
@@ -340,14 +329,14 @@ export function useWorkflow({
           };
         }),
         createdAt: new Date().toISOString(),
-        encodingSettings: ffmpegArgs && processingFormat && outputFormat && videoCompareArgs &&
-          useDirectML !== undefined && numStreams && segment && colorimetry
+        encodingSettings: ffmpegArgs !== undefined && processingFormat !== undefined && 
+          outputFormat !== undefined && videoCompareArgs !== undefined &&
+          numStreams !== undefined && segment !== undefined && colorimetry !== undefined
           ? {
               ffmpegArgs,
               processingFormat,
               outputFormat,
               videoCompareArgs,
-              useDirectML,
               numStreams,
               segment,
               colorimetry,
@@ -367,7 +356,7 @@ export function useWorkflow({
       notify.error('Export Error', getErrorMessage(error));
     }
   }, [filters, deepCopyFilters, addConsoleLog, ffmpegArgs, processingFormat, outputFormat, 
-      videoCompareArgs, useDirectML, numStreams, segment, colorimetry]);
+      videoCompareArgs, numStreams, segment, colorimetry]);
 
   /**
    * Import filters from a workflow file permanently

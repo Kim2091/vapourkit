@@ -402,7 +402,6 @@ export interface WorkflowData {
     processingFormat?: string;
     outputFormat?: string;
     videoCompareArgs?: string;
-    useDirectML?: boolean;
     numStreams?: number;
     segment?: SegmentSelection;
     colorimetry?: ColorimetrySettings;
@@ -439,10 +438,14 @@ export interface QueueItem {
   workflow: {
     selectedModel: string | null;
     filters: Filter[];
+    ffmpegArgs: string;
+    processingFormat: string;
     outputFormat: string;
+    videoCompareArgs: string;
     useDirectML: boolean;
     numStreams: number;
     segment?: SegmentSelection;
+    colorimetry?: ColorimetrySettings;
   };
 }
 

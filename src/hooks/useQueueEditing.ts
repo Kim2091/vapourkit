@@ -8,10 +8,14 @@ interface UseQueueEditingOptions {
   showQueue: boolean;
   selectedModel: string | null;
   filters: any[];
+  ffmpegArgs: string;
+  processingFormat: string;
   outputFormat: string;
+  videoCompareArgs: string;
   useDirectML: boolean;
   numStreams: number;
   segment: SegmentSelection;
+  colorimetry: any;
   setEditingQueueItemId: (id: string | null) => void;
   updateItemWorkflow: (id: string, workflow: any) => void;
   onLog: (message: string) => void;
@@ -23,10 +27,14 @@ export function useQueueEditing(options: UseQueueEditingOptions) {
     showQueue,
     selectedModel,
     filters,
+    ffmpegArgs,
+    processingFormat,
     outputFormat,
+    videoCompareArgs,
     useDirectML,
     numStreams,
     segment,
+    colorimetry,
     setEditingQueueItemId,
     updateItemWorkflow,
     onLog,
@@ -39,10 +47,14 @@ export function useQueueEditing(options: UseQueueEditingOptions) {
     const currentWorkflowSnapshot = {
       selectedModel,
       filters: structuredClone(filters),
+      ffmpegArgs,
+      processingFormat,
       outputFormat,
+      videoCompareArgs,
       useDirectML,
       numStreams,
       segment: segment.enabled ? { ...segment } : undefined,
+      colorimetry,
     };
     
     // Debounce auto-save to avoid excessive updates
@@ -51,7 +63,7 @@ export function useQueueEditing(options: UseQueueEditingOptions) {
     }, 500);
     
     return () => clearTimeout(timeoutId);
-  }, [editingQueueItemId, selectedModel, filters, outputFormat, useDirectML, numStreams, segment, updateItemWorkflow]);
+  }, [editingQueueItemId, selectedModel, filters, ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, useDirectML, numStreams, segment, colorimetry, updateItemWorkflow]);
 
   // Close editing mode when queue panel closes
   useEffect(() => {
