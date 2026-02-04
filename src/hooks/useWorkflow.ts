@@ -41,7 +41,7 @@ interface UseWorkflowProps {
   setProcessingFormat?: (format: string) => void;
   setOutputFormat?: (format: string) => void;
   setVideoCompareArgs?: (args: string) => void;
-  toggleDirectML?: () => void;
+  toggleDirectML?: (value: boolean) => void;
   updateNumStreams?: (streams: number) => void;
   setSegment?: (segment: SegmentSelection) => void;
   handleColorimetryChange?: (settings: ColorimetrySettings) => void;
@@ -70,7 +70,6 @@ export function useWorkflow({
   processingFormat,
   outputFormat,
   videoCompareArgs,
-  useDirectML,
   numStreams,
   segment,
   colorimetry,
@@ -78,7 +77,6 @@ export function useWorkflow({
   setProcessingFormat,
   setOutputFormat,
   setVideoCompareArgs,
-  toggleDirectML,
   updateNumStreams,
   setSegment,
   handleColorimetryChange,
