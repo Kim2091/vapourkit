@@ -28,7 +28,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
 
   return (
     <div className="flex-1 bg-dark-elevated rounded-xl border border-gray-800/70 overflow-hidden flex flex-col min-h-0 card-hover">
-      <div className="flex-shrink-0 px-3 py-2 border-b border-gray-800/70 flex items-center justify-between backdrop-blur-sm">
+      <div className="flex-shrink-0 px-3 py-2 border-b border-gray-800/70 flex items-center justify-between bg-dark-elevated/95 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <Video className="w-4 h-4 text-primary-purple" />
           <h2 className="font-semibold text-base">Output Preview</h2>
@@ -38,7 +38,11 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           {completedVideoPath && (
             <>
               <button
-                onClick={onCompareVideos}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCompareVideos();
+                }}
                 disabled={segmentEnabled}
                 className={`text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${
                   segmentEnabled 
