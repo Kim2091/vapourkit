@@ -116,25 +116,6 @@ export function setupVSEnvironment(pythonPath?: string): NodeJS.ProcessEnv {
   return env;
 }
 
-/**
- * Setup environment for VSE-Previewer (which has embedded Python)
- * Only sets VapourSynth plugin paths, doesn't override Python configuration
- */
-export function setupVSEPreviewerEnvironment(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  
-  // Add VapourSynth portable directory to PATH so VSE-Previewer can find vapoursynth.dll
-  const vsPath = PATHS.VS;
-  env['PATH'] = `${vsPath};${env['PATH']}`;
-  
-  // Setup VapourSynth plugin paths
-  // Do NOT set PYTHONHOME or PYTHONPATH as VSE-Previewer has embedded Python
-  env['VS_PLUGINS_PATH'] = PATHS.PLUGINS;
-  env['VAPOURSYNTH_PLUGINS_PATH'] = PATHS.PLUGINS;
-  
-  return env;
-}
-
 
 /**
  * Wrapper for operations that need logging separators

@@ -28,7 +28,6 @@ export const SetupScreen = memo<SetupScreenProps>(({
       { id: 'vapoursynth', name: 'VapourSynth Portable R72', description: 'Video processing framework', component: 'VapourSynth R72' },
       { id: 'bestsource', name: 'BestSource R13', description: 'Video source filter', component: 'BestSource R13' },
       { id: 'video-compare', name: 'Video Compare Tool', description: 'Side-by-side comparison viewer', component: 'Video Compare Tool' },
-      { id: 'vse-previewer', name: 'VSE-Previewer', description: 'VapourSynth script previewer', component: 'VSE-Previewer' },
       { id: 'onnx', name: 'vs-mlrt ONNX Runtime Plugin v15.13', description: 'DirectML support (AMD/Intel/NVIDIA GPUs)', component: 'vs-mlrt ONNX Runtime' },
     ];
 
@@ -165,7 +164,6 @@ export const SetupScreen = memo<SetupScreenProps>(({
                         step.id === 'onnx' ? 'text-accent-cyan' :
                         step.id === 'bestsource' ? 'text-green-400' :
                         step.id === 'video-compare' ? 'text-yellow-400' :
-                        step.id === 'vse-previewer' ? 'text-purple-400' :
                         step.id === 'python' ? 'text-orange-400' :
                         step.id === 'models' ? 'text-pink-400' :
                         step.id === 'ffmpeg' ? 'text-blue-400' :

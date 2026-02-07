@@ -14,7 +14,7 @@ import { UpscaleExecutor } from './upscaleExecutor';
 import { DependencyManager } from './dependencyManager';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 import { FFmpegManager } from './ffmpegManager';
-import { VsePreviewerManager } from './vsePreviewerManager';
+import { VsViewManager } from './vsViewManager';
 
 let upscaleExecutor: UpscaleExecutor | null = null;
 let previewExecutor: UpscaleExecutor | null = null;
@@ -367,7 +367,7 @@ export function registerVideoHandlers(
     }
   });
 
-  // Launch VSE-Previewer with a VapourSynth script
+  // Launch vs-view with a VapourSynth script
   ipcMain.handle('launch-vse-previewer', async (
     event,
     videoPath: string,
@@ -378,7 +378,7 @@ export function registerVideoHandlers(
     numStreams?: number,
     segment?: { enabled: boolean; startFrame: number; endFrame: number }
   ) => {
-    logger.info(`Launching VSE-Previewer for video: ${videoPath}`);
+    logger.info(`Launching vs-view for video: ${videoPath}`);
     try {
       // Generate VapourSynth script with the current workflow
       const metadata = await extractVideoMetadata(videoPath);
@@ -403,18 +403,18 @@ export function registerVideoHandlers(
       const scriptPath = await scriptGenerator.generateScript(scriptConfig);
       logger.info(`Generated preview script: ${scriptPath}`);
 
-      // Launch VSE-Previewer with the generated script
-      const result = await VsePreviewerManager.launch(scriptPath);
+      // Launch vs-view with the generated script
+      const result = await VsViewManager.launch(scriptPath);
       
       if (result.success) {
-        logger.info('VSE-Previewer launched successfully');
+        logger.info('vs-view launched successfully');
       } else {
-        logger.error(`Failed to launch VSE-Previewer: ${result.error}`);
+        logger.error(`Failed to launch vs-view: ${result.error}`);
       }
 
       return result;
     } catch (error) {
-      logger.error('Error launching VSE-Previewer:', error);
+      logger.error('Error launching vs-view:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
       return { success: false, error: errorMsg };
     }

@@ -213,7 +213,6 @@ export class DependencyManager {
     const pythonExists = await fs.pathExists(PATHS.PYTHON);
     const modelsExtracted = !(await this.modelExtractor.needsExtraction());
     const videoCompareExists = await fs.pathExists(PATHS.VIDEO_COMPARE_EXE);
-    const vsePreviewerExists = await fs.pathExists(PATHS.VSE_PREVIEWER_EXE);
     const ffmpegExists = await FFmpegManager.isInstalled();
     // NOTE: No longer checking if models are converted - they will be initialized on-demand
     
@@ -225,10 +224,9 @@ export class DependencyManager {
     logger.dependency(`Python: ${pythonExists}`);
     logger.dependency(`Models extracted: ${modelsExtracted}`);
     logger.dependency(`Video Compare: ${videoCompareExists}`);
-    logger.dependency(`VSE-Previewer: ${vsePreviewerExists}`);
     logger.dependency(`FFmpeg: ${ffmpegExists}`);
     
-    const allPresent = vsExists && mlrtExists && ortExists && bsExists && pythonExists && modelsExtracted && videoCompareExists && vsePreviewerExists && ffmpegExists;
+    const allPresent = vsExists && mlrtExists && ortExists && bsExists && pythonExists && modelsExtracted && videoCompareExists && ffmpegExists;
     logger.dependency(`All dependencies present: ${allPresent}`);
     
     return allPresent;
@@ -377,41 +375,6 @@ export class DependencyManager {
       await this.extractArchive(archivePath, config.extractTo, config.name);
       await fs.remove(archivePath);
     }
-    
-    // Post-installation: Copy VSE-Previewer config if this is VSE-Previewer
-    if (config.name === 'VSE-Previewer') {
-      await this.copyVsePreviewerConfig();
-    }
-  }
-  
-  private async copyVsePreviewerConfig(): Promise<void> {
-    try {
-      const appPath = app.getAppPath();
-      let bundledBasePath: string;
-      
-      if (appPath.includes('.asar')) {
-        // In production with ASAR, templates are unpacked
-        bundledBasePath = appPath.replace('app.asar', 'app.asar.unpacked');
-      } else {
-        // In development or non-ASAR build
-        bundledBasePath = appPath;
-      }
-      
-      const bundledConfigPath = path.join(bundledBasePath, 'include', 'vse-previewer.conf');
-      const targetConfigPath = path.join(PATHS.VS, 'vse-previewer.conf');
-      
-      // Check if bundled config exists
-      if (await fs.pathExists(bundledConfigPath)) {
-        // Copy config file to vapoursynth-portable directory
-        await fs.copy(bundledConfigPath, targetConfigPath, { overwrite: true });
-        logger.dependency('Copied VSE-Previewer configuration file');
-      } else {
-        logger.warn(`Bundled VSE-Previewer config not found at: ${bundledConfigPath}`);
-      }
-    } catch (error) {
-      logger.error('Failed to copy VSE-Previewer config:', error);
-      // Don't throw - this is not critical
-    }
   }
 
   async setupDependencies(): Promise<void> {
@@ -447,13 +410,6 @@ export class DependencyManager {
           archiveName: 'video-compare.zip',
           checkPath: PATHS.VIDEO_COMPARE_EXE,
           extractTo: PATHS.VIDEO_COMPARE
-        },
-        {
-          name: 'VSE-Previewer',
-          url: 'https://github.com/YomikoR/VapourSynth-Editor/releases/download/VSE-Previewer-R5/vse-previewer.7z',
-          archiveName: 'vse-previewer.7z',
-          checkPath: PATHS.VSE_PREVIEWER_EXE,
-          extractTo: PATHS.VS
         }
       ];
 

@@ -65,7 +65,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           )}
         </div>
       </div>
-      <div className="flex-1 flex items-center justify-center p-3 min-h-0">
+      <div className="flex-1 flex items-center justify-center p-3 min-h-0 overflow-auto">
         {previewFrame ? (
           <div className="relative w-full h-full flex items-center justify-center">
             <img 

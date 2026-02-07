@@ -48,7 +48,7 @@ export interface ScriptConfig {
   segment?: SegmentSelection;
   validationMode?: boolean; // If true, only process first 5 seconds for validation
   sourceFps?: number; // Source video FPS for validation frame calculation
-  generatePreviewOutputs?: boolean; // If true, add output nodes after each filter for VSE-Previewer
+  generatePreviewOutputs?: boolean; // If true, add output nodes after each filter for vs-view
 }
 
 export class VapourSynthScriptGenerator {
@@ -122,8 +122,9 @@ export class VapourSynthScriptGenerator {
       
       // Add output node after each filter if generatePreviewOutputs is enabled
       if (config.generatePreviewOutputs) {
-        // Output index: last filter gets index 0, second-to-last gets 1, etc.
-        const outputIndex = totalFilters - 1 - i;
+        // Output index: first filter gets index 0, second gets 1, etc.
+        // vs-view expects the highest number to be the last step
+        const outputIndex = i;
         filterCode += `clip.set_output(${outputIndex})\n\n`;
       }
     }

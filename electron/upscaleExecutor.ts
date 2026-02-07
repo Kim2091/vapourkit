@@ -344,11 +344,12 @@ export class UpscaleExecutor {
     // Main output file
     ffmpegArgs.push('-y', outputPath);
 
-    // Preview output: PNG frames to stdout
+    // Preview output: JPEG frames to stdout
     ffmpegArgs.push('-map', '0:v:0');
     ffmpegArgs.push('-vf', 'fps=1,scale=-2:720'); // 1 fps preview, max height 720p
     ffmpegArgs.push('-f', 'image2pipe');
-    ffmpegArgs.push('-c:v', 'png');
+    ffmpegArgs.push('-c:v', 'mjpeg');
+    ffmpegArgs.push('-q:v', '1'); // Quality 1 = highest quality (100%)
     ffmpegArgs.push('pipe:1');
 
     return ffmpegArgs;
@@ -421,16 +422,16 @@ export class UpscaleExecutor {
         
         previewFrameBuffer = Buffer.concat([previewFrameBuffer, data]);
         
-        // PNG starts with signature: 89 50 4E 47 0D 0A 1A 0A
-        // PNG ends with IEND chunk: 49 45 4E 44 AE 42 60 82
-        const startMarker = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-        const endMarker = Buffer.from([0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]);
+        // JPEG starts with: FF D8 (SOI)
+        // JPEG ends with: FF D9 (EOI)
+        const startMarker = Buffer.from([0xFF, 0xD8]);
+        const endMarker = Buffer.from([0xFF, 0xD9]);
         
         let startIdx = previewFrameBuffer.indexOf(startMarker);
         let endIdx = previewFrameBuffer.indexOf(endMarker);
         
         while (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-          const pngFrame = previewFrameBuffer.slice(startIdx, endIdx + 8);
+          const jpegFrame = previewFrameBuffer.slice(startIdx, endIdx + 2);
           
           // Throttle preview sending to prevent overwhelming the renderer
           const now = Date.now();
@@ -439,7 +440,7 @@ export class UpscaleExecutor {
             isProcessingPreview = true;
             
             // Copy frame data and current state for async processing
-            const frameData = Buffer.from(pngFrame);
+            const frameData = Buffer.from(jpegFrame);
             const frameInfo = { currentFrame, totalFrames, fps: currentFPS };
             
             // Use setImmediate to defer base64 encoding and IPC send,
@@ -463,7 +464,7 @@ export class UpscaleExecutor {
           }
           
           // Remove processed frame from buffer
-          previewFrameBuffer = previewFrameBuffer.slice(endIdx + 8);
+          previewFrameBuffer = previewFrameBuffer.slice(endIdx + 2);
           startIdx = previewFrameBuffer.indexOf(startMarker);
           endIdx = previewFrameBuffer.indexOf(endMarker);
         }

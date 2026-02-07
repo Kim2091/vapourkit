@@ -76,7 +76,7 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
         // Store the pending frame and schedule update via requestAnimationFrame
         // This decouples the IPC handler from the React render cycle,
         // preventing GUI lag during video processing
-        pendingPreviewFrameRef.current = `data:image/png;base64,${progress.previewFrame}`;
+        pendingPreviewFrameRef.current = `data:image/jpeg;base64,${progress.previewFrame}`;
         
         if (rafIdRef.current === null) {
           rafIdRef.current = requestAnimationFrame(() => {
