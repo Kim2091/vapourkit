@@ -101,6 +101,13 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
           // Always reset stopping state when processing completes
           setIsStopping(false);
           
+          // Cancel any pending preview frame updates
+          if (rafIdRef.current !== null) {
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+          }
+          pendingPreviewFrameRef.current = null;
+          
           // Only auto-load video if we're in a real processing session (not preview)
           // Preview handles its own video loading via handlePreviewSegment
           if (isProcessingRef.current) {
