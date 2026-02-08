@@ -240,7 +240,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const handlePresetChange = (id: string, preset: string) => {
     const templateObj = filterTemplates.find(t => t.name === preset);
     const updatedFilters = pendingFilters.map(f =>
-      f.id === id ? { ...f, preset, code: templateObj?.code || '' } : f
+      f.id === id ? { ...f, preset, code: templateObj?.code || '', category: templateObj?.category } : f
     );
     setPendingFilters(updatedFilters);
     onFiltersChange(updatedFilters);

@@ -352,6 +352,7 @@ export interface Filter {
   order: number;
   modelPath?: string;
   modelType?: 'vsr' | 'image';
+  category?: string | string[];
 }
 
 export interface SegmentSelection {
@@ -393,6 +394,7 @@ export interface WorkflowData {
     filterType: 'aiModel' | 'custom';
     modelPath?: string;
     modelType?: 'vsr' | 'image';
+    category?: string | string[];
   }[];
   createdAt?: string;
   description?: string;

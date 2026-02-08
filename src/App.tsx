@@ -304,6 +304,7 @@ function App() {
     setSelectedModel,
     availableModels: availableModels.map(m => m.path),
     addConsoleLog,
+    filterTemplates,
     refreshFilterTemplates: loadTemplates,
     // Encoding settings
     ffmpegArgs,

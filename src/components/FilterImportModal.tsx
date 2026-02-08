@@ -6,6 +6,7 @@ interface FilterImportItem {
   displayName: string;
   code: string;
   description?: string;
+  category?: string | string[];
   selected: boolean;
 }
 
@@ -18,8 +19,9 @@ interface FilterImportModalProps {
     code: string;
     description?: string;
     filterType: 'aiModel' | 'custom';
+    category?: string | string[];
   }[];
-  onImport: (selectedFilters: { name: string; code: string; description?: string }[]) => void;
+  onImport: (selectedFilters: { name: string; code: string; description?: string; category?: string | string[] }[]) => void;
 }
 
 export const FilterImportModal = memo<FilterImportModalProps>(({
@@ -57,6 +59,7 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
           displayName: `${filter.name} (${workflowName})`,
           code: filter.code,
           description: filter.description,
+          category: filter.category,
           selected: true, // All selected by default
         }))
       );
@@ -121,6 +124,7 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
         name: item.displayName,
         code: item.code,
         description: item.description,
+        category: item.category,
       }));
     
     if (selectedItems.length === 0) {
@@ -280,6 +284,22 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
                                 Original: {item.originalName}
                               </div>
                             )}
+                            {/* Categories */}
+                            {item.category && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {Array.isArray(item.category) ? (
+                                  item.category.map((cat, idx) => (
+                                    <span key={idx} className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded">
+                                      {cat}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded">
+                                    {item.category}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -311,7 +331,21 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2 mb-1">
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-medium text-sm truncate">{item.displayName}</h3>
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <h3 className="font-medium text-sm">{item.displayName}</h3>
+                                {/* Categories */}
+                                {Array.isArray(item.category) ? (
+                                  item.category.map((cat, idx) => (
+                                    <span key={idx} className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded flex-shrink-0">
+                                      {cat}
+                                    </span>
+                                  ))
+                                ) : item.category ? (
+                                  <span className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded flex-shrink-0">
+                                    {item.category}
+                                  </span>
+                                ) : null}
+                              </div>
                               {item.originalName !== item.displayName && (
                                 <div className="text-xs text-gray-500 truncate">
                                   Original: {item.originalName}

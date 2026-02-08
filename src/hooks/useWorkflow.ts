@@ -1,6 +1,6 @@
 // src/hooks/useWorkflow.ts
 import { useState, useCallback } from 'react';
-import type { Filter, WorkflowData, SegmentSelection, ColorimetrySettings } from '../electron.d';
+import type { Filter, FilterTemplate, WorkflowData, SegmentSelection, ColorimetrySettings } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
 import { notify } from '../utils/notifications';
@@ -13,6 +13,7 @@ interface ImportWorkflowModalState {
     code: string;
     description?: string;
     filterType: 'aiModel' | 'custom';
+    category?: string | string[];
   }[];
 }
 
@@ -38,6 +39,7 @@ interface UseWorkflowProps {
   setSelectedModel: (model: string | null) => void;
   availableModels: string[];
   addConsoleLog: (message: string) => void;
+  filterTemplates?: FilterTemplate[];
   refreshFilterTemplates?: () => Promise<void>;
   // Encoding settings
   ffmpegArgs?: string;
@@ -79,6 +81,7 @@ export function useWorkflow({
   setFilters,
   setSelectedModel,
   addConsoleLog,
+  filterTemplates,
   refreshFilterTemplates,
   ffmpegArgs,
   processingFormat,
@@ -197,6 +200,7 @@ export function useWorkflow({
           order: wf.order,
           modelPath: resolvedModelPath,
           modelType: wf.modelType,
+          category: wf.category,
         };
       });
       setFilters(workflowFilters);
@@ -335,6 +339,12 @@ export function useWorkflow({
             portableModelName = getPortableModelName(filter.modelPath);
           }
 
+          // Look up category from filter templates by matching the preset name
+          const matchedTemplate = filter.preset && filterTemplates
+            ? filterTemplates.find(t => t.name === filter.preset)
+            : undefined;
+          const category = matchedTemplate?.category ?? filter.category;
+
           return {
             name: filter.filterType === 'aiModel' ? 'AI Model' : (filter.preset || `Filter ${index + 1}`),
             code: filter.code || '',
@@ -344,6 +354,7 @@ export function useWorkflow({
             filterType: filter.filterType,
             modelPath: portableModelName,
             modelType: filter.filterType === 'aiModel' ? (filter.modelType || 'image') : undefined,
+            category,
           };
         }),
         createdAt: new Date().toISOString(),
@@ -373,7 +384,7 @@ export function useWorkflow({
       addConsoleLog(`Error exporting workflow: ${getErrorMessage(error)}`);
       notify.error('Export Error', getErrorMessage(error));
     }
-  }, [filters, deepCopyFilters, addConsoleLog, ffmpegArgs, processingFormat, outputFormat, 
+  }, [filters, deepCopyFilters, addConsoleLog, filterTemplates, ffmpegArgs, processingFormat, outputFormat, 
       videoCompareArgs, numStreams, segment, colorimetry]);
 
   /**
@@ -420,7 +431,7 @@ export function useWorkflow({
    * Confirm and import selected filters
    */
   const confirmImportFilters = useCallback(async (
-    selectedFilters: { name: string; code: string; description?: string }[]
+    selectedFilters: { name: string; code: string; description?: string; category?: string | string[] }[]
   ): Promise<void> => {
     try {
       // Save selected filters as templates
@@ -429,6 +440,7 @@ export function useWorkflow({
           name: filter.name,
           code: filter.code,
           description: filter.description,
+          category: filter.category,
         });
       }
       

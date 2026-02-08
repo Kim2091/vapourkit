@@ -28,6 +28,9 @@ export function registerWorkflowHandlers() {
           filterType: f.filterType || 'custom',
           modelPath: f.modelPath || undefined,
           modelType: f.modelType || undefined,
+          category: Array.isArray(f.category) && f.category.length === 1
+            ? f.category[0]
+            : (f.category || undefined),
         })),
       };
 
@@ -86,16 +89,22 @@ export function registerWorkflowHandlers() {
         version: data.workflow.version,
         createdAt: data.workflow.created_at,
         description: data.workflow.description,
-        filters: Array.isArray(data.filters) ? data.filters.map((f: any) => ({
-          name: f.name,
-          code: f.code,
-          description: f.description || undefined,
-          enabled: f.enabled,
-          order: f.order,
-          filterType: f.filterType || 'custom',
-          modelPath: f.modelPath || undefined,
-          modelType: f.modelType || undefined,
-        })) : [],
+        filters: Array.isArray(data.filters) ? data.filters.map((f: any) => {
+          const normalizedCategory = Array.isArray(f.category) && f.category.length === 1
+            ? f.category[0]
+            : (f.category || undefined);
+          return {
+            name: f.name,
+            code: f.code,
+            description: f.description || undefined,
+            enabled: f.enabled,
+            order: f.order,
+            filterType: f.filterType || 'custom',
+            modelPath: f.modelPath || undefined,
+            modelType: f.modelType || undefined,
+            category: normalizedCategory,
+          };
+        }) : [],
       };
 
       // Parse encoding settings if present
