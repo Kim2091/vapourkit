@@ -5,6 +5,17 @@ import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
 import { notify } from '../utils/notifications';
 
+interface ImportWorkflowModalState {
+  isOpen: boolean;
+  workflowName: string;
+  filters: {
+    name: string;
+    code: string;
+    description?: string;
+    filterType: 'aiModel' | 'custom';
+  }[];
+}
+
 interface WorkflowState {
   currentWorkflow: string | null;
   previousFilters: Filter[];
@@ -53,6 +64,9 @@ interface UseWorkflowReturn {
   handleClearWorkflow: () => Promise<void>;
   handleExportWorkflow: () => Promise<void>;
   handleImportWorkflow: () => Promise<void>;
+  importModalState: ImportWorkflowModalState;
+  closeImportModal: () => void;
+  confirmImportFilters: (selectedFilters: { name: string; code: string; description?: string }[]) => Promise<void>;
 }
 
 /**
@@ -85,6 +99,12 @@ export function useWorkflow({
     currentWorkflow: null,
     previousFilters: [],
     previousModel: null,
+  });
+
+  const [importModalState, setImportModalState] = useState<ImportWorkflowModalState>({
+    isOpen: false,
+    workflowName: '',
+    filters: [],
   });
 
   /**
@@ -373,30 +393,61 @@ export function useWorkflow({
 
       const workflow = result.workflow;
 
-      // Permanently import custom filters as templates (skip AI model filters)
-      const customFilters = workflow.filters.filter(f => f.filterType !== 'aiModel');
-      for (const filter of customFilters) {
-        const templateName = `${filter.name} (${workflow.name})`;
+      // Show the import modal with all filters from the workflow
+      setImportModalState({
+        isOpen: true,
+        workflowName: workflow.name,
+        filters: workflow.filters,
+      });
+    } catch (error) {
+      addConsoleLog(`Error importing workflow: ${getErrorMessage(error)}`);
+      notify.error('Import Error', getErrorMessage(error));
+    }
+  }, [addConsoleLog]);
+
+  /**
+   * Close the import modal
+   */
+  const closeImportModal = useCallback(() => {
+    setImportModalState({
+      isOpen: false,
+      workflowName: '',
+      filters: [],
+    });
+  }, []);
+
+  /**
+   * Confirm and import selected filters
+   */
+  const confirmImportFilters = useCallback(async (
+    selectedFilters: { name: string; code: string; description?: string }[]
+  ): Promise<void> => {
+    try {
+      // Save selected filters as templates
+      for (const filter of selectedFilters) {
         await window.electronAPI.saveFilterTemplate({
-          name: templateName,
+          name: filter.name,
           code: filter.code,
           description: filter.description,
         });
       }
       
-      addConsoleLog(`Permanently imported ${customFilters.length} custom filter(s) from workflow "${workflow.name}"`);
+      addConsoleLog(`Permanently imported ${selectedFilters.length} filter(s)`);
       
       // Refresh the filter templates list
       if (refreshFilterTemplates) {
         await refreshFilterTemplates();
       }
       
-      notify.success('Filters Imported', `Successfully imported ${customFilters.length} custom filters with " (${workflow.name})" suffix.`);
+      notify.success('Filters Imported', `Successfully imported ${selectedFilters.length} filter(s).`);
+      
+      // Close the modal
+      closeImportModal();
     } catch (error) {
-      addConsoleLog(`Error importing workflow: ${getErrorMessage(error)}`);
+      addConsoleLog(`Error saving imported filters: ${getErrorMessage(error)}`);
       notify.error('Import Error', getErrorMessage(error));
     }
-  }, [addConsoleLog, refreshFilterTemplates]);
+  }, [addConsoleLog, refreshFilterTemplates, closeImportModal]);
 
   return {
     currentWorkflow: workflowState.currentWorkflow,
@@ -404,5 +455,8 @@ export function useWorkflow({
     handleClearWorkflow,
     handleExportWorkflow,
     handleImportWorkflow,
+    importModalState,
+    closeImportModal,
+    confirmImportFilters,
   };
 }

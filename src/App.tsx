@@ -14,6 +14,7 @@ import { ModelManagerModal } from './components/ModelManagerModal';
 import { UpdateNotificationModal } from './components/UpdateNotificationModal';
 import { VsMlrtUpdateModal } from './components/VsMlrtUpdateModal';
 import { QueuePanel } from './components/QueuePanel';
+import { FilterImportModal } from './components/FilterImportModal';
 import type { UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
 import { Header } from './components/Header';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
@@ -293,6 +294,9 @@ function App() {
     handleClearWorkflow,
     handleExportWorkflow,
     handleImportWorkflow,
+    importModalState,
+    closeImportModal,
+    confirmImportFilters,
   } = useWorkflow({
     filters,
     selectedModel,
@@ -1288,6 +1292,14 @@ function App() {
           }}
         />
       )}
+
+      <FilterImportModal
+        isOpen={importModalState.isOpen}
+        onClose={closeImportModal}
+        workflowName={importModalState.workflowName}
+        filters={importModalState.filters}
+        onImport={confirmImportFilters}
+      />
     </div>
   );
 }

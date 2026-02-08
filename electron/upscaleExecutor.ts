@@ -349,6 +349,7 @@ export class UpscaleExecutor {
     ffmpegArgs.push('-vf', 'fps=1,scale=-2:720'); // 1 fps preview, max height 720p
     ffmpegArgs.push('-f', 'image2pipe');
     ffmpegArgs.push('-c:v', 'mjpeg');
+    ffmpegArgs.push('-pix_fmt', 'yuvj422p'); // YUV422 with full range
     ffmpegArgs.push('-q:v', '1'); // Quality 1 = highest quality (100%)
     ffmpegArgs.push('pipe:1');
 
