@@ -122,8 +122,7 @@ export class VapourSynthScriptGenerator {
       
       // Add output node after each filter if generatePreviewOutputs is enabled
       if (config.generatePreviewOutputs) {
-        // Output index: first filter gets index 0, second gets 1, etc.
-        // vs-view expects the highest number to be the last step
+        // Output index: sequential order (0, 1, 2...)
         const outputIndex = i;
         filterCode += `clip.set_output(${outputIndex})\n\n`;
       }
@@ -139,6 +138,12 @@ export class VapourSynthScriptGenerator {
       .replace(/{{DEFAULT_TRANSFER}}/g, defaultTransfer)
       .replace(/{{OUTPUT_FORMAT}}/g, outputFormat)
       .replace(/{{FILTERS}}/g, filterCode);
+
+    // Remove the final clip.set_output() call if we're generating preview outputs
+    // since we want only the numbered outputs for vs-view
+    if (config.generatePreviewOutputs) {
+      template = template.replace(/clip\.set_output\(\)\s*$/, '');
+    }
 
     // Use timestamp + random string for unique script path to avoid collisions in batch processing
     const timestamp = Date.now();
