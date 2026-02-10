@@ -68,7 +68,7 @@ GPL 3.0 - See LICENSE file for details
 ## Discord
 Chat here about Vapourkit!
 
-https://discord.gg/HqRbWKyu7c
+https://discord.gg/uYKMn2hGwB
 
 ## 🙏 Credits
 
