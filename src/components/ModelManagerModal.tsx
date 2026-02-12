@@ -14,6 +14,7 @@ interface ModelMetadata {
   displayTag?: string;
   description?: string;
   modelType: 'vsr' | 'image';
+  temporalFrames?: number;
   useFp32: boolean;
   useBf16?: boolean;
 }
@@ -29,6 +30,7 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
     displayTag: '',
     description: '',
     modelType: 'image',
+    temporalFrames: undefined,
     useFp32: false,
     useBf16: false,
   });
@@ -75,6 +77,7 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
         displayTag: metadata?.displayTag || '',
         description: metadata?.description || '',
         modelType: model.modelType || 'image',
+        temporalFrames: metadata?.temporalFrames,
         useFp32: metadata?.useFp32 || false,
         useBf16: metadata?.useBf16 || false,
       });
@@ -215,6 +218,34 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
                           </select>
                         </div>
                       </div>
+
+                      {/* Temporal Frames - only shown for VSR models */}
+                      {editData.modelType === 'vsr' && (
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">
+                            Temporal Frames
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="99"
+                            step="2"
+                            value={editData.temporalFrames ?? 5}
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value);
+                              setEditData({ 
+                                ...editData, 
+                                temporalFrames: isNaN(value) ? undefined : value 
+                              });
+                            }}
+                            placeholder="5"
+                            className="w-full bg-dark-elevated border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary-purple transition-colors"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Number of frames used by the VSR model (default: 5). Use odd numbers for symmetry.
+                          </p>
+                        </div>
+                      )}
 
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">

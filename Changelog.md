@@ -14,6 +14,8 @@ This release in in dedication to my Mom. She passed away on 1/1/26 after a long 
 - Added [vs_grain](https://github.com/pifroggi/vs_grain)
 - Replaces pop up dialogs with notifications within the GUI
 - Change legacy "TSPAN" text to "VSR". This change was made in conjunction with releasing [TFDAT](https://github.com/Kim2091/TFDAT), which effectively replaces TSPAN + TSPANv2
+- Replace vse-previewer with vs-view, a much more modern solution that has more features and is more robust
+- Lots of GUI tweaks and bug fixes to make it more cohesive and consistent
 
 ## 0.12.2
 - Fix BF16 engine names (previously appended _fp16 when it's _bf16)

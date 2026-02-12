@@ -244,6 +244,7 @@ export interface ModelMetadata {
   useFp32: boolean;
   useBf16?: boolean;
   modelType: 'vsr' | 'image';
+  temporalFrames?: number; // Number of frames for VSR models (default: 5)
   displayTag?: string;
   description?: string;
   createdAt?: string;

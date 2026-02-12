@@ -113,7 +113,8 @@ export class VapourSynthScriptGenerator {
         // Check precision and model type for THIS specific model from config, not filter state
         const filterUseFp32 = configManager.isModelFp32(filter.modelPath);
         const filterModelType = configManager.getModelType(filter.modelPath);
-        filterCode += this.generateAIModelCode(filter, config.useDirectML || false, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams);
+        const filterTemporalFrames = configManager.getTemporalFrames(filter.modelPath);
+        filterCode += this.generateAIModelCode(filter, config.useDirectML || false, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams, filterTemporalFrames);
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';
@@ -158,7 +159,7 @@ export class VapourSynthScriptGenerator {
   /**
    * Generate VapourSynth code for an AI model filter
    */
-  private generateAIModelCode(filter: Filter, useDirectML: boolean, useFp32: boolean, modelType: ModelType, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number): string {
+  private generateAIModelCode(filter: Filter, useDirectML: boolean, useFp32: boolean, modelType: ModelType, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number, temporalFrames?: number): string {
     if (!filter.modelPath) return '';
     
     // Constants for VapourSynth variable names
@@ -202,12 +203,30 @@ export class VapourSynthScriptGenerator {
     
     // Generate model inference code based on model type
     if (modelType === 'vsr') {
-      code += '# Temporal upscaling (5-frame VSR architecture)\n';
-      code += `${M2} = ${CLIP}[:2] + ${CLIP}[:-2]   # shift -2\n`;
-      code += `${M1} = ${CLIP}[:1] + ${CLIP}[:-1]   # shift -1\n`;
-      code += `${P1} = ${CLIP}[1:] + ${CLIP}[-1:]   # shift +1\n`;
-      code += `${P2} = ${CLIP}[2:] + ${CLIP}[-2:]   # shift +2\n`;
-      code += `${CLIP} = core.${modelPlugin}.Model([${M2}, ${M1}, ${CLIP}, ${P1}, ${P2}], ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;
+      // Use temporalFrames parameter or default to 5 for backward compatibility
+      const frames = temporalFrames ?? 5;
+      const halfFrames = Math.floor(frames / 2);
+      
+      code += `# Temporal upscaling (${frames}-frame VSR architecture)\n`;
+      
+      // Generate frame shift variables dynamically based on frame count
+      const frameVars: string[] = [];
+      for (let i = -halfFrames; i <= halfFrames; i++) {
+        if (i === 0) {
+          frameVars.push(CLIP);
+        } else {
+          const varName = i < 0 ? `m${Math.abs(i)}` : `p${i}`;
+          const shift = Math.abs(i);
+          if (i < 0) {
+            code += `${varName} = ${CLIP}[:${shift}] + ${CLIP}[:-${shift}]   # shift ${i}\n`;
+          } else {
+            code += `${varName} = ${CLIP}[${shift}:] + ${CLIP}[-${shift}:]   # shift +${i}\n`;
+          }
+          frameVars.push(varName);
+        }
+      }
+      
+      code += `${CLIP} = core.${modelPlugin}.Model([${frameVars.join(', ')}], ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;
     } else {
       code += '# Single-frame upscaling (non-temporal architecture)\n';
       code += `${CLIP} = core.${modelPlugin}.Model(${CLIP}, ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;

@@ -46,6 +46,7 @@ interface AppConfig {
       useFp32: boolean;
       useBf16?: boolean;
       modelType: ModelType;
+      temporalFrames?: number; // Number of frames for VSR models (default: 5)
       createdAt: string;
       displayTag?: string;
       description?: string;
@@ -110,11 +111,12 @@ export class ConfigManager {
     }
   }
 
-  async setModelMetadata(modelName: string, useFp32: boolean, modelType: ModelType = 'image', displayTag?: string, description?: string, useBf16?: boolean): Promise<void> {
+  async setModelMetadata(modelName: string, useFp32: boolean, modelType: ModelType = 'image', displayTag?: string, description?: string, useBf16?: boolean, temporalFrames?: number): Promise<void> {
     this.config.models[modelName] = {
       useFp32,
       useBf16,
       modelType,
+      temporalFrames,
       createdAt: new Date().toISOString(),
       displayTag,
       description
@@ -122,7 +124,7 @@ export class ConfigManager {
     await this.save();
   }
 
-  getModelMetadata(modelName: string): { useFp32: boolean; useBf16?: boolean; modelType: ModelType; displayTag?: string; description?: string; createdAt?: string } | null {
+  getModelMetadata(modelName: string): { useFp32: boolean; useBf16?: boolean; modelType: ModelType; temporalFrames?: number; displayTag?: string; description?: string; createdAt?: string } | null {
     const metadata = this.config.models[modelName];
     if (!metadata) return null;
     
@@ -131,13 +133,14 @@ export class ConfigManager {
       useFp32: metadata.useFp32,
       useBf16: metadata.useBf16,
       modelType: metadata.modelType || 'image',
+      temporalFrames: metadata.temporalFrames,
       displayTag: metadata.displayTag,
       description: metadata.description,
       createdAt: metadata.createdAt
     };
   }
 
-  async updateModelMetadata(modelName: string, updates: Partial<{ useFp32: boolean; useBf16?: boolean; modelType: ModelType; displayTag?: string; description?: string }>): Promise<void> {
+  async updateModelMetadata(modelName: string, updates: Partial<{ useFp32: boolean; useBf16?: boolean; modelType: ModelType; temporalFrames?: number; displayTag?: string; description?: string }>): Promise<void> {
     const existing = this.config.models[modelName];
     if (!existing) {
       throw new Error(`Model metadata not found for: ${modelName}`);
@@ -167,6 +170,13 @@ export class ConfigManager {
     const metadata = this.getModelMetadata(filename);
     // Return stored model type, default to 'image' as it's the most common type
     return metadata?.modelType || 'image';
+  }
+
+  getTemporalFrames(modelPath: string): number {
+    const filename = path.basename(modelPath, path.extname(modelPath));
+    const metadata = this.getModelMetadata(filename);
+    // Return temporal frames count, default to 5 for backward compatibility
+    return metadata?.temporalFrames ?? 5;
   }
 
   getColorimetrySettings(): { overwriteMatrix: boolean; matrix709: boolean; defaultMatrix: '709' | '170m'; defaultPrimaries: '709' | '601'; defaultTransfer: '709' | '170m' } {

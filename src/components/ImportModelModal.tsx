@@ -128,7 +128,7 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                 <div className="mb-2">
                   <p className="text-sm font-medium text-white">Model Type</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {importForm.modelType === 'vsr' ? 'VSR (5-frame temporal)' : 'Image (single frame)'}
+                    {importForm.modelType === 'vsr' ? 'VSR (temporal/multi-frame)' : 'Image (single frame)'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
