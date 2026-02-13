@@ -4,6 +4,7 @@ import * as fs from 'fs-extra';
 import { logger } from './logger';
 import { PATHS } from './constants';
 import { handleDialogResult } from './ipcUtilities';
+import { configManager } from './configManager';
 
 /**
  * Registers all dialog-related IPC handlers
@@ -58,8 +59,19 @@ export function registerDialogHandlers() {
     
     const ext = path.extname(defaultName).slice(1) || 'mp4';
     
+    // Get the default output folder from config
+    const defaultOutputFolder = configManager.getDefaultOutputFolder();
+    
+    // If a default folder is set, use it as the directory for the defaultPath
+    let defaultPath = defaultName;
+    if (defaultOutputFolder) {
+      const basename = path.basename(defaultName);
+      defaultPath = path.join(defaultOutputFolder, basename);
+      logger.info(`Using default output folder: ${defaultOutputFolder}`);
+    }
+    
     const result = await dialog.showSaveDialog({
-      defaultPath: defaultName,
+      defaultPath,
       filters: [
         { name: 'Video Files', extensions: [ext] },
         { name: 'All Videos', extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'] }
@@ -95,6 +107,21 @@ export function registerDialogHandlers() {
       logger.error('Error selecting workflow file:', error);
       return null;
     }
+  });
+
+  ipcMain.handle('select-folder', async () => {
+    logger.info('Opening folder selection dialog');
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory']
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      logger.info('Folder selection canceled');
+      return null;
+    }
+
+    logger.info(`Selected folder: ${result.filePaths[0]}`);
+    return result.filePaths[0];
   });
 
   // Folder opening handlers

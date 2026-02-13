@@ -117,6 +117,17 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     return { args };
   });
 
+  ipcMain.handle('get-default-output-folder', async () => {
+    const folder = configManager.getDefaultOutputFolder();
+    return { folder };
+  });
+
+  ipcMain.handle('set-default-output-folder', async (event, folder: string | null) => {
+    logger.info(`Setting default output folder: ${folder}`);
+    await configManager.setDefaultOutputFolder(folder);
+    return { success: true };
+  });
+
   ipcMain.handle('get-encoding-settings-expanded', async () => {
     const expanded = configManager.getEncodingSettingsExpanded();
     return { expanded };

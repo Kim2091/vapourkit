@@ -5,6 +5,7 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
   const [processingFormat, setProcessingFormat] = useState<string>('vs.YUV420P8');
   const [outputFormat, setOutputFormat] = useState<string>('mkv');
   const [videoCompareArgs, setVideoCompareArgs] = useState<string>('-W');
+  const [defaultOutputFolder, setDefaultOutputFolder] = useState<string | null>(null);
 
   // Load configuration on mount
   useEffect(() => {
@@ -21,6 +22,9 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
 
         const videoCompareResult = await window.electronAPI.getVideoCompareArgs();
         setVideoCompareArgs(videoCompareResult.args);
+
+        const defaultFolderResult = await window.electronAPI.getDefaultOutputFolder();
+        setDefaultOutputFolder(defaultFolderResult.folder);
       } catch (error) {
         console.error('Failed to load processing config:', error);
       }
@@ -78,6 +82,24 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
     }
   }, []);
 
+  const handleUpdateDefaultOutputFolder = useCallback(async (folder: string | null): Promise<void> => {
+    try {
+      setDefaultOutputFolder(folder);
+      await window.electronAPI.setDefaultOutputFolder(folder);
+    } catch (error) {
+      console.error('Error updating default output folder:', error);
+    }
+  }, []);
+
+  const handleResetDefaultOutputFolder = useCallback(async (): Promise<void> => {
+    try {
+      setDefaultOutputFolder(null);
+      await window.electronAPI.setDefaultOutputFolder(null);
+    } catch (error) {
+      console.error('Error resetting default output folder:', error);
+    }
+  }, []);
+
   const handleUpdateOutputFormat = useCallback(async (format: string): Promise<void> => {
     try {
       setOutputFormat(format);
@@ -92,11 +114,14 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
     processingFormat,
     outputFormat,
     videoCompareArgs,
+    defaultOutputFolder,
     handleUpdateFfmpegArgs,
     handleResetFfmpegArgs,
     handleUpdateProcessingFormat,
     handleUpdateOutputFormat,
     handleUpdateVideoCompareArgs,
-    handleResetVideoCompareArgs
+    handleResetVideoCompareArgs,
+    handleUpdateDefaultOutputFolder,
+    handleResetDefaultOutputFolder
   };
 };

@@ -62,11 +62,14 @@ function App() {
     processingFormat,
     outputFormat,
     videoCompareArgs,
+    defaultOutputFolder,
     handleUpdateFfmpegArgs, 
     handleUpdateProcessingFormat,
     handleUpdateOutputFormat,
     handleUpdateVideoCompareArgs,
-    handleResetVideoCompareArgs
+    handleResetVideoCompareArgs,
+    handleUpdateDefaultOutputFolder,
+    handleResetDefaultOutputFolder
   } = useProcessingConfig(isSetupComplete);
   
   // Model management hooks
@@ -1248,6 +1251,9 @@ function App() {
         videoCompareArgs={videoCompareArgs}
         onUpdateVideoCompareArgs={handleUpdateVideoCompareArgs}
         onResetVideoCompareArgs={handleResetVideoCompareArgs}
+        defaultOutputFolder={defaultOutputFolder}
+        onUpdateDefaultOutputFolder={handleUpdateDefaultOutputFolder}
+        onResetDefaultOutputFolder={handleResetDefaultOutputFolder}
       />
 
       <AboutModal

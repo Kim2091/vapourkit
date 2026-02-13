@@ -50,6 +50,7 @@ export interface ElectronAPI {
   
   // Upscaling operations
   selectOutputFile: (defaultName: string) => Promise<string | null>;
+  selectFolder: () => Promise<string | null>;
   startUpscale: (
     videoPath: string, 
     modelPath: string | null, 
@@ -126,6 +127,10 @@ export interface ElectronAPI {
   getVideoCompareArgs: () => Promise<{ args: string }>;
   setVideoCompareArgs: (args: string) => Promise<{ success: boolean }>;
   getDefaultVideoCompareArgs: () => Promise<{ args: string }>;
+
+  // Default output folder
+  getDefaultOutputFolder: () => Promise<{ folder: string | null }>;
+  setDefaultOutputFolder: (folder: string | null) => Promise<{ success: boolean }>;
 
   // Encoding settings panel state
   getEncodingSettingsExpanded: () => Promise<{ expanded: boolean }>;

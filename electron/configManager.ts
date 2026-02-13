@@ -39,6 +39,7 @@ interface AppConfig {
   processingFormat?: string;
   outputFormat?: string;
   videoCompareArgs?: string;
+  defaultOutputFolder?: string;
   encodingSettingsExpanded?: boolean;
   vsMlrtVersion?: string;
   models: {
@@ -76,6 +77,7 @@ const DEFAULT_CONFIG: AppConfig = {
   processingFormat: 'vs.YUV420P8',
   outputFormat: 'mkv',
   videoCompareArgs: DEFAULT_VIDEO_COMPARE_ARGS,
+  defaultOutputFolder: undefined,
   encodingSettingsExpanded: false,
   vsMlrtVersion: undefined,
   models: {}
@@ -270,6 +272,15 @@ export class ConfigManager {
 
   getDefaultVideoCompareArgs(): string {
     return DEFAULT_VIDEO_COMPARE_ARGS;
+  }
+
+  getDefaultOutputFolder(): string | null {
+    return this.config.defaultOutputFolder ?? null;
+  }
+
+  async setDefaultOutputFolder(folder: string | null): Promise<void> {
+    this.config.defaultOutputFolder = folder ?? undefined;
+    await this.save();
   }
 
   getEncodingSettingsExpanded(): boolean {

@@ -154,8 +154,22 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     setVideoInfo(info);
     onLog(`Video info: ${info.resolution || 'unknown'} @ ${info.fps || 'unknown'} FPS`);
     
-    // Auto-suggest output path in same directory as input
-    const autoOutputPath = filePath.replace(/\.[^/.]+$/, '') + '_processed.' + outputFormat;
+    // Check if there's a default output folder configured
+    const defaultFolderResult = await window.electronAPI.getDefaultOutputFolder();
+    const defaultOutputFolder = defaultFolderResult.folder;
+    
+    // Auto-suggest output path
+    let autoOutputPath: string;
+    if (defaultOutputFolder) {
+      // Use default output folder if configured
+      const fileName = filePath.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, '') || 'output';
+      const separator = defaultOutputFolder.includes('\\') ? '\\' : '/';
+      autoOutputPath = `${defaultOutputFolder}${separator}${fileName}_processed.${outputFormat}`;
+      onLog(`Using default output folder: ${defaultOutputFolder}`);
+    } else {
+      // Use same directory as input
+      autoOutputPath = filePath.replace(/\.[^/.]+$/, '') + '_processed.' + outputFormat;
+    }
     setOutputPath(autoOutputPath);
     onLog(`Auto-suggested output path: ${autoOutputPath}`);
     

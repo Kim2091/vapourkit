@@ -1,5 +1,5 @@
 import { memo, useState, useEffect } from 'react';
-import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp } from 'lucide-react';
+import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive } from 'lucide-react';
 
 interface SettingsModalProps {
   show: boolean;
@@ -11,6 +11,9 @@ interface SettingsModalProps {
   videoCompareArgs: string;
   onUpdateVideoCompareArgs: (args: string) => void;
   onResetVideoCompareArgs: () => void;
+  defaultOutputFolder: string | null;
+  onUpdateDefaultOutputFolder: (folder: string | null) => void;
+  onResetDefaultOutputFolder: () => void;
 }
 
 type Tab = 'general' | 'processing';
@@ -24,7 +27,10 @@ export const SettingsModal = memo<SettingsModalProps>(({
   onUpdateNumStreams,
   videoCompareArgs,
   onUpdateVideoCompareArgs,
-  onResetVideoCompareArgs
+  onResetVideoCompareArgs,
+  defaultOutputFolder,
+  onUpdateDefaultOutputFolder,
+  onResetDefaultOutputFolder
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [showVideoCompareOptions, setShowVideoCompareOptions] = useState(false);
@@ -71,6 +77,17 @@ export const SettingsModal = memo<SettingsModalProps>(({
       await window.electronAPI.openVSScriptsFolder();
     } catch (error) {
       console.error('Error opening VS scripts folder:', error);
+    }
+  };
+
+  const handleSelectDefaultOutputFolder = async (): Promise<void> => {
+    try {
+      const folder = await window.electronAPI.selectFolder();
+      if (folder) {
+        onUpdateDefaultOutputFolder(folder);
+      }
+    } catch (error) {
+      console.error('Error selecting default output folder:', error);
     }
   };
 
@@ -268,6 +285,47 @@ export const SettingsModal = memo<SettingsModalProps>(({
 
           {activeTab === 'processing' && (
             <>
+              {/* Default Output Folder Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <HardDrive className="w-5 h-5 text-orange-500" />
+                  Output Location
+                </h3>
+                
+                <div className="bg-dark-surface rounded-lg p-4 border border-gray-700">
+                  <label className="block">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-white">Default Output Folder</p>
+                      <button
+                        onClick={onResetDefaultOutputFolder}
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Reset to Default
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={defaultOutputFolder || ''}
+                        readOnly
+                        className="flex-1 bg-dark-bg border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        placeholder="Not set (use input video folder)"
+                      />
+                      <button
+                        onClick={handleSelectDefaultOutputFolder}
+                        className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                        Browse
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Set a default folder for all processed videos. If not set, videos will be saved in the same folder as the input video.
+                    </p>
+                  </label>
+                </div>
+              </div>
 
               {/* Video Compare Configuration Section */}
               <div>
