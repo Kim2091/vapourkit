@@ -56,10 +56,24 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
         segment: segment?.enabled ? { ...segment } : undefined,
         colorimetry,
       };
+
+      // Respect the default output folder setting
+      let defaultOutputFolder: string | null = null;
+      try {
+        const result = await window.electronAPI.getDefaultOutputFolder();
+        defaultOutputFolder = result.folder;
+      } catch { /* ignore */ }
       
       // Add each video directly to the queue without showing the modal
       files.forEach((videoPath: string) => {
-        const outputPath = videoPath.replace(/\.[^.]+$/, `_upscaled.${outputFormat}`);
+        let outputPath: string;
+        const fileName = videoPath.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, '') || 'output';
+        if (defaultOutputFolder) {
+          const separator = defaultOutputFolder.includes('\\') ? '\\' : '/';
+          outputPath = `${defaultOutputFolder}${separator}${fileName}_processed.${outputFormat}`;
+        } else {
+          outputPath = videoPath.replace(/\.[^.]+$/, `_processed.${outputFormat}`);
+        }
         onAddToQueue([videoPath], currentWorkflowSnapshot, outputPath);
       });
       
