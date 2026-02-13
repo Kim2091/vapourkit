@@ -15,15 +15,22 @@ import { DependencyManager } from './dependencyManager';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 import { FFmpegManager } from './ffmpegManager';
 import { VsViewManager } from './vsViewManager';
+import { QueueItemLogger } from './queueItemLogger';
 
 let upscaleExecutor: UpscaleExecutor | null = null;
 let previewExecutor: UpscaleExecutor | null = null;
 let infoExecutor: UpscaleExecutor | null = null;
+let activeQueueItemLogger: QueueItemLogger | null = null;
 
 /**
  * Cancels all active video processing executors and their child processes
  */
 export function cancelAllVideoProcessing(): void {
+  if (activeQueueItemLogger) {
+    activeQueueItemLogger.write('Processing canceled (app shutdown)');
+    activeQueueItemLogger.close();
+    activeQueueItemLogger = null;
+  }
   if (upscaleExecutor) {
     upscaleExecutor.cancelInfoExtraction();
     upscaleExecutor.kill();
@@ -198,48 +205,74 @@ export function registerVideoHandlers(
     return await withLogSeparator(async () => {
       const isUpscaling = upscalingEnabled !== false; // Default to true for backward compatibility
       
+      // Close any previous queue item logger
+      if (activeQueueItemLogger) {
+        activeQueueItemLogger.close();
+        activeQueueItemLogger = null;
+      }
+
+      // Create per-item log file for this processing run
+      const videoName = videoPath.split(/[\\/]/).pop() || 'unknown';
+      const itemLogger = new QueueItemLogger(videoName);
+      await itemLogger.open();
+      activeQueueItemLogger = itemLogger;
+
+      // Helper to log to both main log and per-item log
+      const qlog = (message: string) => {
+        logger.upscale(message);
+        itemLogger.write(message);
+      };
+      const qerror = (message: string) => {
+        logger.error(message);
+        itemLogger.error(message);
+      };
+
       // Cancel any pending upscale/preview/info executors and their child processes
       if (infoExecutor) {
-        logger.upscale('Canceling info executor before starting new processing');
+        qlog('Canceling info executor before starting new processing');
         infoExecutor.cancelInfoExtraction();
         infoExecutor = null;
       }
       if (upscaleExecutor) {
-        logger.upscale('Canceling previous upscale executor before starting new processing');
+        qlog('Canceling previous upscale executor before starting new processing');
         upscaleExecutor.cancelInfoExtraction();
         upscaleExecutor.kill();
         upscaleExecutor = null;
       }
       if (previewExecutor) {
-        logger.upscale('Canceling previous preview executor before starting new processing');
+        qlog('Canceling previous preview executor before starting new processing');
         previewExecutor.cancelInfoExtraction();
         previewExecutor.kill();
         previewExecutor = null;
       }
       
-      logger.upscale('Starting processing');
-      logger.upscale(`Input: ${videoPath}`);
-      logger.upscale(`Upscaling: ${isUpscaling ? 'enabled' : 'disabled'}`);
+      qlog('Starting processing');
+      qlog(`Input: ${videoPath}`);
+      qlog(`Upscaling: ${isUpscaling ? 'enabled' : 'disabled'}`);
       if (isUpscaling && modelPath) {
-        logger.upscale(`Model: ${modelPath}`);
-        logger.upscale(`Backend: ${useDirectML ? 'DirectML (ONNX Runtime)' : 'TensorRT'}`);
+        qlog(`Model: ${modelPath}`);
+        qlog(`Backend: ${useDirectML ? 'DirectML (ONNX Runtime)' : 'TensorRT'}`);
       }
-      logger.upscale(`Output: ${outputPath}`);
+      qlog(`Output: ${outputPath}`);
+      qlog(`Item log: ${itemLogger.getLogPath()}`);
       
       // Log segment selection
       if (segment?.enabled) {
-        logger.upscale(`Segment: frames ${segment.startFrame} to ${segment.endFrame === -1 ? 'end' : segment.endFrame}`);
+        qlog(`Segment: frames ${segment.startFrame} to ${segment.endFrame === -1 ? 'end' : segment.endFrame}`);
       }
       
       // Log filter status
       if (filters && filters.length > 0) {
         const enabledFilters = filters.filter(f => f.enabled);
-        logger.upscale(`Filters: ${enabledFilters.length} enabled`);
+        qlog(`Filters: ${enabledFilters.length} enabled`);
+        enabledFilters.forEach(f => {
+          itemLogger.write(`  Filter: ${f.templateName || f.id} (enabled)`);
+        });
       }
       
       try {
         // Generate VapourSynth script
-        logger.upscale('Generating VapourSynth script');
+        qlog('Generating VapourSynth script');
         
         const config = createScriptConfig(
           videoPath,
@@ -253,47 +286,59 @@ export function registerVideoHandlers(
         );
 
         if (config.upscalingEnabled && config.enginePath) {
-          logger.upscale(`Model type: ${config.modelType}`);
+          qlog(`Model type: ${config.modelType}`);
         }
         
         // Log if default filter was auto-created (no filters were enabled)
         if (config.filters && config.filters.length === 1 && config.filters[0].id === 'default-upscale') {
-          logger.upscale('Created default upscale filter from model path');
+          qlog('Created default upscale filter from model path');
         }
         
         const scriptPath = await scriptGenerator.generateScript(config);
-        logger.upscale(`Script generated: ${scriptPath}`);
+        qlog(`Script generated: ${scriptPath}`);
+
+        // Log script content to per-item log for troubleshooting
+        try {
+          const scriptContent = await fs.readFile(scriptPath, 'utf-8');
+          itemLogger.write('=== VapourSynth Script Content ===');
+          itemLogger.write(scriptContent);
+          itemLogger.write('=== End Script Content ===');
+        } catch { /* ignore read errors */ }
 
         // Get video metadata for fps (needed for audio segment trimming)
         const videoMetadata = await extractVideoMetadata(videoPath);
         const fps = videoMetadata.fps || 24;
-        logger.upscale(`Input video fps: ${fps}`);
+        qlog(`Input video fps: ${fps}`);
 
         // Initialize executor
         const vspipePath = dependencyManager.getVSPipePath();
         const pythonPath = dependencyManager.getPythonExecutablePath();
-        logger.upscale(`VSPipe: ${vspipePath}`);
-        logger.upscale(`Python: ${pythonPath}`);
+        qlog(`VSPipe: ${vspipePath}`);
+        qlog(`Python: ${pythonPath}`);
         
         upscaleExecutor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
 
         // Get frame count and execute
-        logger.upscale('Getting frame count');
+        qlog('Getting frame count');
         const totalFrames = await upscaleExecutor.getFrameCount(scriptPath);
-        logger.upscale(`Total frames to process: ${totalFrames}`);
+        qlog(`Total frames to process: ${totalFrames}`);
 
-        logger.upscale('Starting execution');
+        qlog('Starting execution');
         await upscaleExecutor.execute(scriptPath, outputPath, videoPath, totalFrames, false, segment?.enabled ? segment : undefined, fps);
 
         // Cleanup
-        logger.upscale('Cleaning up script file');
+        qlog('Cleaning up script file');
         await scriptGenerator.cleanupScript(scriptPath);
 
-        logger.upscale('Processing completed successfully');
+        qlog('Processing completed successfully');
+        itemLogger.close();
+        activeQueueItemLogger = null;
         return { success: true, outputPath };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        logger.error('Processing failed:', errorMsg);
+        qerror(`Processing failed: ${errorMsg}`);
+        itemLogger.close();
+        activeQueueItemLogger = null;
         return { success: false, error: errorMsg };
       }
     });
@@ -301,6 +346,11 @@ export function registerVideoHandlers(
 
   ipcMain.handle('cancel-upscale', async () => {
     logger.upscale('Canceling upscale process');
+    if (activeQueueItemLogger) {
+      activeQueueItemLogger.write('Processing canceled by user');
+      activeQueueItemLogger.close();
+      activeQueueItemLogger = null;
+    }
     if (upscaleExecutor) {
       upscaleExecutor.cancel();
       upscaleExecutor = null;
@@ -311,6 +361,11 @@ export function registerVideoHandlers(
 
   ipcMain.handle('kill-upscale', async () => {
     logger.upscale('Force killing upscale process');
+    if (activeQueueItemLogger) {
+      activeQueueItemLogger.write('Processing force killed');
+      activeQueueItemLogger.close();
+      activeQueueItemLogger = null;
+    }
     if (upscaleExecutor) {
       upscaleExecutor.kill();
       upscaleExecutor = null;

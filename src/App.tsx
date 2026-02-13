@@ -180,6 +180,7 @@ function App() {
     getNextPendingItem,
     getQueueStats: _getQueueStats,
     requeueItem,
+    duplicateQueueItem,
   } = useQueueManagement({ onLog: addConsoleLog });
 
   // Batch configuration hook
@@ -1205,6 +1206,7 @@ function App() {
                   onCompareItem={handleCompareQueueItem}
                   onOpenItemFolder={handleOpenQueueItemFolder}
                   onDropFiles={handleBatchFiles}
+                  onDuplicateItem={duplicateQueueItem}
                 />
               </Panel>
             </>

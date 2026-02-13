@@ -85,7 +85,7 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     }
   }, [queue, isLoadingQueue, saveQueue]);
 
-  // Add videos to queue
+  // Add videos to queue (skips duplicates already pending/processing)
   const addToQueue = useCallback((
     videoPaths: string[],
     currentWorkflow: {
@@ -102,7 +102,21 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     },
     customOutputPath?: string
   ) => {
-    const newItems: QueueItem[] = videoPaths.map(videoPath => {
+    // Filter out videos that are already in the queue (pending or processing)
+    setQueue(prevQueue => {
+      const existingPaths = new Set(
+        prevQueue
+          .filter(item => item.status === 'pending' || item.status === 'processing')
+          .map(item => item.videoPath.toLowerCase())
+      );
+      const uniquePaths = videoPaths.filter(vp => !existingPaths.has(vp.toLowerCase()));
+      const skippedCount = videoPaths.length - uniquePaths.length;
+      if (skippedCount > 0) {
+        onLog(`Skipped ${skippedCount} video(s) already in queue`);
+      }
+      if (uniquePaths.length === 0) return prevQueue;
+
+    const newItems: QueueItem[] = uniquePaths.map(videoPath => {
       const videoName = videoPath.split(/[\\\\]/).pop() || 'unknown';
       
       // Generate output path
@@ -137,9 +151,10 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
       };
     });
 
-    setQueue(prev => [...prev, ...newItems]);
     onLog(`Added ${newItems.length} video(s) to queue`);
-    return newItems;
+    return [...prevQueue, ...newItems];
+    }); // end setQueue
+    return [];
   }, [onLog]);
 
   // Remove item from queue
@@ -229,6 +244,29 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     onLog('Item reset to pending for reprocessing');
   }, [onLog]);
 
+  // Duplicate a queue item (inserts copy right after the original)
+  const duplicateQueueItem = useCallback((itemId: string) => {
+    setQueue(prev => {
+      const item = prev.find(q => q.id === itemId);
+      if (!item) return prev;
+      const duplicate: QueueItem = {
+        ...item,
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        status: 'pending' as const,
+        progress: 0,
+        errorMessage: undefined,
+        addedAt: new Date().toISOString(),
+        completedAt: undefined,
+        workflow: structuredClone(item.workflow),
+      };
+      const idx = prev.findIndex(q => q.id === itemId);
+      const updated = [...prev];
+      updated.splice(idx + 1, 0, duplicate);
+      onLog(`Duplicated queue item: ${item.videoName}`);
+      return updated;
+    });
+  }, [onLog]);
+
   return {
     queue,
     isLoadingQueue,
@@ -242,5 +280,6 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     getNextPendingItem,
     getQueueStats,
     requeueItem,
+    duplicateQueueItem,
   };
 }

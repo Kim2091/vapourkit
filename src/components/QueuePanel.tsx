@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useMemo, useRef } from 'react';
-import { List, Trash2, ChevronLeft, ChevronRight, PlayCircle, XCircle, RotateCcw, FolderOpen, SplitSquareHorizontal, Scissors, Film, Loader2, GripVertical } from 'lucide-react';
+import { List, Trash2, ChevronLeft, ChevronRight, PlayCircle, XCircle, RotateCcw, FolderOpen, SplitSquareHorizontal, Scissors, Film, Loader2, GripVertical, Copy } from 'lucide-react';
 import type { QueueItem } from '../electron.d';
 
 interface QueuePanelProps {
@@ -16,6 +16,7 @@ interface QueuePanelProps {
   onCompareItem: (itemId: string) => void;
   onOpenItemFolder: (itemId: string) => void;
   onDropFiles?: (files: string[]) => void;
+  onDuplicateItem: (itemId: string) => void;
 }
 
 export const QueuePanel = memo<QueuePanelProps>(({
@@ -32,6 +33,7 @@ export const QueuePanel = memo<QueuePanelProps>(({
   onCompareItem,
   onOpenItemFolder,
   onDropFiles,
+  onDuplicateItem,
 }: QueuePanelProps) => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -451,18 +453,30 @@ export const QueuePanel = memo<QueuePanelProps>(({
                         </span>
                     )}
                   </div>
-                  {/* Delete button */}
+                  {/* Duplicate & Delete buttons */}
                   {item.status !== 'processing' && (
-                  <button
-                      onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveItem(item.id);
-                      }}
-                      className="flex-shrink-0 p-1.5 bg-red-900/20 hover:bg-red-900/40 rounded transition-colors border border-red-900/30"
-                      title="Remove"
-                  >
-                      <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                        onClick={(e) => {
+                        e.stopPropagation();
+                        onDuplicateItem(item.id);
+                        }}
+                        className="p-1.5 bg-blue-900/20 hover:bg-blue-900/40 rounded transition-colors border border-blue-900/30"
+                        title="Duplicate"
+                    >
+                        <Copy className="w-3.5 h-3.5 text-blue-400" />
+                    </button>
+                    <button
+                        onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveItem(item.id);
+                        }}
+                        className="p-1.5 bg-red-900/20 hover:bg-red-900/40 rounded transition-colors border border-red-900/30"
+                        title="Remove"
+                    >
+                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                    </button>
+                  </div>
                   )}
                 </div>
                     
