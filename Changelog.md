@@ -10,12 +10,14 @@ This release in in dedication to my Mom. She passed away on 1/1/26 after a long 
   - You can now have 20+ filters expanded in your workflow and it will not slow down!
   - The bug that required alt tabbing to fix is no longer present
 - Adds vse-previewer! This allows for realtime previewing of how your video will turn out without having to render the whole thing
+  - Replaced vse-previewer with vs-view, a much more modern solution that has more features and is more robust
 - Adds ESC button support to all pop up modals
 - Added [vs_grain](https://github.com/pifroggi/vs_grain)
 - Replaces pop up dialogs with notifications within the GUI
 - Change legacy "TSPAN" text to "VSR". This change was made in conjunction with releasing [TFDAT](https://github.com/Kim2091/TFDAT), which effectively replaces TSPAN + TSPANv2
-- Replace vse-previewer with vs-view, a much more modern solution that has more features and is more robust
 - Lots of GUI tweaks and bug fixes to make it more cohesive and consistent
+- Add option to Settings to set a permanent output path for all videos
+- Add option to duplicate queued items, and overhaul the behavior of the queue button
 
 ## 0.12.2
 - Fix BF16 engine names (previously appended _fp16 when it's _bf16)

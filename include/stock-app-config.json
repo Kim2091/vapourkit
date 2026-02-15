@@ -2,56 +2,72 @@
   "developerMode": false,
   "ffmpegArgs": "-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1 -movflags +faststart",
   "models": {
+    "1x-AniRestore_TFDAT_fp32": {
+      "useFp32": true,
+      "useBf16": false,
+      "modelType": "vsr",
+      "createdAt": "2026-02-07T00:35:14.311Z",
+      "displayTag": "LQ Anime or Cartoons (Dot Crawl, Rainbows)"
+    },
     "2x-AniRemaster_TSPAN_fp16": {
       "useFp32": false,
+      "useBf16": false,
       "modelType": "vsr",
       "createdAt": "2025-10-29T06:27:58.864Z",
       "displayTag": "Classic Anime"
     },
     "2x-AnimeUpV2_TSPAN_fp16": {
       "useFp32": false,
+      "useBf16": false,
       "modelType": "vsr",
       "createdAt": "2025-10-29T06:27:58.864Z",
       "displayTag": "LQ Anime"
     },
     "2x_AnimeJaNai_HD_V3_UltraCompact_fp16": {
       "useFp32": false,
+      "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:28:48.047Z",
       "displayTag": "Modern Anime"
     },
     "2x_AnimeJaNai_SD_V1beta34_Compact_fp16": {
       "useFp32": false,
+      "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:29:05.469Z",
       "displayTag": "Classic HQ Anime"
     },
     "2x_AnimeJaNai_HD_V3Sharp1_UltraCompact_fp16": {
       "useFp32": false,
+      "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:29:34.328Z",
       "displayTag": "Modern HQ Anime"
     },
     "2x_AniSD_AC_SPAN_fp32": {
       "useFp32": true,
+      "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:29:54.736Z",
       "displayTag": "Classic HQ SD Anime"
     },
     "2x_AniSD_DC_SPAN_fp32": {
       "useFp32": true,
+      "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:30:07.152Z",
       "displayTag": "Classic LQ SD Anime"
     },
     "2x_AnimeJaNai_V2_UltraCompact_fp16": {
       "useFp32": false,
+      "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:30:19.831Z",
       "displayTag": "Modern HQ Anime"
     },
     "2x-AnimeSharpV4_Fast_fp16": {
       "useFp32": false,
+      "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:30:19.831Z",
       "displayTag": "LQ Anime"
