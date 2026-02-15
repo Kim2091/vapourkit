@@ -10,6 +10,7 @@
         "build:electron": "tsc -p tsconfig.electron.json",
         "build": "tsc && vite build && npm run build:electron",
         "build:all": "npm run build && electron-builder --win --x64",
+        "build:both": "npm run build && electron-builder --win nsis 7z --x64",
         "build:setup": "npm run build && electron-builder --win nsis --x64",
         "build:7z": "npm run build && electron-builder --win 7z --x64",
         "preview": "vite preview",
@@ -102,7 +103,8 @@
                     ]
                 }
             ],
-            "icon": "build/icon.ico"
+            "icon": "build/icon.ico",
+            "artifactName": "Vapourkit-${version}-${name}.${ext}"
         },
         "nsis": {
             "oneClick": false,
@@ -110,7 +112,8 @@
             "allowElevation": false,
             "allowToChangeInstallationDirectory": true,
             "createDesktopShortcut": true,
-            "createStartMenuShortcut": true
+            "createStartMenuShortcut": true,
+            "artifactName": "Vapourkit-${version}-SETUP.${ext}"
         }
     }
 }
