@@ -12,7 +12,8 @@
         "build:all": "npm run build && electron-builder --win --x64",
         "build:setup": "npm run build && electron-builder --win nsis --x64",
         "build:7z": "npm run build && electron-builder --win 7z --x64",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "update-docs": "tsx scripts/updateModelsDocs.ts"
     },
     "keywords": [
         "video",
@@ -38,6 +39,7 @@
         "electron-builder": "^26.0.12",
         "postcss": "^8.4.45",
         "tailwindcss": "^3.4.10",
+        "tsx": "^4.21.0",
         "typescript": "^5.9.3",
         "vite": "^5.4.3",
         "wait-on": "^8.0.1"

@@ -1,62 +1,11 @@
 import { memo, useEffect, useState } from 'react';
 import { Sparkles, Github, Heart, X, FileText, ChevronDown, ChevronUp, Book } from 'lucide-react';
+import { MODEL_LICENSES } from '../data/modelLicenses';
 
 interface AboutModalProps {
   show: boolean;
   onClose: () => void;
 }
-
-interface ModelLicense {
-  name: string;
-  category: 'Video Models (VSR)' | 'Image Based Models';
-  license: string;
-  url?: string;
-}
-
-const MODEL_LICENSES: ModelLicense[] = [
-  // Video Models (VSR)
-  {
-    name: 'AniRemaster TSPAN',
-    category: 'Video Models (VSR)',
-    license: 'CC BY-NC-SA 4.0',
-  },
-  {
-    name: 'AnimeUpV2 TSPAN',
-    category: 'Video Models (VSR)',
-    license: 'CC BY-NC-SA 4.0',
-  },
-  {
-    name: 'AniDenoise TSPANV2',
-    category: 'Video Models (VSR)',
-    license: 'CC BY-NC-SA 4.0',
-  },
-  {
-    name: 'GameUp TSPANV2',
-    category: 'Video Models (VSR)',
-    license: 'CC BY-NC-SA 4.0',
-  },
-  // Image Based Models
-  {
-    name: 'AnimeJaNai HD V3',
-    category: 'Image Based Models',
-    license: 'CC BY-NC-SA 4.0',
-  },
-  {
-    name: 'AnimeJaNai SD V1',
-    category: 'Image Based Models',
-    license: 'CC BY-NC-SA 4.0',
-  },
-  {
-    name: 'AniSD AC/DC SPAN',
-    category: 'Image Based Models',
-    license: 'CC BY-NC 4.0',
-  },
-  {
-    name: 'AnimeSharp V4',
-    category: 'Image Based Models',
-    license: 'CC BY-NC-SA 4.0',
-  },
-];
 
 export const AboutModal = memo<AboutModalProps>(({ show, onClose }) => {
   const [version, setVersion] = useState<string>('');
