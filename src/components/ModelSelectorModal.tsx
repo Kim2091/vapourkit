@@ -778,8 +778,8 @@ const ModelItem = memo<ModelItemProps>(({
   const [showMatchingEngines, setShowMatchingEngines] = useState(false);
   const hasMatchingEngines = matchingEngineModels.length > 0;
   const displayName = getModelDisplayName(model, useDirectML);
-  const isUnbuilt = displayName.startsWith('[Unbuilt] ');
-  const cleanDisplayName = isUnbuilt ? displayName.replace(/^\[Unbuilt\]\s+/, '') : displayName;
+  const isUnbuilt = displayName.startsWith('[Unbuilt] ') && !hasMatchingEngines;
+  const cleanDisplayName = displayName.startsWith('[Unbuilt] ') ? displayName.replace(/^\[Unbuilt\]\s+/, '') : displayName;
 
   return (
     <div
