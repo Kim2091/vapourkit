@@ -131,8 +131,6 @@ export interface ElectronAPI {
   // Default output folder
   getDefaultOutputFolder: () => Promise<{ folder: string | null }>;
   setDefaultOutputFolder: (folder: string | null) => Promise<{ success: boolean }>;
-  getLastSelectedModelPath: () => Promise<{ modelPath: string | null }>;
-  setLastSelectedModelPath: (modelPath: string | null) => Promise<{ success: boolean }>;
 
   // Encoding settings panel state
   getEncodingSettingsExpanded: () => Promise<{ expanded: boolean }>;

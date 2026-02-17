@@ -128,16 +128,6 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     return { success: true };
   });
 
-  ipcMain.handle('get-last-selected-model-path', async () => {
-    const modelPath = configManager.getLastSelectedModelPath();
-    return { modelPath };
-  });
-
-  ipcMain.handle('set-last-selected-model-path', async (event, modelPath: string | null) => {
-    await configManager.setLastSelectedModelPath(modelPath);
-    return { success: true };
-  });
-
   ipcMain.handle('get-encoding-settings-expanded', async () => {
     const expanded = configManager.getEncodingSettingsExpanded();
     return { expanded };

@@ -127,8 +127,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Default output folder
   getDefaultOutputFolder: () => ipcRenderer.invoke('get-default-output-folder'),
   setDefaultOutputFolder: (folder: string | null) => ipcRenderer.invoke('set-default-output-folder', folder),
-  getLastSelectedModelPath: () => ipcRenderer.invoke('get-last-selected-model-path'),
-  setLastSelectedModelPath: (modelPath: string | null) => ipcRenderer.invoke('set-last-selected-model-path', modelPath),
 
   // Encoding settings panel state
   getEncodingSettingsExpanded: () => ipcRenderer.invoke('get-encoding-settings-expanded'),
