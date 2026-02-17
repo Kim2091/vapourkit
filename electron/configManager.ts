@@ -40,6 +40,7 @@ interface AppConfig {
   outputFormat?: string;
   videoCompareArgs?: string;
   defaultOutputFolder?: string;
+  lastSelectedModelPath?: string;
   encodingSettingsExpanded?: boolean;
   vsMlrtVersion?: string;
   models: {
@@ -79,6 +80,7 @@ const DEFAULT_CONFIG: AppConfig = {
   outputFormat: 'mkv',
   videoCompareArgs: DEFAULT_VIDEO_COMPARE_ARGS,
   defaultOutputFolder: undefined,
+  lastSelectedModelPath: undefined,
   encodingSettingsExpanded: false,
   vsMlrtVersion: undefined,
   models: {}
@@ -296,6 +298,15 @@ export class ConfigManager {
 
   async setDefaultOutputFolder(folder: string | null): Promise<void> {
     this.config.defaultOutputFolder = folder ?? undefined;
+    await this.save();
+  }
+
+  getLastSelectedModelPath(): string | null {
+    return this.config.lastSelectedModelPath ?? null;
+  }
+
+  async setLastSelectedModelPath(modelPath: string | null): Promise<void> {
+    this.config.lastSelectedModelPath = modelPath ?? undefined;
     await this.save();
   }
 

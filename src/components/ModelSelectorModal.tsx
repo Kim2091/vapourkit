@@ -20,6 +20,34 @@ interface RecentModel {
   lastUsed: number;
 }
 
+function normalizeRecentModels(value: unknown): RecentModel[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const normalized: RecentModel[] = [];
+
+  value.forEach(item => {
+    const path = typeof item === 'string'
+      ? item
+      : (item && typeof item === 'object' && typeof (item as { path?: unknown }).path === 'string'
+          ? (item as { path: string }).path
+          : '');
+
+    if (!path || seen.has(path)) return;
+
+    const lastUsed = item && typeof item === 'object' && typeof (item as { lastUsed?: unknown }).lastUsed === 'number'
+      ? (item as { lastUsed: number }).lastUsed
+      : 0;
+
+    normalized.push({ path, lastUsed });
+    seen.add(path);
+  });
+
+  return normalized
+    .sort((a, b) => b.lastUsed - a.lastUsed)
+    .slice(0, MAX_RECENT);
+}
+
 const STORAGE_KEY_RECENT = 'vapourkit_recent_models';
 const STORAGE_KEY_FAVORITES = 'vapourkit_favorite_models';
 const MAX_RECENT = 10;
@@ -103,7 +131,9 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
       }
       const storedRecent = localStorage.getItem(STORAGE_KEY_RECENT);
       if (storedRecent) {
-        setRecentModels(JSON.parse(storedRecent));
+        const normalized = normalizeRecentModels(JSON.parse(storedRecent));
+        setRecentModels(normalized);
+        localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(normalized));
       }
     } catch (error) {
       console.error('Failed to load model preferences:', error);

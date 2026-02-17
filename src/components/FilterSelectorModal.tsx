@@ -17,6 +17,34 @@ interface RecentFilter {
   lastUsed: number;
 }
 
+function normalizeRecentFilters(value: unknown): RecentFilter[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const normalized: RecentFilter[] = [];
+
+  value.forEach(item => {
+    const name = typeof item === 'string'
+      ? item
+      : (item && typeof item === 'object' && typeof (item as { name?: unknown }).name === 'string'
+          ? (item as { name: string }).name
+          : '');
+
+    if (!name || seen.has(name)) return;
+
+    const lastUsed = item && typeof item === 'object' && typeof (item as { lastUsed?: unknown }).lastUsed === 'number'
+      ? (item as { lastUsed: number }).lastUsed
+      : 0;
+
+    normalized.push({ name, lastUsed });
+    seen.add(name);
+  });
+
+  return normalized
+    .sort((a, b) => b.lastUsed - a.lastUsed)
+    .slice(0, MAX_RECENT);
+}
+
 const STORAGE_KEY_RECENT = 'vapourkit_recent_filters';
 const STORAGE_KEY_FAVORITES = 'vapourkit_favorite_filters';
 const MAX_RECENT = 10;
@@ -51,7 +79,9 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
       }
       const storedRecent = localStorage.getItem(STORAGE_KEY_RECENT);
       if (storedRecent) {
-        setRecentFilters(JSON.parse(storedRecent));
+        const normalized = normalizeRecentFilters(JSON.parse(storedRecent));
+        setRecentFilters(normalized);
+        localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(normalized));
       }
     } catch (error) {
       console.error('Failed to load filter preferences:', error);

@@ -1,36 +1,48 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ModelFile, UninitializedModel } from '../electron.d';
 
+const RECENT_MODELS_KEY = 'vapourkit_recent_models';
+
 export const useModels = (isSetupComplete: boolean) => {
   const [availableModels, setAvailableModels] = useState<ModelFile[]>([]);
   const [uninitializedModels, setUninitializedModels] = useState<UninitializedModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [selectedModel, setSelectedModelState] = useState<string | null>(null);
+
+  const setSelectedModel = useCallback((model: string | null) => {
+    setSelectedModelState(model);
+    void window.electronAPI.setLastSelectedModelPath(model);
+  }, []);
 
   const loadModels = useCallback(async (): Promise<void> => {
     try {
       const models = await window.electronAPI.getAvailableModels();
+      const { modelPath: lastSelectedModelPath } = await window.electronAPI.getLastSelectedModelPath();
       setAvailableModels(models);
-      // Use functional updater to avoid dependency on selectedModel
-      setSelectedModel(prev => {
-        // If no model selected yet and we have models, select the first one
-        if (prev === null && models.length > 0) {
-          return models[0].path;
-        }
-        // If currently selected model was deleted, select first available
-        if (prev && models.length > 0 && !models.some(m => m.path === prev)) {
-          return models[0].path;
-        }
-        // If no models available, clear selection
-        if (models.length === 0) {
-          return null;
-        }
-        // Keep current selection
-        return prev;
-      });
+
+      const hasCurrentSelection = selectedModel
+        ? models.some(m => m.path === selectedModel)
+        : false;
+
+      if (hasCurrentSelection) {
+        return;
+      }
+
+      const hasSavedSelection = !!lastSelectedModelPath && models.some(m => m.path === lastSelectedModelPath);
+      if (hasSavedSelection) {
+        setSelectedModelState(lastSelectedModelPath);
+        return;
+      }
+
+      if (lastSelectedModelPath) {
+        localStorage.setItem(RECENT_MODELS_KEY, JSON.stringify([]));
+        await window.electronAPI.setLastSelectedModelPath(null);
+      }
+
+      setSelectedModelState(null);
     } catch (error) {
       console.error('Error loading models:', error);
     }
-  }, []); // No dependencies - stable function identity
+  }, [selectedModel]);
 
   const loadUninitializedModels = useCallback(async (): Promise<void> => {
     try {

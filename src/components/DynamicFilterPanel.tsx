@@ -1,7 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Settings } from 'lucide-react';
 import type { Filter, FilterTemplate, ModelFile } from '../electron.d';
-import { getModelDisplayName } from '../utils/modelUtils';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import { FilterSelectorModal } from './FilterSelectorModal';
 import { ModelSelectorModal } from './ModelSelectorModal';
