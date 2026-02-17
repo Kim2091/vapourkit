@@ -7,76 +7,87 @@
       "useBf16": false,
       "modelType": "vsr",
       "createdAt": "2026-02-07T00:35:14.311Z",
-      "displayTag": "LQ Anime or Cartoons (Dot Crawl, Rainbows)"
+      "displayTag": "LQ Anime or Cartoons (Dot Crawl, Rainbows)",
+      "category": ["Dot Crawl", "Rainbowing", "Color Bleed", "Anime", "Cartoons", "Compression"]
     },
     "2x-AniRemaster_TSPAN_fp16": {
       "useFp32": false,
       "useBf16": false,
       "modelType": "vsr",
       "createdAt": "2025-10-29T06:27:58.864Z",
-      "displayTag": "Classic Anime"
+      "displayTag": "Classic Anime",
+      "category": ["Anime", "Cartoons", "Noise", "Compression"]
     },
     "2x-AnimeUpV2_TSPAN_fp16": {
       "useFp32": false,
       "useBf16": false,
       "modelType": "vsr",
       "createdAt": "2025-10-29T06:27:58.864Z",
-      "displayTag": "LQ Anime"
+      "displayTag": "LQ Anime",
+      "category": ["Anime", "Cartoons", "Noise", "Compression"]
     },
     "2x_AnimeJaNai_HD_V3_UltraCompact_fp16": {
       "useFp32": false,
       "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:28:48.047Z",
-      "displayTag": "Modern Anime"
+      "displayTag": "Modern Anime",
+      "category": ["Anime", "Blur", "Compression"]
     },
     "2x_AnimeJaNai_SD_V1beta34_Compact_fp16": {
       "useFp32": false,
       "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:29:05.469Z",
-      "displayTag": "Classic HQ Anime"
+      "displayTag": "Classic HQ Anime",
+      "category": ["Anime", "Blur", "Noise", "Compression"]
     },
     "2x_AnimeJaNai_HD_V3Sharp1_UltraCompact_fp16": {
       "useFp32": false,
       "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:29:34.328Z",
-      "displayTag": "Modern HQ Anime"
+      "displayTag": "Modern HQ Anime",
+      "category": ["Anime", "Blur", "Compression"]
     },
     "2x_AniSD_AC_SPAN_fp32": {
       "useFp32": true,
       "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:29:54.736Z",
-      "displayTag": "Classic HQ SD Anime"
+      "displayTag": "Classic HQ SD Anime",
+      "category": ["Anime", "Blur", "Noise", "Compression"]
     },
     "2x_AniSD_DC_SPAN_fp32": {
       "useFp32": true,
       "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:30:07.152Z",
-      "displayTag": "Classic LQ SD Anime"
+      "displayTag": "Classic LQ SD Anime",
+      "category": ["Anime", "Blur", "Noise", "Compression"]
     },
     "2x_AnimeJaNai_V2_UltraCompact_fp16": {
       "useFp32": false,
       "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:30:19.831Z",
-      "displayTag": "Modern HQ Anime"
+      "displayTag": "Modern HQ Anime",
+      "category": ["Anime", "Blur", "Noise", "Compression"]
     },
     "2x-AnimeSharpV4_Fast_fp16": {
       "useFp32": false,
       "useBf16": false,
       "modelType": "image",
       "createdAt": "2025-10-29T06:30:19.831Z",
-      "displayTag": "LQ Anime"
+      "displayTag": "LQ Anime",
+      "category": ["Anime", "Cartoons", "Blur", "Noise", "Compression"]
     },
     "2x_bndl_animefilm_v1.5_FDAT_fp32": {
       "useFp32": true,
       "useBf16": false,
       "modelType": "image",
-      "createdAt": "2025-12-25T22:41:27.399Z"
+      "createdAt": "2025-12-25T22:41:27.399Z",
+      "category": ["Anime", "Blur", "Noise", "Compression", "Dot Crawl", "Rainbowing", "Color Bleed"]
     }
   }
 }

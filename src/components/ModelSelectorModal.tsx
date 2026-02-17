@@ -47,6 +47,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedUserCategory, setSelectedUserCategory] = useState<string>('All');
   const [selectedBackend, setSelectedBackend] = useState<'all' | 'tensorrt' | 'onnx'>('all');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [recentModels, setRecentModels] = useState<RecentModel[]>([]);
@@ -127,46 +128,62 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  // Helper to get all categories a model belongs to (derived from modelType + explicit categories only)
-  const getModelCategories = (model: ModelFile): string[] => {
-    const cats: string[] = [];
-    // Derive from model type
-    if (model.modelType === 'vsr') cats.push('VSR');
-    else if (model.modelType === 'image') cats.push('Image');
-    // Add explicit categories, excluding backend labels
-    const explicit = filterCategoryBadges(model.category);
-    explicit.forEach(c => { if (!cats.includes(c)) cats.push(c); });
-    return cats.length > 0 ? cats : ['Uncategorized'];
+  // Helper: get the model type label (VSR or Image)
+  const getModelType = (model: ModelFile): string => {
+    if (model.modelType === 'vsr') return 'VSR';
+    if (model.modelType === 'image') return 'Image';
+    return 'Other';
   };
 
-  // Group models by category (auto-derived + explicit)
-  const groupedModels = useMemo(() => {
+  // Helper: get user-defined categories from model metadata
+  const getModelUserCategories = (model: ModelFile): string[] => {
+    const cats = filterCategoryBadges(model.category);
+    return cats.length > 0 ? cats : [];
+  };
+
+  // Group models by model type (VSR / Image)
+  const groupedByType = useMemo(() => {
     return backendFilteredModels.reduce((acc, model) => {
-      const cats = getModelCategories(model);
+      const type = getModelType(model);
+      if (!acc[type]) acc[type] = [];
+      if (!acc[type].find(m => m.path === model.path)) acc[type].push(model);
+      return acc;
+    }, {} as Record<string, ModelFile[]>);
+  }, [backendFilteredModels]);
+
+  const modelTypes = useMemo(() => {
+    return ['All', ...Object.keys(groupedByType).sort()];
+  }, [groupedByType]);
+
+  // Models after model-type filter applied
+  const typeFilteredModels = useMemo(() => {
+    if (selectedCategory === 'All') return backendFilteredModels;
+    return backendFilteredModels.filter(m => getModelType(m) === selectedCategory);
+  }, [backendFilteredModels, selectedCategory]);
+
+  // Group backend-filtered models by user category (independent of model type filter)
+  const groupedByUserCategory = useMemo(() => {
+    return backendFilteredModels.reduce((acc, model) => {
+      const cats = getModelUserCategories(model);
       cats.forEach(cat => {
-        if (!acc[cat]) {
-          acc[cat] = [];
-        }
-        if (!acc[cat].find(m => m.path === model.path)) {
-          acc[cat].push(model);
-        }
+        if (!acc[cat]) acc[cat] = [];
+        if (!acc[cat].find(m => m.path === model.path)) acc[cat].push(model);
       });
       return acc;
     }, {} as Record<string, ModelFile[]>);
   }, [backendFilteredModels]);
 
-  // Get sorted categories
-  const categories = useMemo(() => {
-    return ['All', ...Object.keys(groupedModels).sort()];
-  }, [groupedModels]);
+  const userCategories = useMemo(() => {
+    return ['All', ...Object.keys(groupedByUserCategory).sort()];
+  }, [groupedByUserCategory]);
 
-  // Filter models based on search and category
+  // Filter models based on search, model type, and user category
   const filteredModels = useMemo(() => {
-    let models = backendFilteredModels;
+    let models = typeFilteredModels;
 
-    // Filter by category
-    if (selectedCategory !== 'All') {
-      models = models.filter(m => getModelCategories(m).includes(selectedCategory));
+    // Filter by user category (second tier)
+    if (selectedUserCategory !== 'All') {
+      models = models.filter(m => getModelUserCategories(m).includes(selectedUserCategory));
     }
 
     // Filter by search query
@@ -191,7 +208,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
 
     // Sort alphabetically
     return models.sort((a, b) => a.name.localeCompare(b.name));
-  }, [backendFilteredModels, selectedCategory, searchQuery]);
+  }, [typeFilteredModels, selectedUserCategory, searchQuery]);
 
   // Get recent models that still exist
   const recentModelFiles = useMemo(() => {
@@ -569,27 +586,57 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                 )}
 
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                  Categories
+                  Model Type
                 </div>
-                <div className="space-y-0.5">
-                  {categories.map(category => {
-                    const count = category === 'All' 
-                      ? backendFilteredModels.length 
-                      : (groupedModels[category]?.length || 0);
-                    
+                <div className="space-y-0.5 mb-4">
+                  {modelTypes.map(type => {
+                    const count = type === 'All'
+                      ? backendFilteredModels.length
+                      : (groupedByType[type]?.length || 0);
                     return (
                       <button
-                        key={category}
-                        onClick={() => setSelectedCategory(category)}
+                        key={type}
+                        onClick={() => setSelectedCategory(type)}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between group ${
-                          selectedCategory === category
+                          selectedCategory === type
                             ? 'bg-purple-500/65 text-white'
                             : 'text-gray-300 hover:bg-dark-elevated hover:text-white'
                         }`}
                       >
-                        <span className="truncate">{category}</span>
+                        <span className="truncate">{type}</span>
                         <span className={`text-xs ${
-                          selectedCategory === category
+                          selectedCategory === type
+                            ? 'text-purple-200'
+                            : 'text-gray-500 group-hover:text-gray-400'
+                        }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                  Categories
+                </div>
+                <div className="space-y-0.5">
+                  {userCategories.map(cat => {
+                    const count = cat === 'All'
+                      ? typeFilteredModels.length
+                      : typeFilteredModels.filter(model => getModelUserCategories(model).includes(cat)).length;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setSelectedUserCategory(cat)}
+                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between group ${
+                          selectedUserCategory === cat
+                            ? 'bg-purple-500/65 text-white'
+                            : 'text-gray-300 hover:bg-dark-elevated hover:text-white'
+                        }`}
+                      >
+                        <span className="truncate">{cat}</span>
+                        <span className={`text-xs ${
+                          selectedUserCategory === cat
                             ? 'text-purple-200'
                             : 'text-gray-500 group-hover:text-gray-400'
                         }`}>
@@ -780,6 +827,7 @@ const ModelItem = memo<ModelItemProps>(({
   const displayName = getModelDisplayName(model, useDirectML);
   const isUnbuilt = displayName.startsWith('[Unbuilt] ') && !hasMatchingEngines;
   const cleanDisplayName = displayName.startsWith('[Unbuilt] ') ? displayName.replace(/^\[Unbuilt\]\s+/, '') : displayName;
+  const userCategoryBadges = filterCategoryBadges(model.category);
 
   return (
     <div
@@ -792,30 +840,67 @@ const ModelItem = memo<ModelItemProps>(({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <h4 className={`font-medium leading-6 min-w-0 break-words ${
+              isSelected ? 'text-purple-300' : 'text-white'
+            }`}>
+              {cleanDisplayName}
+            </h4>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {onEdit && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(model);
+                  }}
+                  className="p-1.5 rounded-lg transition-all text-gray-600 hover:text-purple-300 hover:bg-dark-elevated"
+                  title="Edit model"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(model);
+                  }}
+                  className="p-1.5 rounded-lg transition-all text-gray-600 hover:text-red-400 hover:bg-dark-elevated"
+                  title="Delete model"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleFavorite(model.path);
+                }}
+                className={`p-1.5 rounded-lg transition-all ${
+                  isFavorite
+                    ? 'text-yellow-400 hover:text-yellow-500'
+                    : 'text-gray-600 hover:text-yellow-400'
+                }`}
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <Star className={`w-4 h-4 ${isFavorite ? 'fill-yellow-400' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
             {isUnbuilt && (
               <span className="text-xs px-2 py-0.5 rounded border flex-shrink-0 bg-red-900/40 text-red-300 border-red-700/50">
                 Unbuilt
               </span>
             )}
-            <h4 className={`font-medium ${
-              isSelected ? 'text-purple-300' : 'text-white'
-            }`}>
-              {cleanDisplayName}
-            </h4>
-            {/* Backend badge */}
             <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
-              model.backend === 'tensorrt' 
-                ? 'bg-green-900/50 text-green-400 border border-green-700/50' 
+              model.backend === 'tensorrt'
+                ? 'bg-green-900/50 text-green-400 border border-green-700/50'
                 : 'bg-blue-900/50 text-blue-400 border border-blue-700/50'
             }`}>
               {model.backend === 'tensorrt' ? 'TensorRT' : 'ONNX'}
             </span>
-            {/* Precision badge */}
-            <span className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded flex-shrink-0">
-              {model.precision}
-            </span>
-            {/* Model type badge */}
             {model.modelType && (
               <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
                 model.modelType === 'vsr'
@@ -825,28 +910,34 @@ const ModelItem = memo<ModelItemProps>(({
                 {model.modelType === 'vsr' ? 'VSR' : 'Image'}
               </span>
             )}
-            {model.backend === 'onnx' && hasMatchingEngines && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowMatchingEngines(prev => !prev);
-                }}
-                className={`text-xs px-2 py-0.5 rounded border transition-colors flex-shrink-0 ${
-                  showMatchingEngines
-                    ? 'bg-dark-elevated text-gray-200 border-gray-600'
-                    : 'bg-dark-bg text-gray-400 border-gray-700 hover:border-gray-600 hover:text-gray-300'
-                }`}
-                title="Show matching built TensorRT engines"
-              >
-                Engines {matchingEngineModels.length}
-              </button>
-            )}
-            {/* Category badges (backend labels stripped — shown via backend badge above) */}
-            {filterCategoryBadges(model.category).map((cat, index) => (
-              <span key={index} className="text-xs px-2 py-1 bg-dark-bg text-gray-400 rounded flex-shrink-0">
+
+            <span className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded flex-shrink-0">
+              {model.precision}
+            </span>
+            {userCategoryBadges.map((cat, index) => (
+              <span key={index} className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded flex-shrink-0">
                 {cat}
               </span>
             ))}
+
+            <div className="ml-auto min-w-[84px] flex justify-end">
+              {model.backend === 'onnx' && hasMatchingEngines && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMatchingEngines(prev => !prev);
+                  }}
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                    showMatchingEngines
+                      ? 'bg-dark-elevated text-gray-200 border-gray-600'
+                      : 'bg-dark-bg text-gray-400 border-gray-700 hover:border-gray-600 hover:text-gray-300'
+                  }`}
+                  title="Show matching built TensorRT engines"
+                >
+                  Engines {matchingEngineModels.length}
+                </button>
+              )}
+            </div>
           </div>
           {model.description && (
             <p className="text-sm text-gray-400 line-clamp-2">
@@ -874,46 +965,6 @@ const ModelItem = memo<ModelItemProps>(({
               </div>
             </div>
           )}
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {onEdit && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(model);
-              }}
-              className="p-1.5 rounded-lg transition-all text-gray-600 hover:text-purple-300 hover:bg-dark-elevated"
-              title="Edit model"
-            >
-              <Edit3 className="w-4 h-4" />
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(model);
-              }}
-              className="p-1.5 rounded-lg transition-all text-gray-600 hover:text-red-400 hover:bg-dark-elevated"
-              title="Delete model"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite(model.path);
-            }}
-            className={`p-1.5 rounded-lg transition-all ${
-              isFavorite
-                ? 'text-yellow-400 hover:text-yellow-500'
-                : 'text-gray-600 hover:text-yellow-400'
-            }`}
-            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          >
-            <Star className={`w-4 h-4 ${isFavorite ? 'fill-yellow-400' : ''}`} />
-          </button>
         </div>
       </div>
       {isSelected && (
