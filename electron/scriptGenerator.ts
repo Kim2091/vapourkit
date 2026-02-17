@@ -48,7 +48,7 @@ export interface ScriptConfig {
   segment?: SegmentSelection;
   validationMode?: boolean; // If true, only process first 5 seconds for validation
   sourceFps?: number; // Source video FPS for validation frame calculation
-  generatePreviewOutputs?: boolean; // If true, add output nodes after each filter for vs-view
+  generatePreviewOutputs?: boolean; // If true, add output nodes after each filter for vs-preview
 }
 
 export class VapourSynthScriptGenerator {
@@ -123,9 +123,10 @@ export class VapourSynthScriptGenerator {
       
       // Add output node after each filter if generatePreviewOutputs is enabled
       if (config.generatePreviewOutputs) {
-        // Output index: sequential order (0, 1, 2...)
-        const outputIndex = i;
-        filterCode += `clip.set_output(${outputIndex})\n\n`;
+        // Output index: reverse order so most recent filter is output 0
+        const outputIndex = totalFilters - 1 - i;
+        const filterName = filter.preset || 'Filter';
+        filterCode += `set_output(clip, ${outputIndex}, "${filterName}")\n\n`;
       }
     }
     
@@ -140,10 +141,10 @@ export class VapourSynthScriptGenerator {
       .replace(/{{OUTPUT_FORMAT}}/g, outputFormat)
       .replace(/{{FILTERS}}/g, filterCode);
 
-    // Remove the final clip.set_output() call if we're generating preview outputs
-    // since we want only the numbered outputs for vs-view
+    // Remove the final set_output() call if we're generating preview outputs
+    // since we want only the numbered outputs for vs-preview
     if (config.generatePreviewOutputs) {
-      template = template.replace(/clip\.set_output\(\)\s*$/, '');
+      template = template.replace(/set_output\(clip, 0, "Output"\)\s*$/, '');
     }
 
     // Use timestamp + random string for unique script path to avoid collisions in batch processing

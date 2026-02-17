@@ -10,9 +10,9 @@
         "build:electron": "tsc -p tsconfig.electron.json",
         "build": "tsc && vite build && npm run build:electron",
         "build:all": "npm run build && electron-builder --win --x64",
-        "build:both": "npm run build && electron-builder --win nsis 7z --x64",
+        "build:both": "npm run build && electron-builder --win nsis 7z --x64 && tsx scripts/renamePortable.ts",
         "build:setup": "npm run build && electron-builder --win nsis --x64",
-        "build:7z": "npm run build && electron-builder --win 7z --x64",
+        "build:7z": "npm run build && electron-builder --win 7z --x64 && tsx scripts/renamePortable.ts",
         "preview": "vite preview",
         "update-docs": "tsx scripts/updateModelsDocs.ts"
     },

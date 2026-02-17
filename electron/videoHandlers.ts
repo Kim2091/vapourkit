@@ -422,7 +422,7 @@ export function registerVideoHandlers(
     }
   });
 
-  // Launch vs-view with a VapourSynth script
+  // Launch vs-preview with a VapourSynth script
   ipcMain.handle('launch-vse-previewer', async (
     event,
     videoPath: string,
@@ -433,7 +433,7 @@ export function registerVideoHandlers(
     numStreams?: number,
     segment?: { enabled: boolean; startFrame: number; endFrame: number }
   ) => {
-    logger.info(`Launching vs-view for video: ${videoPath}`);
+    logger.info(`Launching vs-preview for video: ${videoPath}`);
     try {
       // Generate VapourSynth script with the current workflow
       const metadata = await extractVideoMetadata(videoPath);
@@ -458,18 +458,18 @@ export function registerVideoHandlers(
       const scriptPath = await scriptGenerator.generateScript(scriptConfig);
       logger.info(`Generated preview script: ${scriptPath}`);
 
-      // Launch vs-view with the generated script
+      // Launch vs-preview with the generated script
       const result = await VsViewManager.launch(scriptPath);
       
       if (result.success) {
-        logger.info('vs-view launched successfully');
+        logger.info('vs-preview launched successfully');
       } else {
-        logger.error(`Failed to launch vs-view: ${result.error}`);
+        logger.error(`Failed to launch vs-preview: ${result.error}`);
       }
 
       return result;
     } catch (error) {
-      logger.error('Error launching vs-view:', error);
+      logger.error('Error launching vs-preview:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
       return { success: false, error: errorMsg };
     }

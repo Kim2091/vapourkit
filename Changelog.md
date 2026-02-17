@@ -10,7 +10,7 @@ This release in in dedication to my Mom. She passed away on 1/1/26 after a long 
   - You can now have 20+ filters expanded in your workflow and it will not slow down!
   - The bug that required alt tabbing to fix is no longer present
 - Adds vse-previewer! This allows for realtime previewing of how your video will turn out without having to render the whole thing
-  - Replaced vse-previewer with vs-view, a much more modern solution that has more features and is more robust
+  - Replaced vse-previewer with vs-preview, a much more modern solution that has more features and is more robust
 - Adds ESC button support to all pop up modals
 - Added [vs_grain](https://github.com/pifroggi/vs_grain)
 - Replaces pop up dialogs with notifications within the GUI

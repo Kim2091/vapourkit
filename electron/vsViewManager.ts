@@ -6,21 +6,21 @@ import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 
 /**
- * Manager for vs-view - VapourSynth script previewer tool
+ * Manager for vs-preview - VapourSynth script previewer tool
  * 
- * vs-view is a Python package that provides real-time preview capabilities
+ * vs-preview is a Python package that provides real-time preview capabilities
  * for VapourSynth scripts with playback controls and scrubbing.
  * It should be installed via pip in the VapourSynth Python environment.
  */
 export class VsViewManager {
   /**
-   * Check if vs-view is installed in the Python environment
+   * Check if vs-preview is installed in the Python environment
    */
   static async isInstalled(): Promise<boolean> {
     try {
       const env = setupVSEnvironment();
       
-      // Check if vsview is installed by running pip list
+      // Check if vspreview is installed by running pip list
       const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'list'], {
         env,
         cwd: PATHS.VS
@@ -35,8 +35,8 @@ export class VsViewManager {
         
         child.on('close', (code) => {
           if (code === 0) {
-            // Check if vsview is in the pip list output
-            const isInstalled = output.toLowerCase().includes('vsview');
+            // Check if vspreview is in the pip list output
+            const isInstalled = output.toLowerCase().includes('vspreview');
             resolve(isInstalled);
           } else {
             resolve(false);
@@ -48,22 +48,22 @@ export class VsViewManager {
         });
       });
     } catch (error) {
-      logger.error('Error checking vs-view installation:', error);
+      logger.error('Error checking vs-preview installation:', error);
       return false;
     }
   }
   
   /**
-   * Install vs-view using pip
+   * Install vs-preview using pip
    */
   static async install(): Promise<{ success: boolean; error?: string }> {
-    logger.info('Installing vs-view via pip...');
+    logger.info('Installing vs-preview via pip...');
     
     try {
       const env = setupVSEnvironment();
       
-      // Install vsview==0.1.0a2
-      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', 'vsview==0.1.0a2'], {
+      // Install vspreview==0.19.0
+      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', 'vspreview==0.19.0'], {
         env,
         cwd: PATHS.VS,
         stdio: 'pipe'
@@ -83,34 +83,34 @@ export class VsViewManager {
         
         child.on('close', (code) => {
           if (code === 0) {
-            logger.info('vs-view installed successfully');
+            logger.info('vs-preview installed successfully');
             resolve({ success: true });
           } else {
-            const error = `vs-view installation failed with code ${code}: ${errorOutput}`;
+            const error = `vs-preview installation failed with code ${code}: ${errorOutput}`;
             logger.error(error);
             resolve({ success: false, error });
           }
         });
         
         child.on('error', (err) => {
-          const error = `Failed to install vs-view: ${err.message}`;
+          const error = `Failed to install vs-preview: ${err.message}`;
           logger.error(error);
           resolve({ success: false, error });
         });
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error('Error installing vs-view:', error);
+      logger.error('Error installing vs-preview:', error);
       return { success: false, error: errorMsg };
     }
   }
   
   /**
-   * Launch vs-view with a VapourSynth script
+   * Launch vs-preview with a VapourSynth script
    * @param scriptPath Path to the .vpy script file
    */
   static async launch(scriptPath: string): Promise<{ success: boolean; error?: string }> {
-    logger.info(`Launching vs-view with script: ${scriptPath}`);
+    logger.info(`Launching vs-preview with script: ${scriptPath}`);
     
     try {
       // Check if script file exists
@@ -127,10 +127,10 @@ export class VsViewManager {
         return { success: false, error };
       }
       
-      // Check if vs-view is installed
+      // Check if vs-preview is installed
       const isInstalled = await this.isInstalled();
       if (!isInstalled) {
-        logger.info('vs-view not found, attempting to install...');
+        logger.info('vs-preview not found, attempting to install...');
         const installResult = await this.install();
         if (!installResult.success) {
           return { success: false, error: installResult.error };
@@ -140,10 +140,10 @@ export class VsViewManager {
       // Setup environment for VapourSynth
       const env = setupVSEnvironment();
       
-      // Launch vs-view with the script
-      logger.info(`Launching: vsview ${scriptPath}`);
+      // Launch vs-preview with the script
+      logger.info(`Launching: vspreview ${scriptPath}`);
       
-      const child = spawn(PATHS.PYTHON, ['-m', 'vsview', scriptPath], {
+      const child = spawn(PATHS.PYTHON, ['-m', 'vspreview', scriptPath], {
         detached: true,
         stdio: 'pipe', // Capture output to detect launch errors
         cwd: PATHS.VS,
@@ -163,15 +163,15 @@ export class VsViewManager {
         child.on('exit', (code, signal) => {
           if (code !== null && code !== 0) {
             const errorMsg = errorOutput 
-              ? `vs-view failed to start: ${errorOutput.trim()}`
-              : `vs-view exited with code ${code}. This may indicate a missing dependency or configuration issue.`;
+              ? `vs-preview failed to start: ${errorOutput.trim()}`
+              : `vs-preview exited with code ${code}. This may indicate a missing dependency or configuration issue.`;
             logger.error(errorMsg);
             resolve({ success: false, error: errorMsg });
           }
         });
         
         child.on('error', (err) => {
-          const errorMsg = `Failed to launch vs-view: ${err.message}`;
+          const errorMsg = `Failed to launch vs-preview: ${err.message}`;
           logger.error(errorMsg);
           resolve({ success: false, error: errorMsg });
         });
@@ -179,7 +179,7 @@ export class VsViewManager {
         // If process is still running after 2 seconds, assume success
         setTimeout(() => {
           if (!child.killed) {
-            logger.info('vs-view process started successfully');
+            logger.info('vs-preview process started successfully');
             child.unref(); // Allow parent process to exit independently
             resolve({ success: true });
           }
@@ -187,7 +187,7 @@ export class VsViewManager {
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error('Error launching vs-view:', error);
+      logger.error('Error launching vs-preview:', error);
       return { success: false, error: errorMsg };
     }
   }

@@ -121,7 +121,7 @@ function App() {
   const [vsMlrtVersionInfo, setVsMlrtVersionInfo] = useState<VsMlrtVersionInfo | null>(null);
   const [showVsMlrtModal, setShowVsMlrtModal] = useState(false);
 
-  // vs-view loading state
+  // vs-preview loading state
   const [isLaunchingPreviewer, setIsLaunchingPreviewer] = useState(false);
   const [previewerStatus, setPreviewerStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -736,13 +736,13 @@ function App() {
     }
   }, [videoInfo, selectedModel, useDirectML, filters, numStreams, addConsoleLog, loadCompletedVideo, setCompletedVideoPath]);
 
-  // Launch vs-view with current workflow
+  // Launch vs-preview with current workflow
   const handleLaunchPreviewer = useCallback(async () => {
     if (!videoInfo || isLaunchingPreviewer) return;
     
     setIsLaunchingPreviewer(true);
     setPreviewerStatus('idle');
-    addConsoleLog('Launching vs-view with current workflow...');
+    addConsoleLog('Launching vs-preview with current workflow...');
     
     try {
       const result = await window.electronAPI.launchVsePreviewer(
@@ -756,8 +756,8 @@ function App() {
       );
       
       if (result.success) {
-        addConsoleLog('vs-view launched successfully');
-        notify.success('Previewer Launched', 'vs-view opened successfully');
+        addConsoleLog('vs-preview launched successfully');
+        notify.success('Previewer Launched', 'vs-preview opened successfully');
         setPreviewerStatus('success');
       } else {
         const errorMsg = result.error || 'Unknown error occurred';
@@ -1094,7 +1094,7 @@ function App() {
                             ? 'bg-red-600 hover:bg-red-700 text-white'
                             : 'bg-dark-surface hover:bg-dark-bg border border-teal-500/50 hover:border-teal-400 text-teal-300 disabled:border-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
                         }`}
-                        title="Preview VapourSynth script with current workflow in vs-view"
+                        title="Preview VapourSynth script with current workflow in vs-preview"
                       >
                         {isLaunchingPreviewer ? (
                           <>
