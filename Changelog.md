@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.14.1
+- Switch from vs-view to vs-preview. vs-preview is more stable, and supports more features
+
 ## 0.14.0
 This release in in dedication to my Mom. She passed away on 1/1/26 after a long battle with small cell lung cancer. Rest in peace
 - Adds over 150 new filters, including many from Hybrid!
