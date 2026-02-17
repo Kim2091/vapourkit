@@ -1,6 +1,7 @@
 // electron/configManager.ts
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import { app } from 'electron';
 import { PATHS } from './constants';
 import { logger } from './logger';
 import type { ModelType } from './scriptGenerator';
@@ -93,7 +94,9 @@ export class ConfigManager {
       
       if (await fs.pathExists(CONFIG_FILE)) {
         const data = await fs.readFile(CONFIG_FILE, 'utf-8');
-        this.config = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+        const userConfig = JSON.parse(data) as Record<string, unknown>;
+        const migratedConfig = await this.migrateConfigWithStock(userConfig);
+        this.config = migratedConfig;
         logger.info('Config loaded successfully');
       } else {
         logger.info('No config file found, using defaults (will be created during setup)');
@@ -103,6 +106,133 @@ export class ConfigManager {
       logger.error('Error loading config:', error);
       this.config = DEFAULT_CONFIG;
     }
+  }
+
+  private async migrateConfigWithStock(userConfig: Record<string, unknown>): Promise<AppConfig> {
+    const stockConfig = await this.loadBundledStockConfig();
+    const defaultConfigRecord = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+
+    if (!stockConfig) {
+      return this.deepMerge(defaultConfigRecord, userConfig) as unknown as AppConfig;
+    }
+
+    const baseline = this.deepMerge(
+      defaultConfigRecord,
+      stockConfig
+    );
+    const merged = this.deepMerge(baseline, userConfig);
+
+    const stockModels = this.asObject(stockConfig.models);
+    const userModels = this.asObject(userConfig.models);
+    merged.models = this.mergeModelMetadata(stockModels, userModels);
+
+    if (!this.deepEqual(userConfig, merged)) {
+      const backupPath = path.join(PATHS.CONFIG, `app-config.backup-${Date.now()}.json`);
+      await fs.copy(CONFIG_FILE, backupPath);
+      await fs.writeFile(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+      logger.info(`Migrated app config using stock defaults (backup: ${backupPath})`);
+    }
+
+    return merged as unknown as AppConfig;
+  }
+
+  private async loadBundledStockConfig(): Promise<Record<string, unknown> | null> {
+    try {
+      const appPath = app.getAppPath();
+      const bundledBasePath = appPath.includes('.asar')
+        ? appPath.replace('app.asar', 'app.asar.unpacked')
+        : appPath;
+
+      const stockConfigPath = path.join(bundledBasePath, 'include', 'stock-app-config.json');
+      if (!await fs.pathExists(stockConfigPath)) {
+        logger.warn(`Bundled stock config not found at: ${stockConfigPath}`);
+        return null;
+      }
+
+      return await fs.readJson(stockConfigPath) as Record<string, unknown>;
+    } catch (error) {
+      logger.warn(`Unable to load bundled stock config: ${error}`);
+      return null;
+    }
+  }
+
+  private mergeModelMetadata(
+    stockModels: Record<string, unknown>,
+    userModels: Record<string, unknown>
+  ): Record<string, unknown> {
+    const mergedModels: Record<string, unknown> = {};
+
+    for (const [modelName, stockMetadata] of Object.entries(stockModels)) {
+      const userMetadata = userModels[modelName];
+      if (this.isObject(stockMetadata) && this.isObject(userMetadata)) {
+        mergedModels[modelName] = this.deepMerge(stockMetadata, userMetadata);
+      } else if (userMetadata !== undefined) {
+        mergedModels[modelName] = userMetadata;
+      } else {
+        mergedModels[modelName] = stockMetadata;
+      }
+    }
+
+    for (const [modelName, userMetadata] of Object.entries(userModels)) {
+      if (!(modelName in mergedModels)) {
+        mergedModels[modelName] = userMetadata;
+      }
+    }
+
+    return mergedModels;
+  }
+
+  private deepMerge(
+    base: Record<string, unknown>,
+    override: Record<string, unknown>
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = { ...base };
+
+    for (const [key, value] of Object.entries(override)) {
+      const existing = result[key];
+      if (this.isObject(existing) && this.isObject(value)) {
+        result[key] = this.deepMerge(existing, value);
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
+
+  private deepEqual(left: unknown, right: unknown): boolean {
+    if (left === right) return true;
+
+    if (Array.isArray(left) && Array.isArray(right)) {
+      if (left.length !== right.length) return false;
+      for (let index = 0; index < left.length; index++) {
+        if (!this.deepEqual(left[index], right[index])) return false;
+      }
+      return true;
+    }
+
+    if (this.isObject(left) && this.isObject(right)) {
+      const leftKeys = Object.keys(left);
+      const rightKeys = Object.keys(right);
+      if (leftKeys.length !== rightKeys.length) return false;
+
+      for (const key of leftKeys) {
+        if (!(key in right)) return false;
+        if (!this.deepEqual(left[key], right[key])) return false;
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
+  private isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private asObject(value: unknown): Record<string, unknown> {
+    return this.isObject(value) ? value : {};
   }
 
   async save(): Promise<void> {
