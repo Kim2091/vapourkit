@@ -127,10 +127,16 @@ export class ConfigManager {
     merged.models = this.mergeModelMetadata(stockModels, userModels);
 
     if (!this.deepEqual(userConfig, merged)) {
-      const backupPath = path.join(PATHS.CONFIG, `app-config.backup-${Date.now()}.json`);
-      await fs.copy(CONFIG_FILE, backupPath);
-      await fs.writeFile(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
-      logger.info(`Migrated app config using stock defaults (backup: ${backupPath})`);
+      try {
+        const backupPath = path.join(PATHS.CONFIG, `app-config.backup-${Date.now()}.json`);
+        await fs.copy(CONFIG_FILE, backupPath);
+        await fs.writeFile(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+        logger.info(`Migrated app config using stock defaults (backup: ${backupPath})`);
+      } catch (writeError) {
+        // Log but don't throw — the in-memory merged config is still valid.
+        // A write failure here must never cause load() to fall back to DEFAULT_CONFIG.
+        logger.warn(`Could not persist migrated config to disk (will retry on next save): ${writeError}`);
+      }
     }
 
     return merged as unknown as AppConfig;
