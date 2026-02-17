@@ -5,7 +5,7 @@ import { shouldShowBuildNotification, getEnabledAIModelPaths } from '../utils/mo
 
 interface ModelBuildNotificationProps {
   useDirectML: boolean;
-  filteredModels: ModelFile[];
+  availableModels: ModelFile[];
   uninitializedModels: UninitializedModel[];
   filters: Filter[];
   onBuildModel: (model: UninitializedModel) => void;
@@ -13,7 +13,7 @@ interface ModelBuildNotificationProps {
 
 export const ModelBuildNotification = memo<ModelBuildNotificationProps>(({
   useDirectML,
-  filteredModels,
+  availableModels,
   uninitializedModels,
   filters,
   onBuildModel
@@ -27,7 +27,7 @@ export const ModelBuildNotification = memo<ModelBuildNotificationProps>(({
   // Find the first unbuilt model that's being used
   let unbuiltModelPath: string | null = null;
   for (const modelPath of modelsInUse) {
-    const modelObj = filteredModels.find(m => m.path === modelPath);
+    const modelObj = availableModels.find(m => m.path === modelPath);
     if (shouldShowBuildNotification(modelObj ?? null, useDirectML)) {
       unbuiltModelPath = modelPath;
       break;

@@ -51,6 +51,7 @@ interface AppConfig {
       createdAt: string;
       displayTag?: string;
       description?: string;
+      category?: string | string[];
     };
   };
 }
@@ -126,7 +127,7 @@ export class ConfigManager {
     await this.save();
   }
 
-  getModelMetadata(modelName: string): { useFp32: boolean; useBf16?: boolean; modelType: ModelType; temporalFrames?: number; displayTag?: string; description?: string; createdAt?: string } | null {
+  getModelMetadata(modelName: string): { useFp32: boolean; useBf16?: boolean; modelType: ModelType; temporalFrames?: number; displayTag?: string; description?: string; category?: string | string[]; createdAt?: string } | null {
     const metadata = this.config.models[modelName];
     if (!metadata) return null;
     
@@ -138,11 +139,12 @@ export class ConfigManager {
       temporalFrames: metadata.temporalFrames,
       displayTag: metadata.displayTag,
       description: metadata.description,
+      category: metadata.category,
       createdAt: metadata.createdAt
     };
   }
 
-  async updateModelMetadata(modelName: string, updates: Partial<{ useFp32: boolean; useBf16?: boolean; modelType: ModelType; temporalFrames?: number; displayTag?: string; description?: string }>): Promise<void> {
+  async updateModelMetadata(modelName: string, updates: Partial<{ useFp32: boolean; useBf16?: boolean; modelType: ModelType; temporalFrames?: number; displayTag?: string; description?: string; category?: string | string[] }>): Promise<void> {
     const existing = this.config.models[modelName];
     if (!existing) {
       throw new Error(`Model metadata not found for: ${modelName}`);
@@ -158,6 +160,20 @@ export class ConfigManager {
   async deleteModelMetadata(modelName: string): Promise<void> {
     delete this.config.models[modelName];
     await this.save();
+  }
+
+  getAllModelCategories(): string[] {
+    const categories = new Set<string>();
+    for (const model of Object.values(this.config.models)) {
+      if (model.category) {
+        if (Array.isArray(model.category)) {
+          model.category.forEach(cat => categories.add(cat));
+        } else {
+          categories.add(model.category);
+        }
+      }
+    }
+    return [...categories].sort();
   }
 
   isModelFp32(modelPath: string): boolean {

@@ -4,6 +4,7 @@ import type { Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { getModelDisplayName } from '../utils/modelUtils';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import { FilterSelectorModal } from './FilterSelectorModal';
+import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
 
 interface DynamicFilterPanelProps {
@@ -53,6 +54,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyDuplicatedId, setNewlyDuplicatedId] = useState<string | null>(null);
   const [showFilterSelector, setShowFilterSelector] = useState<string | null>(null);
+  const [showModelSelector, setShowModelSelector] = useState<string | null>(null);
 
   // Group filter templates by category (templates can appear in multiple categories)
   const groupedTemplates = filterTemplates.reduce((acc, template) => {
@@ -705,46 +707,20 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               )}
                             </div>
                           </div>
-                          <select
-                            value={filter.modelPath || ''}
-                            onChange={(e) => handleModelChange(filter.id, e.target.value)}
+                          <button
+                            onClick={() => !isProcessing && setShowModelSelector(filter.id)}
                             disabled={isProcessing}
-                            className="w-full bg-gray-900/90 border border-gray-600 rounded-md px-2.5 py-1.5 text-base focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
+                            className={`w-full bg-gray-900/90 border rounded-md px-2.5 py-1.5 text-base text-left focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              filter.modelPath 
+                                ? 'border-purple-500/50 text-gray-200 hover:border-purple-500' 
+                                : 'border-gray-600 text-gray-400 hover:border-gray-500'
+                            }`}
                           >
-                            <option value="">Select a model...</option>
-                            {!useDirectML && (() => {
-                              const engineModels = availableModels.filter(m => m.backend === 'tensorrt');
-                              const onnxModels = availableModels.filter(m => m.backend === 'onnx');
-                              
-                              return (
-                                <>
-                                  {engineModels.length > 0 && (
-                                    <optgroup label="━━━ TensorRT Engines ━━━">
-                                      {engineModels.map((model) => (
-                                        <option key={model.path} value={model.path}>
-                                          {getModelDisplayName(model, useDirectML)}
-                                        </option>
-                                      ))}
-                                    </optgroup>
-                                  )}
-                                  {onnxModels.length > 0 && (
-                                    <optgroup label="━━━ ONNX Models ━━━">
-                                      {onnxModels.map((model) => (
-                                        <option key={model.path} value={model.path}>
-                                          {getModelDisplayName(model, useDirectML)}
-                                        </option>
-                                      ))}
-                                    </optgroup>
-                                  )}
-                                </>
-                              );
-                            })()}
-                            {useDirectML && availableModels.map((model) => (
-                              <option key={model.path} value={model.path}>
-                                {getModelDisplayName(model, useDirectML)}
-                              </option>
-                            ))}
-                          </select>
+                            {filter.modelPath
+                              ? (availableModels.find(m => m.path === filter.modelPath)?.name || 'Unknown Model')
+                              : 'Select a model...'
+                            }
+                          </button>
                         </div>
                       </>
                     ) : (
@@ -986,6 +962,23 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
             return success;
           } : undefined}
           onEditTemplate={onSaveTemplate ? handleEditTemplate : undefined}
+        />
+      )}
+
+      {/* Model Selector Modal */}
+      {showModelSelector && (
+        <ModelSelectorModal
+          isOpen={true}
+          onClose={() => setShowModelSelector(null)}
+          availableModels={availableModels}
+          useDirectML={useDirectML}
+          currentSelection={pendingFilters.find(f => f.id === showModelSelector)?.modelPath || ''}
+          onSelectModel={(modelPath) => {
+            if (showModelSelector) {
+              handleModelChange(showModelSelector, modelPath);
+            }
+          }}
+          onImportModel={onImportClick}
         />
       )}
     </div>

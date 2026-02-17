@@ -77,11 +77,10 @@ function App() {
     availableModels,
     selectedModel,
     setSelectedModel,
-    filteredModels,
     loadModels,
     loadUninitializedModels,
     uninitializedModels,
-  } = useModels(isSetupComplete, useDirectML);
+  } = useModels(isSetupComplete);
   const { templates: filterTemplates, saveTemplate, deleteTemplate, loadTemplates } = useFilterTemplates(isSetupComplete);
   
   // State management hooks
@@ -866,7 +865,7 @@ function App() {
       {/* Notification Bar for Uninitialized Models */}
       <ModelBuildNotification
         useDirectML={useDirectML}
-        filteredModels={filteredModels}
+        availableModels={availableModels}
         uninitializedModels={uninitializedModels}
         filters={filters}
         onBuildModel={handleBuildModel}
@@ -960,7 +959,7 @@ function App() {
                   />
                   
                   <ModelSelectionPanel
-                    filteredModels={filteredModels}
+                    availableModels={availableModels}
                     isProcessing={isProcessing}
                     useDirectML={useDirectML}
                     colorimetrySettings={colorimetrySettings}

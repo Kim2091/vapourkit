@@ -95,21 +95,6 @@ export function shouldShowBuildNotification(
 }
 
 /**
- * Checks if a selected model path is still valid after settings change.
- * Used to determine if we need to auto-switch to a different model.
- */
-export function isModelStillValid(
-  selectedModelPath: string | null,
-  filteredModels: ModelFile[]
-): boolean {
-  if (!selectedModelPath) {
-    return false;
-  }
-  
-  return filteredModels.some(m => m.path === selectedModelPath);
-}
-
-/**
  * Extracts all AI model paths from enabled filters.
  * Used to determine which models are actually being used.
  */

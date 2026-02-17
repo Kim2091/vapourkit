@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   forceStopModelImport: () => ipcRenderer.invoke('force-stop-model-import'),
   validateOnnxModel: (onnxPath: string) => ipcRenderer.invoke('validate-onnx-model', onnxPath),
   
+  // Model category operations
+  getModelCategories: () => ipcRenderer.invoke('get-model-categories'),
+  updateModelCategory: (modelId: string, category: string | string[] | undefined) => ipcRenderer.invoke('update-model-category', modelId, category),
+  
   // Upscaling operations
   selectOutputFile: (defaultName: string) => ipcRenderer.invoke('select-output-file', defaultName),
   selectFolder: () => ipcRenderer.invoke('select-folder'),

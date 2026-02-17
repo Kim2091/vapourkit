@@ -5,7 +5,7 @@ import { ColorimetryPanel } from './ColorimetryPanel';
 import { SegmentSelector, type SegmentSelection } from './SegmentSelector';
 
 interface ModelSelectionPanelProps {
-  filteredModels: ModelFile[];
+  availableModels: ModelFile[];
   isProcessing: boolean;
   useDirectML: boolean;
   colorimetrySettings: ColorimetrySettings;
@@ -25,7 +25,7 @@ interface ModelSelectionPanelProps {
 }
 
 export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
-  filteredModels,
+  availableModels,
   isProcessing,
   useDirectML,
   colorimetrySettings,
@@ -71,7 +71,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         filters={filters}
         filterTemplates={filterTemplates}
         isProcessing={isProcessing}
-        availableModels={filteredModels}
+        availableModels={availableModels}
         useDirectML={useDirectML}
         onFiltersChange={onFiltersChange}
         onSaveTemplate={onSaveTemplate}

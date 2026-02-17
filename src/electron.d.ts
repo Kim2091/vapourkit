@@ -159,6 +159,10 @@ export interface ElectronAPI {
   readTemplateFile: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   importTemplateFile: (filePath: string) => Promise<{ success: boolean; template?: FilterTemplate; error?: string }>;
   
+  // Model category operations
+  getModelCategories: () => Promise<string[]>;
+  updateModelCategory: (modelId: string, category: string | string[] | undefined) => Promise<{ success: boolean; error?: string }>;
+
   // File operations
   fileExists: (filePath: string) => Promise<boolean>;
   
@@ -235,6 +239,7 @@ export interface VideoInfo {
 
 export interface ModelFile {
   id: string;
+  metadataId?: string;
   name: string;
   path: string;
   precision: string;
@@ -243,6 +248,7 @@ export interface ModelFile {
   modelType?: 'vsr' | 'image';
   displayTag?: string;
   description?: string;
+  category?: string | string[];
 }
 
 export interface ModelMetadata {
@@ -252,6 +258,7 @@ export interface ModelMetadata {
   temporalFrames?: number; // Number of frames for VSR models (default: 5)
   displayTag?: string;
   description?: string;
+  category?: string | string[];
   createdAt?: string;
 }
 

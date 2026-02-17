@@ -72,7 +72,7 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
   const handleEdit = async (model: ModelFile) => {
     // Load current metadata
     try {
-      const metadata = await window.electronAPI.getModelMetadata(model.id);
+      const metadata = await window.electronAPI.getModelMetadata(model.metadataId || model.id);
       setEditData({
         displayTag: metadata?.displayTag || '',
         description: metadata?.description || '',
@@ -87,10 +87,10 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
     }
   };
 
-  const handleSave = async (modelId: string) => {
+  const handleSave = async (model: ModelFile) => {
     setIsSaving(true);
     try {
-      const result = await window.electronAPI.updateModelMetadata(modelId, editData);
+      const result = await window.electronAPI.updateModelMetadata(model.metadataId || model.id, editData);
       if (!result.success) {
         throw new Error(result.error || 'Unknown error');
       }
@@ -107,7 +107,7 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
   const handleDelete = async (model: ModelFile) => {
     setIsDeleting(model.id);
     try {
-      await window.electronAPI.deleteModel(model.path, model.id);
+      await window.electronAPI.deleteModel(model.path, model.metadataId || model.id);
       onModelUpdated();
       notify.success('Model Deleted', `Successfully deleted "${model.name}"`);
     } catch (error) {
@@ -310,7 +310,7 @@ export const ModelManagerModal = memo<ModelManagerModalProps>(({
 
                       <div className="flex gap-2 pt-1">
                         <button
-                          onClick={() => handleSave(model.id)}
+                          onClick={() => handleSave(model)}
                           disabled={isSaving}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-purple hover:bg-primary-purple/80 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
                         >

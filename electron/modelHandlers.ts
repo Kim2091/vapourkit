@@ -50,34 +50,40 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       // Include both .engine files (for TensorRT) and .onnx files (for DirectML)
       const models = [
         ...engineFiles.map(file => {
-          const id = path.basename(file, '.engine');
-          const metadata = configManager.getModelMetadata(id);
+          const metadataId = path.basename(file, '.engine');
+          const id = `${metadataId}::engine`;
+          const metadata = configManager.getModelMetadata(metadataId);
           return {
             id,
-            name: id, // Clean: just the filename without extension
+            metadataId,
+            name: metadataId, // Clean: just the filename without extension
             path: path.join(PATHS.MODELS, file),
             precision: metadata?.useFp32 ? 'FP32' : 'FP16',
             backend: 'tensorrt' as const,
             modelType: metadata?.modelType || 'image',
             displayTag: metadata?.displayTag,
-            description: metadata?.description
+            description: metadata?.description,
+            category: metadata?.category
           };
         }),
         ...onnxFiles.map(file => {
-          const id = path.basename(file, '.onnx');
-          const metadata = configManager.getModelMetadata(id);
-          const hasEngine = onnxBasenamesWithEngines.has(id);
+          const metadataId = path.basename(file, '.onnx');
+          const id = `${metadataId}::onnx`;
+          const metadata = configManager.getModelMetadata(metadataId);
+          const hasEngine = onnxBasenamesWithEngines.has(metadataId);
           
           return {
             id,
-            name: id, // Clean: just the filename without extension
+            metadataId,
+            name: metadataId, // Clean: just the filename without extension
             path: path.join(PATHS.MODELS, file),
             precision: metadata?.useFp32 ? 'FP32' : 'FP16',
             backend: 'onnx' as const,
             hasEngine,
             modelType: metadata?.modelType || 'image',
             displayTag: metadata?.displayTag,
-            description: metadata?.description
+            description: metadata?.description,
+            category: metadata?.category
           };
         })
       ];
@@ -503,6 +509,28 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         isValid: false,
         error: errorMsg
       };
+    }
+  });
+
+  ipcMain.handle('get-model-categories', async () => {
+    logger.info('Getting model categories');
+    try {
+      return configManager.getAllModelCategories();
+    } catch (error) {
+      logger.error('Error getting model categories:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle('update-model-category', async (event, modelId: string, category: string | string[] | undefined) => {
+    logger.info(`Updating category for model: ${modelId}`);
+    try {
+      await configManager.updateModelMetadata(modelId, { category });
+      return { success: true };
+    } catch (error) {
+      logger.error('Error updating model category:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMsg };
     }
   });
 }
