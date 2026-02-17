@@ -211,7 +211,6 @@ export class DependencyManager {
     const ortExists = await fs.pathExists(path.join(PATHS.PLUGINS, 'vsort.dll'));
     const bsExists = await fs.pathExists(path.join(PATHS.PLUGINS, 'bestsource.dll'));
     const pythonExists = await fs.pathExists(PATHS.PYTHON);
-    const modelsExtracted = !(await this.modelExtractor.needsExtraction());
     const videoCompareExists = await fs.pathExists(PATHS.VIDEO_COMPARE_EXE);
     const ffmpegExists = await FFmpegManager.isInstalled();
     // NOTE: No longer checking if models are converted - they will be initialized on-demand
@@ -222,11 +221,26 @@ export class DependencyManager {
     logger.dependency(`ONNX Runtime Plugin: ${ortExists}`);
     logger.dependency(`BestSource: ${bsExists}`);
     logger.dependency(`Python: ${pythonExists}`);
-    logger.dependency(`Models extracted: ${modelsExtracted}`);
     logger.dependency(`Video Compare: ${videoCompareExists}`);
     logger.dependency(`FFmpeg: ${ffmpegExists}`);
-    
-    const allPresent = vsExists && mlrtExists && ortExists && bsExists && pythonExists && modelsExtracted && videoCompareExists && ffmpegExists;
+
+    const coreDepsPresent = vsExists && mlrtExists && ortExists && bsExists && pythonExists && videoCompareExists && ffmpegExists;
+
+    // If core deps are healthy, silently extract any missing bundled ONNX models rather than
+    // failing the health check and forcing the user through the full setup flow.
+    // Model extraction is just a fast local file copy (ASAR → data/models), never a download.
+    if (coreDepsPresent && await this.modelExtractor.needsExtraction()) {
+      logger.dependency('Core deps present but some bundled ONNX models are missing — extracting silently');
+      try {
+        await this.modelExtractor.extractModels();
+        logger.dependency('Silent model extraction complete');
+      } catch (extractError) {
+        logger.error('Silent model extraction failed:', extractError);
+        // Non-fatal: don't block app startup over a model copy failure
+      }
+    }
+
+    const allPresent = coreDepsPresent;
     logger.dependency(`All dependencies present: ${allPresent}`);
     
     return allPresent;
