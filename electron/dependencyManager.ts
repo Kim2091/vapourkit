@@ -641,12 +641,16 @@ export class DependencyManager {
       'App configuration'
     );
     
-    // Copy VapourSynth template if it doesn't exist
-    await this.copyTemplateIfNeeded(
-      path.join(PATHS.CONFIG, 'vapoursynth_template.vpy'),
-      path.join(bundledBasePath, 'include', 'vapoursynth_template.vpy'),
-      'VapourSynth template'
-    );
+    // Always overwrite VapourSynth template from bundled source.
+    // This is a generated-script template with placeholders, not a user-customizable file,
+    // so it must stay in sync with the current app version to avoid runtime errors
+    // (e.g. missing imports like set_output).
+    const userTemplatePath = path.join(PATHS.CONFIG, 'vapoursynth_template.vpy');
+    const bundledTemplatePath = path.join(bundledBasePath, 'include', 'vapoursynth_template.vpy');
+    if (await fs.pathExists(bundledTemplatePath)) {
+      await fs.copy(bundledTemplatePath, userTemplatePath, { overwrite: true });
+      logger.dependency('Updated VapourSynth template from bundled source');
+    }
     
     // Copy filter templates from bundled location
     await this.copyFilterTemplates(bundledBasePath);

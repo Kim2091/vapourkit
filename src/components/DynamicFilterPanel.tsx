@@ -168,6 +168,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     onFiltersChange(updatedFilters);
     setExpandedFilters(prev => new Set([...prev, newFilter.id]));
     setShowAddMenu(false);
+    // Immediately open the model selector for the new AI model filter
+    setShowModelSelector(newFilter.id);
   };
 
   const handleRemoveFilter = (id: string) => {

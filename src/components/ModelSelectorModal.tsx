@@ -974,11 +974,6 @@ const ModelItem = memo<ModelItemProps>(({
               {model.description}
             </p>
           )}
-          {model.displayTag && model.displayTag !== model.name && (
-            <p className="text-xs text-gray-500 mt-1">
-              ID: {model.name}
-            </p>
-          )}
           {model.backend === 'onnx' && showMatchingEngines && hasMatchingEngines && (
             <div className="mt-2 bg-dark-bg border border-gray-700 rounded-lg p-2">
               <div className="text-xs text-gray-400 mb-1">Built engines</div>
