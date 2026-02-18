@@ -43,6 +43,7 @@ interface AppConfig {
   defaultOutputFolder?: string;
   encodingSettingsExpanded?: boolean;
   vsMlrtVersion?: string;
+  appVersion?: string;
   models: {
     [modelName: string]: {
       useFp32: boolean;
@@ -450,6 +451,15 @@ export class ConfigManager {
 
   async setVsMlrtVersion(version: string): Promise<void> {
     this.config.vsMlrtVersion = version;
+    await this.save();
+  }
+
+  getAppVersion(): string | undefined {
+    return this.config.appVersion;
+  }
+
+  async setAppVersion(version: string): Promise<void> {
+    this.config.appVersion = version;
     await this.save();
   }
 }

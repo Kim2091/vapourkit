@@ -240,6 +240,23 @@ export class DependencyManager {
       }
     }
 
+    // Detect app version change (upgrade-in-place) and update bundled files
+    if (coreDepsPresent) {
+      const currentVersion = app.getVersion();
+      const storedVersion = configManager.getAppVersion();
+      if (storedVersion !== currentVersion) {
+        logger.dependency(`App version changed: ${storedVersion || 'none'} → ${currentVersion} — updating bundled files`);
+        try {
+          await this.updateBundledFiles();
+          await configManager.setAppVersion(currentVersion);
+          logger.dependency('Bundled files updated for new version');
+        } catch (updateError) {
+          logger.error('Failed to update bundled files on version change:', updateError);
+          // Non-fatal: don't block startup
+        }
+      }
+    }
+
     const allPresent = coreDepsPresent;
     logger.dependency(`All dependencies present: ${allPresent}`);
     
@@ -569,6 +586,29 @@ export class DependencyManager {
     return PATHS.VS;
   }
 
+  /**
+   * Called on version change to overwrite bundled files that must stay in sync with the app.
+   * This handles upgrade-in-place scenarios where setupDependencies() is never called.
+   */
+  private async updateBundledFiles(): Promise<void> {
+    const appPath = app.getAppPath();
+    const bundledBasePath = appPath.includes('.asar')
+      ? appPath.replace('app.asar', 'app.asar.unpacked')
+      : appPath;
+
+    // Always overwrite VapourSynth template — it's a placeholder-driven generated script,
+    // not user-customizable, and must match the current script generator.
+    const bundledTemplatePath = path.join(bundledBasePath, 'include', 'vapoursynth_template.vpy');
+    const userTemplatePath = path.join(PATHS.CONFIG, 'vapoursynth_template.vpy');
+    if (await fs.pathExists(bundledTemplatePath)) {
+      await fs.copy(bundledTemplatePath, userTemplatePath, { overwrite: true });
+      logger.dependency('Updated VapourSynth template from bundled source');
+    }
+
+    // Copy any new filter templates (existing ones are preserved)
+    await this.copyFilterTemplates(bundledBasePath);
+  }
+
   private async copyTemplateIfNeeded(userPath: string, bundledPath: string, logName: string): Promise<void> {
     if (!await fs.pathExists(userPath)) {
       if (await fs.pathExists(bundledPath)) {
@@ -671,6 +711,9 @@ export class DependencyManager {
     }
     
     logger.dependency('User configuration initialized');
+
+    // Store current app version so future upgrades can detect changes
+    await configManager.setAppVersion(app.getVersion());
   }
 
   getPythonExecutablePath(): string {
