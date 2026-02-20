@@ -7,7 +7,7 @@ import { logger } from './logger';
 import { PATHS } from './constants';
 import { configManager } from './configManager';
 import { withLogSeparator } from './utils';
-import { extractVideoMetadata } from './videoUtils';
+import { extractVideoMetadata, getVideoFrameCount } from './videoUtils';
 import { formatBytes } from './ipcUtilities';
 import { VapourSynthScriptGenerator } from './scriptGenerator';
 import { UpscaleExecutor } from './upscaleExecutor';
@@ -61,6 +61,9 @@ export function registerVideoHandlers(
       const stats = await fs.stat(filePath);
       const metadata = await extractVideoMetadata(filePath);
       
+      // Get exact frame count using BestSource
+      const frameCount = await getVideoFrameCount(filePath);
+      
       const info = {
         path: filePath,
         name: path.basename(filePath),
@@ -73,10 +76,11 @@ export function registerVideoHandlers(
         container: metadata.container,
         scanType: metadata.scanType,
         colorSpace: metadata.colorSpace,
-        duration: metadata.duration
+        duration: metadata.duration,
+        frameCount: frameCount
       };
       
-      logger.info(`Video info: ${info.name}, ${info.sizeFormatted}, ${metadata.resolution || 'unknown resolution'}, ${metadata.fps ? metadata.fps + ' fps' : 'unknown fps'}, ${metadata.pixelFormat || 'unknown format'}`);
+      logger.info(`Video info: ${info.name}, ${info.sizeFormatted}, ${metadata.resolution || 'unknown resolution'}, ${metadata.fps ? metadata.fps + ' fps' : 'unknown fps'}, ${metadata.pixelFormat || 'unknown format'}${frameCount ? `, ${frameCount} frames` : ''}`);
       return info;
     } catch (error) {
       logger.error('Error getting video info:', error);

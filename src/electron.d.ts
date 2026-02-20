@@ -227,6 +227,7 @@ export interface VideoInfo {
   fps?: number;
   outputFps?: number;
   duration?: string;
+  frameCount?: number;
   pixelFormat?: string;
   codec?: string;
   container?: string;

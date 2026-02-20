@@ -53,28 +53,6 @@ function timecodeToFrame(timecode: string, fps: number): number | null {
   return Math.round(totalSeconds * fps);
 }
 
-// Calculate duration in seconds from duration string
-function parseDuration(duration: string | undefined): number {
-  if (!duration) return 0;
-  // Format: "HH:MM:SS.ss" or similar
-  const parts = duration.split(':');
-  if (parts.length === 3) {
-    const hours = parseFloat(parts[0]) || 0;
-    const minutes = parseFloat(parts[1]) || 0;
-    const seconds = parseFloat(parts[2]) || 0;
-    return hours * 3600 + minutes * 60 + seconds;
-  }
-  return parseFloat(duration) || 0;
-}
-
-// Calculate total frames from video info
-function getTotalFrames(videoInfo: VideoInfo | null): number {
-  if (!videoInfo) return 0;
-  const fps = videoInfo.fps || 24;
-  const durationSeconds = parseDuration(videoInfo.duration);
-  return Math.ceil(durationSeconds * fps);
-}
-
 export const SegmentSelector = memo<SegmentSelectorProps>(({
   videoInfo,
   segment,
@@ -90,7 +68,7 @@ export const SegmentSelector = memo<SegmentSelectorProps>(({
   const [previewDuration, setPreviewDuration] = useState(5); // seconds
   
   const fps = videoInfo?.fps || 24;
-  const totalFrames = getTotalFrames(videoInfo);
+  const totalFrames = videoInfo?.frameCount || 0;
   
   // Throttle frame seeking during drag to avoid overwhelming the system
   const lastSeekTimeRef = useRef<number>(0);
