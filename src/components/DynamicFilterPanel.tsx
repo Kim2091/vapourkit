@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useRef } from 'react';
-import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Settings } from 'lucide-react';
+import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import type { Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import { FilterSelectorModal } from './FilterSelectorModal';
@@ -21,7 +21,6 @@ interface DynamicFilterPanelProps {
   onDrop?: (targetId: string | null) => void;
   draggedFilterId?: string | null;
   onImportClick?: () => void;
-  onManageModels?: () => void;
 }
 
 export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
@@ -39,7 +38,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   onDrop,
   draggedFilterId,
   onImportClick,
-  onManageModels,
 }: DynamicFilterPanelProps) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -694,16 +692,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                 >
                                   <Download className="w-3 h-3" />
                                   Import Model
-                                </button>
-                              )}
-                              {onManageModels && (
-                                <button
-                                  onClick={onManageModels}
-                                  className="text-sm text-gray-400 hover:text-gray-300 transition-colors flex items-center gap-1"
-                                  disabled={isProcessing}
-                                >
-                                  <Settings className="w-3 h-3" />
-                                  Manage Models
                                 </button>
                               )}
                             </div>

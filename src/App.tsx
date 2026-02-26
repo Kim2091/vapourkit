@@ -10,7 +10,6 @@ import { AboutModal } from './components/AboutModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AutoBuildModal } from './components/AutoBuildModal';
 import { PluginsModal } from './components/PluginsModal';
-import { ModelManagerModal } from './components/ModelManagerModal';
 import { UpdateNotificationModal } from './components/UpdateNotificationModal';
 import { VsMlrtUpdateModal } from './components/VsMlrtUpdateModal';
 import { QueuePanel } from './components/QueuePanel';
@@ -101,9 +100,6 @@ function App() {
     isReloading,
     setIsReloading,
   } = useUIState();
-  
-  // Model manager modal state
-  const [showModelManager, setShowModelManager] = useState(false);
   
   // Segment selection state
   const [segment, setSegment] = useState<SegmentSelection>({
@@ -971,7 +967,6 @@ function App() {
                       setModalMode('import');
                       setShowImportModal(true);
                     }}
-                    onManageModels={() => setShowModelManager(true)}
                     onColorimetryChange={handleColorimetryChange}
                     onFiltersChange={handleSetFilters}
                     onSaveTemplate={saveTemplate}
@@ -1271,16 +1266,6 @@ function App() {
           });
         }}
         onInstallationComplete={loadTemplates}
-      />
-
-      <ModelManagerModal
-        isOpen={showModelManager}
-        models={availableModels}
-        onClose={() => closeModalWithFocusRestore(() => setShowModelManager(false))}
-        onModelUpdated={async () => {
-          await loadModels();
-          await loadUninitializedModels();
-        }}
       />
 
       {showUpdateModal && (

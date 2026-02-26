@@ -84,6 +84,11 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   const [editDescription, setEditDescription] = useState('');
   const [editCategories, setEditCategories] = useState<string[]>([]);
   const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [editModelType, setEditModelType] = useState<'vsr' | 'image'>('image');
+  const [editTemporalFrames, setEditTemporalFrames] = useState<number | undefined>(undefined);
+  const [editUseFp32, setEditUseFp32] = useState(false);
+  const [editUseBf16, setEditUseBf16] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -328,7 +333,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     }
   };
 
-  const handleEditModel = (model: ModelFile) => {
+  const handleEditModel = async (model: ModelFile) => {
     setEditingModel(model);
     setEditDisplayTag(model.displayTag || '');
     setEditDescription(model.description || '');
@@ -336,17 +341,44 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
       ? model.category
       : (model.category ? [model.category] : []);
     setEditCategories(cats);
+    setEditModelType(model.modelType || 'image');
+    setEditTemporalFrames(undefined);
+    setEditUseFp32(false);
+    setEditUseBf16(false);
     setNewCategoryInput('');
+
+    try {
+      const metadata = await window.electronAPI.getModelMetadata(model.metadataId || model.id);
+      if (metadata) {
+        setEditDisplayTag(metadata.displayTag || model.displayTag || '');
+        setEditDescription(metadata.description || model.description || '');
+        const metadataCats = Array.isArray(metadata.category)
+          ? metadata.category
+          : (metadata.category ? [metadata.category] : cats);
+        setEditCategories(metadataCats);
+        setEditModelType(metadata.modelType || model.modelType || 'image');
+        setEditTemporalFrames(metadata.temporalFrames);
+        setEditUseFp32(metadata.useFp32 || false);
+        setEditUseBf16(metadata.useBf16 || false);
+      }
+    } catch (error) {
+      console.error('Failed to load model metadata:', error);
+    }
   };
 
   const handleSaveEdit = async () => {
     if (!editingModel) return;
 
     try {
+      setIsSavingEdit(true);
       const updates: Record<string, any> = {
         displayTag: editDisplayTag.trim() || undefined,
         description: editDescription.trim() || undefined,
         category: editCategories.length > 0 ? editCategories : undefined,
+        modelType: editModelType,
+        temporalFrames: editModelType === 'vsr' ? editTemporalFrames : undefined,
+        useFp32: editUseFp32,
+        useBf16: editingModel.backend === 'tensorrt' ? editUseBf16 : false,
       };
 
       const result = await window.electronAPI.updateModelMetadata(editingModel.metadataId || editingModel.id, updates);
@@ -356,9 +388,15 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
         setEditDescription('');
         setEditCategories([]);
         setNewCategoryInput('');
+        setEditModelType('image');
+        setEditTemporalFrames(undefined);
+        setEditUseFp32(false);
+        setEditUseBf16(false);
       }
     } catch (error) {
       console.error('Failed to update model metadata:', error);
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -368,6 +406,11 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     setEditDescription('');
     setEditCategories([]);
     setNewCategoryInput('');
+    setEditModelType('image');
+    setEditTemporalFrames(undefined);
+    setEditUseFp32(false);
+    setEditUseBf16(false);
+    setIsSavingEdit(false);
   };
 
   if (!isOpen) return null;
@@ -420,6 +463,75 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                   autoFocus
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                    Model Type
+                  </label>
+                  <select
+                    value={editModelType}
+                    onChange={(e) => setEditModelType(e.target.value as 'vsr' | 'image')}
+                    className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors"
+                  >
+                    <option value="vsr">Video</option>
+                    <option value="image">Image</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                    Inference Precision
+                  </label>
+                  {editingModel.backend === 'tensorrt' ? (
+                    <select
+                      value={editUseFp32 ? 'fp32' : editUseBf16 ? 'bf16' : 'fp16'}
+                      onChange={(e) => {
+                        const precision = e.target.value;
+                        setEditUseFp32(precision === 'fp32');
+                        setEditUseBf16(precision === 'bf16');
+                      }}
+                      className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors"
+                    >
+                      <option value="fp16">FP16 (RGBH)</option>
+                      <option value="bf16">BF16 (RGBH)</option>
+                      <option value="fp32">FP32 (RGBS)</option>
+                    </select>
+                  ) : (
+                    <select
+                      value={editUseFp32 ? 'fp32' : 'fp16'}
+                      onChange={(e) => {
+                        setEditUseFp32(e.target.value === 'fp32');
+                        setEditUseBf16(false);
+                      }}
+                      className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors"
+                    >
+                      <option value="fp16">FP16 (RGBH)</option>
+                      <option value="fp32">FP32 (RGBS)</option>
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {editModelType === 'vsr' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                    Temporal Frames
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    step="2"
+                    value={editTemporalFrames ?? 5}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      setEditTemporalFrames(Number.isNaN(value) ? undefined : value);
+                    }}
+                    className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-gray-300">
@@ -496,13 +608,15 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             <div className="flex items-center gap-2 p-4 border-t border-gray-800 bg-dark-surface">
               <button
                 onClick={handleSaveEdit}
-                className="flex-1 bg-purple-500/65 hover:bg-purple-500/80 text-white text-sm py-2 rounded-lg transition-colors font-medium"
+                disabled={isSavingEdit}
+                className="flex-1 bg-purple-500/65 hover:bg-purple-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm py-2 rounded-lg transition-colors font-medium"
               >
-                Save Changes
+                {isSavingEdit ? 'Saving...' : 'Save Changes'}
               </button>
               <button
                 onClick={handleCancelEdit}
-                className="flex-1 bg-dark-surface hover:bg-dark-bg border border-gray-700 text-white text-sm py-2 rounded-lg transition-colors"
+                disabled={isSavingEdit}
+                className="flex-1 bg-dark-surface hover:bg-dark-bg disabled:opacity-50 disabled:cursor-not-allowed border border-gray-700 text-white text-sm py-2 rounded-lg transition-colors"
               >
                 Cancel
               </button>
