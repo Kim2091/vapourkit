@@ -10,3 +10,5 @@
 /*.png
 /include/plugins/plugins
 /include/scripts/extra_scripts
+
+/src-tauri/target

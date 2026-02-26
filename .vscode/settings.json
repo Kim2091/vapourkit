@@ -1,0 +1,6 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "cargo check": true,
+        "Test-Path": true
+    }
+}
