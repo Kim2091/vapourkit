@@ -21,6 +21,7 @@ interface DynamicFilterPanelProps {
   onDrop?: (targetId: string | null) => void;
   draggedFilterId?: string | null;
   onImportClick?: () => void;
+  onModelsUpdated?: () => Promise<void>;
 }
 
 export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
@@ -38,6 +39,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   onDrop,
   draggedFilterId,
   onImportClick,
+  onModelsUpdated,
 }: DynamicFilterPanelProps) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -968,6 +970,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
             }
           }}
           onImportModel={onImportClick}
+          onModelsUpdated={onModelsUpdated}
         />
       )}
     </div>

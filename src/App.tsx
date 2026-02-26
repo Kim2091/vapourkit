@@ -967,6 +967,10 @@ function App() {
                       setModalMode('import');
                       setShowImportModal(true);
                     }}
+                    onModelsUpdated={async () => {
+                      await loadModels();
+                      await loadUninitializedModels();
+                    }}
                     onColorimetryChange={handleColorimetryChange}
                     onFiltersChange={handleSetFilters}
                     onSaveTemplate={saveTemplate}

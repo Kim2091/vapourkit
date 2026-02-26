@@ -12,6 +12,7 @@ interface ModelSelectorModalProps {
   onDeleteModel?: (modelPath: string, modelId: string) => Promise<boolean>;
   onEditModel?: (model: ModelFile) => void;
   onImportModel?: () => void;
+  onModelsUpdated?: () => Promise<void>;
   currentSelection?: string;
 }
 
@@ -71,6 +72,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   onDeleteModel,
   onEditModel,
   onImportModel,
+  onModelsUpdated,
   currentSelection = '',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,8 +91,23 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   const [editUseFp32, setEditUseFp32] = useState(false);
   const [editUseBf16, setEditUseBf16] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryInputRef = useRef<HTMLInputElement>(null);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // All unique user-defined categories across all models
+  const allExistingCategories = useMemo(() => {
+    const catSet = new Set<string>();
+    availableModels.forEach(m => {
+      const cats = Array.isArray(m.category) ? m.category : (m.category ? [m.category] : []);
+      cats.forEach(c => {
+        if (c && !BACKEND_LABELS.has(c.toLowerCase())) catSet.add(c);
+      });
+    });
+    return [...catSet].sort();
+  }, [availableModels]);
 
   const isEngineFile = (modelPath: string): boolean => /\.engine$/i.test(modelPath);
 
@@ -392,6 +409,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
         setEditTemporalFrames(undefined);
         setEditUseFp32(false);
         setEditUseBf16(false);
+        await onModelsUpdated?.();
       }
     } catch (error) {
       console.error('Failed to update model metadata:', error);
@@ -411,6 +429,17 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     setEditUseFp32(false);
     setEditUseBf16(false);
     setIsSavingEdit(false);
+    setShowCategoryDropdown(false);
+  };
+
+  const handleAddCategory = (cat: string) => {
+    const trimmed = cat.trim();
+    if (trimmed && !editCategories.includes(trimmed)) {
+      setEditCategories(prev => [...prev, trimmed]);
+    }
+    setNewCategoryInput('');
+    setShowCategoryDropdown(false);
+    categoryInputRef.current?.focus();
   };
 
   if (!isOpen) return null;
@@ -443,9 +472,9 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             <div className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-gray-300">
-                  Model ID
+                  File Name
                 </label>
-                <div className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-gray-500 text-sm">
+                <div className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-gray-500 text-sm truncate" title={editingModel.name}>
                   {editingModel.name}
                 </div>
               </div>
@@ -538,17 +567,18 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                   Categories
                 </label>
                 <div className="space-y-2">
+                  {/* Selected category chips */}
                   {editCategories.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {editCategories.map((cat, index) => (
                         <span
                           key={index}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-500/10 border border-purple-400/35 rounded-lg text-purple-300"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/10 border border-purple-400/35 rounded-lg text-purple-300 text-sm"
                         >
                           {cat}
                           <button
                             onClick={() => setEditCategories(prev => prev.filter((_, i) => i !== index))}
-                            className="hover:text-red-400 transition-colors"
+                            className="hover:text-red-400 transition-colors ml-0.5"
                             type="button"
                           >
                             <X className="w-3 h-3" />
@@ -557,36 +587,90 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                       ))}
                     </div>
                   )}
-                  <div className="flex gap-2">
+
+                  {/* Combobox input */}
+                  <div className="relative" ref={categoryDropdownRef}>
                     <input
+                      ref={categoryInputRef}
                       type="text"
                       value={newCategoryInput}
-                      onChange={(e) => setNewCategoryInput(e.target.value)}
+                      onChange={(e) => {
+                        setNewCategoryInput(e.target.value);
+                        setShowCategoryDropdown(true);
+                      }}
+                      onFocus={() => setShowCategoryDropdown(true)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newCategoryInput.trim()) {
+                        if (e.key === 'Enter') {
                           e.preventDefault();
-                          if (!editCategories.includes(newCategoryInput.trim())) {
-                            setEditCategories([...editCategories, newCategoryInput.trim()]);
+                          const filtered = allExistingCategories.filter(
+                            c => !editCategories.includes(c) &&
+                              c.toLowerCase().includes(newCategoryInput.toLowerCase())
+                          );
+                          // Prefer exact match or first suggestion, else create new
+                          const exact = allExistingCategories.find(
+                            c => c.toLowerCase() === newCategoryInput.trim().toLowerCase()
+                          );
+                          if (exact) {
+                            handleAddCategory(exact);
+                          } else if (newCategoryInput.trim()) {
+                            handleAddCategory(newCategoryInput);
+                          } else if (filtered.length > 0) {
+                            handleAddCategory(filtered[0]);
                           }
-                          setNewCategoryInput('');
+                        } else if (e.key === 'Escape') {
+                          setShowCategoryDropdown(false);
                         }
                       }}
-                      placeholder="Add category (press Enter)"
-                      className="flex-1 bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors placeholder-gray-500"
+                      onBlur={() => {
+                        // Delay so click on a dropdown item registers first
+                        setTimeout(() => setShowCategoryDropdown(false), 150);
+                      }}
+                      placeholder="Search or add a category…"
+                      className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors placeholder-gray-500 text-sm"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (newCategoryInput.trim() && !editCategories.includes(newCategoryInput.trim())) {
-                          setEditCategories([...editCategories, newCategoryInput.trim()]);
-                          setNewCategoryInput('');
-                        }
-                      }}
-                      disabled={!newCategoryInput.trim()}
-                      className="px-3 py-2 bg-purple-500/65 hover:bg-purple-500/80 disabled:bg-dark-surface disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
-                    >
-                      Add
-                    </button>
+
+                    {/* Dropdown */}
+                    {showCategoryDropdown && (() => {
+                      const suggestions = allExistingCategories.filter(
+                        c => !editCategories.includes(c) &&
+                          c.toLowerCase().includes(newCategoryInput.toLowerCase())
+                      );
+                      const canCreate = newCategoryInput.trim() &&
+                        !allExistingCategories.some(c => c.toLowerCase() === newCategoryInput.trim().toLowerCase()) &&
+                        !editCategories.includes(newCategoryInput.trim());
+
+                      if (suggestions.length === 0 && !canCreate) return null;
+
+                      return (
+                        <div className="absolute z-10 top-full mt-1 w-full bg-dark-elevated border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+                          {suggestions.length > 0 && (
+                            <div className="max-h-40 overflow-y-auto">
+                              {suggestions.map(cat => (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleAddCategory(cat)}
+                                  className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-purple-500/20 hover:text-purple-200 transition-colors"
+                                >
+                                  {cat}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {canCreate && (
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleAddCategory(newCategoryInput)}
+                              className="w-full text-left px-3 py-2 text-sm text-purple-300 hover:bg-purple-500/20 transition-colors border-t border-gray-700 flex items-center gap-2"
+                            >
+                              <span className="text-purple-400">+</span> Create &ldquo;{newCategoryInput.trim()}&rdquo;
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

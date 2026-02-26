@@ -14,6 +14,7 @@ interface ModelSelectionPanelProps {
   filters: Filter[];
   segment?: SegmentSelection;
   onImportClick: () => void;
+  onModelsUpdated?: () => Promise<void>;
   onColorimetryChange: (settings: ColorimetrySettings) => void;
   onFiltersChange: (filters: Filter[]) => void;
   onSaveTemplate?: (template: FilterTemplate) => Promise<boolean>;
@@ -37,6 +38,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
   onSaveTemplate,
   onDeleteTemplate,
   onImportClick,
+  onModelsUpdated,
   onSegmentChange,
   onPreviewSegment,
   onSeekFrame,
@@ -75,6 +77,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         onSaveTemplate={onSaveTemplate}
         onDeleteTemplate={onDeleteTemplate}
         onImportClick={onImportClick}
+        onModelsUpdated={onModelsUpdated}
       />
     </>
   );
