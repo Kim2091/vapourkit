@@ -370,11 +370,50 @@ where
     let ff_cancel = state.cancel_flag.clone();
 
     // stderr reader task
+    // ffmpeg often writes progress with carriage returns and partial chunks,
+    // so split on both '\n' and '\r' from a rolling text buffer.
     tokio::spawn(async move {
-        let mut lines = BufReader::new(ffmpeg_stderr).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
+        let mut reader = ffmpeg_stderr;
+        let mut chunk = [0u8; 4096];
+        let mut pending = String::new();
+
+        loop {
             if ff_cancel.load(Ordering::SeqCst) { break; }
-            if tx_line.send((line, true)).await.is_err() { break; }
+
+            let n = match reader.read(&mut chunk).await {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(_) => break,
+            };
+
+            let text = String::from_utf8_lossy(&chunk[..n]);
+            pending.push_str(&text);
+
+            let mut start = 0usize;
+            for (idx, ch) in pending.char_indices() {
+                if ch == '\n' || ch == '\r' {
+                    let line = pending[start..idx].trim();
+                    if !line.is_empty() {
+                        if tx_line.send((line.to_string(), true)).await.is_err() {
+                            return;
+                        }
+                    }
+                    start = idx + ch.len_utf8();
+                }
+            }
+
+            if start > 0 {
+                pending = pending[start..].to_string();
+            }
+
+            if pending.len() > 4096 {
+                pending = pending[pending.len().saturating_sub(2048)..].to_string();
+            }
+        }
+
+        let tail = pending.trim();
+        if !tail.is_empty() {
+            let _ = tx_line.send((tail.to_string(), true)).await;
         }
     });
 
@@ -427,7 +466,9 @@ where
             // Parse progress: "frame=  662 fps=187 q=24.0"
             if let Some((frame, fps_val)) = parse_ffmpeg_progress(&msg) {
                 current_frame = frame;
-                current_fps = fps_val;
+                if let Some(fps) = fps_val {
+                    current_fps = fps;
+                }
                 let pct = if total_frames > 0 {
                     (current_frame * 100 / total_frames) as u32
                 } else {
@@ -613,25 +654,37 @@ fn build_ffmpeg_args(
     args
 }
 
-fn parse_ffmpeg_progress(line: &str) -> Option<(u64, f64)> {
+fn parse_ffmpeg_progress(line: &str) -> Option<(u64, Option<f64>)> {
     let trimmed = line.trim();
 
-    // vspipe format: "Frame: 100/1000" printed to stderr
+    // vspipe format: "Frame: 100/1000" or "Frame: 100" printed to stderr
     if let Some(rest) = trimmed.strip_prefix("Frame:") {
         let rest = rest.trim();
         if let Some((current, _total)) = rest.split_once('/') {
             if let Ok(frame) = current.trim().parse::<u64>() {
-                return Some((frame, 0.0));
+                return Some((frame, None));
+            }
+        } else if let Ok(frame) = rest.parse::<u64>() {
+            return Some((frame, None));
+        } else {
+            // Handles variants like "Frame: 123 (something...)"
+            let value: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(frame) = value.parse::<u64>() {
+                return Some((frame, None));
             }
         }
     }
 
     // ffmpeg format: "frame=  662 fps=187 q=24.0 ..."
-    let frame_match = regex_capture(trimmed, "frame=")?;
-    let fps_match = regex_capture(trimmed, "fps=").unwrap_or_else(|| "0".to_string());
+    let lower = trimmed.to_ascii_lowercase();
+    let frame_match = regex_capture(&lower, "frame=")?;
+    let fps_match = regex_capture(&lower, "fps=").unwrap_or_else(|| "0".to_string());
     let frame: u64 = frame_match.parse().ok()?;
     let fps: f64 = fps_match.parse().unwrap_or(0.0);
-    Some((frame, fps))
+    Some((frame, Some(fps)))
 }
 
 /// Minimal key=value capture: given `"frame=  662 fps=187"` and key `"frame="`,

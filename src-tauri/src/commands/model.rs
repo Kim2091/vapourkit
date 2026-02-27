@@ -222,6 +222,7 @@ pub async fn initialize_model(
         params.use_static_shape.unwrap_or(false),
         params.use_custom_trtexec_params.unwrap_or(false),
         params.custom_trtexec_params.as_deref(),
+        "model-init-progress",
         cancel_flag.clone(),
         &app,
     )
@@ -376,6 +377,7 @@ pub async fn import_custom_model(
             params.use_static_shape.unwrap_or(false),
             params.use_custom_trtexec_params.unwrap_or(false),
             params.custom_trtexec_params.as_deref(),
+            "model-import-progress",
             cancel_flag.clone(),
             &app,
         )
@@ -654,6 +656,7 @@ async fn run_trtexec(
     use_static_shape: bool,
     use_custom_params: bool,
     custom_params: Option<&str>,
+    progress_event: &str,
     cancel_flag: Arc<AtomicBool>,
     app: &AppHandle,
 ) -> anyhow::Result<()> {
@@ -715,6 +718,7 @@ async fn run_trtexec(
     let stderr = child.stderr.take().expect("stderr");
     let app_clone = app.clone();
     let flag = cancel_flag.clone();
+    let progress_event = progress_event.to_string();
 
     let reader_task = tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
@@ -733,7 +737,7 @@ async fn run_trtexec(
             } else if line.contains("Engine built") || line.contains("serialized in") {
                 progress = 99.0;
             }
-            let _ = app_clone.emit("model-init-progress", serde_json::json!({
+            let _ = app_clone.emit(&progress_event, serde_json::json!({
                 "type": "converting",
                 "progress": progress,
                 "message": &line

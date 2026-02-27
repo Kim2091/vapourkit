@@ -89,7 +89,8 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
         }
       } else {
         setUpscaleProgress(progress);
-        onLog(`[Upscale] ${progress.message}`);
+        const fpsSuffix = progress.fps && progress.fps > 0 ? ` | ${progress.fps.toFixed(1)} FPS` : '';
+        onLog(`[Upscale] ${progress.message}${fpsSuffix}`);
         
         // Update stopping state based on progress
         // Only set isStopping to true if we're still processing (avoid race condition with cancel)
