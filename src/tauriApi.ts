@@ -67,13 +67,68 @@ const dragDropPathCache: Map<string, string> = new Map();
 /** Initialize Tauri drag-drop event listener to capture file paths. */
 function initDragDropListener() {
   const webview = getCurrentWebviewWindow();
+  let lastDragTarget: Element | null = null;
+  // Paths carried by the current drag gesture (populated on 'enter', reused on 'over').
+  let currentDragPaths: string[] = [];
+
+  /** Build a DataTransfer pre-populated with File stubs so that
+   *  e.dataTransfer is never null and e.dataTransfer.types includes 'Files'. */
+  function buildDragDataTransfer(paths: string[]): DataTransfer {
+    const dt = new DataTransfer();
+    for (const p of paths) {
+      const name = p.split(/[\\/]/).pop() || p;
+      dt.items.add(new File([], name));
+    }
+    return dt;
+  }
+
   webview.onDragDropEvent((event) => {
-    if (event.payload.type === 'drop' && event.payload.paths) {
+    const payload = event.payload as any;
+    const type: string = payload.type;
+    const pos: { x: number; y: number } = payload.position ?? { x: 0, y: 0 };
+
+    if (type === 'enter' || type === 'over') {
+      // 'enter' often carries paths; 'over' usually doesn't – reuse what we cached.
+      if (payload.paths && (payload.paths as string[]).length > 0) {
+        currentDragPaths = payload.paths as string[];
+      }
+      const dt = buildDragDataTransfer(currentDragPaths);
+      // Show the drag-over highlight in whichever drop zone the cursor is over.
+      const target = document.elementFromPoint(pos.x, pos.y) ?? document.body;
+      lastDragTarget = target;
+      target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, clientX: pos.x, clientY: pos.y, dataTransfer: dt }));
+
+    } else if (type === 'leave') {
+      // Cursor left the window — fire dragleave on the last known target so
+      // React clears the drag-highlight state.
+      const target = lastDragTarget ?? document.body;
+      lastDragTarget = null;
+      currentDragPaths = [];
+      target.dispatchEvent(new DragEvent('dragleave', { bubbles: true, cancelable: true }));
+
+    } else if (type === 'drop') {
+      const paths: string[] = payload.paths ?? [];
+      lastDragTarget = null;
+      currentDragPaths = [];
+
+      // 1. Populate the path cache so getFilePathFromFile can resolve names → paths.
       dragDropPathCache.clear();
-      for (const p of event.payload.paths) {
+      for (const p of paths) {
         const name = p.split(/[\\/]/).pop() || p;
         dragDropPathCache.set(name, p);
       }
+
+      // 2. Build a DataTransfer with empty File stubs (real content is not needed;
+      //    only the file.name is used by getFilePathFromFile to look up the cached path).
+      const dt = new DataTransfer();
+      for (const p of paths) {
+        const name = p.split(/[\\/]/).pop() || p;
+        dt.items.add(new File([], name));
+      }
+
+      // 3. Dispatch a native drop event so React's onDrop handler fires normally.
+      const target = document.elementFromPoint(pos.x, pos.y) ?? document.body;
+      target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, clientX: pos.x, clientY: pos.y, dataTransfer: dt }));
     }
   });
 }

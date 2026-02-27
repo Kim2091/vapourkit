@@ -485,8 +485,40 @@ pub async fn update_model_metadata(
     metadata: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     log::info!("Updating model metadata: {}", model_id);
-    let meta: ModelMetadata = serde_json::from_value(metadata).map_err(|e| e.to_string())?;
     let mut cfg = state.config.lock().unwrap();
+
+    // Fetch and clone the existing record so we can patch individual fields.
+    // The frontend sends a *partial* payload (no `createdAt`, etc.), so we
+    // cannot deserialise directly into the full ModelMetadata struct.
+    let mut meta = cfg
+        .get_model_metadata(&model_id)
+        .ok_or_else(|| format!("Model not found: {}", model_id))?
+        .clone();
+
+    if let Some(v) = metadata.get("useFp32").and_then(|v| v.as_bool()) {
+        meta.use_fp32 = v;
+    }
+    if let Some(v) = metadata.get("useBf16") {
+        meta.use_bf16 = v.as_bool();
+    }
+    if let Some(v) = metadata.get("modelType") {
+        if let Ok(mt) = serde_json::from_value::<crate::config_manager::ModelType>(v.clone()) {
+            meta.model_type = mt;
+        }
+    }
+    if let Some(v) = metadata.get("temporalFrames") {
+        meta.temporal_frames = v.as_u64().map(|n| n as u32);
+    }
+    if let Some(v) = metadata.get("displayTag") {
+        meta.display_tag = if v.is_null() { None } else { v.as_str().map(|s| s.to_string()) };
+    }
+    if let Some(v) = metadata.get("description") {
+        meta.description = if v.is_null() { None } else { v.as_str().map(|s| s.to_string()) };
+    }
+    if let Some(v) = metadata.get("category") {
+        meta.category = if v.is_null() { None } else { Some(v.clone()) };
+    }
+
     cfg.set_model_metadata(model_id, meta)
         .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "success": true }))
@@ -660,6 +692,12 @@ async fn run_trtexec(
     cancel_flag: Arc<AtomicBool>,
     app: &AppHandle,
 ) -> anyhow::Result<()> {
+    let _ = app.emit(progress_event, serde_json::json!({
+        "type": "converting",
+        "progress": 0,
+        "message": "Starting TensorRT engine conversion..."
+    }));
+
     let trtexec = crate::paths::trtexec();
     if !trtexec.exists() {
         anyhow::bail!("trtexec not found at {:?}. Please set up TensorRT first.", trtexec);
@@ -698,7 +736,10 @@ async fn run_trtexec(
             args.push("--fp16".into());
         }
 
-        args.push("--skipInference".into());
+        args.push("--builderOptimizationLevel=3".into());
+        args.push("--useCudaGraph".into());
+        args.push("--tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT".into());
+        args.push("--verbose".into());
     }
 
     log::info!("Running trtexec: {} {}", trtexec.display(), args.join(" "));
@@ -710,43 +751,85 @@ async fn run_trtexec(
         .stdout(std::process::Stdio::piped());
 
     let mut child = cmd.spawn()?;
-    let pid = child.id();
+    let _pid = child.id();
     
     // Store PID for force-kill support (handled via upscale_state in the caller)
 
-    // Stream stderr (trtexec outputs progress there)
+    // Stream stderr/stdout (different trtexec builds may use either)
     let stderr = child.stderr.take().expect("stderr");
-    let app_clone = app.clone();
+    let stdout = child.stdout.take().expect("stdout");
+    let app_clone2 = app.clone();
     let flag = cancel_flag.clone();
-    let progress_event = progress_event.to_string();
+    let flag2 = cancel_flag.clone();
+    let progress_event2 = progress_event.to_string();
 
-    let reader_task = tokio::spawn(async move {
+    // stderr: log only (trtexec --verbose goes to stdout)
+    let stderr_reader_task = tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
         let mut reader = tokio::io::BufReader::new(stderr).lines();
-        let mut progress = 0.0f64;
         while let Ok(Some(line)) = reader.next_line().await {
             if flag.load(Ordering::SeqCst) {
                 break;
             }
-            log::debug!("[trtexec] {}", line);
-            // Simple progress estimation from trtexec output
-            if line.contains("Building engine") {
-                progress = 50.0;
-            } else if line.contains("Saving engine") {
-                progress = 90.0;
-            } else if line.contains("Engine built") || line.contains("serialized in") {
-                progress = 99.0;
+            log::debug!("[trtexec stderr] {}", line);
+        }
+    });
+
+    // stdout: parse progress exactly as modelExtractor.ts does
+    let stdout_reader_task = tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt;
+        let mut reader = tokio::io::BufReader::new(stdout).lines();
+        let mut last_progress: u32 = 0;
+        while let Ok(Some(line)) = reader.next_line().await {
+            if flag2.load(Ordering::SeqCst) {
+                break;
             }
-            let _ = app_clone.emit(&progress_event, serde_json::json!({
+            log::debug!("[trtexec stdout] {}", line);
+
+            let mut new_progress: Option<u32> = None;
+
+            // Pattern 1: first `N%` literal in the line (only advance)
+            'pct: for (pct_end, _) in line.match_indices('%') {
+                let digits_start = line[..pct_end]
+                    .rfind(|c: char| !c.is_ascii_digit())
+                    .map(|i| i + 1)
+                    .unwrap_or(0);
+                if digits_start < pct_end {
+                    if let Ok(p) = line[digits_start..pct_end].parse::<u32>() {
+                        if p <= 100 && p > last_progress {
+                            new_progress = Some(p);
+                            break 'pct;
+                        }
+                    }
+                }
+            }
+
+            // Pattern 2: phase keywords (mirrors modelExtractor.ts thresholds)
+            if new_progress.is_none() {
+                if line.contains("Starting inference") && last_progress < 95 {
+                    new_progress = Some(95);
+                } else if (line.contains("Serializing") || line.contains("Saving engine")) && last_progress < 90 {
+                    new_progress = Some(90);
+                } else if line.contains("Building") && last_progress < 30 {
+                    new_progress = Some(30);
+                }
+            }
+
+            if let Some(p) = new_progress {
+                last_progress = p;
+            }
+
+            let _ = app_clone2.emit(&progress_event2, serde_json::json!({
                 "type": "converting",
-                "progress": progress,
+                "progress": last_progress,
                 "message": &line
             }));
         }
     });
 
     let status = child.wait().await?;
-    reader_task.abort();
+    stderr_reader_task.abort();
+    stdout_reader_task.abort();
 
     if cancel_flag.load(Ordering::SeqCst) {
         anyhow::bail!("Model conversion canceled by user");
