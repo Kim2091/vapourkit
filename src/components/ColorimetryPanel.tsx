@@ -57,7 +57,7 @@ export const ColorimetryPanel = memo<ColorimetryPanelProps>(({
             checked={settings.overwriteMatrix && !isRgbFormat}
             onChange={(e) => handleCheckboxChange(e.target.checked)}
             disabled={isProcessing || isRgbFormat}
-            className="w-4 h-4 rounded border-gray-700 bg-dark-surface text-accent-cyan focus:ring-2 focus:ring-accent-cyan focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-4 h-4 rounded border-gray-700 bg-dark-surface accent-cyan-400 focus:ring-2 focus:ring-accent-cyan focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
       </div>

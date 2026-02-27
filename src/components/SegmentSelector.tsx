@@ -328,7 +328,7 @@ export const SegmentSelector = memo<SegmentSelectorProps>(({
             checked={segment.enabled}
             onChange={(e) => handleToggle(e.target.checked)}
             disabled={isProcessing}
-            className="w-4 h-4 rounded border-gray-700 bg-dark-elevated text-orange-500 focus:ring-2 focus:ring-orange-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-4 h-4 rounded border-gray-700 bg-dark-elevated accent-orange-500 focus:ring-2 focus:ring-orange-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
             title={segment.enabled ? "Disable segment selection" : "Enable segment selection"}
           />
         </div>

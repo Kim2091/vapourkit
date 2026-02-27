@@ -283,6 +283,7 @@ where
 
     // Spawn vspipe
     let mut vs_cmd = Command::new(&vspipe);
+    crate::utils::configure_tokio_command(&mut vs_cmd);
     vs_cmd.args(&vs_args)
         .envs(&env)
         .current_dir(&vs_dir)
@@ -304,6 +305,7 @@ where
 
     // Spawn ffmpeg
     let mut ff_cmd = Command::new(&ffmpeg);
+    crate::utils::configure_tokio_command(&mut ff_cmd);
     ff_cmd.args(&ffmpeg_args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())

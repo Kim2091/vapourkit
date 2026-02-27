@@ -85,6 +85,7 @@ where
     progress_cb("Starting TensorRT engine conversion...".to_string(), 0);
 
     let mut cmd = Command::new(&trtexec);
+    crate::utils::configure_tokio_command(&mut cmd);
     cmd.args(&args)
         .envs(crate::utils::vs_environment())
         .current_dir(paths::vs())

@@ -168,7 +168,9 @@ pub async fn extract_7z(archive: &PathBuf, dest_dir: &PathBuf) -> Result<()> {
     let native_7z = paths::vs().join("7z.exe");
     if native_7z.exists() {
         log::info!("Using native 7z.exe: {}", native_7z.display());
-        let output = tokio::process::Command::new(&native_7z)
+        let mut cmd = tokio::process::Command::new(&native_7z);
+        crate::utils::configure_tokio_command(&mut cmd);
+        let output = cmd
             .args(["x", "-y", &format!("-o{}", dest_dir.display()), archive.to_str().unwrap_or("")])
             .output()
             .await
@@ -430,6 +432,14 @@ where
         progress_cb(SetupProgress {
             kind: "python-setup".to_string(),
             component: "Python Embedded".to_string(),
+            progress: 90,
+            message: "Verifying vs-preview installation...".to_string(),
+        });
+        ensure_vspreview_installed(&python).await?;
+
+        progress_cb(SetupProgress {
+            kind: "python-setup".to_string(),
+            component: "Python Embedded".to_string(),
             progress: 100,
             message: "Embedded Python already configured".to_string(),
         });
@@ -529,9 +539,48 @@ where
     progress_cb(SetupProgress {
         kind: "python-setup".to_string(),
         component: "Python Embedded".to_string(),
+        progress: 95,
+        message: "Installing vs-preview...".to_string(),
+    });
+
+    ensure_vspreview_installed(&py).await?;
+
+    progress_cb(SetupProgress {
+        kind: "python-setup".to_string(),
+        component: "Python Embedded".to_string(),
         progress: 100,
         message: "Embedded Python configured successfully".to_string(),
     });
+
+    Ok(())
+}
+
+async fn ensure_vspreview_installed(python: &PathBuf) -> Result<()> {
+    let env = crate::utils::vs_environment();
+    let vs_dir = paths::vs();
+    let python_str = python.to_str().unwrap_or("python");
+
+    let check = crate::utils::run_command(
+        python_str,
+        &["-m", "pip", "show", "vspreview"],
+        Some(&vs_dir),
+        Some(&env),
+    )
+    .await;
+
+    if check.is_ok() {
+        log::info!("vspreview already installed");
+        return Ok(());
+    }
+
+    log::info!("Installing vspreview==0.19.0");
+    crate::utils::run_command(
+        python_str,
+        &["-m", "pip", "install", "vspreview==0.19.0"],
+        Some(&vs_dir),
+        Some(&env),
+    )
+    .await?;
 
     Ok(())
 }

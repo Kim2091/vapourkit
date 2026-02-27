@@ -27,11 +27,15 @@ pub async fn launch_vse_previewer(script_path: Option<&PathBuf>) -> Result<()> {
     let env = crate::utils::vs_environment();
     let vs_dir = paths::vs();
 
+    ensure_vspreview_installed(&python, &vs_dir, &env).await?;
+
     let script_str = script.to_string_lossy().into_owned();
     let args = ["-m", "vspreview", &script_str];
     log::info!("Launching vs-preview: {} {}", python.display(), args.join(" "));
 
-    let mut child = tokio::process::Command::new(&python)
+    let mut cmd = tokio::process::Command::new(&python);
+    crate::utils::configure_tokio_command(&mut cmd);
+    let mut child = cmd
         .args(&args)
         .envs(&env)
         .current_dir(&vs_dir)
@@ -105,10 +109,41 @@ pub async fn launch_video_compare(input: &PathBuf, output: &PathBuf, extra_args_
 
     log::info!("Launching video-compare: {} {}", exe.display(), args.join(" "));
 
-    tokio::process::Command::new(&exe)
-        .args(&args)
-        .spawn()
-        .context("Spawn video-compare")?;
+    let mut cmd = tokio::process::Command::new(&exe);
+    crate::utils::configure_tokio_command(&mut cmd);
+    cmd.args(&args).spawn().context("Spawn video-compare")?;
+
+    Ok(())
+}
+
+async fn ensure_vspreview_installed(
+    python: &PathBuf,
+    vs_dir: &PathBuf,
+    env: &std::collections::HashMap<String, String>,
+) -> Result<()> {
+    let python_str = python.to_str().unwrap_or("python");
+
+    let check = crate::utils::run_command(
+        python_str,
+        &["-m", "pip", "show", "vspreview"],
+        Some(vs_dir),
+        Some(env),
+    )
+    .await;
+
+    if check.is_ok() {
+        return Ok(());
+    }
+
+    log::info!("vspreview not found, installing vspreview==0.19.0");
+    crate::utils::run_command(
+        python_str,
+        &["-m", "pip", "install", "vspreview==0.19.0"],
+        Some(vs_dir),
+        Some(env),
+    )
+    .await
+    .context("Install vspreview")?;
 
     Ok(())
 }

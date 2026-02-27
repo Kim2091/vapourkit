@@ -95,7 +95,9 @@ where
 /// Detect if CUDA (NVIDIA GPU) is available via nvidia-smi.
 pub async fn detect_cuda() -> bool {
     use tokio::process::Command;
-    let result = Command::new("nvidia-smi")
+    let mut cmd = Command::new("nvidia-smi");
+    crate::utils::configure_tokio_command(&mut cmd);
+    let result = cmd
         .args(["--query-gpu=name", "--format=csv,noheader"])
         .output()
         .await;

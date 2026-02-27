@@ -372,8 +372,10 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     }
   };
 
-  const handleDragLeave = () => {
-    setDragOverId(null);
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverId(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent, targetId: string) => {
@@ -612,7 +614,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
 
                   {/* Drag Handle */}
                   <div
-                    className="text-gray-500 hover:text-blue-400 transition-colors flex-shrink-0 relative group pointer-events-none"
+                    className="text-gray-500 hover:text-blue-400 transition-colors flex-shrink-0 relative group"
                     onMouseEnter={() => setHoveredDragHandle(filter.id)}
                     onMouseLeave={() => setHoveredDragHandle(null)}
                   >
@@ -650,7 +652,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                     onChange={(e) => handleToggleFilter(filter.id, e.target.checked)}
                     disabled={isProcessing}
                     className={`w-4 h-4 rounded border-gray-600 bg-gray-700 ${
-                      isAIModel ? 'text-purple-500 focus:ring-purple-500' : 'text-blue-500 focus:ring-blue-500'
+                      isAIModel ? 'accent-purple-500 focus:ring-purple-500' : 'accent-blue-500 focus:ring-blue-500'
                     } focus:ring-2 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
                     title={filter.enabled ? "Disable filter" : "Enable filter"}
                   />

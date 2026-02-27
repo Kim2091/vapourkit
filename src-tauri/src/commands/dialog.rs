@@ -198,7 +198,9 @@ fn file_path_to_string(fp: FilePath) -> Option<String> {
 async fn open_path_in_explorer(app: &AppHandle, path: &str) -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     {
-        tokio::process::Command::new("explorer").arg(path).spawn()?;
+        let mut cmd = tokio::process::Command::new("explorer");
+        crate::utils::configure_tokio_command(&mut cmd);
+        cmd.arg(path).spawn()?;
     }
     #[cfg(target_os = "macos")]
     {

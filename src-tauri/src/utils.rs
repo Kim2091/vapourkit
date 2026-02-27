@@ -9,12 +9,29 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 /// Result of running a child process
 #[derive(Debug)]
 pub struct ProcessResult {
     pub stdout: String,
     pub stderr: String,
     pub code: i32,
+}
+
+pub fn configure_tokio_command(cmd: &mut tokio::process::Command) {
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
+pub fn configure_std_command(cmd: &mut std::process::Command) {
+    #[cfg(target_os = "windows")]
+    {
+        std::os::windows::process::CommandExt::creation_flags(cmd, CREATE_NO_WINDOW);
+    }
 }
 
 /// Build the environment map for VapourSynth processes.
@@ -75,6 +92,7 @@ pub async fn run_command(
     log::debug!("Running: {} {}", command, args.join(" "));
 
     let mut cmd = Command::new(command);
+    configure_tokio_command(&mut cmd);
     cmd.args(args);
 
     if let Some(dir) = cwd {
@@ -122,6 +140,7 @@ where
     log::debug!("Streaming: {} {}", command, args.join(" "));
 
     let mut cmd = Command::new(command);
+    configure_tokio_command(&mut cmd);
     cmd.args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -184,7 +203,7 @@ pub fn format_bytes(bytes: u64) -> String {
 
 /// Force-kill a process by PID on Windows using taskkill /F /T
 pub fn force_kill_pid(pid: u32) {
-    let _ = std::process::Command::new("taskkill")
-        .args(["/F", "/T", "/PID", &pid.to_string()])
-        .output();
+    let mut cmd = std::process::Command::new("taskkill");
+    configure_std_command(&mut cmd);
+    let _ = cmd.args(["/F", "/T", "/PID", &pid.to_string()]).output();
 }

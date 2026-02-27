@@ -14,24 +14,38 @@ static APP_DATA_PATH: OnceCell<PathBuf> = OnceCell::new();
 
 /// Initialize the app data path.  Must be called once from `lib.rs` setup.
 ///
-/// In production the exe-adjacent `data/` folder is used (portable mode).
-/// In development (cargo run / tauri dev) the exe lives inside `target/debug/`
-/// so we fall back to the workspace-root `data/` folder.
+/// In production the exe-adjacent `data/` folder is always used (portable mode),
+/// and created if missing.
+/// In development (`tauri dev`) where the exe is inside `src-tauri/target/*`,
+/// the workspace-root `data/` folder is used.
 pub fn init_app_data_path(exe_dir: PathBuf) {
-    let prod_data = exe_dir.join("data");
-    let path = if prod_data.exists() {
-        prod_data
-    } else {
-        // Dev mode: use workspace_root()/data
+    let path = if is_dev_exe_dir(&exe_dir) {
         let dev_data = workspace_root().join("data");
-        log::info!(
-            "exe-adjacent data/ not found ({}), using dev path: {}",
-            prod_data.display(),
-            dev_data.display()
-        );
+        log::info!("Using dev app data path: {}", dev_data.display());
         dev_data
+    } else {
+        let portable_data = exe_dir.join("data");
+        if let Err(e) = std::fs::create_dir_all(&portable_data) {
+            log::error!(
+                "Failed to create portable data directory at {}: {}",
+                portable_data.display(),
+                e
+            );
+        }
+        log::info!("Using portable app data path: {}", portable_data.display());
+        portable_data
     };
     APP_DATA_PATH.set(path).ok(); // ignore if already set
+}
+
+fn is_dev_exe_dir(exe_dir: &PathBuf) -> bool {
+    if !cfg!(debug_assertions) {
+        return false;
+    }
+
+    let workspace = workspace_root();
+    let dev_target = workspace.join("src-tauri").join("target");
+    exe_dir.starts_with(dev_target)
 }
 
 pub fn app_data() -> PathBuf {
@@ -59,9 +73,8 @@ pub fn workspace_root() -> PathBuf {
 /// Resolve a bundled include path that works in both dev and production.
 ///
 /// In dev mode the `include/` tree lives at `<workspace_root>/include/`.
-/// In production Tauri bundles resources into `resource_dir/` with the
-/// sub-path defined in `tauri.conf.json` resources mapping — the `include/`
-/// prefix is stripped (e.g. `include/models/*.onnx` → `models/`).
+/// In production resources may be bundled either as `resource_dir/include/...`
+/// (preferred) or directly under `resource_dir/...` (legacy stripped layout).
 ///
 /// `resource_dir` — the value returned by `app.path().resource_dir()`.
 /// `sub_path`     — the sub-path relative to `include/`, e.g. `"models"`.
@@ -73,17 +86,23 @@ pub fn resolve_include(resource_dir: &PathBuf, sub_path: &str) -> PathBuf {
         return dev_path;
     }
 
-    // Production: resource_dir/<sub_path>  (include/ prefix stripped by Tauri bundler)
-    let prod_path = resource_dir.join(sub_path);
-    if prod_path.exists() {
-        log::info!("resolve_include (prod): {}", prod_path.display());
-        return prod_path;
+    // Preferred production layout: resource_dir/include/<sub_path>
+    let include_path = resource_dir.join("include").join(sub_path);
+    if include_path.exists() {
+        log::info!("resolve_include (prod include): {}", include_path.display());
+        return include_path;
     }
 
-    // Legacy fallback: resource_dir/include/<sub_path>
-    let legacy_path = resource_dir.join("include").join(sub_path);
-    log::warn!("resolve_include fallback: {}", legacy_path.display());
-    legacy_path
+    // Legacy production layout: resource_dir/<sub_path>
+    let stripped_path = resource_dir.join(sub_path);
+    if stripped_path.exists() {
+        log::info!("resolve_include (prod stripped): {}", stripped_path.display());
+        return stripped_path;
+    }
+
+    // Final fallback
+    log::warn!("resolve_include fallback: {}", include_path.display());
+    include_path
 }
 
 pub fn vs() -> PathBuf {

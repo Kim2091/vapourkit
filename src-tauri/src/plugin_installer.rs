@@ -198,6 +198,7 @@ impl PluginInstaller {
         log::info!("pip install {}", packages.join(" "));
 
         let mut cmd = Command::new(python.to_str().unwrap_or("python"));
+        crate::utils::configure_tokio_command(&mut cmd);
         cmd.args(&args)
             .envs(crate::utils::vs_environment())
             .current_dir(paths::vs())

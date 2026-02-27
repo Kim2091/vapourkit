@@ -152,7 +152,7 @@ export const SettingsModal = memo<SettingsModalProps>(({
                       type="checkbox"
                       checked={useDirectML}
                       onChange={(e) => onToggleDirectML(e.target.checked)}
-                      className="w-5 h-5 rounded border-gray-600 bg-dark-bg text-primary-blue focus:ring-2 focus:ring-primary-blue mt-0.5"
+                      className="w-5 h-5 rounded border-gray-600 bg-dark-bg accent-blue-500 focus:ring-2 focus:ring-primary-blue mt-0.5"
                     />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-white">Use DirectML (ONNX Runtime)</p>
@@ -183,7 +183,7 @@ export const SettingsModal = memo<SettingsModalProps>(({
                         max="4"
                         value={numStreams}
                         onChange={(e) => onUpdateNumStreams(parseInt(e.target.value, 10))}
-                        className="w-full h-2 bg-dark-bg rounded-lg appearance-none cursor-pointer"
+                        className="w-full h-2 bg-dark-bg rounded-lg appearance-none cursor-pointer accent-blue-500"
                         style={{
                           background: `linear-gradient(to right, rgb(59 130 246) 0%, rgb(59 130 246) ${((numStreams - 1) / 3) * 100}%, rgb(31 41 55) ${((numStreams - 1) / 3) * 100}%, rgb(31 41 55) 100%)`
                         }}

@@ -150,7 +150,9 @@ async fn count_engine_files() -> u32 {
 
 pub async fn detect_cuda_support() -> bool {
     // Check for nvidia-smi presence as proxy for CUDA availability
-    let output = tokio::process::Command::new("nvidia-smi")
+    let mut cmd = tokio::process::Command::new("nvidia-smi");
+    crate::utils::configure_tokio_command(&mut cmd);
+    let output = cmd
         .arg("--query-gpu=name")
         .arg("--format=csv,noheader")
         .output()

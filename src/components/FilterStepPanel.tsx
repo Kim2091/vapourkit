@@ -185,7 +185,7 @@ export const FilterStepPanel = memo<FilterStepPanelProps>(({
               checked={enabled}
               onChange={(e) => onToggle(e.target.checked)}
               disabled={isProcessing}
-              className="w-4 h-4 rounded border-gray-700 bg-dark-elevated text-primary-purple focus:ring-2 focus:ring-primary-purple focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-4 h-4 rounded border-gray-700 bg-dark-elevated accent-purple-500 focus:ring-2 focus:ring-primary-purple focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
               title={enabled ? `Disable ${title}` : `Enable ${title}`}
             />
           </div>

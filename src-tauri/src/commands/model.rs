@@ -701,6 +701,7 @@ async fn run_trtexec(
     log::info!("Running trtexec: {} {}", trtexec.display(), args.join(" "));
 
     let mut cmd = tokio::process::Command::new(&trtexec);
+    crate::utils::configure_tokio_command(&mut cmd);
     cmd.args(&args)
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped());
