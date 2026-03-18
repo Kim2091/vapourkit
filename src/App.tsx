@@ -341,6 +341,7 @@ function App() {
     handleShapeModeChange,
     handleFp32Change,
     handlePrecisionChange,
+    handleTemporalFramesChange,
     handleAutoBuildModel,
     showAutoBuildModal,
     autoBuildModelName,
@@ -1227,6 +1228,7 @@ function App() {
         handleShapeModeChange={handleShapeModeChange}
         handleFp32Change={handleFp32Change}
         handlePrecisionChange={handlePrecisionChange}
+        handleTemporalFramesChange={handleTemporalFramesChange}
         importProgress={importProgress}
         mode={modalMode}
         useDirectML={useDirectML}

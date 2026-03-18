@@ -12,6 +12,7 @@ export interface ImportForm {
   useFp32: boolean;
   useBf16: boolean;
   modelType: 'vsr' | 'image';
+  temporalFrames: number;
   useDirectML: boolean;
   displayTag: string;
   useStaticShape: boolean;
@@ -21,8 +22,8 @@ export interface ImportForm {
 }
 
 // Helper function to generate default trtexec command
-export const generateTrtexecCommand = (modelType: 'vsr' | 'image', useFp32: boolean, useStaticShape: boolean, inputName: string = 'input', useBf16: boolean = false): string => {
-  const channels = modelType === 'vsr' ? '15' : '3';
+export const generateTrtexecCommand = (modelType: 'vsr' | 'image', useFp32: boolean, useStaticShape: boolean, inputName: string = 'input', useBf16: boolean = false, temporalFrames: number = 5): string => {
+  const channels = modelType === 'vsr' ? String(temporalFrames * 3) : '3';
   // FP32 is the default in trtexec, so only add --fp16/--bf16 flag when NOT using FP32
   // For BF16: use --bf16 flag but keep fp16 format strings
   let precisionFlags = '';
@@ -53,6 +54,7 @@ const DEFAULT_IMPORT_FORM: ImportForm = {
   useFp32: false,
   useBf16: false,
   modelType: 'image',
+  temporalFrames: 5,
   useDirectML: false,
   displayTag: '',
   useStaticShape: false,
@@ -117,8 +119,8 @@ export const useModelImport = (
         setImportForm(prev => {
           // If static model detected, use static mode and the detected shape
           const useStatic = detectedIsStatic;
-          const channels = prev.modelType === 'vsr' ? '15' : '3';
-          
+          const channels = prev.modelType === 'vsr' ? String(prev.temporalFrames * 3) : '3';
+
           addConsoleLog(`[Model] Form update - useStatic: ${useStatic}, channels: ${channels}`);
           
           // Build optShapes based on detected shape or defaults
@@ -132,7 +134,7 @@ export const useModelImport = (
             optShapes = `${extractedInputName}:1x${channels}x720x1280`;
           }
           
-          let newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, useStatic, extractedInputName, prev.useBf16);
+          let newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, useStatic, extractedInputName, prev.useBf16, prev.temporalFrames);
           
           // If static model with detected shape, update the command to use the actual detected shape
           if (useStatic && detectedShape && detectedShape.length >= 4) {
@@ -169,7 +171,7 @@ export const useModelImport = (
 
   const handleFp32Change = useCallback((useFp32: boolean): void => {
     setImportForm(prev => {
-      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape, prev.inputName, prev.useBf16);
+      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape, prev.inputName, prev.useBf16, prev.temporalFrames);
       return {
         ...prev,
         useFp32,
@@ -182,7 +184,7 @@ export const useModelImport = (
     setImportForm(prev => {
       const useFp32 = precision === 'fp32';
       const useBf16 = precision === 'bf16';
-      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape, prev.inputName, useBf16);
+      const newCommand = generateTrtexecCommand(prev.modelType, useFp32, prev.useStaticShape, prev.inputName, useBf16, prev.temporalFrames);
       return {
         ...prev,
         useFp32,
@@ -196,8 +198,8 @@ export const useModelImport = (
     setImportForm(prev => {
       const useStatic = prev.useStaticShape;
       const inputName = prev.inputName;
-      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStatic, inputName, prev.useBf16);
-      const channels = modelType === 'vsr' ? '15' : '3';
+      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStatic, inputName, prev.useBf16, prev.temporalFrames);
+      const channels = modelType === 'vsr' ? String(prev.temporalFrames * 3) : '3';
       return {
         ...prev,
         modelType,
@@ -215,8 +217,8 @@ export const useModelImport = (
     setImportForm(prev => {
       const modelType = prev.modelType;
       const inputName = prev.inputName;
-      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStaticShape, inputName, prev.useBf16);
-      const channels = modelType === 'vsr' ? '15' : '3';
+      const newCommand = generateTrtexecCommand(modelType, prev.useFp32, useStaticShape, inputName, prev.useBf16, prev.temporalFrames);
+      const channels = modelType === 'vsr' ? String(prev.temporalFrames * 3) : '3';
       return {
         ...prev,
         useStaticShape,
@@ -224,6 +226,24 @@ export const useModelImport = (
         optShapes: useStaticShape 
           ? `${inputName}:1x${channels}x480x640` 
           : `${inputName}:1x${channels}x720x1280`,
+      };
+    });
+  }, []);
+
+  const handleTemporalFramesChange = useCallback((temporalFrames: number): void => {
+    setImportForm(prev => {
+      const channels = String(temporalFrames * 3);
+      const inputName = prev.inputName;
+      const newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, prev.useStaticShape, inputName, prev.useBf16, temporalFrames);
+      return {
+        ...prev,
+        temporalFrames,
+        customTrtexecParams: newCommand,
+        minShapes: `${inputName}:1x${channels}x240x240`,
+        optShapes: prev.useStaticShape
+          ? `${inputName}:1x${channels}x480x640`
+          : `${inputName}:1x${channels}x720x1280`,
+        maxShapes: `${inputName}:1x${channels}x1080x1920`,
       };
     });
   }, []);
@@ -245,6 +265,7 @@ export const useModelImport = (
           useFp32: importForm.useFp32,
           useBf16: importForm.useBf16,
           modelType: importForm.modelType,
+          temporalFrames: importForm.modelType === 'vsr' ? importForm.temporalFrames : undefined,
           displayTag: importForm.displayTag || undefined,
           useStaticShape: importForm.useStaticShape,
           useCustomTrtexecParams: importForm.useCustomTrtexecParams,
@@ -260,6 +281,7 @@ export const useModelImport = (
           useFp32: importForm.useFp32,
           useBf16: importForm.useBf16,
           modelType: importForm.modelType,
+          temporalFrames: importForm.modelType === 'vsr' ? importForm.temporalFrames : undefined,
           useDirectML: importForm.useDirectML,
           displayTag: importForm.displayTag || undefined,
           useStaticShape: importForm.useStaticShape,
@@ -373,8 +395,8 @@ export const useModelImport = (
       // Update form if static model is detected
       if (progress.detectedStatic && progress.detectedShape) {
         setImportForm(prev => {
-          const channels = prev.modelType === 'vsr' ? '15' : '3';
-          const newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, true, prev.inputName);
+          const channels = prev.modelType === 'vsr' ? String(prev.temporalFrames * 3) : '3';
+          const newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, true, prev.inputName, prev.useBf16, prev.temporalFrames);
           // Replace the default shape with the detected shape
           const updatedCommand = newCommand.replace(
             `--shapes=${prev.inputName}:1x${channels}x720x1280`,
@@ -414,8 +436,8 @@ export const useModelImport = (
       // Update form if static model is detected
       if (progress.detectedStatic && progress.detectedShape) {
         setImportForm(prev => {
-          const channels = prev.modelType === 'vsr' ? '15' : '3';
-          const newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, true, prev.inputName);
+          const channels = prev.modelType === 'vsr' ? String(prev.temporalFrames * 3) : '3';
+          const newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, true, prev.inputName, prev.useBf16, prev.temporalFrames);
           // Replace the default shape with the detected shape
           const updatedCommand = newCommand.replace(
             `--shapes=${prev.inputName}:1x${channels}x720x1280`,
@@ -470,6 +492,7 @@ export const useModelImport = (
     handleShapeModeChange,
     handleFp32Change,
     handlePrecisionChange,
+    handleTemporalFramesChange,
     handleImportModel,
     handleCancelBuild,
     handleAutoBuildModel,

@@ -16,6 +16,7 @@ interface ImportModelModalProps {
   handleShapeModeChange: (useStaticShape: boolean) => void;
   handleFp32Change: (useFp32: boolean) => void;
   handlePrecisionChange: (precision: 'fp16' | 'bf16' | 'fp32') => void;
+  handleTemporalFramesChange: (temporalFrames: number) => void;
   importProgress: ModelImportProgress | null;
   mode: 'import' | 'build';
   useDirectML: boolean;
@@ -34,6 +35,7 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
   handleShapeModeChange,
   handleFp32Change,
   handlePrecisionChange,
+  handleTemporalFramesChange,
   importProgress,
   mode,
 }) => {
@@ -268,6 +270,31 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                 )}
               </div>
             </div>
+
+            {/* Temporal Frames - Only show for VSR models */}
+            {importForm.modelType === 'vsr' && (
+              <div className="mt-3">
+                <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                  Temporal Frames
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  step="2"
+                  value={importForm.temporalFrames}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value, 10);
+                    if (!Number.isNaN(value)) {
+                      handleTemporalFramesChange(value);
+                    }
+                  }}
+                  disabled={isImporting}
+                  className="w-full bg-dark-bg border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-blue disabled:opacity-50"
+                />
+                <p className="text-xs text-gray-400 mt-1">Number of frames used by the VSR model (default: 5)</p>
+              </div>
+            )}
           </div>
 
           {/* TensorRT Build Command - Only show in TensorRT mode */}

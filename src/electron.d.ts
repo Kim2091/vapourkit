@@ -280,6 +280,7 @@ export interface InitializeModelParams {
   useFp32: boolean;
   useBf16?: boolean;
   modelType?: 'vsr' | 'image';
+  temporalFrames?: number;
   displayTag?: string;
   useStaticShape?: boolean;
   useCustomTrtexecParams?: boolean;
@@ -317,6 +318,7 @@ export interface ImportModelParams {
   useFp32: boolean;
   useBf16?: boolean;
   modelType?: 'vsr' | 'image';
+  temporalFrames?: number;
   useDirectML?: boolean;
   displayTag?: string;
   useStaticShape?: boolean;

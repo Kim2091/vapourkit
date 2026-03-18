@@ -141,6 +141,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     useFp32: boolean;
     useBf16?: boolean;
     modelType?: string;
+    temporalFrames?: number;
     displayTag?: string;
     useStaticShape?: boolean;
     useCustomTrtexecParams?: boolean;
@@ -213,14 +214,15 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         
         // Save model metadata including type and display tag
         await configManager.setModelMetadata(
-          modelNameWithPrecision, 
+          modelNameWithPrecision,
           params.useFp32,
           (params.modelType as 'vsr' | 'image') || 'image',
           params.displayTag,
           undefined,
-          params.useBf16
+          params.useBf16,
+          params.modelType === 'vsr' ? params.temporalFrames : undefined
         );
-        
+
         // Complete
         sendProgress('complete', 100, 'Model initialized successfully!', enginePath);
         activeModelExtractor = null;
@@ -258,6 +260,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     useFp32: boolean;
     useBf16?: boolean;
     modelType?: string;
+    temporalFrames?: number;
     useDirectML?: boolean;
     displayTag?: string;
     useStaticShape?: boolean;
@@ -324,14 +327,15 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         
         // Save model metadata including type and display tag
         await configManager.setModelMetadata(
-          modelNameWithPrecision, 
+          modelNameWithPrecision,
           params.useFp32,
           (params.modelType as 'vsr' | 'image') || 'image',
           params.displayTag,
           undefined,
-          params.useBf16
+          params.useBf16,
+          params.modelType === 'vsr' ? params.temporalFrames : undefined
         );
-        
+
         // If DirectML mode is enabled, skip TensorRT conversion
         if (params.useDirectML) {
           logger.model('DirectML mode enabled - skipping TensorRT conversion');
