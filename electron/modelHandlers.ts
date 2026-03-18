@@ -504,7 +504,8 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         inputShape: result.inputShape,
         outputShape: result.outputShape,
         inputName: result.inputName || 'input', // Default to 'input' if not found
-        isStatic: result.isStatic // Include static detection
+        isStatic: result.isStatic,
+        inputDataType: result.inputDataType
       };
     } catch (error) {
       logger.error('Error validating ONNX model:', error);

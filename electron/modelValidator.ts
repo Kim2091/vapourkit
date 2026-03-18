@@ -9,6 +9,7 @@ export interface OnnxModelInfo {
   outputShape?: number[];
   inputName?: string;
   isStatic?: boolean;
+  inputDataType?: string;
 }
 
 export class ModelValidator {
@@ -53,10 +54,11 @@ export class ModelValidator {
         logger.model(`Inputs: ${inputNames.join(', ')}`);
         logger.model(`Outputs: ${outputNames.join(', ')}`);
         
-        // Try to get input shape if available
+        // Try to get input shape and data type if available
         let inputShape: number[] | undefined;
         let outputShape: number[] | undefined;
-        
+        let inputDataType: string | undefined;
+
         try {
           if (inputNames.length > 0) {
             // Access via handler (internal API used by onnxruntime-node)
@@ -68,8 +70,13 @@ export class ModelValidator {
                 inputShape = firstInput.shape;
                 logger.model(`Input shape: ${inputShape!.join('x')}`);
               }
+              // Extract data type from metadata ('type' field contains strings like 'float32', 'float16')
+              if (firstInput && (firstInput.type || firstInput.dataType)) {
+                inputDataType = firstInput.type || firstInput.dataType;
+                logger.model(`Input data type: ${inputDataType}`);
+              }
             }
-            
+
             // Also try to get output shape
             if (handler && handler.outputMetadata && Array.isArray(handler.outputMetadata) && handler.outputMetadata.length > 0) {
               const firstOutput = handler.outputMetadata[0];
@@ -118,7 +125,8 @@ export class ModelValidator {
           inputShape,
           outputShape,
           inputName,
-          isStatic
+          isStatic,
+          inputDataType
         };
         
       } catch (ortError: any) {

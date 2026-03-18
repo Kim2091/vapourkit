@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Upload, Info, Loader2, XCircle, FileUp, X } from 'lucide-react';
+import { Upload, Info, Loader2, XCircle, FileUp, X, AlertTriangle } from 'lucide-react';
 import type { ModelImportProgress } from '../electron.d';
 import type { ImportForm } from '../hooks/useModelImport';
 
@@ -296,6 +296,16 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
               </div>
             )}
           </div>
+
+          {/* Detection failed warning */}
+          {importForm.detectionFailed && importForm.onnxPath && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+              <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+              <p className="text-xs text-yellow-300/80">
+                Automatic model detection failed. Please verify the settings above are correct.
+              </p>
+            </div>
+          )}
 
           {/* TensorRT Build Command - Only show in TensorRT mode */}
           {!importForm.useDirectML && (

@@ -19,6 +19,7 @@ export interface ImportForm {
   useCustomTrtexecParams: boolean;
   customTrtexecParams: string;
   skipValidation: boolean;
+  detectionFailed: boolean;
 }
 
 // Helper function to generate default trtexec command
@@ -60,7 +61,8 @@ const DEFAULT_IMPORT_FORM: ImportForm = {
   useStaticShape: false,
   useCustomTrtexecParams: true, // Always true in refactored UI - the textbox is the main interface
   customTrtexecParams: generateTrtexecCommand('image', false, false, 'input', false),
-  skipValidation: false
+  skipValidation: false,
+  detectionFailed: false
 };
 
 export const useModelImport = (
@@ -95,34 +97,76 @@ export const useModelImport = (
         const filename = result.split(/[\\/]/).pop() || '';
         const modelName = filename.replace(/\.onnx$/i, '');
         
-        // Validate the model to extract input name and detect static shapes
+        // Validate the model to extract input name and detect properties
         let extractedInputName = 'input'; // Default fallback
         let detectedIsStatic = false;
         let detectedShape: number[] | undefined;
+        let detectedModelType: 'vsr' | 'image' | undefined;
+        let detectedTemporalFrames: number | undefined;
+        let detectedPrecision: 'fp16' | 'bf16' | 'fp32' | undefined;
+        let detectionFailed = false;
         try {
           const validation = await window.electronAPI.validateOnnxModel(result);
+          if (!validation.isValid) {
+            detectionFailed = true;
+          }
           if (validation.isValid && validation.inputName) {
             extractedInputName = validation.inputName;
             addConsoleLog(`[Model] Detected input name: ${extractedInputName}`);
           }
-          if (validation.isValid && validation.isStatic && validation.inputShape) {
-            detectedIsStatic = true;
-            detectedShape = validation.inputShape;
-            addConsoleLog(`[Model] Detected static model with shape: ${detectedShape.join('x')}`);
+          if (validation.isValid && validation.inputShape) {
+            if (validation.isStatic) {
+              detectedIsStatic = true;
+              detectedShape = validation.inputShape;
+              addConsoleLog(`[Model] Detected static model with shape: ${detectedShape.join('x')}`);
+            } else {
+              addConsoleLog(`[Model] Detected dynamic model`);
+            }
+          }
+          // Auto-detect VSR model type and temporal frames from channel count
+          if (validation.isValid && validation.inputShape && validation.inputShape.length >= 4) {
+            const inputChannels = validation.inputShape[1];
+            if (inputChannels > 3 && inputChannels % 3 === 0) {
+              detectedModelType = 'vsr';
+              detectedTemporalFrames = inputChannels / 3;
+              addConsoleLog(`[Model] Detected VSR model with ${detectedTemporalFrames} temporal frames (${inputChannels} channels)`);
+            } else if (inputChannels === 3) {
+              detectedModelType = 'image';
+              addConsoleLog(`[Model] Detected image model (3 channels)`);
+            }
+          }
+          // Auto-detect precision from input data type
+          if (validation.isValid && validation.inputDataType) {
+            const dt = validation.inputDataType.toLowerCase();
+            if (dt === 'float16') {
+              detectedPrecision = 'fp16';
+              addConsoleLog(`[Model] Detected FP16 precision`);
+            } else if (dt === 'bfloat16') {
+              detectedPrecision = 'bf16';
+              addConsoleLog(`[Model] Detected BF16 precision`);
+            } else if (dt === 'float32') {
+              detectedPrecision = 'fp32';
+              addConsoleLog(`[Model] Detected FP32 precision`);
+            }
           }
         } catch (validationError) {
           console.warn('Could not validate ONNX model:', validationError);
+          detectionFailed = true;
         }
-        
+
         addConsoleLog(`[Model] Setting form - detectedIsStatic: ${detectedIsStatic}, detectedShape: ${detectedShape ? detectedShape.join('x') : 'none'}`);
-        
+
         setImportForm(prev => {
-          // If static model detected, use static mode and the detected shape
+          // Apply detected values, falling back to current form state
           const useStatic = detectedIsStatic;
-          const channels = prev.modelType === 'vsr' ? String(prev.temporalFrames * 3) : '3';
+          const modelType = detectedModelType ?? prev.modelType;
+          const temporalFrames = detectedTemporalFrames ?? prev.temporalFrames;
+          const useFp32 = detectedPrecision === 'fp32' ? true : detectedPrecision ? false : prev.useFp32;
+          const useBf16 = detectedPrecision === 'bf16' ? true : detectedPrecision ? false : prev.useBf16;
+          const channels = modelType === 'vsr' ? String(temporalFrames * 3) : '3';
 
           addConsoleLog(`[Model] Form update - useStatic: ${useStatic}, channels: ${channels}`);
-          
+
           // Build optShapes based on detected shape or defaults
           let optShapes: string;
           if (useStatic && detectedShape && detectedShape.length >= 4) {
@@ -133,9 +177,9 @@ export const useModelImport = (
           } else {
             optShapes = `${extractedInputName}:1x${channels}x720x1280`;
           }
-          
-          let newCommand = generateTrtexecCommand(prev.modelType, prev.useFp32, useStatic, extractedInputName, prev.useBf16, prev.temporalFrames);
-          
+
+          let newCommand = generateTrtexecCommand(modelType, useFp32, useStatic, extractedInputName, useBf16, temporalFrames);
+
           // If static model with detected shape, update the command to use the actual detected shape
           if (useStatic && detectedShape && detectedShape.length >= 4) {
             const detectedShapeStr = detectedShape.join('x');
@@ -146,21 +190,26 @@ export const useModelImport = (
               `--shapes=${extractedInputName}:${detectedShapeStr}`
             );
           }
-          
-          const finalForm = { 
-            ...prev, 
+
+          const finalForm = {
+            ...prev,
             onnxPath: result,
             modelName: modelName,
             inputName: extractedInputName,
+            modelType,
+            temporalFrames,
+            useFp32,
+            useBf16,
             useStaticShape: useStatic,
             customTrtexecParams: newCommand,
             minShapes: `${extractedInputName}:1x${channels}x240x240`,
             optShapes,
             maxShapes: `${extractedInputName}:1x${channels}x1080x1920`,
+            detectionFailed,
           };
-          
+
           addConsoleLog(`[Model] Final form - useStaticShape: ${finalForm.useStaticShape}, optShapes: ${finalForm.optShapes}`);
-          
+
           return finalForm;
         });
       }
@@ -317,10 +366,12 @@ export const useModelImport = (
     const modelType = model.modelType || 'image';
     const displayTag = model.displayTag || '';
     
-    // Extract input name and detect static shapes from the model
+    // Extract input name and detect properties from the model
     let inputName = 'input'; // Default fallback
     let isStaticModel = false;
     let detectedShape: number[] | undefined;
+    let temporalFrames = 5; // Default
+    let useFp32 = false;
     try {
       const validation = await window.electronAPI.validateOnnxModel(model.onnxPath);
       if (validation.isValid && validation.inputName) {
@@ -332,13 +383,31 @@ export const useModelImport = (
         detectedShape = validation.inputShape;
         addConsoleLog(`[Auto-Build] Detected static model with shape: ${detectedShape.join('x')}`);
       }
+      // Auto-detect temporal frames from channel count
+      if (validation.isValid && validation.inputShape && validation.inputShape.length >= 4) {
+        const inputChannels = validation.inputShape[1];
+        if (inputChannels > 3 && inputChannels % 3 === 0) {
+          temporalFrames = inputChannels / 3;
+          addConsoleLog(`[Auto-Build] Detected ${temporalFrames} temporal frames (${inputChannels} channels)`);
+        }
+      }
+      // Auto-detect precision
+      if (validation.isValid && validation.inputDataType) {
+        const dt = validation.inputDataType.toLowerCase();
+        if (dt === 'float32') {
+          useFp32 = true;
+          addConsoleLog(`[Auto-Build] Detected FP32 precision`);
+        } else {
+          addConsoleLog(`[Auto-Build] Detected ${dt} precision`);
+        }
+      }
     } catch (validationError) {
       console.warn('Could not validate ONNX model for auto-build:', validationError);
     }
-    
+
     // Set shapes based on whether model is static or dynamic
     const isVideoModel = modelType === 'vsr';
-    const channels = isVideoModel ? '15' : '3';
+    const channels = isVideoModel ? String(temporalFrames * 3) : '3';
     
     let minShapes: string;
     let optShapes: string;
@@ -374,8 +443,9 @@ export const useModelImport = (
         minShapes,
         optShapes,
         maxShapes,
-        useFp32: false,
+        useFp32,
         modelType: modelType as 'vsr' | 'image',
+        temporalFrames: modelType === 'vsr' ? temporalFrames : undefined,
         displayTag: displayTag || undefined,
         useStaticShape: isStaticModel,
       });
