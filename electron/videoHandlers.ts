@@ -165,6 +165,11 @@ export function registerVideoHandlers(
           else if (args.includes('prores')) codec = 'ProRes';
           else if (args.includes('vp9')) codec = 'VP9';
           else if (args.includes('av1')) codec = 'AV1';
+          else {
+              // Extract codec name directly from -c:v for custom/unknown codecs
+              const codecMatch = args.match(/-c:v\s+(\S+)/);
+              if (codecMatch) codec = codecMatch[1].toUpperCase();
+          }
       }
 
       await scriptGenerator.cleanupScript(scriptPath);
