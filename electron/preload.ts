@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getModelMetadata: (modelId: string) => ipcRenderer.invoke('get-model-metadata', modelId),
   updateModelMetadata: (modelId: string, metadata: any) => ipcRenderer.invoke('update-model-metadata', modelId, metadata),
   deleteModel: (modelPath: string, modelId: string) => ipcRenderer.invoke('delete-model', modelPath, modelId),
+  renameModel: (modelPath: string, modelId: string, newName: string) => ipcRenderer.invoke('rename-model', modelPath, modelId, newName),
   cancelModelImport: () => ipcRenderer.invoke('cancel-model-import'),
   forceStopModelImport: () => ipcRenderer.invoke('force-stop-model-import'),
   validateOnnxModel: (onnxPath: string) => ipcRenderer.invoke('validate-onnx-model', onnxPath),

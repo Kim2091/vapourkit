@@ -9,7 +9,6 @@ interface ModelSelectorModalProps {
   availableModels: ModelFile[];
   useDirectML: boolean;
   onSelectModel: (modelPath: string) => void;
-  onDeleteModel?: (modelPath: string, modelId: string) => Promise<boolean>;
   onEditModel?: (model: ModelFile) => void;
   onImportModel?: () => void;
   onModelsUpdated?: () => Promise<void>;
@@ -69,7 +68,6 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   availableModels,
   useDirectML,
   onSelectModel,
-  onDeleteModel,
   onEditModel,
   onImportModel,
   onModelsUpdated,
@@ -90,6 +88,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   const [editTemporalFrames, setEditTemporalFrames] = useState<number | undefined>(undefined);
   const [editUseFp32, setEditUseFp32] = useState(false);
   const [editUseBf16, setEditUseBf16] = useState(false);
+  const [editModelName, setEditModelName] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const categoryInputRef = useRef<HTMLInputElement>(null);
@@ -319,39 +318,49 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   };
 
   const handleDeleteModel = async (model: ModelFile) => {
-    if (!onDeleteModel) return;
-    
     if (!confirm(`Delete model "${model.name}"?\n\nThis action cannot be undone.`)) {
       return;
     }
 
-    const success = await onDeleteModel(model.path, model.metadataId || model.id);
-    if (success) {
-      setFavorites(prev => {
-        const next = new Set(prev);
-        next.delete(model.path);
-        try {
-          localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify([...next]));
-        } catch (error) {
-          console.error('Failed to update favorites:', error);
+    try {
+      const result = await window.electronAPI.deleteModel(model.path, model.metadataId || model.id);
+      if (result.success) {
+        setFavorites(prev => {
+          const next = new Set(prev);
+          next.delete(model.path);
+          try {
+            localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify([...next]));
+          } catch (error) {
+            console.error('Failed to update favorites:', error);
+          }
+          return next;
+        });
+
+        setRecentModels(prev => {
+          const filtered = prev.filter(rm => rm.path !== model.path);
+          try {
+            localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(filtered));
+          } catch (error) {
+            console.error('Failed to update recent models:', error);
+          }
+          return filtered;
+        });
+
+        // If we were editing this model, close the edit dialog
+        if (editingModel?.path === model.path) {
+          handleCancelEdit();
         }
-        return next;
-      });
-      
-      setRecentModels(prev => {
-        const filtered = prev.filter(rm => rm.path !== model.path);
-        try {
-          localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(filtered));
-        } catch (error) {
-          console.error('Failed to update recent models:', error);
-        }
-        return filtered;
-      });
+
+        await onModelsUpdated?.();
+      }
+    } catch (error) {
+      console.error('Failed to delete model:', error);
     }
   };
 
   const handleEditModel = async (model: ModelFile) => {
     setEditingModel(model);
+    setEditModelName(model.name);
     setEditDisplayTag(model.displayTag || '');
     setEditDescription(model.description || '');
     const cats = Array.isArray(model.category)
@@ -388,6 +397,32 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
 
     try {
       setIsSavingEdit(true);
+      let metadataId = editingModel.metadataId || editingModel.id;
+
+      // Handle rename if name changed
+      const trimmedName = editModelName.trim();
+      if (trimmedName && trimmedName !== editingModel.name) {
+        try {
+          const renameResult = await window.electronAPI.renameModel(
+            editingModel.path,
+            metadataId,
+            trimmedName
+          );
+          if (!renameResult.success) {
+            alert(renameResult.error || 'Failed to rename model');
+            setIsSavingEdit(false);
+            return;
+          }
+          // Update metadataId to the new name for the metadata update below
+          metadataId = renameResult.newId!;
+        } catch (renameError) {
+          console.error('Failed to rename model:', renameError);
+          alert('Failed to rename model. Please restart the app and try again.');
+          setIsSavingEdit(false);
+          return;
+        }
+      }
+
       const updates: Record<string, any> = {
         displayTag: editDisplayTag.trim() || undefined,
         description: editDescription.trim() || undefined,
@@ -398,9 +433,10 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
         useBf16: editingModel.backend === 'tensorrt' ? editUseBf16 : false,
       };
 
-      const result = await window.electronAPI.updateModelMetadata(editingModel.metadataId || editingModel.id, updates);
+      const result = await window.electronAPI.updateModelMetadata(metadataId, updates);
       if (result.success) {
         setEditingModel(null);
+        setEditModelName('');
         setEditDisplayTag('');
         setEditDescription('');
         setEditCategories([]);
@@ -420,6 +456,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
 
   const handleCancelEdit = () => {
     setEditingModel(null);
+    setEditModelName('');
     setEditDisplayTag('');
     setEditDescription('');
     setEditCategories([]);
@@ -472,11 +509,15 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             <div className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-gray-300">
-                  File Name
+                  Model Name
                 </label>
-                <div className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-gray-500 text-sm truncate" title={editingModel.name}>
-                  {editingModel.name}
-                </div>
+                <input
+                  type="text"
+                  value={editModelName}
+                  onChange={(e) => setEditModelName(e.target.value)}
+                  placeholder="Model name"
+                  className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors text-sm"
+                />
               </div>
 
               <div>
@@ -691,8 +732,18 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             
             <div className="flex items-center gap-2 p-4 border-t border-gray-800 bg-dark-surface">
               <button
-                onClick={handleSaveEdit}
+                onClick={() => {
+                  if (editingModel) handleDeleteModel(editingModel);
+                }}
                 disabled={isSavingEdit}
+                className="p-2 rounded-lg transition-colors text-gray-500 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete model"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit || !editModelName.trim()}
                 className="flex-1 bg-purple-500/65 hover:bg-purple-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm py-2 rounded-lg transition-colors font-medium"
               >
                 {isSavingEdit ? 'Saving...' : 'Save Changes'}
@@ -918,7 +969,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         onToggleFavorite={toggleFavorite}
                         onSelect={handleSelectModel}
                         isSelected={currentSelection === model.path}
-                        onDelete={onDeleteModel ? handleDeleteModel : undefined}
+                        onDelete={handleDeleteModel}
                         onEdit={onEditModel || handleEditModel}
                       />
                     ))}
@@ -945,7 +996,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         onToggleFavorite={toggleFavorite}
                         onSelect={handleSelectModel}
                         isSelected={currentSelection === model.path}
-                        onDelete={onDeleteModel ? handleDeleteModel : undefined}
+                        onDelete={handleDeleteModel}
                         onEdit={onEditModel || handleEditModel}
                       />
                     ))}
@@ -994,7 +1045,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         onToggleFavorite={toggleFavorite}
                         onSelect={handleSelectModel}
                         isSelected={currentSelection === model.path}
-                        onDelete={onDeleteModel ? handleDeleteModel : undefined}
+                        onDelete={handleDeleteModel}
                         onEdit={onEditModel || handleEditModel}
                       />
                     ))}

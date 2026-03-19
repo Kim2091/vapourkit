@@ -44,6 +44,7 @@ export interface ElectronAPI {
   getModelMetadata: (modelId: string) => Promise<ModelMetadata | null>;
   updateModelMetadata: (modelId: string, metadata: Partial<ModelMetadata>) => Promise<{ success: boolean; error?: string }>;
   deleteModel: (modelPath: string, modelId: string) => Promise<{ success: boolean; error?: string }>;
+  renameModel: (modelPath: string, modelId: string, newName: string) => Promise<{ success: boolean; newPath?: string; newId?: string; error?: string }>;
   cancelModelImport: () => Promise<{ success: boolean }>;
   forceStopModelImport: () => Promise<{ success: boolean }>;
   validateOnnxModel: (onnxPath: string) => Promise<ValidateOnnxModelResult>;

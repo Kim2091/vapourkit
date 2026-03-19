@@ -476,6 +476,50 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     }
   });
 
+  ipcMain.handle('rename-model', async (event, modelPath: string, modelId: string, newName: string) => {
+    logger.info(`Renaming model: ${modelId} -> ${newName}`);
+    try {
+      const ext = path.extname(modelPath);
+      const dir = path.dirname(modelPath);
+      const newPath = path.join(dir, `${newName}${ext}`);
+
+      // Check if target already exists
+      if (await fs.pathExists(newPath)) {
+        return { success: false, error: `A model named "${newName}${ext}" already exists` };
+      }
+
+      // Rename the file
+      await fs.rename(modelPath, newPath);
+      logger.info(`Renamed file: ${modelPath} -> ${newPath}`);
+
+      // Migrate metadata from old key to new key
+      const oldMetadata = configManager.getModelMetadata(modelId);
+      if (oldMetadata) {
+        await configManager.setModelMetadata(
+          newName,
+          oldMetadata.useFp32,
+          oldMetadata.modelType,
+          oldMetadata.displayTag,
+          oldMetadata.description,
+          oldMetadata.useBf16,
+          oldMetadata.temporalFrames
+        );
+        // Copy category if present
+        if (oldMetadata.category) {
+          await configManager.updateModelMetadata(newName, { category: oldMetadata.category });
+        }
+        await configManager.deleteModelMetadata(modelId);
+        logger.info(`Migrated metadata: ${modelId} -> ${newName}`);
+      }
+
+      return { success: true, newPath, newId: newName };
+    } catch (error) {
+      logger.error('Error renaming model:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMsg };
+    }
+  });
+
   ipcMain.handle('cancel-model-import', async () => {
     logger.info('Cancelling model import/initialization');
     cancelActiveModelOperation();

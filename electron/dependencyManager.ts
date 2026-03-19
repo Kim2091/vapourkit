@@ -189,13 +189,17 @@ export class DependencyManager {
       await runCommand(PATHS.PYTHON, ['-m', 'pip', 'install', 'vapoursynth']);
     }
 
+    // Install vstools (required by the VapourSynth template for set_output)
+    logger.dependency('Installing vstools');
+    await runCommand(PATHS.PYTHON, ['-m', 'pip', 'install', 'vstools', '--no-warn-script-location']);
+
     this.sendProgress({
       type: 'python-setup',
       component: 'Python Embedded',
       progress: 100,
       message: 'Embedded Python configured successfully'
     });
-    
+
     logger.dependency('Embedded Python setup completed');
   }
 
