@@ -904,11 +904,22 @@ function App() {
                         style={{ width: `${upscaleProgress?.percentage ?? 0}%` }}
                       />
                     </div>
-                    {upscaleProgress?.fps ? (
-                      <p className="text-base text-gray-400 font-medium">Speed: {upscaleProgress.fps} FPS</p>
-                    ) : (
-                      <p className="text-base text-gray-400 font-medium">Speed: N/A</p>
-                    )}
+                    <div className="flex items-center justify-between">
+                      {upscaleProgress?.fps ? (
+                        <p className="text-base text-gray-400 font-medium">Speed: {upscaleProgress.fps} FPS</p>
+                      ) : (
+                        <p className="text-base text-gray-400 font-medium">Speed: N/A</p>
+                      )}
+                      {upscaleProgress?.eta != null && upscaleProgress.eta > 0 && (
+                        <p className="text-base text-gray-400 font-medium">
+                          ETA: {upscaleProgress.eta >= 3600
+                            ? `${Math.floor(upscaleProgress.eta / 3600)}h ${Math.floor((upscaleProgress.eta % 3600) / 60)}m`
+                            : upscaleProgress.eta >= 60
+                              ? `${Math.floor(upscaleProgress.eta / 60)}m ${upscaleProgress.eta % 60}s`
+                              : `${upscaleProgress.eta}s`}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Console */}

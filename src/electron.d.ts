@@ -353,6 +353,7 @@ export interface UpscaleProgress {
   message: string;
   previewFrame?: string;
   isStopping?: boolean;
+  eta?: number | null; // Estimated seconds remaining, null if not yet calculable
 }
 
 export interface UpscaleResult {

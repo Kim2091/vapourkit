@@ -51,6 +51,7 @@ export interface UpscaleProgress {
   message: string;
   previewFrame?: string; // Base64 encoded PNG
   isStopping?: boolean; // Indicates if the process is stopping
+  eta?: number | null; // Estimated seconds remaining, null if not yet calculable
 }
 
 export class UpscaleExecutor {
@@ -78,10 +79,15 @@ export class UpscaleExecutor {
 
 
   private sendProgress(progress: UpscaleProgress) {
-    if (this.mainWindow) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('upscale-progress', progress);
-      // Error messages are now handled entirely in the renderer process
-      // to avoid blocking focus issues with dialog.showErrorBox
+
+      // Update Windows taskbar progress bar
+      if (progress.type === 'progress') {
+        this.mainWindow.setProgressBar(progress.percentage / 100);
+      } else if (progress.type === 'complete' || progress.type === 'error') {
+        this.mainWindow.setProgressBar(-1);
+      }
     }
   }
 
@@ -402,6 +408,10 @@ export class UpscaleExecutor {
   ) {
     let currentFrame = 0;
     let currentFPS = 0;
+    let smoothedFPS = 0;
+    let fpsInitialized = false;
+    const EMA_ALPHA = 0.15; // Smoothing factor for FPS EMA
+    const ETA_WARMUP_FRAMES = 30; // Don't report ETA until this many frames processed
     let vspipeStderrBuffer = '';
     let ffmpegStderrBuffer = '';
     const MAX_STDERR_BUFFER_SIZE = 1024 * 1024; // 1MB max per stderr buffer
@@ -504,12 +514,28 @@ export class UpscaleExecutor {
         if (ffmpegMatch) {
           currentFrame = parseInt(ffmpegMatch[1], 10);
           currentFPS = parseFloat(ffmpegMatch[2]);
-          
+
+          // Update smoothed FPS using exponential moving average
+          if (currentFPS > 0) {
+            if (!fpsInitialized) {
+              smoothedFPS = currentFPS;
+              fpsInitialized = true;
+            } else {
+              smoothedFPS = EMA_ALPHA * currentFPS + (1 - EMA_ALPHA) * smoothedFPS;
+            }
+          }
+
           const percentage = totalFrames > 0 ? Math.round((currentFrame / totalFrames) * 100) : 0;
+
+          // Calculate ETA from smoothed FPS
+          let eta: number | null = null;
+          if (smoothedFPS > 0 && totalFrames > 0 && currentFrame >= ETA_WARMUP_FRAMES) {
+            eta = Math.round((totalFrames - currentFrame) / smoothedFPS);
+          }
 
           // Log progress every 100 frames
           if (currentFrame % 100 === 0) {
-            logger.upscale(`Progress: frame ${currentFrame}/${totalFrames} (${percentage}%) @ ${currentFPS.toFixed(1)} fps`);
+            logger.upscale(`Progress: frame ${currentFrame}/${totalFrames} (${percentage}%) @ ${currentFPS.toFixed(1)} fps${eta !== null ? ` ETA: ${eta}s` : ''}`);
           }
 
           this.sendProgress({
@@ -519,7 +545,8 @@ export class UpscaleExecutor {
             fps: currentFPS,
             percentage,
             message: this.isCanceling ? 'Stopping processing' : `Processing frame ${currentFrame}${totalFrames > 0 ? `/${totalFrames}` : ''}`,
-            isStopping: this.isCanceling
+            isStopping: this.isCanceling,
+            eta
           });
         }
       });
@@ -632,7 +659,12 @@ export class UpscaleExecutor {
   cancel() {
     logger.upscale('Canceling upscale process gracefully');
     this.isCanceling = true;
-    
+
+    // Clear taskbar progress
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.setProgressBar(-1);
+    }
+
     // Cancel any pending info extraction processes
     this.vsInfoExtractor.cancelAll();
     
@@ -711,6 +743,11 @@ export class UpscaleExecutor {
   kill() {
     logger.upscale('Force killing upscale process');
     this.isCanceling = true;
+
+    // Clear taskbar progress
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.setProgressBar(-1);
+    }
 
     // Cancel any pending info extraction processes
     this.vsInfoExtractor.cancelAll();
