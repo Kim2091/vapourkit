@@ -5,7 +5,7 @@ import * as fs from 'fs-extra';
 import { BrowserWindow } from 'electron';
 import { logger } from './logger';
 import { PATHS } from './constants';
-import { setupVSEnvironment } from './utils';
+import { setupVSEnvironment, pollGpuStats, GpuStats } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { ErrorMessageHandler } from './errorMessageHandler';
 import { VideoMetadataExtractor, VideoMetadata } from './videoMetadataExtractor';
@@ -52,6 +52,9 @@ export interface UpscaleProgress {
   previewFrame?: string; // Base64 encoded PNG
   isStopping?: boolean; // Indicates if the process is stopping
   eta?: number | null; // Estimated seconds remaining, null if not yet calculable
+  gpuMemoryUsed?: number; // GPU VRAM used in MB
+  gpuMemoryTotal?: number; // GPU VRAM total in MB
+  gpuUtilization?: number; // GPU utilization percentage 0-100
 }
 
 export class UpscaleExecutor {
@@ -63,6 +66,8 @@ export class UpscaleExecutor {
   private ffmpegProcess: ChildProcess | null = null;
   private vsInfoExtractor: VapourSynthInfoExtractor;
   private isCanceling: boolean = false;
+  private gpuPollInterval: ReturnType<typeof setInterval> | null = null;
+  private latestGpuStats: GpuStats | null = null;
 
   constructor(vspipePath: string, pythonPath: string, mainWindow: BrowserWindow | null = null) {
     this.vspipePath = vspipePath;
@@ -107,6 +112,23 @@ export class UpscaleExecutor {
     if (pixelFormat === 'RGBH') return 'gbrpf16le';
     
     return 'gbrp';
+  }
+
+  private startGpuPolling() {
+    this.stopGpuPolling();
+    this.gpuPollInterval = setInterval(async () => {
+      const stats = await pollGpuStats();
+      if (stats) {
+        this.latestGpuStats = stats;
+      }
+    }, 2000);
+  }
+
+  private stopGpuPolling() {
+    if (this.gpuPollInterval) {
+      clearInterval(this.gpuPollInterval);
+      this.gpuPollInterval = null;
+    }
   }
 
   async getFrameCount(scriptPath: string): Promise<number> {
@@ -406,6 +428,9 @@ export class UpscaleExecutor {
     resolve: () => void,
     reject: (reason?: any) => void
   ) {
+    // Start GPU stats polling
+    this.startGpuPolling();
+
     let currentFrame = 0;
     let currentFPS = 0;
     let smoothedFPS = 0;
@@ -546,7 +571,8 @@ export class UpscaleExecutor {
             percentage,
             message: this.isCanceling ? 'Stopping processing' : `Processing frame ${currentFrame}${totalFrames > 0 ? `/${totalFrames}` : ''}`,
             isStopping: this.isCanceling,
-            eta
+            eta,
+            ...this.latestGpuStats
           });
         }
       });
@@ -618,7 +644,8 @@ export class UpscaleExecutor {
     ffmpeg.on('close', (code) => {
       logger.upscale(`ffmpeg exited with code ${code}`);
       this.ffmpegProcess = null; // Clear reference on exit
-      
+      this.stopGpuPolling();
+
       if (code === 0) {
         logger.upscale('Processing completed successfully!');
         logger.upscale(`Output saved to: ${outputPath}`);
@@ -659,6 +686,7 @@ export class UpscaleExecutor {
   cancel() {
     logger.upscale('Canceling upscale process gracefully');
     this.isCanceling = true;
+    this.stopGpuPolling();
 
     // Clear taskbar progress
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -743,6 +771,7 @@ export class UpscaleExecutor {
   kill() {
     logger.upscale('Force killing upscale process');
     this.isCanceling = true;
+    this.stopGpuPolling();
 
     // Clear taskbar progress
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {

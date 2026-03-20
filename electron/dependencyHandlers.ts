@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { logger } from './logger';
 import { configManager } from './configManager';
-import { detectCudaSupport } from './utils';
+import { detectCudaSupport, pollGpuStats } from './utils';
 import { createIpcHandler } from './ipcUtilities';
 import { DependencyManager } from './dependencyManager';
 import { PluginInstaller } from './pluginInstaller';
@@ -21,7 +21,7 @@ export function registerDependencyHandlers(
     )
   );
 
-  ipcMain.handle('detect-cuda-support', 
+  ipcMain.handle('detect-cuda-support',
     createIpcHandler(
       'detect-cuda-support',
       async () => {
@@ -32,6 +32,10 @@ export function registerDependencyHandlers(
       { logResult: true }
     )
   );
+
+  ipcMain.handle('get-gpu-stats', async () => {
+    return await pollGpuStats();
+  });
 
   ipcMain.handle('setup-dependencies',
     createIpcHandler(

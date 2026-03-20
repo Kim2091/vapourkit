@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu, FileCheck2, Undo, Redo } from 'lucide-react';
 import { Logo } from './Logo';
 
@@ -20,6 +20,7 @@ interface HeaderProps {
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
+  gpuStats?: { gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null;
 }
 
 export const Header = memo<HeaderProps>(({ 
@@ -40,7 +41,25 @@ export const Header = memo<HeaderProps>(({
   canRedo = false,
   onUndo,
   onRedo,
-}: HeaderProps) => (
+  gpuStats,
+}: HeaderProps) => {
+  const vramPercent = useMemo(() => {
+    if (gpuStats?.gpuMemoryUsed != null && gpuStats?.gpuMemoryTotal) {
+      return Math.round((gpuStats.gpuMemoryUsed / gpuStats.gpuMemoryTotal) * 100);
+    }
+    return null;
+  }, [gpuStats?.gpuMemoryUsed, gpuStats?.gpuMemoryTotal]);
+
+  const colorForPercent = (pct: number) => {
+    if (pct >= 90) return { bar: 'bg-red-500', text: 'text-red-400' };
+    if (pct >= 70) return { bar: 'bg-amber-500', text: 'text-amber-400' };
+    return { bar: 'bg-emerald-500', text: 'text-emerald-400' };
+  };
+
+  const vramColor = vramPercent != null ? colorForPercent(vramPercent) : null;
+  const loadColor = gpuStats?.gpuUtilization != null ? colorForPercent(gpuStats.gpuUtilization) : null;
+
+  return (
   <div className="flex-shrink-0">
     <div className="py-3 px-6 border-b border-gray-800/50">
       <div className="flex items-center justify-between gap-4 relative">
@@ -124,6 +143,32 @@ export const Header = memo<HeaderProps>(({
 
         {/* Right side buttons */}
         <div className="flex items-center gap-3 flex-shrink-0">
+          {/* GPU Stats Indicator */}
+          {gpuStats && vramPercent != null && vramColor && loadColor && (
+            <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-dark-surface border border-gray-700/50" title={`VRAM: ${gpuStats.gpuMemoryUsed}MB / ${gpuStats.gpuMemoryTotal}MB\nGPU Load: ${gpuStats.gpuUtilization}%`}>
+              {/* VRAM */}
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-500 font-medium leading-none">VRAM</span>
+                  <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-500 ${vramColor.bar}`} style={{ width: `${vramPercent}%` }} />
+                  </div>
+                </div>
+                <span className={`text-xs font-semibold ${vramColor.text}`}>{(gpuStats.gpuMemoryUsed / 1024).toFixed(1)}/{(gpuStats.gpuMemoryTotal / 1024).toFixed(1)} GB</span>
+              </div>
+              {/* GPU Load */}
+              <div className="flex items-center gap-2 border-l border-gray-700/50 pl-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-500 font-medium leading-none">Load</span>
+                  <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-500 ${loadColor.bar}`} style={{ width: `${gpuStats.gpuUtilization}%` }} />
+                  </div>
+                </div>
+                <span className={`text-xs font-semibold ${loadColor.text}`}>{gpuStats.gpuUtilization}%</span>
+              </div>
+            </div>
+          )}
+
           {/* Active Workflow Badge */}
           {workflowName && (
             <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-primary-purple/30 via-primary-blue/30 to-accent-cyan/30 border border-primary-purple/60 shadow-lg shadow-primary-purple/20">
@@ -200,4 +245,5 @@ export const Header = memo<HeaderProps>(({
       </div>
     </div>
   </div>
-));
+  );
+});

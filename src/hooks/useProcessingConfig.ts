@@ -13,7 +13,7 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
       try {
         const argsResult = await window.electronAPI.getFfmpegArgs();
         setFfmpegArgs(argsResult.args);
-        
+
         const formatResult = await window.electronAPI.getProcessingFormat();
         setProcessingFormat(formatResult.format);
 
@@ -29,7 +29,7 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
         console.error('Failed to load processing config:', error);
       }
     };
-    
+
     if (isSetupComplete) {
       loadConfig();
     }

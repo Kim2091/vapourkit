@@ -147,7 +147,64 @@ export async function withLogSeparator<T>(
   }
 }
 
-// electron/utils.ts - Add after line 124
+/**
+ * GPU stats returned by pollGpuStats
+ */
+export interface GpuStats {
+  gpuMemoryUsed: number;
+  gpuMemoryTotal: number;
+  gpuUtilization: number;
+}
+
+/**
+ * Polls nvidia-smi for GPU memory and utilization stats.
+ * Returns null if nvidia-smi is unavailable (non-NVIDIA systems).
+ */
+export async function pollGpuStats(): Promise<GpuStats | null> {
+  try {
+    const proc = spawn('nvidia-smi', [
+      '--query-gpu=memory.used,memory.total,utilization.gpu',
+      '--format=csv,noheader,nounits'
+    ], {
+      shell: true,
+      windowsHide: true
+    });
+
+    return new Promise((resolve) => {
+      let output = '';
+
+      if (proc.stdout) {
+        proc.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+      }
+
+      proc.on('close', (code) => {
+        if (code === 0 && output.trim()) {
+          const parts = output.trim().split(',').map(s => s.trim());
+          if (parts.length >= 3) {
+            resolve({
+              gpuMemoryUsed: parseInt(parts[0], 10),
+              gpuMemoryTotal: parseInt(parts[1], 10),
+              gpuUtilization: parseInt(parts[2], 10)
+            });
+            return;
+          }
+        }
+        resolve(null);
+      });
+
+      proc.on('error', () => resolve(null));
+
+      setTimeout(() => {
+        proc.kill();
+        resolve(null);
+      }, 3000);
+    });
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Detects if CUDA-capable NVIDIA GPU is available

@@ -45,6 +45,21 @@ function App() {
   // Ref to preserve scroll position in right panel
   const rightPanelRef = useRef<HTMLDivElement>(null);
 
+  // GPU stats polling (always-on, independent of processing)
+  const [gpuStats, setGpuStats] = useState<{ gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null>(null);
+  useEffect(() => {
+    let active = true;
+    const poll = async () => {
+      try {
+        const stats = await window.electronAPI.getGpuStats();
+        if (active) setGpuStats(stats);
+      } catch { /* nvidia-smi unavailable */ }
+    };
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => { active = false; clearInterval(interval); };
+  }, []);
+
   // Setup and initialization hooks
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup, showPluginPrompt, setShowPluginPrompt } = useSetup(addConsoleLog);
@@ -652,6 +667,7 @@ function App() {
         canRedo={canRedo}
         onUndo={handleUndo}
         onRedo={handleRedo}
+        gpuStats={gpuStats}
       />
 
       {/* Notification Bar for Uninitialized Models */}

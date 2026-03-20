@@ -5,6 +5,7 @@ export interface ElectronAPI {
   setupDependencies: () => Promise<{ success: boolean; error?: string }>;
   onSetupProgress: (callback: (progress: SetupProgress) => void) => () => void;
   detectCudaSupport: () => Promise<boolean>;
+  getGpuStats: () => Promise<{ gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null>;
   
   // Video operations
   selectVideoFile: () => Promise<string[] | null>;
@@ -354,6 +355,9 @@ export interface UpscaleProgress {
   previewFrame?: string;
   isStopping?: boolean;
   eta?: number | null; // Estimated seconds remaining, null if not yet calculable
+  gpuMemoryUsed?: number; // GPU VRAM used in MB
+  gpuMemoryTotal?: number; // GPU VRAM total in MB
+  gpuUtilization?: number; // GPU utilization percentage 0-100
 }
 
 export interface UpscaleResult {

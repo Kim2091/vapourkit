@@ -83,9 +83,9 @@ export class WindowManager {
       templateManager: new TemplateManager(),
       pluginInstaller: new PluginInstaller(this.window)
     };
-    
+
     logger.info('Managers initialized');
-    
+
     // Initialize default templates
     this.managers.templateManager.createDefaultTemplates().catch(err => {
       logger.error('Error creating default templates:', err);

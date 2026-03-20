@@ -189,7 +189,6 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
           </div>
         </div>
 
-
         {/* Encoding Settings Expand/Collapse */}
         <button
           onClick={handleToggleExpanded}
