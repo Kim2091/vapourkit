@@ -34,6 +34,15 @@ export function fixAsarPath(filePath: string): string {
 }
 
 /**
+ * Returns the app base path with ASAR unpacking applied.
+ * Use this whenever you need to access bundled files from include/.
+ */
+export function getBundledBasePath(): string {
+  const { app } = require('electron');
+  return fixAsarPath(app.getAppPath());
+}
+
+/**
  * Shared utility to run a command with stdout/stderr capture
  */
 export async function runCommand(

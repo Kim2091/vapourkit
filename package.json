@@ -62,7 +62,8 @@
         "onnxruntime-node": "^1.23.0",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
-        "react-resizable-panels": "^3.0.6"
+        "react-resizable-panels": "^3.0.6",
+        "zod": "^4.3.6"
     },
     "build": {
         "appId": "com.aivideoupscaler.gui",

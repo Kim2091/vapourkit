@@ -1,11 +1,13 @@
-// src/hooks/useQueueHandlers.ts - Queue operation handlers
+// src/hooks/useQueueOperations.ts - Queue user operations (merged from useQueueHandlers + useQueueEditing)
 
+import { useEffect } from 'react';
 import type { QueueItem, SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 
-interface UseQueueHandlersOptions {
+interface UseQueueOperationsOptions {
   queue: QueueItem[];
   editingQueueItemId: string | null;
+  showQueue: boolean;
   selectedModel: string | null;
   filters: any[];
   ffmpegArgs: string;
@@ -39,10 +41,38 @@ interface UseQueueHandlersOptions {
   setCompletedVideoPath?: (path: string | null) => void;
 }
 
-export function useQueueHandlers(options: UseQueueHandlersOptions) {
+/** Snapshot the current workflow state into a plain object for saving */
+function snapshotWorkflow(options: {
+  selectedModel: string | null;
+  filters: any[];
+  ffmpegArgs: string;
+  processingFormat: string;
+  outputFormat: string;
+  videoCompareArgs: string;
+  useDirectML: boolean;
+  numStreams: number;
+  segment: SegmentSelection;
+  colorimetry: any;
+}) {
+  return {
+    selectedModel: options.selectedModel,
+    filters: structuredClone(options.filters),
+    ffmpegArgs: options.ffmpegArgs,
+    processingFormat: options.processingFormat,
+    outputFormat: options.outputFormat,
+    videoCompareArgs: options.videoCompareArgs,
+    useDirectML: options.useDirectML,
+    numStreams: options.numStreams,
+    segment: options.segment.enabled ? { ...options.segment } : undefined,
+    colorimetry: options.colorimetry,
+  };
+}
+
+export function useQueueOperations(options: UseQueueOperationsOptions) {
   const {
     queue,
     editingQueueItemId,
+    showQueue,
     selectedModel,
     filters,
     ffmpegArgs,
@@ -76,6 +106,33 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
     setCompletedVideoPath,
   } = options;
 
+  // --- Auto-save effect (from useQueueEditing) ---
+  useEffect(() => {
+    if (!editingQueueItemId) return;
+
+    const currentWorkflowSnapshot = snapshotWorkflow({
+      selectedModel, filters, ffmpegArgs, processingFormat,
+      outputFormat, videoCompareArgs, useDirectML, numStreams,
+      segment, colorimetry,
+    });
+
+    const timeoutId = setTimeout(() => {
+      updateItemWorkflow(editingQueueItemId, currentWorkflowSnapshot);
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [editingQueueItemId, selectedModel, filters, ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, useDirectML, numStreams, segment, colorimetry, updateItemWorkflow]);
+
+  // Close editing mode when queue panel closes
+  useEffect(() => {
+    if (!showQueue && editingQueueItemId) {
+      setEditingQueueItemId(null);
+      onLog('Exited queue item editing mode');
+    }
+  }, [showQueue, editingQueueItemId, setEditingQueueItemId, onLog]);
+
+  // --- Handlers (from useQueueHandlers) ---
+
   const handleSelectQueueItem = async (itemId: string): Promise<void> => {
     const item = queue.find(q => q.id === itemId);
     if (!item) return;
@@ -84,31 +141,24 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
     if (item.status === 'completed') {
       if (loadCompletedVideo && setCompletedVideoPath) {
         try {
-          // Load video info first (resets state)
           await loadVideoInfo(item.videoPath);
           setOutputPath(item.outputPath);
-          
-          // Set completed state
           setCompletedVideoPath(item.outputPath);
           await loadCompletedVideo(item.outputPath);
-          
-          // Load the workflow settings so the UI reflects what was used
+
           setSelectedModel(item.workflow.selectedModel || '');
           setFilters(item.workflow.filters);
           setOutputFormat(item.workflow.outputFormat);
           toggleDirectML(item.workflow.useDirectML);
           updateNumStreams(item.workflow.numStreams);
-          
-          // Restore segment selection AFTER loading video info
+
           if (item.workflow.segment?.enabled) {
             setSegment(item.workflow.segment);
           } else {
             setSegment({ enabled: false, startFrame: 0, endFrame: -1 });
           }
-          
-          // Clear editing state if we were editing something
+
           setEditingQueueItemId(null);
-          
           onLog(`Loaded completed queue item: ${item.videoName}`);
         } catch (error) {
           onLog(`Error loading completed item: ${getErrorMessage(error)}`);
@@ -118,25 +168,17 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
     }
 
     if (item.status !== 'pending') return;
-    
+
     // Auto-save current workflow to the currently editing queue item if any
     if (editingQueueItemId) {
-      const currentWorkflowSnapshot = {
-        selectedModel,
-        filters: structuredClone(filters),
-        ffmpegArgs,
-        processingFormat,
-        outputFormat,
-        videoCompareArgs,
-        useDirectML,
-        numStreams,
-        segment: segment.enabled ? { ...segment } : undefined,
-        colorimetry,
-      };
-      updateItemWorkflow(editingQueueItemId, currentWorkflowSnapshot);
+      updateItemWorkflow(editingQueueItemId, snapshotWorkflow({
+        selectedModel, filters, ffmpegArgs, processingFormat,
+        outputFormat, videoCompareArgs, useDirectML, numStreams,
+        segment, colorimetry,
+      }));
       onLog(`Auto-saved changes to queue item`);
     }
-    
+
     // Load the selected queue item's workflow into main window
     setEditingQueueItemId(itemId);
     setSelectedModel(item.workflow.selectedModel || '');
@@ -144,21 +186,17 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
     setOutputFormat(item.workflow.outputFormat);
     toggleDirectML(item.workflow.useDirectML);
     updateNumStreams(item.workflow.numStreams);
-    
-    // Load video info and output path
+
     try {
       await loadVideoInfo(item.videoPath);
       setOutputPath(item.outputPath);
-      
-      // Restore segment selection AFTER loading video info
-      // This ensures the segment isn't reset by the videoInfo change effect
+
       if (item.workflow.segment?.enabled) {
         setSegment(item.workflow.segment);
       } else {
-        // Reset segment to disabled if the queue item doesn't have segment data
         setSegment({ enabled: false, startFrame: 0, endFrame: -1 });
       }
-      
+
       onLog(`Loaded queue item for editing: ${item.videoName}`);
     } catch (error) {
       onLog(`Error loading queue item: ${getErrorMessage(error)}`);
@@ -173,9 +211,8 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
   const handleStopQueue = async (): Promise<void> => {
     setIsQueueStopping(true);
     onLog('Stopping queue processing...');
-    
+
     try {
-      // Cancel current processing if any
       if (isProcessingQueueItem) {
         await handleCancelUpscale();
       }
@@ -185,13 +222,12 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
       setIsQueueStarted(false);
       setIsProcessingQueue(false);
       setIsProcessingQueueItem(false);
-      
-      // Reset any processing items back to pending
+
       const processingItem = queue.find(item => item.status === 'processing');
       if (processingItem) {
         updateQueueItem(processingItem.id, { status: 'pending', progress: 0 });
       }
-      
+
       setIsQueueStopping(false);
       onLog('Queue stopped');
     }
@@ -200,22 +236,14 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
   const handleCancelQueueItem = async (itemId: string): Promise<void> => {
     const item = queue.find(q => q.id === itemId);
     if (!item || item.status !== 'processing') return;
-    
+
     onLog(`Canceling queue item: ${item.videoName}`);
-    
-    // Cancel the current upscale
     await handleCancelUpscale();
-    
-    // Mark item as error/canceled
+
     updateQueueItem(itemId, {
       status: 'error',
       errorMessage: 'Canceled by user',
     });
-    
-    // Do NOT clear the processing flag here.
-    // The useQueueProcessing hook will handle it when the startUpscale promise rejects/returns.
-    // Clearing it here causes a race condition where the next item starts before the current one finishes cleaning up.
-    // setIsProcessingQueueItem(false);
   };
 
   const handleRequeueItem = (itemId: string): void => {
@@ -225,7 +253,7 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
   const handleCompareQueueItem = async (itemId: string): Promise<void> => {
     const item = queue.find(q => q.id === itemId);
     if (!item || item.status !== 'completed') return;
-    
+
     try {
       onLog(`Launching comparison for queue item: ${item.videoName}`);
       const result = await window.electronAPI.compareVideos(item.videoPath, item.outputPath);
@@ -240,7 +268,7 @@ export function useQueueHandlers(options: UseQueueHandlersOptions) {
   const handleOpenQueueItemFolder = async (itemId: string): Promise<void> => {
     const item = queue.find(q => q.id === itemId);
     if (!item || item.status !== 'completed') return;
-    
+
     try {
       onLog(`Opening folder for queue item: ${item.outputPath}`);
       await window.electronAPI.openOutputFolder(item.outputPath);

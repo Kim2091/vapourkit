@@ -1,3 +1,4 @@
+import './asarFix'; // Must be first — fixes 7zip-bin path before any module imports 7zip-min
 import { app, dialog, protocol } from 'electron';
 import * as path from 'path';
 import { logger } from './logger';

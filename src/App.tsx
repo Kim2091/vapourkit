@@ -1,19 +1,13 @@
 // src/App.tsx - Refactored with extracted components and hooks
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, XCircle, ChevronDown, ChevronUp, Terminal, Loader2, CheckCircle, AlertCircle, Play } from 'lucide-react';
 import { NotificationContainer } from './components/NotificationContainer';
 import { notify } from './utils/notifications';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { ImportModelModal } from './components/ImportModelModal';
-import { AboutModal } from './components/AboutModal';
-import { SettingsModal } from './components/SettingsModal';
-import { AutoBuildModal } from './components/AutoBuildModal';
-import { PluginsModal } from './components/PluginsModal';
-import { UpdateNotificationModal } from './components/UpdateNotificationModal';
-import { VsMlrtUpdateModal } from './components/VsMlrtUpdateModal';
 import { QueuePanel } from './components/QueuePanel';
-import { FilterImportModal } from './components/FilterImportModal';
+import { AppModals } from './components/AppModals';
+import { ProgressPanel } from './components/ProgressPanel';
+import { ActionButtons } from './components/ActionButtons';
 import type { UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
 import { Header } from './components/Header';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
@@ -32,11 +26,10 @@ import { useColorimetry } from './hooks/useColorimetry';
 import { useFilterConfig } from './hooks/useFilterConfig';
 import { useUIState } from './hooks/useUIState';
 import { useBackendOperations } from './hooks/useBackendOperations';
-import { useQueueManagement } from './hooks/useQueueManagement';
-import { useQueueState } from './hooks/useQueueState';
-import { useQueueHandlers } from './hooks/useQueueHandlers';
+import { useAppEffects } from './hooks/useAppEffects';
+import { useQueueStore } from './hooks/useQueueStore';
+import { useQueueOperations } from './hooks/useQueueOperations';
 import { useQueueProcessing } from './hooks/useQueueProcessing';
-import { useQueueEditing } from './hooks/useQueueEditing';
 import { useBatchConfig } from './hooks/useBatchConfig';
 import { useProcessingConfig } from './hooks/useProcessingConfig';
 import { getErrorMessage } from './types/errors';
@@ -132,8 +125,8 @@ function App() {
     segment: SegmentSelection;
   } | null>(null);
 
-  // Queue management state and handlers
-  const { state: queueState, actions: queueActions } = useQueueState(addConsoleLog);
+  // Queue store (data + UI state)
+  const queueStore = useQueueStore({ onLog: addConsoleLog });
 
   // Video processing hooks
   const {
@@ -161,10 +154,9 @@ function App() {
     updatePreviewFrame,
   } = useVideoProcessing({ outputFormat, onLog: addConsoleLog });
   
-  // Queue management hook
+  // Destructure queue store for convenience
   const {
     queue,
-    isLoadingQueue: _isLoadingQueue,
     addToQueue,
     removeFromQueue,
     updateQueueItem,
@@ -173,10 +165,9 @@ function App() {
     clearCompletedItems,
     reorderQueue,
     getNextPendingItem,
-    getQueueStats: _getQueueStats,
     requeueItem,
     duplicateQueueItem,
-  } = useQueueManagement({ onLog: addConsoleLog });
+  } = queueStore;
 
   // Batch configuration hook
   const {
@@ -194,16 +185,16 @@ function App() {
     numStreams,
     segment,
     colorimetry: colorimetrySettings,
-    showQueue: queueState.showQueue,
+    showQueue: queueStore.showQueue,
     onAddToQueue: (videoPaths, workflow, outputPath) => {
       addToQueue(videoPaths, workflow, outputPath);
-      queueActions.setShowQueue(true);
+      queueStore.setShowQueue(true);
     },
     onLoadVideoInfo: loadVideoInfo,
     onLog: addConsoleLog,
   });
 
-  // Queue handlers hook
+  // Queue operations hook (handlers + editing effects)
   const {
     handleSelectQueueItem,
     handleStartQueue,
@@ -212,9 +203,10 @@ function App() {
     handleRequeueItem,
     handleCompareQueueItem,
     handleOpenQueueItemFolder,
-  } = useQueueHandlers({
+  } = useQueueOperations({
     queue,
-    editingQueueItemId: queueState.editingQueueItemId,
+    editingQueueItemId: queueStore.editingQueueItemId,
+    showQueue: queueStore.showQueue,
     selectedModel,
     filters,
     ffmpegArgs,
@@ -225,12 +217,12 @@ function App() {
     numStreams,
     segment,
     colorimetry: colorimetrySettings,
-    isProcessingQueueItem: queueState.isProcessingQueueItem,
-    setEditingQueueItemId: queueActions.setEditingQueueItemId,
-    setIsQueueStarted: queueActions.setIsQueueStarted,
-    setIsProcessingQueue: queueActions.setIsProcessingQueue,
-    setIsProcessingQueueItem: queueActions.setIsProcessingQueueItem,
-    setIsQueueStopping: queueActions.setIsQueueStopping,
+    isProcessingQueueItem: queueStore.isProcessingQueueItem,
+    setEditingQueueItemId: queueStore.setEditingQueueItemId,
+    setIsQueueStarted: queueStore.setIsQueueStarted,
+    setIsProcessingQueue: queueStore.setIsProcessingQueue,
+    setIsProcessingQueueItem: queueStore.setIsProcessingQueueItem,
+    setIsQueueStopping: queueStore.setIsQueueStopping,
     setSelectedModel,
     setFilters: handleSetFilters,
     setOutputFormat: handleUpdateOutputFormat,
@@ -251,38 +243,19 @@ function App() {
   // Queue processing effects
   useQueueProcessing({
     queue,
-    isQueueStarted: queueState.isQueueStarted,
-    isQueueStopping: queueState.isQueueStopping,
-    isProcessingQueueItem: queueState.isProcessingQueueItem,
-    isProcessingQueue: queueState.isProcessingQueue,
+    isQueueStarted: queueStore.isQueueStarted,
+    isQueueStopping: queueStore.isQueueStopping,
+    isProcessingQueueItem: queueStore.isProcessingQueueItem,
+    isProcessingQueue: queueStore.isProcessingQueue,
     isProcessing,
     upscaleProgress,
-    setIsProcessingQueue: queueActions.setIsProcessingQueue,
-    setIsProcessingQueueItem: queueActions.setIsProcessingQueueItem,
-    setIsQueueStarted: queueActions.setIsQueueStarted,
+    setIsProcessingQueue: queueStore.setIsProcessingQueue,
+    setIsProcessingQueueItem: queueStore.setIsProcessingQueueItem,
+    setIsQueueStarted: queueStore.setIsQueueStarted,
     setVideoInfo,
     setOutputPath,
     updateQueueItem,
     getNextPendingItem,
-    onLog: addConsoleLog,
-  });
-
-  // Queue editing effects
-  useQueueEditing({
-    editingQueueItemId: queueState.editingQueueItemId,
-    showQueue: queueState.showQueue,
-    selectedModel,
-    filters,
-    ffmpegArgs,
-    processingFormat,
-    outputFormat,
-    videoCompareArgs,
-    useDirectML,
-    numStreams,
-    segment,
-    colorimetry: colorimetrySettings,
-    setEditingQueueItemId: queueActions.setEditingQueueItemId,
-    updateItemWorkflow,
     onLog: addConsoleLog,
   });
   
@@ -407,7 +380,7 @@ function App() {
   
   // Handle queue toggle - save/restore workflow state
   const handleToggleQueue = async () => {
-    const newShowQueue = !queueState.showQueue;
+    const newShowQueue = !queueStore.showQueue;
     
     if (newShowQueue) {
       // Opening queue - save current workflow state
@@ -465,7 +438,7 @@ function App() {
       }
     }
     
-    queueActions.setShowQueue(newShowQueue);
+    queueStore.setShowQueue(newShowQueue);
   };
   
   // Output resolution validation hook (manual trigger only)
@@ -489,210 +462,32 @@ function App() {
   // Reset segment selection when video changes (but not when loading a queue item)
   useEffect(() => {
     // Don't reset segment when we're editing a queue item - the segment will be restored from the queue item's workflow
-    if (videoInfo && !queueState.editingQueueItemId) {
+    if (videoInfo && !queueStore.editingQueueItemId) {
       setSegment({
         enabled: false,
         startFrame: 0,
         endFrame: -1,
       });
     }
-  }, [videoInfo?.path, queueState.editingQueueItemId]);
+  }, [videoInfo?.path, queueStore.editingQueueItemId]);
 
-  // Preserve scroll position in right panel when preview updates
-  useEffect(() => {
-    const rightPanel = rightPanelRef.current;
-    if (rightPanel) {
-      const scrollTop = rightPanel.scrollTop;
-      // Restore scroll position after render
-      requestAnimationFrame(() => {
-        rightPanel.scrollTop = scrollTop;
-      });
-    }
-  }, [previewFrame]);
-
-  // Check for updates on startup
-  useEffect(() => {
-    const checkForUpdates = async (): Promise<void> => {
-      try {
-        const result = await window.electronAPI.checkForUpdates();
-        if (result.success && result.data && result.data.available) {
-          setUpdateInfo(result.data);
-          setShowUpdateModal(true);
-          addConsoleLog(`Update available: ${result.data.latestVersion}`);
-        } else {
-          addConsoleLog('No updates available');
-        }
-      } catch (error) {
-        console.error('Failed to check for updates:', error);
-      }
-    };
-    
-    if (isSetupComplete) {
-      // Check for updates after a short delay to avoid blocking initial load
-      const timeoutId = setTimeout(checkForUpdates, 2000);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isSetupComplete, addConsoleLog]);
-
-  // Check for vs-mlrt version mismatch on startup
-  useEffect(() => {
-    const checkVsMlrtVersion = async (): Promise<void> => {
-      try {
-        const versionInfo = await window.electronAPI.checkVsMlrtVersion();
-        
-        if (versionInfo.needsNotification) {
-          // Version changed and there are existing engines - show modal immediately
-          addConsoleLog(`vs-mlrt version upgrade detected: ${versionInfo.storedVersion || 'unknown'} → ${versionInfo.currentVersion}`);
-          setVsMlrtVersionInfo(versionInfo);
-          setShowVsMlrtModal(true);
-        } else if (versionInfo.storedVersion === undefined && versionInfo.engineCount > 0) {
-          // Upgrading from old version that didn't track vs-mlrt version, but engines exist
-          addConsoleLog(`vs-mlrt version upgrade detected (${versionInfo.engineCount} engine(s) from previous version may need rebuilding)`);
-          setVsMlrtVersionInfo(versionInfo);
-          setShowVsMlrtModal(true);
-        } else if (versionInfo.hasVersionMismatch) {
-          // CRITICAL: Version changed - ALWAYS show modal to let user decide when to update
-          // This preserves user control and prevents unexpected plugin replacement
-          addConsoleLog(`vs-mlrt version mismatch detected: ${versionInfo.storedVersion} → ${versionInfo.currentVersion}`);
-          setVsMlrtVersionInfo(versionInfo);
-          setShowVsMlrtModal(true);
-        } else if (versionInfo.storedVersion === undefined) {
-          // First run or version not tracked yet - store the current version
-          await window.electronAPI.updateVsMlrtVersion();
-          addConsoleLog(`vs-mlrt version initialized: ${versionInfo.currentVersion}`);
-        } else {
-          // Version matches - no action needed
-          addConsoleLog(`vs-mlrt version: ${versionInfo.currentVersion}`);
-        }
-      } catch (error) {
-        console.error('Failed to check vs-mlrt version:', error);
-        addConsoleLog(`Error checking vs-mlrt version: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    };
-    
-    if (isSetupComplete && hasCudaSupport) {
-      // Check immediately after setup completes to catch upgrades
-      checkVsMlrtVersion();
-    }
-  }, [isSetupComplete, hasCudaSupport, addConsoleLog]);
-
-  // Global error handlers with proper cleanup
-  useEffect(() => {
-    const handleError = (event: ErrorEvent): void => {
-      event.preventDefault();
-      const message = getErrorMessage(event.error || event.message);
-      notify.error('Error', message);
-    };
-
-    const handleRejection = (event: PromiseRejectionEvent): void => {
-      event.preventDefault();
-      const message = getErrorMessage(event.reason);
-      notify.error('Error', message);
-    };
-
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleRejection);
-
-    return () => {
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleRejection);
-    };
-  }, []);
-
-  // Focus recovery mechanism for Electron/Chromium focus desync issues
-  // Uses event-driven approach instead of polling to prevent GUI freezing
-  useEffect(() => {
-    let focusRecoveryPending = false;
-
-    // Handle focus recovery after user interaction if focus is stuck
-    const handleInteraction = (e: Event) => {
-      // Avoid recursive focus handling
-      if (focusRecoveryPending) return;
-      
-      const target = e.target as HTMLElement;
-      
-      // Don't interfere with inputs, textareas, selects - let browser handle focus naturally
-      if (target && (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable
-      )) {
-        return;
-      }
-      
-      // Use requestAnimationFrame to check focus after the event completes
-      requestAnimationFrame(() => {
-        const activeElement = document.activeElement;
-        
-        // Only recover focus if it's stuck on body/document and the click was on an interactive element
-        if (!activeElement || activeElement === document.body || activeElement === document.documentElement) {
-          // Check if the event target is or contains a focusable element
-          if (target && target.closest) {
-            const focusable = target.closest('button, a, [tabindex]:not([tabindex="-1"])');
-            if (focusable instanceof HTMLElement) {
-              focusRecoveryPending = true;
-              focusable.focus({ preventScroll: true });
-              focusRecoveryPending = false;
-              return;
-            }
-          }
-          
-          // Only use window.focus() as a last resort, and never blur first
-          // as that can cause the desync we're trying to fix
-          window.focus();
-        }
-      });
-    };
-
-    // Handle window blur/focus events for app-level focus recovery
-    const handleWindowBlur = () => {
-      // Mark that we lost focus - used to detect stuck state
-    };
-
-    const handleWindowFocus = () => {
-      // When window regains focus, ensure an element is focused
-      requestAnimationFrame(() => {
-        const activeElement = document.activeElement;
-        if (!activeElement || activeElement === document.body || activeElement === document.documentElement) {
-          const mainContent = document.querySelector('main') || document.querySelector('[role="main"]');
-          if (mainContent instanceof HTMLElement) {
-            mainContent.focus({ preventScroll: true });
-          }
-        }
-      });
-    };
-
-    // Only listen for mousedown - less intrusive than polling
-    document.addEventListener('mousedown', handleInteraction, { passive: true, capture: true });
-    window.addEventListener('blur', handleWindowBlur);
-    window.addEventListener('focus', handleWindowFocus);
-
-    return () => {
-      document.removeEventListener('mousedown', handleInteraction, true);
-      window.removeEventListener('blur', handleWindowBlur);
-      window.removeEventListener('focus', handleWindowFocus);
-    };
-  }, []);
+  // App-level side effects (update check, vs-mlrt version check, error handlers, focus recovery)
+  const { closeModalWithFocusRestore } = useAppEffects({
+    isSetupComplete,
+    hasCudaSupport,
+    previewFrame,
+    rightPanelRef,
+    addConsoleLog,
+    setUpdateInfo,
+    setShowUpdateModal,
+    setVsMlrtVersionInfo,
+    setShowVsMlrtModal,
+  });
 
   const handleToggleDirectML = (value: boolean): void => {
     toggleDirectML(value);
     addConsoleLog(`Inference backend changed to: ${value ? 'DirectML (ONNX Runtime)' : 'TensorRT'}`);
   };
-
-  // Helper to restore focus after modal closes (fixes Electron/Chromium focus desync)
-  const closeModalWithFocusRestore = useCallback((closeFn: () => void) => {
-    closeFn();
-    // Delay focus restoration to allow React to unmount the modal
-    requestAnimationFrame(() => {
-      // Find a suitable element to focus, or just ensure window has focus
-      const mainContent = document.querySelector('main') || document.body;
-      if (mainContent instanceof HTMLElement) {
-        mainContent.focus({ preventScroll: true });
-      }
-      window.focus();
-    });
-  }, []);
 
   // Segment selection handlers
   const handleSegmentChange = useCallback((newSegment: SegmentSelection) => {
@@ -890,59 +685,13 @@ function App() {
                     onVideoError={handleVideoError}
                   />
 
-                  {/* Progress & Controls */}
-                  <div className="flex-shrink-0 bg-dark-elevated rounded-2xl border border-gray-800 p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium">{upscaleProgress?.message || 'Start an upscale!'}</span>
-                      <span className="text-sm text-gray-400">
-                        {upscaleProgress?.percentage !== undefined ? `${upscaleProgress.percentage}%` : 'N/A'}
-                      </span>
-                    </div>
-                    <div className="w-full bg-dark-surface rounded-full h-2 mb-3">
-                      <div 
-                        className="bg-gradient-to-r from-primary-blue to-primary-purple h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${upscaleProgress?.percentage ?? 0}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      {upscaleProgress?.fps ? (
-                        <p className="text-base text-gray-400 font-medium">Speed: {upscaleProgress.fps} FPS</p>
-                      ) : (
-                        <p className="text-base text-gray-400 font-medium">Speed: N/A</p>
-                      )}
-                      {upscaleProgress?.eta != null && upscaleProgress.eta > 0 && (
-                        <p className="text-base text-gray-400 font-medium">
-                          ETA: {upscaleProgress.eta >= 3600
-                            ? `${Math.floor(upscaleProgress.eta / 3600)}h ${Math.floor((upscaleProgress.eta % 3600) / 60)}m`
-                            : upscaleProgress.eta >= 60
-                              ? `${Math.floor(upscaleProgress.eta / 60)}m ${upscaleProgress.eta % 60}s`
-                              : `${upscaleProgress.eta}s`}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Console */}
-                  <div className="flex-shrink-0 bg-dark-elevated rounded-2xl border border-gray-800 overflow-hidden">
-                    <button
-                      onClick={() => setShowConsole(!showConsole)}
-                      className="w-full px-4 py-3 border-b border-gray-800 flex items-center justify-between hover:bg-dark-surface transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Terminal className="w-5 h-5 text-accent-cyan" />
-                        <h2 className="font-semibold">Console</h2>
-                      </div>
-                      {showConsole ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                    </button>
-                    {showConsole && (
-                      <div className="p-4 max-h-64 overflow-y-auto font-mono text-sm bg-black/30">
-                        {consoleOutput.map((log, i) => (
-                          <div key={i} className="text-gray-300 mb-1">{log}</div>
-                        ))}
-                        <div ref={consoleEndRef} />
-                      </div>
-                    )}
-                  </div>
+                  <ProgressPanel
+                    upscaleProgress={upscaleProgress}
+                    showConsole={showConsole}
+                    setShowConsole={setShowConsole}
+                    consoleOutput={consoleOutput}
+                    consoleEndRef={consoleEndRef}
+                  />
                 </div>
               </Panel>
 
@@ -958,7 +707,7 @@ function App() {
                     isDragging={isDragging}
                     isProcessing={isProcessing}
                     queueCount={queue.length}
-                    showQueue={queueState.showQueue}
+                    showQueue={queueStore.showQueue}
                     onSelectVideo={handleSelectVideoWithQueue}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -1014,8 +763,8 @@ function App() {
                   />
 
                   {/* Editing Queue Item Banner */}
-                  {queueState.editingQueueItemId && (() => {
-                    const editingItem = queue.find(q => q.id === queueState.editingQueueItemId);
+                  {queueStore.editingQueueItemId && (() => {
+                    const editingItem = queue.find(q => q.id === queueStore.editingQueueItemId);
                     return editingItem ? (
                       <div className="flex-shrink-0 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/50 rounded-xl p-3">
                         <div className="flex items-center justify-between">
@@ -1025,8 +774,8 @@ function App() {
                           </div>
                           <button
                             onClick={() => {
-                              queueActions.setEditingQueueItemId(null);
-                              queueActions.setShowQueue(false);
+                              queueStore.setEditingQueueItemId(null);
+                              queueStore.setShowQueue(false);
                             }}
                             className="ml-2 px-3 py-1 text-xs bg-dark-surface hover:bg-dark-bg rounded-lg transition-colors"
                           >
@@ -1038,174 +787,49 @@ function App() {
                   })()}
 
                   {/* Action Buttons */}
-                  <div className="flex-shrink-0 flex gap-2 relative">
-                    {/* Force Stop Button - Only visible when stuck */}
-                    {!isProcessing && upscaleProgress && upscaleProgress.type === 'progress' && (
-                      <button
-                        onClick={handleForceStop}
-                        className="bg-red-900/50 hover:bg-red-800 text-red-200 px-4 rounded-xl border border-red-700/50 transition-colors flex items-center gap-2"
-                        title="Force stop stuck process"
-                      >
-                        <XCircle className="w-5 h-5" />
-                      </button>
-                    )}
-
-                    {/* Validate Workflow Button - hidden during processing */}
-                    {!isProcessing && (
-                      <button
-                        onClick={isValidating ? cancelValidation : validateWorkflow}
-                        disabled={!videoInfo && !isValidating}
-                        className={`font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
-                          isValidating
-                            ? 'bg-orange-600 hover:bg-orange-700 cursor-pointer text-white'
-                            : validationStatus === 'success'
-                            ? 'bg-green-600 hover:bg-green-700 text-white'
-                            : validationStatus === 'error'
-                            ? 'bg-red-600 hover:bg-red-700 text-white'
-                            : 'bg-dark-surface hover:bg-dark-bg border border-violet-500/50 hover:border-violet-400 text-violet-300 disabled:border-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
-                        }`}
-                        title={isValidating ? 'Click to cancel validation' : validationStatus === 'error' && validationError ? `Error: ${validationError}` : 'Validate the current workflow by processing first 5 seconds'}
-                      >
-                        {isValidating ? (
-                          <>
-                            <XCircle className="w-5 h-5" />
-                            Cancel
-                          </>
-                        ) : validationStatus === 'success' ? (
-                          <>
-                            <CheckCircle className="w-5 h-5" />
-                            Valid
-                          </>
-                        ) : validationStatus === 'error' ? (
-                          <>
-                            <AlertCircle className="w-5 h-5" />
-                            Failed
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="w-5 h-5" />
-                            Validate
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    {/* Preview Script Button - hidden during processing */}
-                    {!isProcessing && (
-                      <button
-                        onClick={handleLaunchPreviewer}
-                        disabled={!videoInfo || isLaunchingPreviewer}
-                        className={`font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
-                          isLaunchingPreviewer
-                            ? 'bg-teal-700 border border-teal-500/50 text-white cursor-wait'
-                            : previewerStatus === 'success'
-                            ? 'bg-teal-600 hover:bg-teal-700 text-white'
-                            : previewerStatus === 'error'
-                            ? 'bg-red-600 hover:bg-red-700 text-white'
-                            : 'bg-dark-surface hover:bg-dark-bg border border-teal-500/50 hover:border-teal-400 text-teal-300 disabled:border-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
-                        }`}
-                        title="Preview VapourSynth script with current workflow in vs-preview"
-                      >
-                        {isLaunchingPreviewer ? (
-                          <>
-                            <Play className="w-5 h-5 animate-spin" />
-                            Launching...
-                          </>
-                        ) : previewerStatus === 'success' ? (
-                          <>
-                            <CheckCircle className="w-5 h-5" />
-                            Launched
-                          </>
-                        ) : previewerStatus === 'error' ? (
-                          <>
-                            <XCircle className="w-5 h-5" />
-                            Failed
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-5 h-5" />
-                            Preview
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    {queueState.showQueue ? (
-                      <button
-                        onClick={queueState.isQueueStarted ? handleStopQueue : handleStartQueue}
-                        disabled={(!queueState.isQueueStarted && queue.filter(item => item.status === 'pending').length === 0) || queueState.isQueueStopping}
-                        className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
-                          queueState.isQueueStarted
-                            ? queueState.isQueueStopping
-                              ? 'bg-orange-600 cursor-wait'
-                              : 'bg-orange-500 hover:bg-orange-600'
-                            : 'bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed'
-                        }`}
-                      >
-                        {queueState.isQueueStarted ? (
-                          queueState.isQueueStopping ? (
-                            <>
-                              <Loader2 className="w-5 h-5 animate-spin" />
-                              Stopping Queue...
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="w-5 h-5" />
-                              Stop Queue
-                            </>
-                          )
-                        ) : (
-                          <>
-                            <Sparkles className="w-5 h-5" />
-                            Start Queue
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={isProcessing ? handleCancelUpscale : () => handleUpscale(selectedModel || '', useDirectML, filters, numStreams, segment)}
-                        disabled={isStartDisabled}
-                        className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
-                          isStopping
-                            ? 'bg-orange-500 cursor-not-allowed'
-                            : isProcessing
-                            ? 'bg-red-500 hover:bg-red-600'
-                            : 'bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed'
-                        }`}
-                      >
-                        {isStopping ? (
-                          <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            Stopping...
-                          </>
-                        ) : isProcessing ? (
-                          <>
-                            <XCircle className="w-5 h-5" />
-                            Stop Processing
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-5 h-5" />
-                            Start Processing
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
+                  <ActionButtons
+                    isProcessing={isProcessing}
+                    isStopping={isStopping}
+                    isStartDisabled={isStartDisabled}
+                    upscaleProgress={upscaleProgress}
+                    isValidating={isValidating}
+                    validationStatus={validationStatus}
+                    validationError={validationError}
+                    validateWorkflow={validateWorkflow}
+                    cancelValidation={cancelValidation}
+                    isLaunchingPreviewer={isLaunchingPreviewer}
+                    previewerStatus={previewerStatus}
+                    videoInfo={videoInfo}
+                    selectedModel={selectedModel}
+                    useDirectML={useDirectML}
+                    filters={filters}
+                    numStreams={numStreams}
+                    segment={segment}
+                    showQueue={queueStore.showQueue}
+                    isQueueStarted={queueStore.isQueueStarted}
+                    isQueueStopping={queueStore.isQueueStopping}
+                    queue={queue}
+                    handleForceStop={handleForceStop}
+                    handleLaunchPreviewer={handleLaunchPreviewer}
+                    handleUpscale={handleUpscale}
+                    handleCancelUpscale={handleCancelUpscale}
+                    handleStartQueue={handleStartQueue}
+                    handleStopQueue={handleStopQueue}
+                  />
                 </div>
               </Panel>
             </PanelGroup>
           </Panel>
           
           {/* Queue Panel - Collapsible at the bottom */}
-          {queueState.showQueue && (
+          {queueStore.showQueue && (
             <>
               <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-primary-purple transition-colors rounded-full" />
               <Panel defaultSize={20} minSize={15} maxSize={40}>
                 <QueuePanel
                   queue={queue}
-                  isQueueStarted={queueState.isQueueStarted}
-                  editingItemId={queueState.editingQueueItemId}
+                  isQueueStarted={queueStore.isQueueStarted}
+                  editingItemId={queueStore.editingQueueItemId}
                   onRemoveItem={removeFromQueue}
                   onSelectItem={handleSelectQueueItem}
                   onClearCompleted={clearCompletedItems}
@@ -1225,10 +849,10 @@ function App() {
         )}
       </div>
 
-      {/* Modals using extracted components */}
-      <ImportModelModal
-        show={showImportModal}
-        onClose={() => closeModalWithFocusRestore(() => setShowImportModal(false))}
+      {/* Modals */}
+      <AppModals
+        showImportModal={showImportModal}
+        onCloseImportModal={() => closeModalWithFocusRestore(() => setShowImportModal(false))}
         isImporting={isImporting}
         importForm={importForm}
         setImportForm={setImportForm}
@@ -1241,74 +865,40 @@ function App() {
         handlePrecisionChange={handlePrecisionChange}
         handleTemporalFramesChange={handleTemporalFramesChange}
         importProgress={importProgress}
-        mode={modalMode}
+        modalMode={modalMode}
         useDirectML={useDirectML}
-      />
-
-      <AutoBuildModal
-        show={showAutoBuildModal}
-        modelName={autoBuildModelName}
-        modelType={autoBuildModelType}
-        progress={importProgress}
-        isStatic={autoBuildIsStatic}
-        staticShape={autoBuildStaticShape}
-      />
-
-      <SettingsModal
-        show={showSettings}
-        onClose={() => closeModalWithFocusRestore(() => setShowSettings(false))}
-        useDirectML={useDirectML}
-        onToggleDirectML={handleToggleDirectML}
+        showAutoBuildModal={showAutoBuildModal}
+        autoBuildModelName={autoBuildModelName}
+        autoBuildModelType={autoBuildModelType}
+        autoBuildIsStatic={autoBuildIsStatic}
+        autoBuildStaticShape={autoBuildStaticShape}
+        showSettings={showSettings}
+        onCloseSettings={() => closeModalWithFocusRestore(() => setShowSettings(false))}
         numStreams={numStreams}
         onUpdateNumStreams={updateNumStreams}
+        onToggleDirectML={handleToggleDirectML}
         videoCompareArgs={videoCompareArgs}
         onUpdateVideoCompareArgs={handleUpdateVideoCompareArgs}
         onResetVideoCompareArgs={handleResetVideoCompareArgs}
         defaultOutputFolder={defaultOutputFolder}
         onUpdateDefaultOutputFolder={handleUpdateDefaultOutputFolder}
         onResetDefaultOutputFolder={handleResetDefaultOutputFolder}
-      />
-
-      <AboutModal
-        show={showAbout}
-        onClose={() => closeModalWithFocusRestore(() => setShowAbout(false))}
-      />
-
-      <PluginsModal
-        show={showPlugins || showPluginPrompt}
-        onClose={() => {
-          closeModalWithFocusRestore(() => {
-            setShowPlugins(false);
-            setShowPluginPrompt(false);
-          });
-        }}
+        showAbout={showAbout}
+        onCloseAbout={() => closeModalWithFocusRestore(() => setShowAbout(false))}
+        showPlugins={showPlugins}
+        showPluginPrompt={showPluginPrompt}
+        onClosePlugins={() => closeModalWithFocusRestore(() => { setShowPlugins(false); setShowPluginPrompt(false); })}
         onInstallationComplete={loadTemplates}
-      />
-
-      {showUpdateModal && (
-        <UpdateNotificationModal
-          updateInfo={updateInfo}
-          onClose={() => closeModalWithFocusRestore(() => setShowUpdateModal(false))}
-        />
-      )}
-
-      {showVsMlrtModal && vsMlrtVersionInfo && (
-        <VsMlrtUpdateModal
-          versionInfo={vsMlrtVersionInfo}
-          onClose={() => closeModalWithFocusRestore(() => setShowVsMlrtModal(false))}
-          onEnginesCleared={async () => {
-            await loadModels();
-            await loadUninitializedModels();
-          }}
-        />
-      )}
-
-      <FilterImportModal
-        isOpen={importModalState.isOpen}
-        onClose={closeImportModal}
-        workflowName={importModalState.workflowName}
-        filters={importModalState.filters}
-        onImport={confirmImportFilters}
+        showUpdateModal={showUpdateModal}
+        updateInfo={updateInfo}
+        onCloseUpdateModal={() => closeModalWithFocusRestore(() => setShowUpdateModal(false))}
+        showVsMlrtModal={showVsMlrtModal}
+        vsMlrtVersionInfo={vsMlrtVersionInfo}
+        onCloseVsMlrtModal={() => closeModalWithFocusRestore(() => setShowVsMlrtModal(false))}
+        onEnginesCleared={async () => { await loadModels(); await loadUninitializedModels(); }}
+        importModalState={importModalState}
+        closeImportModal={closeImportModal}
+        confirmImportFilters={confirmImportFilters}
       />
     </div>
   );

@@ -57,14 +57,6 @@ export class FFmpegManager {
 
     try {
       const axios = (await import('axios')).default;
-      const sevenBin = require('7zip-bin');
-      
-      // Fix 7zip path for ASAR if needed
-      let sevenZipPath = sevenBin.path7za;
-      if (sevenZipPath.includes('app.asar') && !sevenZipPath.includes('app.asar.unpacked')) {
-        sevenZipPath = sevenZipPath.replace('app.asar', 'app.asar.unpacked');
-      }
-      
       const _7z = (await import('7zip-min')).default;
       
       // Download ffmpeg

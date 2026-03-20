@@ -7,6 +7,8 @@ import { configManager } from './configManager';
 import { withLogSeparator } from './utils';
 import { sendModelImportProgress } from './ipcUtilities';
 import { ModelExtractor } from './modelExtractor';
+import { handleValidated } from './ipcValidation';
+import { z } from 'zod';
 
 // Module-level ModelExtractor instance for cancellation support
 let activeModelExtractor: ModelExtractor | null = null;
@@ -454,17 +456,17 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     }
   });
 
-  ipcMain.handle('delete-model', async (event, modelPath: string, modelId: string) => {
+  handleValidated('delete-model', z.tuple([z.string().min(1), z.string().min(1)]), async ([modelPath, modelId]) => {
     logger.info(`Deleting model: ${modelPath} (id: ${modelId})`);
     try {
       // Delete only the specific file being requested
       await fs.remove(modelPath);
       logger.info(`Deleted file: ${modelPath}`);
-      
+
       // Delete metadata only for this specific model ID
       await configManager.deleteModelMetadata(modelId);
       logger.info(`Deleted metadata for model: ${modelId}`);
-      
+
       return { success: true };
     } catch (error) {
       logger.error('Error deleting model:', error);
@@ -476,7 +478,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     }
   });
 
-  ipcMain.handle('rename-model', async (event, modelPath: string, modelId: string, newName: string) => {
+  handleValidated('rename-model', z.tuple([z.string().min(1), z.string().min(1), z.string().min(1)]), async ([modelPath, modelId, newName]) => {
     logger.info(`Renaming model: ${modelId} -> ${newName}`);
     try {
       const ext = path.extname(modelPath);
@@ -535,7 +537,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     return { success: true };
   });
 
-  ipcMain.handle('validate-onnx-model', async (event, onnxPath: string) => {
+  handleValidated('validate-onnx-model', z.string().min(1), async (onnxPath) => {
     logger.info(`Validating ONNX model: ${onnxPath}`);
     try {
       const { ModelValidator } = await import('./modelValidator');

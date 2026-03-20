@@ -5,17 +5,10 @@ import { app, BrowserWindow} from 'electron';
 import { ModelExtractor } from './modelExtractor';
 import { logger } from './logger';
 import { PATHS, VS_MLRT_VERSION } from './constants';
-import { runCommand } from './utils';
+import { runCommand, getBundledBasePath } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
 import { VsMlrtManager } from './vsMlrtManager';
-
-// Fix 7zip-bin path for ASAR BEFORE importing 7zip-min
-const sevenBin = require('7zip-bin');
-if (sevenBin.path7za.includes('app.asar') && !sevenBin.path7za.includes('app.asar.unpacked')) {
-  sevenBin.path7za = sevenBin.path7za.replace('app.asar', 'app.asar.unpacked');
-  logger.info(`Fixed 7zip path to: ${sevenBin.path7za}`);
-}
 import * as _7z from '7zip-min';
 
 export interface DownloadProgress {
@@ -595,10 +588,7 @@ export class DependencyManager {
    * This handles upgrade-in-place scenarios where setupDependencies() is never called.
    */
   private async updateBundledFiles(): Promise<void> {
-    const appPath = app.getAppPath();
-    const bundledBasePath = appPath.includes('.asar')
-      ? appPath.replace('app.asar', 'app.asar.unpacked')
-      : appPath;
+    const bundledBasePath = getBundledBasePath();
 
     // Always overwrite VapourSynth template — it's a placeholder-driven generated script,
     // not user-customizable, and must match the current script generator.
@@ -664,18 +654,8 @@ export class DependencyManager {
     
     await fs.ensureDir(PATHS.CONFIG);
     
-    // Get bundled template paths (handle ASAR unpacking)
-    const appPath = app.getAppPath();
-    let bundledBasePath: string;
-    
-    if (appPath.includes('.asar')) {
-      // In production with ASAR, templates are unpacked
-      bundledBasePath = appPath.replace('app.asar', 'app.asar.unpacked');
-    } else {
-      // In development or non-ASAR build
-      bundledBasePath = appPath;
-    }
-    
+    // Get bundled template paths
+    const bundledBasePath = getBundledBasePath();
     logger.dependency(`Bundled templates base path: ${bundledBasePath}`);
     
     // Copy stock app-config.json with pre-configured model metadata
@@ -727,18 +707,8 @@ export class DependencyManager {
   private async extractExtraPlugins(): Promise<void> {
     logger.dependency('Checking for extra plugins');
     
-    // Get bundled extra plugins path (handle ASAR unpacking)
-    const appPath = app.getAppPath();
-    let bundledBasePath: string;
-    
-    if (appPath.includes('.asar')) {
-      // In production with ASAR, plugins are unpacked
-      bundledBasePath = appPath.replace('app.asar', 'app.asar.unpacked');
-    } else {
-      // In development or non-ASAR build
-      bundledBasePath = appPath;
-    }
-    
+    // Get bundled extra plugins path
+    const bundledBasePath = getBundledBasePath();
     const extraPluginsPath = path.join(bundledBasePath, 'include', 'plugins', 'extra_plugins.7z');
     
     if (await fs.pathExists(extraPluginsPath)) {

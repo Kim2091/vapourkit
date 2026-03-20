@@ -1,20 +1,51 @@
+// src/hooks/useQueueStore.ts - Consolidated queue data layer (merged from useQueueState + useQueueManagement)
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { QueueItem, Filter, SegmentSelection } from '../electron.d';
 
-interface UseQueueManagementProps {
+interface UseQueueStoreProps {
   onLog: (message: string) => void;
 }
 
-export function useQueueManagement({ onLog }: UseQueueManagementProps) {
+export function useQueueStore({ onLog }: UseQueueStoreProps) {
+  // --- UI state (from useQueueState) ---
+  const [showQueue, setShowQueueRaw] = useState(false);
+  const [editingQueueItemId, setEditingQueueItemId] = useState<string | null>(null);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [isQueueStarted, setIsQueueStarted] = useState(false);
+  const [isQueueStopping, setIsQueueStopping] = useState(false);
+  const [isProcessingQueueItem, setIsProcessingQueueItem] = useState(false);
+
+  // --- Queue data (from useQueueManagement) ---
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isLoadingQueue, setIsLoadingQueue] = useState(true);
   const hasLoadedInitially = useRef(false);
+
+  // Load showQueue state from persistent storage
+  useEffect(() => {
+    const loadState = async () => {
+      try {
+        const result = await window.electronAPI.getShowQueue();
+        setShowQueueRaw(result.show);
+      } catch (error) {
+        onLog(`Error loading queue state: ${error}`);
+      }
+    };
+    loadState();
+  }, [onLog]);
+
+  const setShowQueue = useCallback((show: boolean) => {
+    setShowQueueRaw(show);
+    window.electronAPI.setShowQueue(show).catch(error => {
+      onLog(`Error saving queue state: ${error}`);
+    });
+  }, [onLog]);
 
   // Load queue from persistent storage
   const loadQueue = useCallback(async () => {
     try {
       const savedQueue = await window.electronAPI.getQueue();
-      
+
       // Reset any items that were processing when app was closed
       const resetQueue = savedQueue.map((item: QueueItem) => {
         if (item.status === 'processing') {
@@ -22,15 +53,15 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
         }
         return item;
       });
-      
-      const resetCount = resetQueue.filter((item: QueueItem, idx: number) => 
+
+      const resetCount = resetQueue.filter((item: QueueItem, idx: number) =>
         item.status === 'pending' && savedQueue[idx].status === 'processing'
       ).length;
-      
+
       if (resetCount > 0) {
         onLog(`Reset ${resetCount} interrupted item(s) back to pending`);
       }
-      
+
       setQueue(resetQueue);
       onLog(`Loaded ${resetQueue.length} queue items`);
     } catch (error) {
@@ -56,27 +87,22 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     loadQueue();
   }, [loadQueue]);
 
-  // Auto-save queue whenever it changes (but only after initial load)
-  // Debounce saves to prevent excessive disk writes during processing
-  // Use a ref to store the queue for saving to avoid triggering on every progress update
+  // Auto-save queue whenever it changes (debounced)
   const queueForSaveRef = useRef<QueueItem[]>([]);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
+
   useEffect(() => {
     if (hasLoadedInitially.current && !isLoadingQueue) {
-      // Store the queue in ref for the timeout callback
       queueForSaveRef.current = queue;
-      
-      // Clear existing timeout
+
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      
-      // Only save after 2 seconds of inactivity
+
       saveTimeoutRef.current = setTimeout(() => {
         saveQueue(queueForSaveRef.current);
       }, 2000);
-      
+
       return () => {
         if (saveTimeoutRef.current) {
           clearTimeout(saveTimeoutRef.current);
@@ -85,7 +111,8 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     }
   }, [queue, isLoadingQueue, saveQueue]);
 
-  // Add videos to queue (skips duplicates already pending/processing)
+  // --- Queue CRUD operations ---
+
   const addToQueue = useCallback((
     videoPaths: string[],
     currentWorkflow: {
@@ -102,7 +129,6 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     },
     customOutputPath?: string
   ) => {
-    // Filter out videos that are already in the queue (pending or processing)
     setQueue(prevQueue => {
       const existingPaths = new Set(
         prevQueue
@@ -116,48 +142,44 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
       }
       if (uniquePaths.length === 0) return prevQueue;
 
-    const newItems: QueueItem[] = uniquePaths.map(videoPath => {
-      const videoName = videoPath.split(/[\\\\]/).pop() || 'unknown';
-      
-      // Generate output path
-      let outputPath: string;
-      if (customOutputPath) {
-        // If custom output path is provided, use it directly
-        outputPath = customOutputPath;
-      } else {
-        // Use same directory as input video
-        outputPath = videoPath.replace(/\.[^/.]+$/, '') + `_processed.${currentWorkflow.outputFormat}`;
-      }
+      const newItems: QueueItem[] = uniquePaths.map(videoPath => {
+        const videoName = videoPath.split(/[\\\\]/).pop() || 'unknown';
 
-      return {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        videoPath,
-        videoName,
-        outputPath,
-        status: 'pending' as const,
-        addedAt: new Date().toISOString(),
-        workflow: {
-          selectedModel: currentWorkflow.selectedModel,
-          filters: structuredClone(currentWorkflow.filters), // Deep copy
-          ffmpegArgs: currentWorkflow.ffmpegArgs,
-          processingFormat: currentWorkflow.processingFormat,
-          outputFormat: currentWorkflow.outputFormat,
-          videoCompareArgs: currentWorkflow.videoCompareArgs,
-          useDirectML: currentWorkflow.useDirectML,
-          numStreams: currentWorkflow.numStreams,
-          segment: currentWorkflow.segment ? { ...currentWorkflow.segment } : undefined,
-          colorimetry: currentWorkflow.colorimetry,
-        },
-      };
+        let outputPath: string;
+        if (customOutputPath) {
+          outputPath = customOutputPath;
+        } else {
+          outputPath = videoPath.replace(/\.[^/.]+$/, '') + `_processed.${currentWorkflow.outputFormat}`;
+        }
+
+        return {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          videoPath,
+          videoName,
+          outputPath,
+          status: 'pending' as const,
+          addedAt: new Date().toISOString(),
+          workflow: {
+            selectedModel: currentWorkflow.selectedModel,
+            filters: structuredClone(currentWorkflow.filters),
+            ffmpegArgs: currentWorkflow.ffmpegArgs,
+            processingFormat: currentWorkflow.processingFormat,
+            outputFormat: currentWorkflow.outputFormat,
+            videoCompareArgs: currentWorkflow.videoCompareArgs,
+            useDirectML: currentWorkflow.useDirectML,
+            numStreams: currentWorkflow.numStreams,
+            segment: currentWorkflow.segment ? { ...currentWorkflow.segment } : undefined,
+            colorimetry: currentWorkflow.colorimetry,
+          },
+        };
+      });
+
+      onLog(`Added ${newItems.length} video(s) to queue`);
+      return [...prevQueue, ...newItems];
     });
-
-    onLog(`Added ${newItems.length} video(s) to queue`);
-    return [...prevQueue, ...newItems];
-    }); // end setQueue
     return [];
   }, [onLog]);
 
-  // Remove item from queue
   const removeFromQueue = useCallback((itemId: string) => {
     setQueue(prev => {
       const updated = prev.filter(item => item.id !== itemId);
@@ -166,27 +188,24 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     });
   }, [onLog]);
 
-  // Update queue item
   const updateQueueItem = useCallback((itemId: string, updates: Partial<QueueItem>) => {
-    setQueue(prev => prev.map(item => 
+    setQueue(prev => prev.map(item =>
       item.id === itemId ? { ...item, ...updates } : item
     ));
   }, []);
 
-  // Update item workflow
   const updateItemWorkflow = useCallback((
-    itemId: string, 
+    itemId: string,
     workflow: Partial<QueueItem['workflow']>
   ) => {
-    setQueue(prev => prev.map(item => 
-      item.id === itemId 
+    setQueue(prev => prev.map(item =>
+      item.id === itemId
         ? { ...item, workflow: { ...item.workflow, ...workflow } }
         : item
     ));
     onLog(`Updated workflow for queue item`);
   }, [onLog]);
 
-  // Clear entire queue
   const clearQueue = useCallback(async () => {
     try {
       await window.electronAPI.clearQueue();
@@ -197,10 +216,9 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     }
   }, [onLog]);
 
-  // Clear only completed/error items
   const clearCompletedItems = useCallback(() => {
     setQueue(prev => {
-      const updated = prev.filter(item => 
+      const updated = prev.filter(item =>
         item.status === 'pending' || item.status === 'processing'
       );
       onLog(`Cleared ${prev.length - updated.length} completed items`);
@@ -208,7 +226,6 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     });
   }, [onLog]);
 
-  // Reorder queue items
   const reorderQueue = useCallback((fromIndex: number, toIndex: number) => {
     setQueue(prev => {
       const updated = [...prev];
@@ -218,12 +235,10 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     });
   }, []);
 
-  // Get next pending item
   const getNextPendingItem = useCallback((): QueueItem | null => {
     return queue.find(item => item.status === 'pending') || null;
   }, [queue]);
 
-  // Get queue statistics
   const getQueueStats = useCallback(() => {
     return {
       total: queue.length,
@@ -234,9 +249,8 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     };
   }, [queue]);
 
-  // Requeue a completed or errored item
   const requeueItem = useCallback((itemId: string) => {
-    setQueue(prev => prev.map(item => 
+    setQueue(prev => prev.map(item =>
       item.id === itemId && (item.status === 'completed' || item.status === 'error')
         ? { ...item, status: 'pending' as const, progress: 0, errorMessage: undefined }
         : item
@@ -244,7 +258,6 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
     onLog('Item reset to pending for reprocessing');
   }, [onLog]);
 
-  // Duplicate a queue item (inserts copy right after the original)
   const duplicateQueueItem = useCallback((itemId: string) => {
     setQueue(prev => {
       const item = prev.find(q => q.id === itemId);
@@ -268,6 +281,21 @@ export function useQueueManagement({ onLog }: UseQueueManagementProps) {
   }, [onLog]);
 
   return {
+    // UI state
+    showQueue,
+    editingQueueItemId,
+    isProcessingQueue,
+    isQueueStarted,
+    isQueueStopping,
+    isProcessingQueueItem,
+    setShowQueue,
+    setEditingQueueItemId,
+    setIsProcessingQueue,
+    setIsQueueStarted,
+    setIsQueueStopping,
+    setIsProcessingQueueItem,
+
+    // Queue data
     queue,
     isLoadingQueue,
     addToQueue,

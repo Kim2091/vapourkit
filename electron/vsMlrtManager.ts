@@ -5,12 +5,6 @@ import axios from 'axios';
 import { BrowserWindow } from 'electron';
 import { PATHS, VS_MLRT_VERSION } from './constants';
 import { logger } from './logger';
-
-// Fix 7zip-bin path for ASAR BEFORE importing 7zip-min
-const sevenBin = require('7zip-bin');
-if (sevenBin.path7za.includes('app.asar') && !sevenBin.path7za.includes('app.asar.unpacked')) {
-  sevenBin.path7za = sevenBin.path7za.replace('app.asar', 'app.asar.unpacked');
-}
 import * as _7z from '7zip-min';
 
 export type VsMlrtComponent = 'onnx-runtime' | 'tensorrt';

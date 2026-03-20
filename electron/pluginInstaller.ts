@@ -7,13 +7,7 @@ import * as https from 'https';
 import { logger } from './logger';
 import { PATHS } from './constants';
 import { configManager } from './configManager';
-
-// Fix 7zip-bin path for ASAR BEFORE importing 7zip-min
-const sevenBin = require('7zip-bin');
-if (sevenBin.path7za.includes('app.asar') && !sevenBin.path7za.includes('app.asar.unpacked')) {
-  sevenBin.path7za = sevenBin.path7za.replace('app.asar', 'app.asar.unpacked');
-  logger.info(`Fixed 7zip path to: ${sevenBin.path7za}`);
-}
+import { getBundledBasePath } from './utils';
 import * as _7z from '7zip-min';
 
 export interface PluginDependencyProgress {
@@ -567,18 +561,8 @@ export class PluginInstaller {
   private async extractAllPlugins(): Promise<void> {
     logger.info('Extracting all plugins from plugins folder');
     
-    // Get bundled plugins path (handle ASAR unpacking)
-    const appPath = app.getAppPath();
-    let bundledBasePath: string;
-    
-    if (appPath.includes('.asar')) {
-      // In production with ASAR, plugins are unpacked
-      bundledBasePath = appPath.replace('app.asar', 'app.asar.unpacked');
-    } else {
-      // In development or non-ASAR build
-      bundledBasePath = appPath;
-    }
-    
+    // Get bundled plugins path
+    const bundledBasePath = getBundledBasePath();
     const pluginsFolder = path.join(bundledBasePath, 'include', 'plugins');
     
     if (!await fs.pathExists(pluginsFolder)) {
@@ -746,18 +730,8 @@ export class PluginInstaller {
   private async extractAllScripts(): Promise<void> {
     logger.info('Extracting all scripts from scripts folder');
     
-    // Get bundled scripts path (handle ASAR unpacking)
-    const appPath = app.getAppPath();
-    let bundledBasePath: string;
-    
-    if (appPath.includes('.asar')) {
-      // In production with ASAR, scripts are unpacked
-      bundledBasePath = appPath.replace('app.asar', 'app.asar.unpacked');
-    } else {
-      // In development or non-ASAR build
-      bundledBasePath = appPath;
-    }
-    
+    // Get bundled scripts path
+    const bundledBasePath = getBundledBasePath();
     const scriptsFolder = path.join(bundledBasePath, 'include', 'scripts');
     
     if (!await fs.pathExists(scriptsFolder)) {
@@ -853,18 +827,8 @@ export class PluginInstaller {
   private async copyFilterTemplates(): Promise<void> {
     logger.info('Copying filter templates from plugin_filters folder');
     
-    // Get bundled plugin_filters path (handle ASAR unpacking)
-    const appPath = app.getAppPath();
-    let bundledBasePath: string;
-    
-    if (appPath.includes('.asar')) {
-      // In production with ASAR, plugins are unpacked
-      bundledBasePath = appPath.replace('app.asar', 'app.asar.unpacked');
-    } else {
-      // In development or non-ASAR build
-      bundledBasePath = appPath;
-    }
-    
+    // Get bundled plugin_filters path
+    const bundledBasePath = getBundledBasePath();
     const pluginFiltersFolder = path.join(bundledBasePath, 'include', 'plugins', 'plugin_filters');
     
     if (!await fs.pathExists(pluginFiltersFolder)) {

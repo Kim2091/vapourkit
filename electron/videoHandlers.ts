@@ -9,6 +9,8 @@ import { configManager } from './configManager';
 import { withLogSeparator } from './utils';
 import { extractVideoMetadata, getVideoFrameCount } from './videoUtils';
 import { formatBytes } from './ipcUtilities';
+import { handleValidated } from './ipcValidation';
+import { z } from 'zod';
 import { VapourSynthScriptGenerator } from './scriptGenerator';
 import { UpscaleExecutor } from './upscaleExecutor';
 import { DependencyManager } from './dependencyManager';
@@ -55,15 +57,15 @@ export function registerVideoHandlers(
   scriptGenerator: VapourSynthScriptGenerator,
   dependencyManager: DependencyManager
 ) {
-  ipcMain.handle('get-video-info', async (event, filePath: string) => {
+  handleValidated('get-video-info', z.string().min(1), async (filePath) => {
     logger.info(`Getting video info for: ${filePath}`);
     try {
       const stats = await fs.stat(filePath);
       const metadata = await extractVideoMetadata(filePath);
-      
+
       // Get exact frame count using BestSource
       const frameCount = await getVideoFrameCount(filePath);
-      
+
       const info = {
         path: filePath,
         name: path.basename(filePath),
@@ -79,7 +81,7 @@ export function registerVideoHandlers(
         duration: metadata.duration,
         frameCount: frameCount
       };
-      
+
       logger.info(`Video info: ${info.name}, ${info.sizeFormatted}, ${metadata.resolution || 'unknown resolution'}, ${metadata.fps ? metadata.fps + ' fps' : 'unknown fps'}, ${metadata.pixelFormat || 'unknown format'}${frameCount ? `, ${frameCount} frames` : ''}`);
       return info;
     } catch (error) {
@@ -88,17 +90,17 @@ export function registerVideoHandlers(
     }
   });
 
-  ipcMain.handle('read-video-file', async (event, filePath: string) => {
+  handleValidated('read-video-file', z.string().min(1), async (filePath) => {
     try {
       // Check file size first to prevent loading massive files into memory
       const stats = await fs.stat(filePath);
-      
+
       // Warning: Reading large files into memory can cause the app to crash.
       // For playback, use the 'video://' protocol instead.
       if (stats.size > 500 * 1024 * 1024) {
          logger.warn(`Reading large file into memory: ${filePath} (${formatBytes(stats.size)})`);
       }
-      
+
       return await fs.readFile(filePath);
     } catch (error) {
       logger.error('Error reading video file:', error);
@@ -383,7 +385,7 @@ export function registerVideoHandlers(
     return { success: true };
   });
 
-  ipcMain.handle('compare-videos', async (event, inputPath: string, outputPath: string) => {
+  handleValidated('compare-videos', z.tuple([z.string().min(1), z.string().min(1)]), async ([inputPath, outputPath]) => {
     logger.info(`Launching video comparison tool`);
     logger.info(`Input: ${inputPath}`);
     logger.info(`Output: ${outputPath}`);

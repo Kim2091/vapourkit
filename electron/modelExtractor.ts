@@ -1,9 +1,9 @@
 // electron/modelExtractor.ts
-import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { logger } from './logger';
 import { PATHS } from './constants';
+import { getBundledBasePath } from './utils';
 
 export class ModelExtractor {
   private bundledModelsPath: string;
@@ -11,20 +11,7 @@ export class ModelExtractor {
   private isForceStopping: boolean = false;
 
   constructor() {
-    // Get bundled models path
-    const appPath = app.getAppPath();
-    if (process.env.NODE_ENV === 'development') {
-      // In development, models are in the project root under include/
-      this.bundledModelsPath = path.join(appPath, 'include', 'models');
-    } else {
-      // In production, models are unpacked from ASAR
-      if (appPath.includes('.asar')) {
-        const asarUnpackedPath = appPath.replace('app.asar', 'app.asar.unpacked');
-        this.bundledModelsPath = path.join(asarUnpackedPath, 'include', 'models');
-      } else {
-        this.bundledModelsPath = path.join(appPath, 'include', 'models');
-      }
-    }
+    this.bundledModelsPath = path.join(getBundledBasePath(), 'include', 'models');
     
     logger.model(`Initialized ModelExtractor`);
     logger.model(`Bundled models path: ${this.bundledModelsPath}`);

@@ -1,9 +1,9 @@
 // electron/configManager.ts
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { app } from 'electron';
 import { PATHS } from './constants';
 import { logger } from './logger';
+import { getBundledBasePath } from './utils';
 import type { ModelType } from './scriptGenerator';
 
 // Single source of truth for FFmpeg default arguments
@@ -145,11 +145,7 @@ export class ConfigManager {
 
   private async loadBundledStockConfig(): Promise<Record<string, unknown> | null> {
     try {
-      const appPath = app.getAppPath();
-      const bundledBasePath = appPath.includes('.asar')
-        ? appPath.replace('app.asar', 'app.asar.unpacked')
-        : appPath;
-
+      const bundledBasePath = getBundledBasePath();
       const stockConfigPath = path.join(bundledBasePath, 'include', 'stock-app-config.json');
       if (!await fs.pathExists(stockConfigPath)) {
         logger.warn(`Bundled stock config not found at: ${stockConfigPath}`);

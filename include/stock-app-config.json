@@ -6,6 +6,7 @@
       "useFp32": true,
       "useBf16": false,
       "modelType": "vsr",
+      "temporalFrames": 5,
       "createdAt": "2026-02-07T00:35:14.311Z",
       "displayTag": "LQ Anime or Cartoons (Dot Crawl, Rainbows)",
       "category": ["Dot Crawl", "Rainbowing", "Color Bleed", "Anime", "Cartoons", "Compression"]
@@ -14,6 +15,7 @@
       "useFp32": false,
       "useBf16": false,
       "modelType": "vsr",
+      "temporalFrames": 5,
       "createdAt": "2025-10-29T06:27:58.864Z",
       "displayTag": "Classic Anime",
       "category": ["Anime", "Cartoons", "Noise", "Compression"]
@@ -22,6 +24,7 @@
       "useFp32": false,
       "useBf16": false,
       "modelType": "vsr",
+      "temporalFrames": 5,
       "createdAt": "2025-10-29T06:27:58.864Z",
       "displayTag": "LQ Anime",
       "category": ["Anime", "Cartoons", "Noise", "Compression"]
