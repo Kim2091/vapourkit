@@ -342,9 +342,9 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                   className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-primary-blue focus:ring-primary-blue focus:ring-offset-0"
                 />
                 <label htmlFor="skipValidation" className="text-sm text-gray-300 cursor-pointer">
-                  Skip ONNX validation before building
+                  Skip ONNX validation
                 </label>
-                <span className="text-xs text-gray-500">(use if validation fails but model is known to work)</span>
+                <span className="text-xs text-gray-500">(skips auto-detection and build-time validation)</span>
               </div>
             </div>
           )}

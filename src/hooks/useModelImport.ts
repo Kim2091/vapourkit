@@ -75,6 +75,10 @@ export const useModelImport = (
   const [importProgress, setImportProgress] = useState<ModelImportProgress | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importForm, setImportForm] = useState<ImportForm>(DEFAULT_IMPORT_FORM);
+  // Ref to access skipValidation inside callbacks without re-creating them
+  const skipValidationRef = useRef(importForm.skipValidation);
+  skipValidationRef.current = importForm.skipValidation;
+
   // Auto-build modal state
   const [showAutoBuildModal, setShowAutoBuildModal] = useState(false);
   const [autoBuildModelName, setAutoBuildModelName] = useState('');
@@ -105,6 +109,10 @@ export const useModelImport = (
         let detectedTemporalFrames: number | undefined;
         let detectedPrecision: 'fp16' | 'bf16' | 'fp32' | undefined;
         let detectionFailed = false;
+
+        if (skipValidationRef.current) {
+          addConsoleLog(`[Model] Skipping ONNX auto-detection (skip validation enabled)`);
+        } else {
         try {
           const validation = await window.electronAPI.validateOnnxModel(result);
           if (!validation.isValid) {
@@ -152,6 +160,7 @@ export const useModelImport = (
         } catch (validationError) {
           console.warn('Could not validate ONNX model:', validationError);
           detectionFailed = true;
+        }
         }
 
         addConsoleLog(`[Model] Setting form - detectedIsStatic: ${detectedIsStatic}, detectedShape: ${detectedShape ? detectedShape.join('x') : 'none'}`);
