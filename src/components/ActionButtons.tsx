@@ -1,7 +1,7 @@
 // src/components/ActionButtons.tsx - Validate/Preview/Start/Stop button cluster
 
 import { memo } from 'react';
-import { Sparkles, XCircle, Loader2, CheckCircle, AlertCircle, Play } from 'lucide-react';
+import { Sparkles, XCircle, Loader2, CheckCircle, AlertCircle, Play, Gauge } from 'lucide-react';
 import type { QueueItem, SegmentSelection, Filter, UpscaleProgress } from '../electron.d';
 import type { ValidationStatus } from '../hooks/useOutputResolution';
 
@@ -30,6 +30,7 @@ interface ActionButtonsProps {
   filters: Filter[];
   numStreams: number;
   segment: SegmentSelection;
+  benchmarkMode: boolean;
 
   // Queue state
   showQueue: boolean;
@@ -40,7 +41,7 @@ interface ActionButtonsProps {
   // Handlers
   handleForceStop: () => void;
   handleLaunchPreviewer: () => void;
-  handleUpscale: (model: string, useDirectML: boolean, filters: Filter[], numStreams: number, segment: SegmentSelection) => void;
+  handleUpscale: (model: string, useDirectML: boolean, filters: Filter[], numStreams: number, segment: SegmentSelection, benchmarkMode: boolean) => void;
   handleCancelUpscale: () => void;
   handleStartQueue: () => void;
   handleStopQueue: () => void;
@@ -64,6 +65,7 @@ export const ActionButtons = memo(function ActionButtons({
   filters,
   numStreams,
   segment,
+  benchmarkMode,
   showQueue,
   isQueueStarted,
   isQueueStopping,
@@ -201,13 +203,15 @@ export const ActionButtons = memo(function ActionButtons({
         </button>
       ) : (
         <button
-          onClick={isProcessing ? handleCancelUpscale : () => handleUpscale(selectedModel || '', useDirectML, filters, numStreams, segment)}
+          onClick={isProcessing ? handleCancelUpscale : () => handleUpscale(selectedModel || '', useDirectML, filters, numStreams, segment, benchmarkMode)}
           disabled={isStartDisabled}
           className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
             isStopping
               ? 'bg-orange-500 cursor-not-allowed'
               : isProcessing
               ? 'bg-red-500 hover:bg-red-600'
+              : benchmarkMode
+              ? 'bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed'
               : 'bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed'
           }`}
         >
@@ -220,6 +224,11 @@ export const ActionButtons = memo(function ActionButtons({
             <>
               <XCircle className="w-5 h-5" />
               Stop Processing
+            </>
+          ) : benchmarkMode ? (
+            <>
+              <Gauge className="w-5 h-5" />
+              Start Benchmark
             </>
           ) : (
             <>

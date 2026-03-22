@@ -1,10 +1,10 @@
 // OutputSettingsPanel.tsx
 import { memo, useState, useEffect } from 'react';
-import { Download, ChevronDown, ChevronUp, Sliders } from 'lucide-react';
+import { Download, ChevronDown, ChevronUp, Sliders, Gauge } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
 import type { Codec, Preset, Encoder } from '../utils/ffmpegConfig';
-import { 
-  parseFfmpegArgs, 
+import {
+  parseFfmpegArgs,
   generateFfmpegArgs,
   getRecommendedCrfRange,
   supportsCrf,
@@ -23,10 +23,12 @@ interface OutputSettingsPanelProps {
   ffmpegArgs: string;
   processingFormat: string;
   isProcessing: boolean;
+  benchmarkMode: boolean;
   onFormatChange: (format: string) => void;
   onSelectOutputFile: () => void;
   onFfmpegArgsChange: (args: string) => void;
   onProcessingFormatChange: (format: string) => void;
+  onBenchmarkModeChange: (enabled: boolean) => void;
 }
 
 export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
@@ -36,10 +38,12 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   ffmpegArgs,
   processingFormat,
   isProcessing,
+  benchmarkMode,
   onFormatChange,
   onSelectOutputFile,
   onFfmpegArgsChange,
   onProcessingFormatChange,
+  onBenchmarkModeChange,
 }: OutputSettingsPanelProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [advancedMode, setAdvancedMode] = useState(false);
@@ -152,9 +156,35 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
           <Download className="w-4 h-4 text-accent-cyan" />
           <h3 className="text-base font-semibold">Output Settings</h3>
         </div>
+        <button
+          onClick={() => onBenchmarkModeChange(!benchmarkMode)}
+          disabled={isProcessing}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+            benchmarkMode
+              ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30'
+              : 'bg-dark-surface text-gray-400 border border-gray-700 hover:border-gray-600 hover:text-gray-300'
+          }`}
+          title="Benchmark mode: discard output and measure processing speed only"
+        >
+          <Gauge className="w-3.5 h-3.5" />
+          Benchmark
+        </button>
       </div>
 
-      {/* Always Visible: Format & Save Location */}
+      {/* Benchmark Mode Info */}
+      {benchmarkMode && (
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+            <Gauge className="w-4 h-4 text-orange-400 flex-shrink-0" />
+            <p className="text-xs text-orange-300">
+              Output will be discarded. Measures processing speed only.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Always Visible: Format & Save Location (hidden in benchmark mode) */}
+      {!benchmarkMode && (
       <div className="px-4 py-3 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -227,9 +257,10 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
           </span>
         </button>
       </div>
+      )}
 
-      {/* Expandable Encoding Settings */}
-      {isExpanded && (
+      {/* Expandable Encoding Settings (hidden in benchmark mode) */}
+      {!benchmarkMode && isExpanded && (
         <div className="px-4 pb-3 border-t border-gray-800 pt-3">
           <div className="space-y-3">
           {/* Simple Mode */}

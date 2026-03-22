@@ -139,32 +139,35 @@ export class UpscaleExecutor {
     return this.vsInfoExtractor.getOutputInfo(scriptPath);
   }
 
-  async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0, previewMode: boolean = false, segment?: SegmentSelection, fps?: number): Promise<void> {
+  async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0, previewMode: boolean = false, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
         this.logExecutionStart(scriptPath, inputPath, outputPath, totalFrames);
-        
+        if (benchmarkMode) {
+          logger.upscale('BENCHMARK MODE: Output will be discarded, measuring processing speed only');
+        }
+
         await this.validateFiles(scriptPath, inputPath);
         const metadata = await this.getVideoMetadata(inputPath);
-        
+
         // Get output info for RGB handling
         const outputInfo = await this.getOutputInfo(scriptPath);
-        
+
         await this.logScriptContent(scriptPath);
-        
+
         const env = this.setupEnvironment();
         await this.validateExecutables();
-        
+
         const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
-        
+
         // Spawn processes
         const vspipe = this.spawnVspipe(scriptPath, env, isRawVideo);
-        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, previewMode, segment, fps);
+        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, previewMode, segment, fps, benchmarkMode);
         const ffmpeg = this.spawnFFmpeg(ffmpegArgs);
-        
+
         this.setupProcessPiping(vspipe, ffmpeg);
-        this.setupProcessMonitoring(vspipe, ffmpeg, totalFrames, outputPath, resolve, reject);
-        
+        this.setupProcessMonitoring(vspipe, ffmpeg, totalFrames, outputPath, resolve, reject, benchmarkMode);
+
         this.process = vspipe;
         this.ffmpegProcess = ffmpeg;
         
@@ -277,14 +280,35 @@ export class UpscaleExecutor {
     });
   }
 
-  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, previewMode: boolean = false, segment?: SegmentSelection, fps?: number): Promise<string[]> {
+  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, previewMode: boolean = false, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<string[]> {
+    if (benchmarkMode) {
+      logger.upscale('Building FFmpeg command for BENCHMARK MODE (null output)');
+      const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
+      const ffmpegArgs: string[] = [];
+
+      if (isRawVideo) {
+        ffmpegArgs.push('-f', 'rawvideo');
+        const pixFmt = this.mapVsFormatToFfmpeg(outputInfo.pixelFormat);
+        ffmpegArgs.push('-pix_fmt', pixFmt);
+        if (outputInfo.resolution) ffmpegArgs.push('-s', outputInfo.resolution);
+        if (outputInfo.fpsString) ffmpegArgs.push('-r', outputInfo.fpsString);
+        else if (outputInfo.fps) ffmpegArgs.push('-r', `${outputInfo.fps}`);
+      } else {
+        ffmpegArgs.push('-f', 'yuv4mpegpipe');
+      }
+
+      ffmpegArgs.push('-i', 'pipe:0');
+      ffmpegArgs.push('-f', 'null', '-');
+      return ffmpegArgs;
+    }
+
     logger.upscale('Building FFmpeg command with metadata passthrough and preview output');
     const ffmpegConfig = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
-    
+
     const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
-    
+
     const ffmpegArgs: string[] = [];
-    
+
     if (isRawVideo) {
       logger.upscale(`Detected RGB output (${outputInfo.pixelFormat}), using rawvideo format`);
       ffmpegArgs.push('-f', 'rawvideo');
@@ -421,12 +445,13 @@ export class UpscaleExecutor {
   }
 
   private setupProcessMonitoring(
-    vspipe: ChildProcess, 
-    ffmpeg: ChildProcess, 
+    vspipe: ChildProcess,
+    ffmpeg: ChildProcess,
     totalFrames: number,
     outputPath: string,
     resolve: () => void,
-    reject: (reason?: any) => void
+    reject: (reason?: any) => void,
+    benchmarkMode: boolean = false
   ) {
     // Start GPU stats polling
     this.startGpuPolling();
@@ -647,8 +672,12 @@ export class UpscaleExecutor {
       this.stopGpuPolling();
 
       if (code === 0) {
-        logger.upscale('Processing completed successfully!');
-        logger.upscale(`Output saved to: ${outputPath}`);
+        if (benchmarkMode) {
+          logger.upscale('Benchmark completed successfully!');
+        } else {
+          logger.upscale('Processing completed successfully!');
+          logger.upscale(`Output saved to: ${outputPath}`);
+        }
         logger.separator();
         
         this.sendProgress({

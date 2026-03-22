@@ -22,6 +22,7 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
   // Refs to avoid re-subscribing to the progress listener when these values change
   const isProcessingRef = useRef(isProcessing);
   const outputPathRef = useRef(outputPath);
+  const benchmarkModeRef = useRef(false);
   
   // Keep refs in sync
   useEffect(() => {
@@ -112,9 +113,13 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
           // Preview handles its own video loading via handlePreviewSegment
           if (isProcessingRef.current) {
             setIsProcessing(false);
-            setCompletedVideoPath(outputPathRef.current);
             setPreviewFrame(null);
-            loadCompletedVideoRef.current(outputPathRef.current);
+            // In benchmark mode there's no output file to load
+            if (!benchmarkModeRef.current) {
+              setCompletedVideoPath(outputPathRef.current);
+              loadCompletedVideoRef.current(outputPathRef.current);
+            }
+            benchmarkModeRef.current = false;
           }
         } else if (progress.type === 'error') {
           setIsProcessing(false);
@@ -223,26 +228,31 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     useDirectML: boolean,
     filters: Filter[],
     numStreams: number = 2,
-    segment?: SegmentSelection
+    segment?: SegmentSelection,
+    benchmarkMode: boolean = false
   ): Promise<void> => {
-    if (!videoInfo || !outputPath) return;
-    
-    try {
-      const fileExists = await window.electronAPI.fileExists(outputPath);
-      if (fileExists) {
-        const shouldOverwrite = window.confirm(
-          `The file "${outputPath}" already exists.\n\nDo you want to overwrite it?`
-        );
-        if (!shouldOverwrite) {
-          onLog('Processing canceled - output file already exists');
-          return;
+    if (!videoInfo) return;
+    if (!benchmarkMode && !outputPath) return;
+
+    if (!benchmarkMode) {
+      try {
+        const fileExists = await window.electronAPI.fileExists(outputPath);
+        if (fileExists) {
+          const shouldOverwrite = window.confirm(
+            `The file "${outputPath}" already exists.\n\nDo you want to overwrite it?`
+          );
+          if (!shouldOverwrite) {
+            onLog('Processing canceled - output file already exists');
+            return;
+          }
+          onLog('Warning: Overwriting existing file');
         }
-        onLog('Warning: Overwriting existing file');
+      } catch (error) {
+        onLog(`Warning: Could not check if output file exists: ${getErrorMessage(error)}`);
       }
-    } catch (error) {
-      onLog(`Warning: Could not check if output file exists: ${getErrorMessage(error)}`);
     }
-    
+
+    benchmarkModeRef.current = benchmarkMode;
     setIsProcessing(true);
     setIsStopping(false);
     setUpscaleProgress(null);
@@ -250,26 +260,30 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     setCompletedVideoPath(null);
     setCompletedVideoBlobUrl(null);
     setVideoLoadError(false);
-    onLog('=== Starting upscale process ===');
+    onLog(benchmarkMode ? '=== Starting benchmark ===' : '=== Starting upscale process ===');
     onLog(`Using backend: ${useDirectML ? 'DirectML (ONNX Runtime)' : 'TensorRT'}`);
     if (!useDirectML) {
       onLog(`TensorRT num_streams: ${numStreams}`);
     }
+    if (benchmarkMode) {
+      onLog('Benchmark mode: output will be discarded');
+    }
     if (segment?.enabled) {
       onLog(`Segment: frames ${segment.startFrame} to ${segment.endFrame === -1 ? 'end' : segment.endFrame}`);
     }
-    
+
     try {
       const result = await window.electronAPI.startUpscale(
-        videoInfo.path, 
-        selectedModel, 
-        outputPath, 
+        videoInfo.path,
+        selectedModel,
+        outputPath || 'benchmark',
         useDirectML,
         true,
         filters,
         0,
         numStreams,
-        segment
+        segment,
+        benchmarkMode
       );
       if (!result.success) {
         onLog(`Error: ${result.error}`);

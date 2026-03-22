@@ -54,15 +54,16 @@ export interface ElectronAPI {
   selectOutputFile: (defaultName: string) => Promise<string | null>;
   selectFolder: () => Promise<string | null>;
   startUpscale: (
-    videoPath: string, 
-    modelPath: string | null, 
-    outputPath: string, 
-    useDirectML?: boolean, 
+    videoPath: string,
+    modelPath: string | null,
+    outputPath: string,
+    useDirectML?: boolean,
     upscalingEnabled?: boolean,
     filters?: Filter[],
     upscalePosition?: number,
     numStreams?: number,
-    segment?: SegmentSelection
+    segment?: SegmentSelection,
+    benchmarkMode?: boolean
   ) => Promise<UpscaleResult>;
   previewSegment: (
     videoPath: string,

@@ -109,6 +109,9 @@ function App() {
     setIsReloading,
   } = useUIState();
   
+  // Benchmark mode state
+  const [benchmarkMode, setBenchmarkMode] = useState(false);
+
   // Segment selection state
   const [segment, setSegment] = useState<SegmentSelection>({
     enabled: false,
@@ -605,9 +608,10 @@ function App() {
   const isStartDisabled = (() => {
     // Disable if stopping
     if (isStopping) return true;
-    
-    // Basic validation
-    if (!videoInfo || !outputPath) return true;
+
+    // Basic validation - benchmark mode doesn't need outputPath
+    if (!videoInfo) return true;
+    if (!benchmarkMode && !outputPath) return true;
     
     // Prevent processing if using TensorRT mode with ONNX models
     if (!useDirectML) {
@@ -765,10 +769,12 @@ function App() {
                     ffmpegArgs={ffmpegArgs}
                     processingFormat={processingFormat}
                     isProcessing={isProcessing}
+                    benchmarkMode={benchmarkMode}
                     onFormatChange={handleUpdateOutputFormat}
                     onSelectOutputFile={handleSelectOutputFile}
                     onFfmpegArgsChange={handleUpdateFfmpegArgs}
                     onProcessingFormatChange={handleUpdateProcessingFormat}
+                    onBenchmarkModeChange={setBenchmarkMode}
                   />
 
                   {/* Video Info */}
@@ -821,6 +827,7 @@ function App() {
                     filters={filters}
                     numStreams={numStreams}
                     segment={segment}
+                    benchmarkMode={benchmarkMode}
                     showQueue={queueStore.showQueue}
                     isQueueStarted={queueStore.isQueueStarted}
                     isQueueStopping={queueStore.isQueueStopping}

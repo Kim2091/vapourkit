@@ -202,16 +202,17 @@ export function registerVideoHandlers(
   });
 
   ipcMain.handle('start-upscale', async (
-    event, 
-    videoPath: string, 
-    modelPath: string | null, 
-    outputPath: string, 
-    useDirectML?: boolean, 
+    event,
+    videoPath: string,
+    modelPath: string | null,
+    outputPath: string,
+    useDirectML?: boolean,
     upscalingEnabled?: boolean,
     filters?: any[],
     upscalePosition?: number,
     numStreams?: number,
-    segment?: { enabled: boolean; startFrame: number; endFrame: number }
+    segment?: { enabled: boolean; startFrame: number; endFrame: number },
+    benchmarkMode?: boolean
   ) => {
     return await withLogSeparator(async () => {
       const isUpscaling = upscalingEnabled !== false; // Default to true for backward compatibility
@@ -264,7 +265,8 @@ export function registerVideoHandlers(
         qlog(`Model: ${modelPath}`);
         qlog(`Backend: ${useDirectML ? 'DirectML (ONNX Runtime)' : 'TensorRT'}`);
       }
-      qlog(`Output: ${outputPath}`);
+      qlog(`Output: ${benchmarkMode ? '(benchmark - null output)' : outputPath}`);
+      if (benchmarkMode) qlog('BENCHMARK MODE: Output will be discarded');
       qlog(`Item log: ${itemLogger.getLogPath()}`);
       
       // Log segment selection
@@ -335,7 +337,7 @@ export function registerVideoHandlers(
         qlog(`Total frames to process: ${totalFrames}`);
 
         qlog('Starting execution');
-        await upscaleExecutor.execute(scriptPath, outputPath, videoPath, totalFrames, false, segment?.enabled ? segment : undefined, fps);
+        await upscaleExecutor.execute(scriptPath, outputPath, videoPath, totalFrames, false, segment?.enabled ? segment : undefined, fps, benchmarkMode);
 
         // Cleanup
         qlog('Cleaning up script file');
