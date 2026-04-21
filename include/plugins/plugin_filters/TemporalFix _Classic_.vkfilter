@@ -1,0 +1,18 @@
+name = "TemporalFix (Classic)"
+category = ["Temporal Smoothing", "Restoration"]
+code = """
+# Full Docs: https://github.com/pifroggi/vs_temporalfix#temporalfix-classic
+# Increase strength if the effect is not strong enough. Check the docs for a full explanation.
+
+strength = 500
+tr       = 6
+denoise  = False
+exclude  = None
+
+
+import vs_temporalfix
+clip = vs_temporalfix.classic(clip, strength=strength, tr=tr, denoise=denoise, exclude=exclude)"""
+description = "Adds Temporal Coherence to Single Image AI Upscaling Models. This is the older cpu based version."
+
+[metadata]
+createdAt = "2025-11-13T15:24:02.315Z"

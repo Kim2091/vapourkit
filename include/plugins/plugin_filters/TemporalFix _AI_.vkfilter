@@ -1,0 +1,20 @@
+name = "TemporalFix (AI)"
+category = ["Temporal Smoothing", "Restoration"]
+code = """
+# Full Docs: https://github.com/pifroggi/vs_temporalfix#temporalfix-ai-model
+
+strength    = 2           # Suppression strength, 1-3. Higher = more aggressive, may oversmooth small motion.
+tiles       = 1           # More tiles = less VRAM, slower. Only increase on low-end hardware.
+backend     = "tensorrt"  # "cpu", "cuda", or "tensorrt". tensorrt is fastest (Nvidia RTX), cuda needs any Nvidia GPU.
+num_streams = 1           # Parallel TensorRT streams. Higher can be faster on high-end GPUs. TensorRT backend only.
+exclude     = None        # Optionally exclude scenes, e.g. "[10 20] [600 900]"
+
+
+import vs_temporalfix
+clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s="709")
+clip = vs_temporalfix.model(clip, strength=strength, tiles=tiles, backend=backend, num_streams=num_streams, exclude=exclude)
+clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s="709")"""
+description = "Adds Temporal Coherence to Single Image AI Upscaling Models. More accurate and faster than the classic version."
+
+[metadata]
+createdAt = "2026-04-21T00:00:00.000Z"
