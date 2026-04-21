@@ -8,7 +8,7 @@ import { join } from 'path';
 import { version } from '../package.json';
 
 const releaseDir = join(__dirname, '..', 'release');
-const oldName = `Vapourkit-${version}-win.7z`;
+const oldName = `Vapourkit-${version}-vapourkit-gui.7z`;
 const newName = `Vapourkit-${version}-PORTABLE.7z`;
 
 const oldPath = join(releaseDir, oldName);
