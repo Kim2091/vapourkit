@@ -1,0 +1,22 @@
+name = "Temporal Fix (V2)"
+category = ["Temporal Smoothing", "Restoration"]
+code = """
+# Full Docs: https://github.com/pifroggi/vs_temporalfix?tab=readme-ov-file#usage
+# AI model based version. Requires vs-mlrt with TensorRT support for the tensorrt backend.
+
+strength      = 2           # Suppression strength, 1-3. Higher = more aggressive, may oversmooth small motion.
+tiles         = 1           # More tiles = less VRAM, slower. Only increase on low-end hardware.
+backend       = "tensorrt"  # "cpu", "cuda", or "tensorrt". tensorrt is fastest (Nvidia RTX), cuda needs any Nvidia GPU.
+num_streams   = 1           # Parallel TensorRT streams. Higher can be faster on high-end GPUs. TensorRT backend only.
+engine_folder = None        # Optional TensorRT engine storage path. None = vs_temporalfix/engines. TensorRT backend only.
+exclude       = None        # Optionally exclude scenes, e.g. "[10 20] [600 900] [2000 2500]"
+
+
+import vs_temporalfix
+clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s="709")
+clip = vs_temporalfix.model(clip, strength=strength, tiles=tiles, backend=backend, num_streams=num_streams, engine_folder=engine_folder, exclude=exclude)
+clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s="709")"""
+description = "AI model based Temporal Fix. More accurate than the classic version and supports CUDA and TensorRT backends."
+
+[metadata]
+createdAt = "2026-04-21T00:00:00.000Z"
