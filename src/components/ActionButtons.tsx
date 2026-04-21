@@ -144,7 +144,7 @@ export const ActionButtons = memo(function ActionButtons({
               ? 'bg-red-600 hover:bg-red-700 text-white'
               : 'bg-dark-surface hover:bg-dark-bg border border-teal-500/50 hover:border-teal-400 text-teal-300 disabled:border-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed'
           }`}
-          title="Preview VapourSynth script with current workflow in vs-preview"
+          title="Preview VapourSynth script with current workflow in vs-view"
         >
           {isLaunchingPreviewer ? (
             <>

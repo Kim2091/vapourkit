@@ -1,5 +1,4 @@
 import vapoursynth as vs
-from vstools import set_output
 core = vs.core
 core.max_cache_size = 15000
 
@@ -51,4 +50,4 @@ if clip.format.id != output_format:
         clip = core.resize.Bilinear(clip, format=output_format, primaries_s="709", transfer_s="709", dither_type="error_diffusion")
     else:
         clip = core.resize.Bilinear(clip, format=output_format, primaries_s="709", transfer_s="709", dither_type="error_diffusion", matrix_s="709")
-set_output(clip, 0, "Output")
+clip.set_output()

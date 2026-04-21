@@ -6,21 +6,21 @@ import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 
 /**
- * Manager for vs-preview - VapourSynth script previewer tool
+ * Manager for vs-view - VapourSynth script previewer tool
  * 
- * vs-preview is a Python package that provides real-time preview capabilities
+ * vs-view is a Python package that provides real-time preview capabilities
  * for VapourSynth scripts with playback controls and scrubbing.
  * It should be installed via pip in the VapourSynth Python environment.
  */
 export class VsViewManager {
   /**
-   * Check if vs-preview is installed in the Python environment
+   * Check if vs-view is installed in the Python environment
    */
   static async isInstalled(): Promise<boolean> {
     try {
       const env = setupVSEnvironment();
       
-      // Check if vspreview is installed by running pip list
+      // Check if vsview is installed by running pip list
       const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'list'], {
         env,
         cwd: PATHS.VS
@@ -35,8 +35,8 @@ export class VsViewManager {
         
         child.on('close', (code) => {
           if (code === 0) {
-            // Check if vspreview is in the pip list output
-            const isInstalled = output.toLowerCase().includes('vspreview');
+            // Check if vsview is in the pip list output
+            const isInstalled = output.toLowerCase().includes('vsview');
             resolve(isInstalled);
           } else {
             resolve(false);
@@ -48,22 +48,22 @@ export class VsViewManager {
         });
       });
     } catch (error) {
-      logger.error('Error checking vs-preview installation:', error);
+      logger.error('Error checking vs-view installation:', error);
       return false;
     }
   }
   
   /**
-   * Install vs-preview using pip
+   * Install vs-view using pip
    */
   static async install(): Promise<{ success: boolean; error?: string }> {
-    logger.info('Installing vs-preview via pip...');
+    logger.info('Installing vs-view via pip...');
     
     try {
       const env = setupVSEnvironment();
       
-      // Install vspreview==0.19.0
-      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', 'vspreview==0.19.0'], {
+      // Install vsview==0.5.0
+      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', 'vsview==0.5.0'], {
         env,
         cwd: PATHS.VS,
         stdio: 'pipe'
@@ -83,35 +83,88 @@ export class VsViewManager {
         
         child.on('close', (code) => {
           if (code === 0) {
-            logger.info('vs-preview installed successfully');
+            logger.info('vs-view installed successfully');
             resolve({ success: true });
           } else {
-            const error = `vs-preview installation failed with code ${code}: ${errorOutput}`;
+            const error = `vs-view installation failed with code ${code}: ${errorOutput}`;
             logger.error(error);
             resolve({ success: false, error });
           }
         });
         
         child.on('error', (err) => {
-          const error = `Failed to install vs-preview: ${err.message}`;
+          const error = `Failed to install vs-view: ${err.message}`;
           logger.error(error);
           resolve({ success: false, error });
         });
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error('Error installing vs-preview:', error);
+      logger.error('Error installing vs-view:', error);
       return { success: false, error: errorMsg };
     }
   }
   
   /**
-   * Launch vs-preview with a VapourSynth script
+   * Detect a leftover vs-preview install from a prior build and uninstall it.
+   * Runs before the vs-view install check so upgrading users migrate cleanly.
+   */
+  static async migrateFromVsPreview(): Promise<void> {
+    try {
+      const env = setupVSEnvironment();
+
+      const listChild = spawn(PATHS.PYTHON, ['-m', 'pip', 'list'], {
+        env,
+        cwd: PATHS.VS
+      });
+
+      const hasVsPreview = await new Promise<boolean>((resolve) => {
+        let output = '';
+        listChild.stdout?.on('data', (data) => { output += data.toString(); });
+        listChild.on('close', (code) => {
+          resolve(code === 0 && output.toLowerCase().includes('vspreview'));
+        });
+        listChild.on('error', () => resolve(false));
+      });
+
+      if (!hasVsPreview) return;
+
+      logger.info('Detected vs-preview from a prior build, uninstalling...');
+
+      const uninstallChild = spawn(PATHS.PYTHON, ['-m', 'pip', 'uninstall', '-y', 'vspreview'], {
+        env,
+        cwd: PATHS.VS,
+        stdio: 'pipe'
+      });
+
+      await new Promise<void>((resolve) => {
+        uninstallChild.stderr?.on('data', (data) => logger.info(data.toString()));
+        uninstallChild.stdout?.on('data', (data) => logger.info(data.toString()));
+        uninstallChild.on('close', (code) => {
+          if (code === 0) {
+            logger.info('vs-preview uninstalled successfully');
+          } else {
+            logger.warn(`vs-preview uninstall exited with code ${code}; continuing`);
+          }
+          resolve();
+        });
+        uninstallChild.on('error', (err) => {
+          logger.warn(`Failed to uninstall vs-preview: ${err.message}; continuing`);
+          resolve();
+        });
+      });
+    } catch (error) {
+      logger.warn('Error during vs-preview migration check, continuing:', error);
+    }
+  }
+
+  /**
+   * Launch vs-view with a VapourSynth script
    * @param scriptPath Path to the .vpy script file
    */
   static async launch(scriptPath: string): Promise<{ success: boolean; error?: string }> {
-    logger.info(`Launching vs-preview with script: ${scriptPath}`);
-    
+    logger.info(`Launching vs-view with script: ${scriptPath}`);
+
     try {
       // Check if script file exists
       if (!fs.existsSync(scriptPath)) {
@@ -119,18 +172,21 @@ export class VsViewManager {
         logger.error(error);
         return { success: false, error };
       }
-      
+
       // Verify Python executable exists
       if (!fs.existsSync(PATHS.PYTHON)) {
         const error = 'Python executable not found. VapourSynth dependencies may not be installed correctly.';
         logger.error(error);
         return { success: false, error };
       }
-      
-      // Check if vs-preview is installed
+
+      // Uninstall vs-preview if present (from a prior build)
+      await this.migrateFromVsPreview();
+
+      // Check if vs-view is installed
       const isInstalled = await this.isInstalled();
       if (!isInstalled) {
-        logger.info('vs-preview not found, attempting to install...');
+        logger.info('vs-view not found, attempting to install...');
         const installResult = await this.install();
         if (!installResult.success) {
           return { success: false, error: installResult.error };
@@ -140,10 +196,10 @@ export class VsViewManager {
       // Setup environment for VapourSynth
       const env = setupVSEnvironment();
       
-      // Launch vs-preview with the script
-      logger.info(`Launching: vspreview ${scriptPath}`);
+      // Launch vs-view with the script
+      logger.info(`Launching: vsview ${scriptPath}`);
       
-      const child = spawn(PATHS.PYTHON, ['-m', 'vspreview', scriptPath], {
+      const child = spawn(PATHS.PYTHON, ['-m', 'vsview', scriptPath], {
         detached: true,
         stdio: 'pipe', // Capture output to detect launch errors
         cwd: PATHS.VS,
@@ -163,15 +219,15 @@ export class VsViewManager {
         child.on('exit', (code, signal) => {
           if (code !== null && code !== 0) {
             const errorMsg = errorOutput 
-              ? `vs-preview failed to start: ${errorOutput.trim()}`
-              : `vs-preview exited with code ${code}. This may indicate a missing dependency or configuration issue.`;
+              ? `vs-view failed to start: ${errorOutput.trim()}`
+              : `vs-view exited with code ${code}. This may indicate a missing dependency or configuration issue.`;
             logger.error(errorMsg);
             resolve({ success: false, error: errorMsg });
           }
         });
         
         child.on('error', (err) => {
-          const errorMsg = `Failed to launch vs-preview: ${err.message}`;
+          const errorMsg = `Failed to launch vs-view: ${err.message}`;
           logger.error(errorMsg);
           resolve({ success: false, error: errorMsg });
         });
@@ -179,7 +235,7 @@ export class VsViewManager {
         // If process is still running after 2 seconds, assume success
         setTimeout(() => {
           if (!child.killed) {
-            logger.info('vs-preview process started successfully');
+            logger.info('vs-view process started successfully');
             child.unref(); // Allow parent process to exit independently
             resolve({ success: true });
           }
@@ -187,7 +243,7 @@ export class VsViewManager {
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error('Error launching vs-preview:', error);
+      logger.error('Error launching vs-view:', error);
       return { success: false, error: errorMsg };
     }
   }
