@@ -6,6 +6,7 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
   const [outputFormat, setOutputFormat] = useState<string>('mkv');
   const [videoCompareArgs, setVideoCompareArgs] = useState<string>('-W');
   const [defaultOutputFolder, setDefaultOutputFolder] = useState<string | null>(null);
+  const [descriptiveNamingEnabled, setDescriptiveNamingEnabled] = useState<boolean>(true);
 
   // Load configuration on mount
   useEffect(() => {
@@ -25,6 +26,9 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
 
         const defaultFolderResult = await window.electronAPI.getDefaultOutputFolder();
         setDefaultOutputFolder(defaultFolderResult.folder);
+
+        const descriptiveNamingResult = await window.electronAPI.getDescriptiveNamingEnabled();
+        setDescriptiveNamingEnabled(descriptiveNamingResult.enabled);
       } catch (error) {
         console.error('Failed to load processing config:', error);
       }
@@ -109,12 +113,22 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
     }
   }, []);
 
+  const handleUpdateDescriptiveNamingEnabled = useCallback(async (enabled: boolean): Promise<void> => {
+    try {
+      setDescriptiveNamingEnabled(enabled);
+      await window.electronAPI.setDescriptiveNamingEnabled(enabled);
+    } catch (error) {
+      console.error('Error updating descriptive naming setting:', error);
+    }
+  }, []);
+
   return {
     ffmpegArgs,
     processingFormat,
     outputFormat,
     videoCompareArgs,
     defaultOutputFolder,
+    descriptiveNamingEnabled,
     handleUpdateFfmpegArgs,
     handleResetFfmpegArgs,
     handleUpdateProcessingFormat,
@@ -122,6 +136,7 @@ export const useProcessingConfig = (isSetupComplete: boolean) => {
     handleUpdateVideoCompareArgs,
     handleResetVideoCompareArgs,
     handleUpdateDefaultOutputFolder,
-    handleResetDefaultOutputFolder
+    handleResetDefaultOutputFolder,
+    handleUpdateDescriptiveNamingEnabled,
   };
 };

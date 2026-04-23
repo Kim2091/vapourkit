@@ -70,13 +70,15 @@ function App() {
     outputFormat,
     videoCompareArgs,
     defaultOutputFolder,
+    descriptiveNamingEnabled,
     handleUpdateFfmpegArgs, 
     handleUpdateProcessingFormat,
     handleUpdateOutputFormat,
     handleUpdateVideoCompareArgs,
     handleResetVideoCompareArgs,
     handleUpdateDefaultOutputFolder,
-    handleResetDefaultOutputFolder
+    handleResetDefaultOutputFolder,
+    handleUpdateDescriptiveNamingEnabled,
   } = useProcessingConfig(isSetupComplete);
   
   // Model management hooks
@@ -144,7 +146,7 @@ function App() {
   } | null>(null);
 
   // Queue store (data + UI state)
-  const queueStore = useQueueStore({ onLog: addConsoleLog });
+  const queueStore = useQueueStore({ onLog: addConsoleLog, descriptiveNamingEnabled });
 
   // Video processing hooks
   const {
@@ -171,7 +173,15 @@ function App() {
     setCompletedVideoPath,
     updatePreviewFrame,
     indexingProgress,
-  } = useVideoProcessing({ outputFormat, onLog: addConsoleLog });
+  } = useVideoProcessing({
+    outputFormat,
+    onLog: addConsoleLog,
+    descriptiveNamingEnabled,
+    filters,
+    selectedModel,
+    colorimetry: colorimetrySettings,
+    segment,
+  });
   
   // Destructure queue store for convenience
   const {
@@ -205,6 +215,7 @@ function App() {
     segment,
     colorimetry: colorimetrySettings,
     showQueue: queueStore.showQueue,
+    descriptiveNamingEnabled,
     onAddToQueue: (videoPaths, workflow, outputPath) => {
       addToQueue(videoPaths, workflow, outputPath);
       queueStore.setShowQueue(true);
@@ -908,6 +919,8 @@ function App() {
         defaultOutputFolder={defaultOutputFolder}
         onUpdateDefaultOutputFolder={handleUpdateDefaultOutputFolder}
         onResetDefaultOutputFolder={handleResetDefaultOutputFolder}
+        descriptiveNamingEnabled={descriptiveNamingEnabled}
+        onUpdateDescriptiveNamingEnabled={handleUpdateDescriptiveNamingEnabled}
         showAbout={showAbout}
         onCloseAbout={() => closeModalWithFocusRestore(() => setShowAbout(false))}
         showPlugins={showPlugins}

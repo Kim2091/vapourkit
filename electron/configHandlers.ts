@@ -128,6 +128,17 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     return { success: true };
   });
 
+  ipcMain.handle('get-descriptive-naming-enabled', async () => {
+    const enabled = configManager.getDescriptiveNamingEnabled();
+    return { enabled };
+  });
+
+  ipcMain.handle('set-descriptive-naming-enabled', async (event, enabled: boolean) => {
+    logger.info(`Setting descriptive naming enabled: ${enabled}`);
+    await configManager.setDescriptiveNamingEnabled(enabled);
+    return { success: true };
+  });
+
   ipcMain.handle('get-encoding-settings-expanded', async () => {
     const expanded = configManager.getEncodingSettingsExpanded();
     return { expanded };

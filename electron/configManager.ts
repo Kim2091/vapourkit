@@ -41,6 +41,7 @@ interface AppConfig {
   outputFormat?: string;
   videoCompareArgs?: string;
   defaultOutputFolder?: string;
+  descriptiveNamingEnabled?: boolean;
   encodingSettingsExpanded?: boolean;
   vsMlrtVersion?: string;
   appVersion?: string;
@@ -81,6 +82,7 @@ const DEFAULT_CONFIG: AppConfig = {
   outputFormat: 'mkv',
   videoCompareArgs: DEFAULT_VIDEO_COMPARE_ARGS,
   defaultOutputFolder: undefined,
+  descriptiveNamingEnabled: true,
   encodingSettingsExpanded: false,
   vsMlrtVersion: undefined,
   models: {}
@@ -429,6 +431,15 @@ export class ConfigManager {
 
   async setDefaultOutputFolder(folder: string | null): Promise<void> {
     this.config.defaultOutputFolder = folder ?? undefined;
+    await this.save();
+  }
+
+  getDescriptiveNamingEnabled(): boolean {
+    return this.config.descriptiveNamingEnabled ?? true;
+  }
+
+  async setDescriptiveNamingEnabled(enabled: boolean): Promise<void> {
+    this.config.descriptiveNamingEnabled = enabled;
     await this.save();
   }
 

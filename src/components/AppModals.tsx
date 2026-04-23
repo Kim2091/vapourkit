@@ -49,6 +49,8 @@ interface AppModalsProps {
   defaultOutputFolder: string | null;
   onUpdateDefaultOutputFolder: (folder: string | null) => void;
   onResetDefaultOutputFolder: () => void;
+  descriptiveNamingEnabled: boolean;
+  onUpdateDescriptiveNamingEnabled: (enabled: boolean) => void;
 
   // About
   showAbout: boolean;
@@ -121,6 +123,8 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
         defaultOutputFolder={props.defaultOutputFolder}
         onUpdateDefaultOutputFolder={props.onUpdateDefaultOutputFolder}
         onResetDefaultOutputFolder={props.onResetDefaultOutputFolder}
+        descriptiveNamingEnabled={props.descriptiveNamingEnabled}
+        onUpdateDescriptiveNamingEnabled={props.onUpdateDescriptiveNamingEnabled}
       />
 
       <AboutModal
