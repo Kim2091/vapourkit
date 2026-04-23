@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { QueueItem, Filter, SegmentSelection } from '../electron.d';
+import { generateOutputSuffix } from '../utils/generateOutputSuffix';
 
 interface UseQueueStoreProps {
   onLog: (message: string) => void;
+  descriptiveNamingEnabled?: boolean;
 }
 
-export function useQueueStore({ onLog }: UseQueueStoreProps) {
+export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQueueStoreProps) {
   // --- UI state (from useQueueState) ---
   const [showQueue, setShowQueueRaw] = useState(false);
   const [editingQueueItemId, setEditingQueueItemId] = useState<string | null>(null);
@@ -149,7 +151,17 @@ export function useQueueStore({ onLog }: UseQueueStoreProps) {
         if (customOutputPath) {
           outputPath = customOutputPath;
         } else {
-          outputPath = videoPath.replace(/\.[^/.]+$/, '') + `_processed.${currentWorkflow.outputFormat}`;
+          const suffix = descriptiveNamingEnabled
+            ? generateOutputSuffix(
+                {
+                  colorimetry: currentWorkflow.colorimetry,
+                  filters: currentWorkflow.filters,
+                  segment: currentWorkflow.segment,
+                  selectedModel: currentWorkflow.selectedModel,
+                }
+              )
+            : 'processed';
+          outputPath = videoPath.replace(/\.[^/.]+$/, '') + `-${suffix}.${currentWorkflow.outputFormat}`;
         }
 
         return {
@@ -178,7 +190,7 @@ export function useQueueStore({ onLog }: UseQueueStoreProps) {
       return [...prevQueue, ...newItems];
     });
     return [];
-  }, [onLog]);
+  }, [onLog, descriptiveNamingEnabled]);
 
   const removeFromQueue = useCallback((itemId: string) => {
     setQueue(prev => {

@@ -2,6 +2,7 @@
 
 import type { SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
+import { generateOutputSuffix } from '../utils/generateOutputSuffix';
 
 interface UseBatchConfigOptions {
   ffmpegArgs: string;
@@ -15,20 +16,21 @@ interface UseBatchConfigOptions {
   segment?: SegmentSelection;
   colorimetry?: any;
   showQueue: boolean;
+  descriptiveNamingEnabled: boolean;
   onAddToQueue: (videoPaths: string[], workflow: any, outputPath?: string) => void;
   onLoadVideoInfo: (path: string) => Promise<void>;
   onLog: (message: string) => void;
 }
 
 export function useBatchConfig(options: UseBatchConfigOptions) {
-  const { ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, selectedModel, filters, useDirectML, numStreams, segment, colorimetry, showQueue, onAddToQueue, onLoadVideoInfo, onLog } = options;
+  const { ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, selectedModel, filters, useDirectML, numStreams, segment, colorimetry, showQueue, descriptiveNamingEnabled, onAddToQueue, onLoadVideoInfo, onLog } = options;
 
   const handleSelectVideoWithQueue = async (): Promise<void> => {
     try {
       const files = await window.electronAPI.selectVideoFile();
-      
+
       if (!files || files.length === 0) return;
-      
+
       await handleBatchFiles(files);
     } catch (error) {
       onLog(`Error selecting videos: ${getErrorMessage(error)}`);
@@ -42,7 +44,7 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
         onLog(`Loaded video: ${files[0]}`);
         return;
       }
-      
+
       // Single file with queue shown, or multiple files - add directly to queue
       const currentWorkflowSnapshot = {
         selectedModel,
@@ -63,20 +65,26 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
         const result = await window.electronAPI.getDefaultOutputFolder();
         defaultOutputFolder = result.folder;
       } catch { /* ignore */ }
-      
+
       // Add each video directly to the queue without showing the modal
       files.forEach((videoPath: string) => {
         let outputPath: string;
         const fileName = videoPath.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, '') || 'output';
+        const suffix = descriptiveNamingEnabled
+          ? generateOutputSuffix(
+              { colorimetry, filters, segment, selectedModel }
+            )
+          : 'processed';
+
         if (defaultOutputFolder) {
           const separator = defaultOutputFolder.includes('\\') ? '\\' : '/';
-          outputPath = `${defaultOutputFolder}${separator}${fileName}_processed.${outputFormat}`;
+          outputPath = `${defaultOutputFolder}${separator}${fileName}-${suffix}.${outputFormat}`;
         } else {
-          outputPath = videoPath.replace(/\.[^.]+$/, `_processed.${outputFormat}`);
+          outputPath = videoPath.replace(/\.[^.]+$/, `-${suffix}.${outputFormat}`);
         }
         onAddToQueue([videoPath], currentWorkflowSnapshot, outputPath);
       });
-      
+
       onLog(`Added ${files.length} video(s) to queue`);
   };
 
@@ -93,7 +101,7 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
       segment: segment?.enabled ? { ...segment } : undefined,
       colorimetry,
     };
-    
+
     onAddToQueue([videoPath], currentWorkflowSnapshot, outputPath);
     onLog(`Added current video to queue`);
   };

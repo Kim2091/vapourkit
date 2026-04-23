@@ -14,6 +14,8 @@ interface SettingsModalProps {
   defaultOutputFolder: string | null;
   onUpdateDefaultOutputFolder: (folder: string | null) => void;
   onResetDefaultOutputFolder: () => void;
+  descriptiveNamingEnabled: boolean;
+  onUpdateDescriptiveNamingEnabled: (enabled: boolean) => void;
 }
 
 type Tab = 'general' | 'processing';
@@ -30,7 +32,9 @@ export const SettingsModal = memo<SettingsModalProps>(({
   onResetVideoCompareArgs,
   defaultOutputFolder,
   onUpdateDefaultOutputFolder,
-  onResetDefaultOutputFolder
+  onResetDefaultOutputFolder,
+  descriptiveNamingEnabled,
+  onUpdateDescriptiveNamingEnabled,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [showVideoCompareOptions, setShowVideoCompareOptions] = useState(false);
@@ -323,6 +327,24 @@ export const SettingsModal = memo<SettingsModalProps>(({
                     <p className="text-xs text-gray-400 mt-2">
                       Set a default folder for all processed videos. If not set, videos will be saved in the same folder as the input video.
                     </p>
+                  </label>
+                </div>
+
+                {/* Descriptive Naming Toggle */}
+                <div className="bg-dark-surface rounded-lg p-4 border border-gray-700 mt-4">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={descriptiveNamingEnabled}
+                      onChange={(e) => onUpdateDescriptiveNamingEnabled(e.target.checked)}
+                      className="w-5 h-5 rounded border-gray-600 bg-dark-bg text-primary-blue focus:ring-2 focus:ring-primary-blue mt-0.5"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">Descriptive Output Filenames</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Include workflow details in auto-generated output filenames (e.g., EpisodeName-colorimetry_denoise_4x_resize2160.mkv). When disabled, uses the legacy "_processed" suffix.
+                      </p>
+                    </div>
                   </label>
                 </div>
               </div>

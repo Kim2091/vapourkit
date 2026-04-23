@@ -130,6 +130,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDefaultOutputFolder: () => ipcRenderer.invoke('get-default-output-folder'),
   setDefaultOutputFolder: (folder: string | null) => ipcRenderer.invoke('set-default-output-folder', folder),
 
+  // Descriptive naming
+  getDescriptiveNamingEnabled: () => ipcRenderer.invoke('get-descriptive-naming-enabled'),
+  setDescriptiveNamingEnabled: (enabled: boolean) => ipcRenderer.invoke('set-descriptive-naming-enabled', enabled),
+
   // Encoding settings panel state
   getEncodingSettingsExpanded: () => ipcRenderer.invoke('get-encoding-settings-expanded'),
   setEncodingSettingsExpanded: (expanded: boolean) => ipcRenderer.invoke('set-encoding-settings-expanded', expanded),

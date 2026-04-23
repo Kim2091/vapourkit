@@ -135,6 +135,10 @@ export interface ElectronAPI {
   getDefaultOutputFolder: () => Promise<{ folder: string | null }>;
   setDefaultOutputFolder: (folder: string | null) => Promise<{ success: boolean }>;
 
+  // Descriptive naming
+  getDescriptiveNamingEnabled: () => Promise<{ enabled: boolean }>;
+  setDescriptiveNamingEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+
   // Encoding settings panel state
   getEncodingSettingsExpanded: () => Promise<{ expanded: boolean }>;
   setEncodingSettingsExpanded: (expanded: boolean) => Promise<{ success: boolean }>;

@@ -102,7 +102,7 @@ export class VsMlrtManager {
       });
 
       const writer = fs.createWriteStream(archivePath);
-      const totalLength = parseInt(response.headers['content-length'] || '0', 10);
+      const totalLength = parseInt(String(response.headers['content-length'] || '0'), 10);
       let downloadedLength = 0;
 
       response.data.on('data', (chunk: Buffer) => {

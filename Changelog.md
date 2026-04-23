@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.1
+- Add descriptive output filenames (enabled by default)
+  - Output filenames now reflect your workflow instead of using a generic `_processed` suffix
+  - Example: `EpisodeName-colorimetry_denoise_4x_resize2160.mkv`
+  - Includes applied filters, AI model scale, and output resolution
+  - Automatically truncates to 32 characters if too long
+  - Manually selecting an output path disables auto-generation for that file
+  - Toggle available in Settings under Processing
+- Fix TypeScript compilation error in `electron/vsMlrtManager.ts`
+
 ## 0.14.0
 This release in in dedication to my Mom. She passed away on 1/1/26 after a long battle with small cell lung cancer. Rest in peace
 - Adds over 150 new filters, including many from Hybrid!
