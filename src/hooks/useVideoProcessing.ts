@@ -18,6 +18,7 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
   const [completedVideoPath, setCompletedVideoPath] = useState<string | null>(null);
   const [completedVideoBlobUrl, setCompletedVideoBlobUrl] = useState<string | null>(null);
   const [videoLoadError, setVideoLoadError] = useState(false);
+  const [indexingProgress, setIndexingProgress] = useState<number | null>(null);
 
   // Refs to avoid re-subscribing to the progress listener when these values change
   const isProcessingRef = useRef(isProcessing);
@@ -32,6 +33,18 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
   useEffect(() => {
     outputPathRef.current = outputPath;
   }, [outputPath]);
+
+  // Subscribe to BestSource indexing progress events from the backend
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onVideoIndexProgress((progress) => {
+      if (progress.complete) {
+        setIndexingProgress(null);
+      } else {
+        setIndexingProgress(progress.percentage);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   // Load completed video as blob URL
   const loadCompletedVideo = useCallback(async (videoPath: string): Promise<void> => {
@@ -149,35 +162,38 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
 
   const loadVideoInfo = useCallback(async (filePath: string): Promise<void> => {
     onLog(`Selected video: ${filePath}`);
-    const info = await window.electronAPI.getVideoInfo(filePath);
-    
+    setIndexingProgress(0);
+    let info;
+    try {
+      info = await window.electronAPI.getVideoInfo(filePath);
+    } catch (error) {
+      setIndexingProgress(null);
+      throw error;
+    }
+
     // Cleanup old blob URL before loading new video
     if (completedVideoBlobUrl) {
       URL.revokeObjectURL(completedVideoBlobUrl);
     }
-    
+
     setVideoInfo(info);
     onLog(`Video info: ${info.resolution || 'unknown'} @ ${info.fps || 'unknown'} FPS`);
-    
-    // Check if there's a default output folder configured
+
     const defaultFolderResult = await window.electronAPI.getDefaultOutputFolder();
     const defaultOutputFolder = defaultFolderResult.folder;
-    
-    // Auto-suggest output path
+
     let autoOutputPath: string;
     if (defaultOutputFolder) {
-      // Use default output folder if configured
       const fileName = filePath.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, '') || 'output';
       const separator = defaultOutputFolder.includes('\\') ? '\\' : '/';
       autoOutputPath = `${defaultOutputFolder}${separator}${fileName}_processed.${outputFormat}`;
       onLog(`Using default output folder: ${defaultOutputFolder}`);
     } else {
-      // Use same directory as input
       autoOutputPath = filePath.replace(/\.[^/.]+$/, '') + '_processed.' + outputFormat;
     }
     setOutputPath(autoOutputPath);
     onLog(`Auto-suggested output path: ${autoOutputPath}`);
-    
+
     setPreviewFrame(null);
     setCompletedVideoPath(null);
     setCompletedVideoBlobUrl(null);
@@ -391,6 +407,7 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     completedVideoPath,
     completedVideoBlobUrl,
     videoLoadError,
+    indexingProgress,
     loadVideoInfo,
     handleSelectVideo,
     handleSelectOutputFile,
