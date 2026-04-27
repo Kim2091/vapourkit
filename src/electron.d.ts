@@ -12,6 +12,7 @@ export interface ElectronAPI {
   selectOnnxFile: () => Promise<string | null>;
   selectTemplateFile: () => Promise<string | null>;
   getVideoInfo: (filePath: string) => Promise<VideoInfo>;
+  onVideoIndexProgress: (callback: (progress: { percentage: number; complete: boolean }) => void) => () => void;
   readVideoFile: (filePath: string) => Promise<ArrayBuffer>;
   getVideoThumbnail: (filePath: string) => Promise<string | null>;
   getVideoFrameAt: (filePath: string, frameNumber: number, fps: number) => Promise<string | null>;

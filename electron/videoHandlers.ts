@@ -63,8 +63,21 @@ export function registerVideoHandlers(
       const stats = await fs.stat(filePath);
       const metadata = await extractVideoMetadata(filePath);
 
-      // Get exact frame count using BestSource
-      const frameCount = await getVideoFrameCount(filePath);
+      // Stream BestSource indexing progress to the renderer
+      const onProgress = (percentage: number) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('video-index-progress', { percentage, complete: false });
+        }
+      };
+
+      let frameCount: number | undefined;
+      try {
+        frameCount = await getVideoFrameCount(filePath, onProgress);
+      } finally {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('video-index-progress', { percentage: 100, complete: true });
+        }
+      }
 
       const info = {
         path: filePath,
@@ -86,6 +99,10 @@ export function registerVideoHandlers(
       return info;
     } catch (error) {
       logger.error('Error getting video info:', error);
+      // Make sure the renderer clears its progress UI even on error
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('video-index-progress', { percentage: 100, complete: true });
+      }
       throw error;
     }
   });

@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectOnnxFile: () => ipcRenderer.invoke('select-onnx-file'),
   selectTemplateFile: () => ipcRenderer.invoke('select-template-file'),
   getVideoInfo: (filePath: string) => ipcRenderer.invoke('get-video-info', filePath),
+  onVideoIndexProgress: (callback: (progress: { percentage: number; complete: boolean }) => void) => {
+    const listener = (event: any, progress: { percentage: number; complete: boolean }) => callback(progress);
+    ipcRenderer.on('video-index-progress', listener);
+    return () => ipcRenderer.removeListener('video-index-progress', listener);
+  },
   readVideoFile: (filePath: string) => ipcRenderer.invoke('read-video-file', filePath),
   getVideoThumbnail: (filePath: string) => ipcRenderer.invoke('get-video-thumbnail', filePath),
   getVideoFrameAt: (filePath: string, frameNumber: number, fps: number) => ipcRenderer.invoke('get-video-frame-at', filePath, frameNumber, fps),
