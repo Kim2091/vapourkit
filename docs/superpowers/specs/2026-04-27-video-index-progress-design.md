@@ -55,7 +55,7 @@ When the source filesize is unknown, BestSource emits "MB" instead of "%". In th
 
 **3. `electron/preload.ts`**
 
-- Expose `onVideoIndexProgress(callback: (progress: { percentage: number }) => void): () => void` mirroring the existing `onUpscaleProgress` signature (returns an unsubscribe function).
+- Expose `onVideoIndexProgress(callback: (progress: { percentage: number; complete: boolean }) => void): () => void` mirroring the existing `onUpscaleProgress` signature (returns an unsubscribe function). The `complete` flag tells the renderer when to clear the bar without special-casing `percentage === 100`.
 
 **4. `src/electron.d.ts`**
 

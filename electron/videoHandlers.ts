@@ -99,10 +99,9 @@ export function registerVideoHandlers(
       return info;
     } catch (error) {
       logger.error('Error getting video info:', error);
-      // Make sure the renderer clears its progress UI even on error
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('video-index-progress', { percentage: 100, complete: true });
-      }
+      // Inner finally already sent the terminal event if frame counting started.
+      // Earlier failures (stat/metadata) happen before the renderer shows any
+      // progress UI, so no terminal event is required.
       throw error;
     }
   });
