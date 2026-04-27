@@ -177,6 +177,7 @@ function App() {
     outputFormat,
     onLog: addConsoleLog,
     descriptiveNamingEnabled,
+    defaultOutputFolder,
     filters,
     selectedModel,
     colorimetry: colorimetrySettings,
