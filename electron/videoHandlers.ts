@@ -301,12 +301,7 @@ export function registerVideoHandlers(
         if (config.upscalingEnabled && config.enginePath) {
           qlog(`Model type: ${config.modelType}`);
         }
-        
-        // Log if default filter was auto-created (no filters were enabled)
-        if (config.filters && config.filters.length === 1 && config.filters[0].id === 'default-upscale') {
-          qlog('Created default upscale filter from model path');
-        }
-        
+
         const scriptPath = await scriptGenerator.generateScript(config);
         qlog(`Script generated: ${scriptPath}`);
 
@@ -787,22 +782,7 @@ function createScriptConfig(
     modelType = configManager.getModelType(modelPath);
     useFp32 = configManager.isModelFp32(modelPath);
   }
-  
-  // If upscaling is enabled with a model but no filters are enabled,
-  // create a default filter from the selected model
-  if (isUpscaling && modelPath && (!filters || filters.filter(f => f.enabled).length === 0)) {
-    filters = [{
-      id: 'default-upscale',
-      enabled: true,
-      filterType: 'aiModel' as const,
-      preset: 'Simple Upscale',
-      code: '',
-      order: 0,
-      modelPath: modelPath,
-      modelType: modelType
-    }];
-  }
-  
+
   const colorimetrySettings = configManager.getColorimetrySettings();
   const processingFormat = configManager.getProcessingFormat();
   const outputFormat = processingFormat === 'match_input' ? 'original_clip.format.id' : processingFormat;
