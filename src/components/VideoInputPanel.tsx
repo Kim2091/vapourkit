@@ -8,6 +8,7 @@ interface VideoInputPanelProps {
   isProcessing: boolean;
   queueCount: number;
   showQueue: boolean;
+  indexingProgress: number | null;
   onSelectVideo: () => Promise<void>;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -21,6 +22,7 @@ export const VideoInputPanel = memo<VideoInputPanelProps>(({
   isProcessing,
   queueCount,
   showQueue,
+  indexingProgress,
   onSelectVideo,
   onDragOver,
   onDragLeave,
@@ -48,7 +50,7 @@ export const VideoInputPanel = memo<VideoInputPanelProps>(({
           {showQueue ? <PanelRightClose className="w-3.5 h-3.5" /> : <PanelRightOpen className="w-3.5 h-3.5" />}
         </button>
       </div>
-      
+
       <div
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -75,6 +77,21 @@ export const VideoInputPanel = memo<VideoInputPanelProps>(({
           </div>
         )}
       </div>
+
+      {indexingProgress !== null && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-gray-400">Indexing video</span>
+            <span className="text-xs text-gray-400 tabular-nums">{indexingProgress}%</span>
+          </div>
+          <div className="h-1.5 bg-dark-surface rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary-blue transition-all duration-200 ease-out"
+              style={{ width: `${indexingProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 });

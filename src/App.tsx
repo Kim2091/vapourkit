@@ -170,6 +170,7 @@ function App() {
     loadCompletedVideo,
     setCompletedVideoPath,
     updatePreviewFrame,
+    indexingProgress,
   } = useVideoProcessing({ outputFormat, onLog: addConsoleLog });
   
   // Destructure queue store for convenience
@@ -728,6 +729,7 @@ function App() {
                     isProcessing={isProcessing}
                     queueCount={queue.length}
                     showQueue={queueStore.showQueue}
+                    indexingProgress={indexingProgress}
                     onSelectVideo={handleSelectVideoWithQueue}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
