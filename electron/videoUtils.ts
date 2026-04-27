@@ -3,6 +3,7 @@ import { FFmpegManager } from './ffmpegManager';
 import { PATHS } from './constants';
 import { spawn } from 'child_process';
 import { setupVSEnvironment } from './utils';
+import { parseBestSourceProgress } from './bestSourceProgressParser';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as os from 'os';
@@ -159,78 +160,79 @@ export async function extractVideoMetadata(filePath: string): Promise<{
 /**
  * Gets the exact frame count from a video file using BestSource via VapourSynth
  */
-export async function getVideoFrameCount(filePath: string): Promise<number | undefined> {
+export async function getVideoFrameCount(
+  filePath: string,
+  onProgress?: (percentage: number) => void
+): Promise<number | undefined> {
   try {
-    // Check if VapourSynth components are available
     if (!fs.existsSync(PATHS.VSPIPE)) {
       logger.warn('VapourSynth vspipe not available for frame count extraction');
       return undefined;
     }
-    
+
     if (!fs.existsSync(PATHS.PYTHON)) {
       logger.warn('VapourSynth Python not available for frame count extraction');
       return undefined;
     }
-    
-    // Check if BestSource plugin is available
+
     const bestSourcePath = path.join(PATHS.PLUGINS, 'bestsource.dll');
     if (!fs.existsSync(bestSourcePath)) {
       logger.warn('BestSource plugin not available for frame count extraction');
       return undefined;
     }
-    
-    // Create a temporary VapourSynth script to load the video
+
     const tempDir = path.join(os.tmpdir(), 'vapourkit_framecount');
     await fs.ensureDir(tempDir);
-    
+
     const scriptPath = path.join(tempDir, `framecount_${Date.now()}.vpy`);
     const escapedPath = filePath.replace(/\\/g, '\\\\');
-    
+
+    // cachemode=3 writes a .bsindex next to the source so the upscale step reuses it.
     const script = `import vapoursynth as vs
 core = vs.core
 
-# Load video with BestSource
-clip = core.bs.VideoSource(source="${escapedPath}", cachemode=0)
-
-# Set output
+clip = core.bs.VideoSource(source="${escapedPath}", cachemode=3)
 clip.set_output()
 `;
-    
+
     await fs.writeFile(scriptPath, script, 'utf8');
     logger.info(`Created temporary frame count script: ${scriptPath}`);
-    
-    // Use vspipe -i to get video info including frame count
+
     return new Promise<number | undefined>((resolve) => {
       const env = setupVSEnvironment(PATHS.PYTHON);
-      
+
       const vspipe = spawn(PATHS.VSPIPE, ['-i', scriptPath, '-'], {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: env,
         cwd: PATHS.VS
       });
-      
+
       let output = '';
-      
+
+      const handleChunk = (data: Buffer) => {
+        const text = data.toString();
+        output += text;
+        if (onProgress) {
+          for (const pct of parseBestSourceProgress(text)) {
+            onProgress(pct);
+          }
+        }
+      };
+
       if (vspipe.stdout) {
-        vspipe.stdout.on('data', (data: Buffer) => {
-          output += data.toString();
-        });
+        vspipe.stdout.on('data', handleChunk);
       }
-      
       if (vspipe.stderr) {
-        vspipe.stderr.on('data', (data: Buffer) => {
-          output += data.toString();
-        });
+        vspipe.stderr.on('data', handleChunk);
       }
-      
+
       vspipe.on('close', async (code) => {
-        // Clean up temp script
         try {
           await fs.remove(scriptPath);
         } catch (e) {
           // Ignore cleanup errors
         }
-        
+
         if (code === 0) {
           const match = output.match(/Frames:\s*(\d+)/i);
           if (match) {
@@ -248,23 +250,9 @@ clip.set_output()
           resolve(undefined);
         }
       });
-      
-      vspipe.on('error', (error) => {
-        logger.error('vspipe error during frame count extraction:', error);
-        resolve(undefined);
-      });
-      
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        if (!vspipe.killed) {
-          logger.warn('Frame count extraction timed out, killing vspipe');
-          vspipe.kill('SIGKILL');
-          resolve(undefined);
-        }
-      }, 30000);
     });
   } catch (error) {
-    logger.error('Error getting video frame count with BestSource:', error);
+    logger.error('Error in getVideoFrameCount:', error);
     return undefined;
   }
 }
