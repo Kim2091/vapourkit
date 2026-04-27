@@ -250,6 +250,11 @@ clip.set_output()
           resolve(undefined);
         }
       });
+
+      vspipe.on('error', (error) => {
+        logger.error('vspipe error during frame count extraction:', error);
+        resolve(undefined);
+      });
     });
   } catch (error) {
     logger.error('Error in getVideoFrameCount:', error);
