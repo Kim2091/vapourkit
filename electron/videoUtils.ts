@@ -209,7 +209,11 @@ clip.set_output()
 
       let output = '';
 
-      const handleChunk = (data: Buffer) => {
+      const appendOutput = (data: Buffer) => {
+        output += data.toString();
+      };
+
+      const handleStderr = (data: Buffer) => {
         const text = data.toString();
         output += text;
         if (onProgress) {
@@ -220,10 +224,10 @@ clip.set_output()
       };
 
       if (vspipe.stdout) {
-        vspipe.stdout.on('data', handleChunk);
+        vspipe.stdout.on('data', appendOutput);
       }
       if (vspipe.stderr) {
-        vspipe.stderr.on('data', handleChunk);
+        vspipe.stderr.on('data', handleStderr);
       }
 
       vspipe.on('close', async (code) => {
@@ -257,7 +261,7 @@ clip.set_output()
       });
     });
   } catch (error) {
-    logger.error('Error in getVideoFrameCount:', error);
+    logger.error('Error getting video frame count with BestSource:', error);
     return undefined;
   }
 }
