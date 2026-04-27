@@ -55,4 +55,15 @@ describe('parseBestSourceProgress', () => {
     ].join('\n');
     expect(parseBestSourceProgress(chunk)).toEqual([25, 50]);
   });
+
+  it('is safe to call multiple times on the same string (lastIndex reset)', () => {
+    const chunk = 'VideoSource track #0 index progress 42%';
+    expect(parseBestSourceProgress(chunk)).toEqual([42]);
+    expect(parseBestSourceProgress(chunk)).toEqual([42]);
+    expect(parseBestSourceProgress(chunk)).toEqual([42]);
+  });
+
+  it('does not match negative percentages (regex rejects them, no clamp triggered)', () => {
+    expect(parseBestSourceProgress('VideoSource track #0 index progress -5%')).toEqual([]);
+  });
 });
