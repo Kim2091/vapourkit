@@ -85,7 +85,7 @@ export const ActionButtons = memo(function ActionButtons({
       {showNoFiltersBanner && (
         <div className="bg-yellow-900/40 border border-yellow-500/50 text-yellow-200 px-3 py-2 rounded-lg flex items-center gap-2 text-sm">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 text-yellow-400" />
-          <span>The video will be encoded with the selected settings with no changes applied.</span>
+          <span>No filters are configured — the video will only be re-encoded with your current settings.</span>
         </div>
       )}
       <div className="flex gap-2 relative">
