@@ -67,7 +67,7 @@ When the source filesize is unknown, BestSource emits "MB" instead of "%". In th
 
 - New state: `const [indexingProgress, setIndexingProgress] = useState<number | null>(null)`.
 - New `useEffect` that subscribes to `window.electronAPI.onVideoIndexProgress`, stores the latest percentage. Returns the unsubscribe.
-- In `loadVideoInfo`: set `indexingProgress` to `0` before calling `getVideoInfo`; clear to `null` in a `finally` block (so it clears on success, error, and cancellation).
+- In `loadVideoInfo`: set `indexingProgress` to `0` before calling `getVideoInfo`; on error, clear to `null` in a `catch` block before re-throwing. On success, the backend's terminal `complete: true` IPC event clears it asynchronously — a renderer-side `finally` would prematurely null the bar before `setVideoInfo` runs and cause a visible flicker.
 - Return `indexingProgress` from the hook.
 
 **2. `src/App.tsx`**
