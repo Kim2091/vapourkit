@@ -250,16 +250,6 @@ export function useVideoProcessing({ outputFormat, onLog }: UseVideoProcessingPr
     if (!videoInfo) return;
     if (!benchmarkMode && !outputPath) return;
 
-    const enabledFilterCount = filters.filter(f => f.enabled).length;
-    if (enabledFilterCount === 0) {
-      const shouldContinue = window.confirm(
-        'No filters are configured.\n\nThe video will be re-encoded without any AI processing or filters applied. Continue?'
-      );
-      if (!shouldContinue) {
-        onLog('Processing canceled - no filters configured');
-        return;
-      }
-    }
 
     if (!benchmarkMode) {
       try {
