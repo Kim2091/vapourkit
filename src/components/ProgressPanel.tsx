@@ -1,6 +1,6 @@
 // src/components/ProgressPanel.tsx - Progress bar, speed/ETA, and console
 
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import type { UpscaleProgress } from '../electron.d';
 
@@ -10,6 +10,7 @@ interface ProgressPanelProps {
   setShowConsole: (show: boolean) => void;
   consoleOutput: string[];
   consoleEndRef: React.RefObject<HTMLDivElement | null>;
+  privacyMode: boolean;
 }
 
 export const ProgressPanel = memo(function ProgressPanel({
@@ -18,7 +19,16 @@ export const ProgressPanel = memo(function ProgressPanel({
   setShowConsole,
   consoleOutput,
   consoleEndRef,
+  privacyMode,
 }: ProgressPanelProps) {
+  const prevPrivacyModeRef = useRef(privacyMode);
+  useEffect(() => {
+    if (!prevPrivacyModeRef.current && privacyMode && showConsole) {
+      setShowConsole(false);
+    }
+    prevPrivacyModeRef.current = privacyMode;
+  }, [privacyMode, showConsole, setShowConsole]);
+
   return (
     <>
       {/* Progress & Controls */}

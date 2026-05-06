@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Upload, Video, List, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
+import { PrivacyText } from './PrivacyVeil';
 
 interface VideoInputPanelProps {
   videoInfo: VideoInfo | null;
@@ -9,6 +10,7 @@ interface VideoInputPanelProps {
   queueCount: number;
   showQueue: boolean;
   indexingProgress: number | null;
+  privacyMode: boolean;
   onSelectVideo: () => Promise<void>;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -23,6 +25,7 @@ export const VideoInputPanel = memo<VideoInputPanelProps>(({
   queueCount,
   showQueue,
   indexingProgress,
+  privacyMode,
   onSelectVideo,
   onDragOver,
   onDragLeave,
@@ -65,7 +68,13 @@ export const VideoInputPanel = memo<VideoInputPanelProps>(({
         {videoInfo ? (
           <div>
             <Video className="w-8 h-8 text-primary-purple mx-auto mb-2" />
-            <p className="text-sm font-medium mb-1 truncate">{videoInfo.name}</p>
+            <p className="text-sm font-medium mb-1 truncate">
+              <PrivacyText
+                enabled={privacyMode}
+                value={videoInfo.name}
+                maskLength={12}
+              />
+            </p>
             <p className="text-xs text-gray-400">{videoInfo.resolution} • {videoInfo.fps} FPS • {videoInfo.sizeFormatted}</p>
             <p className="text-xs text-gray-500 mt-0.5">{videoInfo.duration}</p>
           </div>

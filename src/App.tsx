@@ -13,6 +13,8 @@ import { Header } from './components/Header';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
 import { useModels } from './hooks/useModels';
 import { useSettings } from './hooks/useSettings';
+import { usePrivacyMode } from './hooks/usePrivacyMode';
+import { PrivacyText } from './components/PrivacyVeil';
 import { useConsoleLog } from './hooks/useConsoleLog';
 import { useModelImport } from './hooks/useModelImport';
 import { useVideoDragDrop } from './hooks/useVideoDragDrop';
@@ -64,6 +66,7 @@ function App() {
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup, showPluginPrompt, setShowPluginPrompt } = useSetup(addConsoleLog);
   const { useDirectML, toggleDirectML, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
+  const { privacyMode, togglePrivacyMode } = usePrivacyMode();
   const { 
     ffmpegArgs, 
     processingFormat,
@@ -669,6 +672,8 @@ function App() {
       <Header
         isProcessing={isProcessing}
         useDirectML={useDirectML}
+        privacyMode={privacyMode}
+        onTogglePrivacyMode={togglePrivacyMode}
         onSettingsClick={() => setShowSettings(true)}
         onPluginsClick={() => setShowPlugins(true)}
         onReloadBackend={handleReloadBackend}
@@ -713,6 +718,7 @@ function App() {
                     videoLoadError={videoLoadError}
                     isProcessing={isProcessing}
                     segmentEnabled={segment.enabled}
+                    privacyMode={privacyMode}
                     onCompareVideos={handleCompareVideos}
                     onOpenOutputFolder={handleOpenOutputFolder}
                     onVideoError={handleVideoError}
@@ -724,6 +730,7 @@ function App() {
                     setShowConsole={setShowConsole}
                     consoleOutput={consoleOutput}
                     consoleEndRef={consoleEndRef}
+                    privacyMode={privacyMode}
                   />
                 </div>
               </Panel>
@@ -742,6 +749,7 @@ function App() {
                     queueCount={queue.length}
                     showQueue={queueStore.showQueue}
                     indexingProgress={indexingProgress}
+                    privacyMode={privacyMode}
                     onSelectVideo={handleSelectVideoWithQueue}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -784,6 +792,7 @@ function App() {
                     processingFormat={processingFormat}
                     isProcessing={isProcessing}
                     benchmarkMode={benchmarkMode}
+                    privacyMode={privacyMode}
                     onFormatChange={handleUpdateOutputFormat}
                     onSelectOutputFile={handleSelectOutputFile}
                     onFfmpegArgsChange={handleUpdateFfmpegArgs}
@@ -806,7 +815,13 @@ function App() {
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-blue-400 font-medium mb-1">Editing Queue Item</p>
-                            <p className="text-sm truncate" title={editingItem.videoName}>{editingItem.videoName}</p>
+                            <p className="text-sm truncate" title={privacyMode ? undefined : editingItem.videoName}>
+                              <PrivacyText
+                                enabled={privacyMode}
+                                value={editingItem.videoName}
+                                maskLength={12}
+                              />
+                            </p>
                           </div>
                           <button
                             onClick={() => {
@@ -867,6 +882,7 @@ function App() {
                   queue={queue}
                   isQueueStarted={queueStore.isQueueStarted}
                   editingItemId={queueStore.editingQueueItemId}
+                  privacyMode={privacyMode}
                   onRemoveItem={removeFromQueue}
                   onSelectItem={handleSelectQueueItem}
                   onClearCompleted={clearCompletedItems}

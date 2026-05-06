@@ -11,9 +11,23 @@ export interface Notification {
   timestamp: number;
 }
 
+const PRIVACY_TITLES: Record<NotificationType, string> = {
+  error: 'Error',
+  warning: 'Warning',
+  success: 'Notification',
+  info: 'Notification',
+};
+
+const PRIVACY_MESSAGE = 'Details hidden by privacy mode';
+
 class NotificationManager {
   private listeners: Set<(notification: Notification) => void> = new Set();
   private notificationCounter = 0;
+  private privacyMode = false;
+
+  setPrivacyMode(enabled: boolean): void {
+    this.privacyMode = enabled;
+  }
 
   /**
    * Show a non-blocking notification
@@ -23,8 +37,8 @@ class NotificationManager {
     const notification: Notification = {
       id: `notification-${++this.notificationCounter}`,
       type,
-      title,
-      message,
+      title: this.privacyMode ? PRIVACY_TITLES[type] : title,
+      message: this.privacyMode ? PRIVACY_MESSAGE : message,
       timestamp: Date.now(),
     };
 

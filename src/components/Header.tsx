@@ -1,10 +1,12 @@
 import { memo, useMemo } from 'react';
-import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu, FileCheck2, Undo, Redo } from 'lucide-react';
+import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu, FileCheck2, Undo, Redo, Lock, LockOpen } from 'lucide-react';
 import { Logo } from './Logo';
 
 interface HeaderProps {
   isProcessing: boolean;
   useDirectML: boolean;
+  privacyMode: boolean;
+  onTogglePrivacyMode: () => void;
   onSettingsClick: () => void;
   onPluginsClick: () => void;
   onReloadBackend: () => void;
@@ -23,13 +25,15 @@ interface HeaderProps {
   gpuStats?: { gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null;
 }
 
-export const Header = memo<HeaderProps>(({ 
-  isProcessing, 
+export const Header = memo<HeaderProps>(({
+  isProcessing,
   useDirectML,
-  onSettingsClick, 
-  onPluginsClick, 
-  onReloadBackend, 
-  onAboutClick, 
+  privacyMode,
+  onTogglePrivacyMode,
+  onSettingsClick,
+  onPluginsClick,
+  onReloadBackend,
+  onAboutClick,
   onToggleDirectML,
   onLoadWorkflow,
   onImportWorkflow,
@@ -102,7 +106,21 @@ export const Header = memo<HeaderProps>(({
             <RefreshCw className={`w-5 h-5 ${isReloading ? 'animate-spin' : ''}`} />
             <span className="text-xs">Reload</span>
           </button>
-          
+
+          <button
+            onClick={onTogglePrivacyMode}
+            className={`transition-colors p-2 rounded-lg flex flex-col items-center gap-0.5 min-w-[56px] ${
+              privacyMode
+                ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                : 'text-gray-400 hover:text-white hover:bg-dark-surface border border-transparent'
+            }`}
+            title={privacyMode ? 'Privacy mode is ON — click to turn off' : 'Privacy mode is OFF — click to hide previews, filenames, and notifications'}
+            aria-pressed={privacyMode}
+          >
+            {privacyMode ? <Lock className="w-5 h-5" /> : <LockOpen className="w-5 h-5" />}
+            <span className="text-xs">Privacy</span>
+          </button>
+
           {/* Undo/Redo buttons */}
           <div className="flex items-center gap-1 px-2 py-1 border-l border-gray-700/50 ml-1">
             {onUndo && (
@@ -143,6 +161,17 @@ export const Header = memo<HeaderProps>(({
 
         {/* Right side buttons */}
         <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Privacy Mode Indicator */}
+          {privacyMode && (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300"
+              title="Privacy mode is on — previews and filenames are hidden"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="text-xs font-semibold tracking-wide">Privacy</span>
+            </div>
+          )}
+
           {/* GPU Stats Indicator */}
           {gpuStats && vramPercent != null && vramColor && loadColor && (
             <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-dark-surface border border-gray-700/50" title={`VRAM: ${gpuStats.gpuMemoryUsed}MB / ${gpuStats.gpuMemoryTotal}MB\nGPU Load: ${gpuStats.gpuUtilization}%`}>

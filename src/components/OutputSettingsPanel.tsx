@@ -3,6 +3,7 @@ import { memo, useState, useEffect } from 'react';
 import { Download, ChevronDown, ChevronUp, Sliders, Gauge } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
 import type { Codec, Preset, Encoder } from '../utils/ffmpegConfig';
+import { PrivacyText } from './PrivacyVeil';
 import {
   parseFfmpegArgs,
   generateFfmpegArgs,
@@ -24,6 +25,7 @@ interface OutputSettingsPanelProps {
   processingFormat: string;
   isProcessing: boolean;
   benchmarkMode: boolean;
+  privacyMode: boolean;
   onFormatChange: (format: string) => void;
   onSelectOutputFile: () => void;
   onFfmpegArgsChange: (args: string) => void;
@@ -39,6 +41,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   processingFormat,
   isProcessing,
   benchmarkMode,
+  privacyMode,
   onFormatChange,
   onSelectOutputFile,
   onFfmpegArgsChange,
@@ -211,7 +214,13 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
               className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-left hover:border-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm truncate"
             >
               {outputPath ? (
-                <span className="truncate block">{outputPath.split('\\').pop()?.split('/').pop() || outputPath}</span>
+                <span className="truncate block">
+                  <PrivacyText
+                    enabled={privacyMode}
+                    value={outputPath.split('\\').pop()?.split('/').pop() || outputPath}
+                    maskLength={12}
+                  />
+                </span>
               ) : (
                 <span className="text-gray-500">Browse...</span>
               )}

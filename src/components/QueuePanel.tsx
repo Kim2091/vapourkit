@@ -1,11 +1,13 @@
 import { memo, useState, useEffect, useMemo, useRef } from 'react';
-import { List, Trash2, ChevronLeft, ChevronRight, PlayCircle, XCircle, RotateCcw, FolderOpen, SplitSquareHorizontal, Scissors, Film, Loader2, GripVertical, Copy } from 'lucide-react';
+import { List, Trash2, ChevronLeft, ChevronRight, PlayCircle, XCircle, RotateCcw, FolderOpen, SplitSquareHorizontal, Scissors, Film, Loader2, GripVertical, Copy, Lock } from 'lucide-react';
 import type { QueueItem } from '../electron.d';
+import { PrivacyText } from './PrivacyVeil';
 
 interface QueuePanelProps {
   queue: QueueItem[];
   isQueueStarted: boolean;
   editingItemId: string | null;
+  privacyMode: boolean;
   onRemoveItem: (itemId: string) => void;
   onSelectItem: (itemId: string) => void;
   onClearCompleted: () => void;
@@ -23,6 +25,7 @@ export const QueuePanel = memo<QueuePanelProps>(({
   queue,
   isQueueStarted,
   editingItemId,
+  privacyMode,
   onRemoveItem,
   onSelectItem,
   onClearCompleted,
@@ -315,8 +318,12 @@ export const QueuePanel = memo<QueuePanelProps>(({
 
                 {/* Top Row: Name, Index, Status, Actions */}
                 <div className="flex items-start justify-between gap-2 mb-2">
-                    <p className="text-sm font-medium truncate flex-1 min-w-0" title={item.videoName}>
-                        {item.videoName}
+                    <p className="text-sm font-medium truncate flex-1 min-w-0" title={privacyMode ? undefined : item.videoName}>
+                        <PrivacyText
+                          enabled={privacyMode}
+                          value={item.videoName}
+                          maskLength={12}
+                        />
                     </p>
                     <div className="flex items-center gap-2 flex-shrink-0">
                         <div className={`flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center ${
@@ -347,12 +354,17 @@ export const QueuePanel = memo<QueuePanelProps>(({
 
                 {/* Thumbnail - Large */}
                 <div className="flex-1 min-h-0 rounded-lg overflow-hidden bg-dark-bg border border-gray-800 flex items-center justify-center relative group/thumb">
-                  {loadingThumbnails.has(item.videoPath) ? (
+                  {privacyMode ? (
+                    <div className="flex flex-col items-center gap-1 text-gray-500">
+                      <Lock className="w-7 h-7" />
+                      <span className="text-[10px]">Hidden</span>
+                    </div>
+                  ) : loadingThumbnails.has(item.videoPath) ? (
                     <Loader2 className="w-8 h-8 text-gray-600 animate-spin" />
                   ) : thumbnails[item.videoPath] ? (
-                    <img 
-                      src={thumbnails[item.videoPath]!} 
-                      alt="" 
+                    <img
+                      src={thumbnails[item.videoPath]!}
+                      alt=""
                       className="w-full h-full object-contain"
                     />
                   ) : (
