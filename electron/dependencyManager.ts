@@ -177,14 +177,27 @@ export class DependencyManager {
       logger.dependency('Installing VapourSynth from local wheel');
       await runCommand(PATHS.PYTHON, ['-m', 'pip', 'install', wheelPath]);
     } else {
-      // Install VapourSynth from PyPI if local wheel doesn't exist
+      // Install VapourSynth from PyPI if local wheel doesn't exist.
+      // Pin to match the bundled VapourSynth runtime — newer Python package
+      // versions are not ABI-compatible with older VapourSynth installs.
       logger.dependency('Installing VapourSynth from PyPI');
-      await runCommand(PATHS.PYTHON, ['-m', 'pip', 'install', 'vapoursynth']);
+      await runCommand(PATHS.PYTHON, ['-m', 'pip', 'install', 'vapoursynth==72']);
     }
 
-    // Install vstools (required by several vkfilters that import from vstools)
+    // Install vstools (required by several vkfilters that import from vstools).
+    // vstools declares `Requires-Dist: vsjetpack` with no version pin — pip would
+    // resolve to the latest vsjetpack (1.5.0+), which requires vapoursynth>=73 and
+    // would silently upgrade the Python package away from the bundled R72 runtime,
+    // breaking VSScript initialization. Pin vsjetpack to a vapoursynth>=69 release
+    // and re-assert vapoursynth==72 to make pip's resolver refuse any upgrade.
     logger.dependency('Installing vstools');
-    await runCommand(PATHS.PYTHON, ['-m', 'pip', 'install', 'vstools', '--no-warn-script-location']);
+    await runCommand(PATHS.PYTHON, [
+      '-m', 'pip', 'install',
+      'vstools',
+      'vsjetpack==1.1.0',
+      'vapoursynth==72',
+      '--no-warn-script-location',
+    ]);
 
     this.sendProgress({
       type: 'python-setup',
