@@ -591,6 +591,17 @@ export class PluginInstaller {
     }
   }
 
+  emitSetupComplete(): void {
+    if (this.mainWindow) {
+      this.mainWindow.webContents.send('setup-progress', {
+        type: 'complete',
+        component: 'All Dependencies',
+        progress: 100,
+        message: 'All dependencies and plugins installed successfully!',
+      });
+    }
+  }
+
   cancel(): void {
     if (this.installProcess) {
       logger.info('Cancelling plugin dependency operation');

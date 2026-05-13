@@ -44,7 +44,23 @@ export function registerDependencyHandlers(
         await dependencyManager.setupDependencies();
         // Reload config after setup to get the stock config with model metadata
         await configManager.load();
-        logger.info('Config reloaded after setup');
+        logger.info('Config reloaded after core setup');
+
+        // Auto-install plugins as the final phase of unified setup.
+        logger.info('Starting plugin install phase of unified setup');
+        const pluginResult = await pluginInstaller.installDependenciesForSetup();
+        if (!pluginResult.success) {
+          logger.error(`Plugin install failed during setup: ${pluginResult.error}`);
+          // pluginInstaller already emitted a setup-progress error event with
+          // component='Plugins'. Return failure so the renderer can show recovery UI.
+          return { success: false, error: pluginResult.error };
+        }
+
+        // Reload config again so any plugin-extracted templates/filters are picked up.
+        await configManager.load();
+
+        // Final unified setup completion event — fires only after BOTH phases succeed.
+        pluginInstaller.emitSetupComplete();
         return { success: true };
       },
       { useLogSeparator: true }
@@ -92,5 +108,21 @@ export function registerDependencyHandlers(
     logger.info('Cancelling plugin dependency operation');
     pluginInstaller.cancel();
     return { success: true };
+  });
+
+  ipcMain.handle('retry-setup-plugins', async () => {
+    logger.info('User-initiated retry of plugin install (setup mode)');
+    try {
+      const result = await pluginInstaller.installDependenciesForSetup();
+      if (result.success) {
+        await configManager.load();
+        pluginInstaller.emitSetupComplete();
+      }
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Error retrying plugin install:', errorMsg);
+      return { success: false, error: errorMsg };
+    }
   });
 }
