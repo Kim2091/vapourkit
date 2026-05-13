@@ -16,17 +16,34 @@ export interface PluginDependencyProgress {
   message: string;
 }
 
+interface SetupProgressEvent {
+  type: 'installing' | 'complete' | 'error';
+  component: string;
+  progress: number;
+  message: string;
+}
+
 export class PluginInstaller {
   private mainWindow: BrowserWindow | null;
   private installProcess: ChildProcess | null = null;
   private isCancelled: boolean = false;
+  private useSetupChannel: boolean = false;
 
   constructor(mainWindow: BrowserWindow | null = null) {
     this.mainWindow = mainWindow;
   }
 
   private sendProgress(progress: PluginDependencyProgress) {
-    if (this.mainWindow) {
+    if (!this.mainWindow) return;
+    if (this.useSetupChannel) {
+      const setupEvent: SetupProgressEvent = {
+        type: progress.type,
+        component: 'Plugins',
+        progress: progress.progress,
+        message: progress.message,
+      };
+      this.mainWindow.webContents.send('setup-progress', setupEvent);
+    } else {
       this.mainWindow.webContents.send('plugin-dependency-progress', progress);
     }
   }
