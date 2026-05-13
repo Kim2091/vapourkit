@@ -10,6 +10,9 @@ interface SetupScreenProps {
   setupProgress: SetupProgress | null;
   isSettingUp: boolean;
   onSetup: () => Promise<void>;
+  pluginInstallError: string | null;
+  onRetryPlugins: () => Promise<void>;
+  onContinueWithoutPlugins: () => void;
 }
 
 export const SetupScreen = memo<SetupScreenProps>(({
@@ -19,6 +22,9 @@ export const SetupScreen = memo<SetupScreenProps>(({
   setupProgress,
   isSettingUp,
   onSetup,
+  pluginInstallError,
+  onRetryPlugins,
+  onContinueWithoutPlugins,
 }: SetupScreenProps) => {
   // Define the setup steps with their expected component names
   // Note: component names must use startsWith matching because backend sends versioned names
@@ -43,7 +49,8 @@ export const SetupScreen = memo<SetupScreenProps>(({
     steps.push(
       { id: 'python', name: 'Python Embedded', description: 'Python runtime for VapourSynth', component: 'Python Embedded' },
       { id: 'models', name: 'ONNX Models', description: 'Bundled AI upscaling models', component: 'ONNX Models' },
-      { id: 'ffmpeg', name: 'FFmpeg', description: 'Video encoding/decoding', component: 'FFmpeg' }
+      { id: 'ffmpeg', name: 'FFmpeg', description: 'Video encoding/decoding', component: 'FFmpeg' },
+      { id: 'plugins', name: 'Plugins & Filters', description: 'PyTorch, vsjetpack, and bundled VapourSynth plugins', component: 'Plugins' }
     );
 
     return steps;
@@ -167,6 +174,7 @@ export const SetupScreen = memo<SetupScreenProps>(({
                         step.id === 'python' ? 'text-orange-400' :
                         step.id === 'models' ? 'text-pink-400' :
                         step.id === 'ffmpeg' ? 'text-blue-400' :
+                        step.id === 'plugins' ? 'text-primary-purple' :
                         'text-gray-400'
                       }`} />
                     )}
@@ -210,12 +218,41 @@ export const SetupScreen = memo<SetupScreenProps>(({
             </div>
 
             {/* Error Message */}
-            {setupProgress?.type === 'error' && (
+            {setupProgress?.type === 'error' && !pluginInstallError && (
               <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                 <p className="text-red-400 text-sm flex items-center gap-2">
                   <XCircle className="w-4 h-4 flex-shrink-0" />
                   {setupProgress.message}
                 </p>
+              </div>
+            )}
+
+            {/* Plugin install error with recovery options */}
+            {pluginInstallError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg space-y-3">
+                <p className="text-red-400 text-sm flex items-center gap-2">
+                  <XCircle className="w-4 h-4 flex-shrink-0" />
+                  Plugin install failed: {pluginInstallError}
+                </p>
+                <p className="text-gray-400 text-xs">
+                  You can retry now, or continue without plugins and install them later from the Plugins menu.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={onRetryPlugins}
+                    disabled={isSettingUp}
+                    className="flex-1 bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium py-2 px-4 rounded-lg transition-all duration-200"
+                  >
+                    Retry plugins
+                  </button>
+                  <button
+                    onClick={onContinueWithoutPlugins}
+                    disabled={isSettingUp}
+                    className="flex-1 bg-dark-surface hover:bg-gray-700 disabled:bg-dark-surface disabled:cursor-not-allowed text-gray-200 text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Continue without plugins
+                  </button>
+                </div>
               </div>
             )}
 
