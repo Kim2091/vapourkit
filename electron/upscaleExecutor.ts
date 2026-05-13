@@ -131,8 +131,8 @@ export class UpscaleExecutor {
     }
   }
 
-  async getFrameCount(scriptPath: string): Promise<number> {
-    return this.vsInfoExtractor.getFrameCount(scriptPath);
+  async getFrameCount(scriptPath: string, onProgress?: (percentage: number) => void): Promise<number> {
+    return this.vsInfoExtractor.getFrameCount(scriptPath, onProgress);
   }
 
   async getOutputInfo(scriptPath: string): Promise<OutputInfo> {

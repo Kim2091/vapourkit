@@ -3,6 +3,7 @@ import { spawn, ChildProcess, exec } from 'child_process';
 import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 import { ErrorMessageHandler } from './errorMessageHandler';
+import { parseBestSourceProgress } from './bestSourceProgressParser';
 
 export interface OutputInfo {
   resolution: string | null;
@@ -75,11 +76,13 @@ export class VapourSynthInfoExtractor {
   }
 
   /**
-   * Gets the total frame count from a VapourSynth script
+   * Gets the total frame count from a VapourSynth script.
+   * If onProgress is provided, BestSource indexing percentages parsed from stderr
+   * are forwarded so callers can surface them instead of looking hung on cold caches.
    */
-  async getFrameCount(scriptPath: string): Promise<number> {
+  async getFrameCount(scriptPath: string, onProgress?: (percentage: number) => void): Promise<number> {
     logger.upscale(`Getting frame count from script: ${scriptPath}`);
-    
+
     return new Promise((resolve, reject) => {
       const env = setupVSEnvironment(this.pythonPath);
 
@@ -95,18 +98,23 @@ export class VapourSynthInfoExtractor {
 
       let output = '';
       let stderrOutput = '';
-      
+
       if (vspipe.stdout) {
         vspipe.stdout.on('data', (data: Buffer) => {
           output += data.toString();
         });
       }
-      
+
       if (vspipe.stderr) {
         vspipe.stderr.on('data', (data: Buffer) => {
           const text = data.toString();
           output += text;
           stderrOutput += text;
+          if (onProgress) {
+            for (const pct of parseBestSourceProgress(text)) {
+              onProgress(pct);
+            }
+          }
         });
       }
 

@@ -340,15 +340,35 @@ export function registerVideoHandlers(
         qlog(`VSPipe: ${vspipePath}`);
         qlog(`Python: ${pythonPath}`);
         
-        upscaleExecutor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
+        const executor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
+        upscaleExecutor = executor;
 
-        // Get frame count and execute
+        // Get frame count and execute. Stream BestSource indexing progress so a
+        // cold cache doesn't look like a hang, and re-check the module slot after
+        // the await — cancel-upscale, kill-upscale, and the new-run cleanup at the
+        // top of this handler all null the module reference mid-flight.
         qlog('Getting frame count');
-        const totalFrames = await upscaleExecutor.getFrameCount(scriptPath);
+        let lastIndexPct = -1;
+        const totalFrames = await executor.getFrameCount(scriptPath, (pct) => {
+          if (pct !== lastIndexPct) {
+            lastIndexPct = pct;
+            qlog(`Indexing source: ${pct}%`);
+          }
+          mainWindow?.webContents.send('video-index-progress', { percentage: pct, complete: false });
+        });
         qlog(`Total frames to process: ${totalFrames}`);
 
+        if (upscaleExecutor !== executor) {
+          qlog('Upscale canceled before execution started');
+          mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
+          itemLogger.close();
+          activeQueueItemLogger = null;
+          return { success: false, error: 'Canceled' };
+        }
+        mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
+
         qlog('Starting execution');
-        await upscaleExecutor.execute(scriptPath, outputPath, videoPath, totalFrames, false, segment?.enabled ? segment : undefined, fps, benchmarkMode);
+        await executor.execute(scriptPath, outputPath, videoPath, totalFrames, false, segment?.enabled ? segment : undefined, fps, benchmarkMode);
 
         // Cleanup
         qlog('Cleaning up script file');
@@ -562,14 +582,31 @@ export function registerVideoHandlers(
         // Initialize executor for preview
         const vspipePath = dependencyManager.getVSPipePath();
         const pythonPath = dependencyManager.getPythonExecutablePath();
-        previewExecutor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
-        
-        // Get frame count
-        const totalFrames = await previewExecutor.getFrameCount(scriptPath);
+        const executor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
+        previewExecutor = executor;
+
+        // Stream indexing progress and re-check the module slot before executing —
+        // start-upscale and a subsequent preview-segment both null the previous
+        // previewExecutor mid-flight.
+        let lastIndexPct = -1;
+        const totalFrames = await executor.getFrameCount(scriptPath, (pct) => {
+          if (pct !== lastIndexPct) {
+            lastIndexPct = pct;
+            logger.upscale(`Preview indexing source: ${pct}%`);
+          }
+          mainWindow?.webContents.send('video-index-progress', { percentage: pct, complete: false });
+        });
         logger.upscale(`Preview frames to process: ${totalFrames}`);
-        
+
+        if (previewExecutor !== executor) {
+          logger.upscale('Preview canceled before execution started');
+          mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
+          return { success: false, error: 'Canceled' };
+        }
+        mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
+
         // Execute preview (previewMode=true to skip subtitles for MKV compatibility)
-        await previewExecutor.execute(scriptPath, previewPath, videoPath, totalFrames, true, previewSegment, fps);
+        await executor.execute(scriptPath, previewPath, videoPath, totalFrames, true, previewSegment, fps);
         
         // Cleanup script
         await scriptGenerator.cleanupScript(scriptPath);
