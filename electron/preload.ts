@@ -175,6 +175,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Plugin dependency operations
   installPluginDependencies: () => ipcRenderer.invoke('install-plugin-dependencies'),
+  retrySetupPlugins: () => ipcRenderer.invoke('retry-setup-plugins'),
   uninstallPluginDependencies: () => ipcRenderer.invoke('uninstall-plugin-dependencies'),
   checkPluginDependencies: () => ipcRenderer.invoke('check-plugin-dependencies'),
   cancelPluginDependencyInstall: () => ipcRenderer.invoke('cancel-plugin-dependency-install'),

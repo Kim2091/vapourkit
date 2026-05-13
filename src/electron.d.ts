@@ -181,6 +181,7 @@ export interface ElectronAPI {
   
   // Plugin dependency operations
   installPluginDependencies: () => Promise<{ success: boolean; error?: string }>;
+  retrySetupPlugins: () => Promise<{ success: boolean; error?: string }>;
   uninstallPluginDependencies: () => Promise<{ success: boolean; error?: string }>;
   checkPluginDependencies: () => Promise<{ installed: boolean; packages: string[] }>;
   cancelPluginDependencyInstall: () => Promise<{ success: boolean }>;
@@ -219,7 +220,7 @@ export interface VsMlrtVersionInfo {
 }
 
 export interface SetupProgress {
-  type: 'download' | 'extract' | 'complete' | 'error' | 'model-extract';
+  type: 'download' | 'extract' | 'installing' | 'complete' | 'error' | 'model-extract';
   component: string;
   progress: number;
   message: string;
