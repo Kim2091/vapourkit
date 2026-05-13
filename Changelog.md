@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.16.1
+- Fix `Cannot read properties of null (reading 'execute')` crash when canceling or restarting an upscale during the frame count probe
+  - Same fix applied to the preview-segment path
+- Stream BestSource indexing progress during the frame count probe so cold-cache runs don't look like a hang
+  - Indexing progress now shows in the same progress bar used on first video load, and is written to the queue item log
+
+## 0.16.0
+- Auto-install plugins at the end of setup
+  - Removes the manual "reinstall your plugins" step required by 0.15.0
+  - Auto-retries once on transient failure; falls back to Retry / Continue-without-plugins on hard failure
+- Add Privacy mode (lock icon in the header)
+  - Hides preview frames, input/output filenames, queue thumbnails, and queue item names behind clickable veils
+  - Notification toasts become generic so filenames don't leak to screen
+  - Console auto-collapses when privacy is enabled
+  - Setting persists across launches
+- Add descriptive output filenames (enabled by default) — thanks @fs10102020!
+  - See 0.15.1 entry below for details
+- Add no-filters safety
+  - Persistent banner above the Upscale button when no filters are enabled
+  - Confirm dialog before upscaling with zero filters
+  - Removed the old "default-upscale" silent fallback that would secretly run whichever AI model was selected first
+- Add BestSource indexing progress bar under the video drop zone on first video load
+- Rename Temporal Fix filters
+  - `Temporal Fix V2` → `TemporalFix (AI)`
+  - `Temporal Fix` → `TemporalFix (Classic)`
+- Fix "Failed to initialize VSScript" on fresh installs
+  - Pinned `vapoursynth==72` and `vsjetpack==1.1.0` so pip doesn't silently upgrade to an ABI-incompatible Python binding
+- Fix vsview failing to launch (switched from `python -m vsview` to `vsview.exe`)
+- Fix descriptive-naming regen ignoring the configured default output folder
+- Fix duplicate `video-index-progress` terminal event in the `get-video-info` handler
+- Fix content-length parseInt type error under newer `@types/axios`
+
 ## 0.15.1
 - Add descriptive output filenames (enabled by default)
   - Output filenames now reflect your workflow instead of using a generic `_processed` suffix
