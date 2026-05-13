@@ -366,6 +366,31 @@ export class PluginInstaller {
     }
   }
 
+  async installDependenciesForSetup(): Promise<{ success: boolean; error?: string }> {
+    this.useSetupChannel = true;
+    try {
+      logger.info('Starting plugin dependency installation (setup mode, attempt 1/2)');
+      const firstResult = await this.installDependencies();
+      if (firstResult.success) {
+        return firstResult;
+      }
+
+      if (this.isCancelled) {
+        return firstResult;
+      }
+
+      logger.info(`Plugin install attempt 1 failed (${firstResult.error}); retrying once`);
+      this.isCancelled = false;
+      const secondResult = await this.installDependencies();
+      if (!secondResult.success) {
+        logger.error(`Plugin install retry failed: ${secondResult.error}`);
+      }
+      return secondResult;
+    } finally {
+      this.useSetupChannel = false;
+    }
+  }
+
   async checkInstalled(): Promise<{ installed: boolean; packages: string[] }> {
     logger.info('Checking if plugin dependencies are installed');
     
