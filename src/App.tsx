@@ -64,7 +64,7 @@ function App() {
 
   // Setup and initialization hooks
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
-  const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup, showPluginPrompt, setShowPluginPrompt } = useSetup(addConsoleLog);
+  const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup, pluginInstallError, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
   const { useDirectML, toggleDirectML, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
   const { 
@@ -660,6 +660,9 @@ function App() {
         setupProgress={setupProgress}
         isSettingUp={isSettingUp}
         onSetup={handleSetup}
+        pluginInstallError={pluginInstallError}
+        onRetryPlugins={handleRetryPlugins}
+        onContinueWithoutPlugins={handleContinueWithoutPlugins}
       />
     );
   }
@@ -941,8 +944,7 @@ function App() {
         showAbout={showAbout}
         onCloseAbout={() => closeModalWithFocusRestore(() => setShowAbout(false))}
         showPlugins={showPlugins}
-        showPluginPrompt={showPluginPrompt}
-        onClosePlugins={() => closeModalWithFocusRestore(() => { setShowPlugins(false); setShowPluginPrompt(false); })}
+        onClosePlugins={() => closeModalWithFocusRestore(() => setShowPlugins(false))}
         onInstallationComplete={loadTemplates}
         showUpdateModal={showUpdateModal}
         updateInfo={updateInfo}

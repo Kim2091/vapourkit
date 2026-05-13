@@ -58,7 +58,6 @@ interface AppModalsProps {
 
   // Plugins
   showPlugins: boolean;
-  showPluginPrompt: boolean;
   onClosePlugins: () => void;
   onInstallationComplete: () => void;
 
@@ -133,7 +132,7 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
       />
 
       <PluginsModal
-        show={props.showPlugins || props.showPluginPrompt}
+        show={props.showPlugins}
         onClose={props.onClosePlugins}
         onInstallationComplete={props.onInstallationComplete}
       />
