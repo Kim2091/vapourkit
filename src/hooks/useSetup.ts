@@ -8,25 +8,27 @@ export function useSetup(onLog: (message: string) => void) {
   const [hasCudaSupport, setHasCudaSupport] = useState<boolean | null>(null);
   const [setupProgress, setSetupProgress] = useState<SetupProgress | null>(null);
   const [isSettingUp, setIsSettingUp] = useState(false);
-  const [showPluginPrompt, setShowPluginPrompt] = useState(false);
+  const [pluginInstallError, setPluginInstallError] = useState<string | null>(null);
 
   // Setup progress listener
   useEffect(() => {
     const unsubscribe = window.electronAPI.onSetupProgress((progress: SetupProgress) => {
       setSetupProgress(progress);
       onLog(`[Setup] ${progress.message} (${progress.progress}%)`);
-      if (progress.type === 'complete') {
+
+      if (progress.type === 'error' && progress.component.startsWith('Plugins')) {
+        // Plugin install error after the installer's internal auto-retry.
+        // Keep isSettingUp false so the recovery buttons are enabled; surface
+        // the error in dedicated state so SetupScreen renders the recovery UI.
+        setPluginInstallError(progress.message);
+        setIsSettingUp(false);
+        return;
+      }
+
+      if (progress.type === 'complete' && progress.component === 'All Dependencies') {
         setIsSetupComplete(true);
         setIsSettingUp(false);
-        
-        // Check if we should show the plugin prompt
-        // Only show if this is the first time setup completed
-        const hasShownPluginPrompt = localStorage.getItem('hasShownPluginPrompt');
-        if (!hasShownPluginPrompt) {
-          setShowPluginPrompt(true);
-          localStorage.setItem('hasShownPluginPrompt', 'true');
-          onLog('First-time setup complete - prompting for plugin installation');
-        }
+        setPluginInstallError(null);
       }
     });
 
@@ -39,7 +41,7 @@ export function useSetup(onLog: (message: string) => void) {
       const cudaSupport = await window.electronAPI.detectCudaSupport();
       setHasCudaSupport(cudaSupport);
       onLog(`CUDA support: ${cudaSupport ? 'detected' : 'not detected'}`);
-      
+
       const isComplete = await window.electronAPI.checkDependencies();
       setIsSetupComplete(isComplete);
       if (!isComplete) {
@@ -56,19 +58,29 @@ export function useSetup(onLog: (message: string) => void) {
 
   const handleSetup = async (): Promise<void> => {
     setIsSettingUp(true);
-    
-    // Clear all localStorage to prevent persistence issues from previous installations
-    // but preserve any existing plugin prompt flag (shouldn't exist for first-time setups anyway)
+    setPluginInstallError(null);
+
+    // Clear localStorage to prevent persistence issues from previous installations.
     onLog('Clearing previous application data...');
-    const hasShownPluginPrompt = localStorage.getItem('hasShownPluginPrompt');
     localStorage.clear();
-    if (hasShownPluginPrompt) {
-      localStorage.setItem('hasShownPluginPrompt', hasShownPluginPrompt);
-    }
-    
+
     onLog('Starting dependency setup...');
     await window.electronAPI.setupDependencies();
   };
+
+  const handleRetryPlugins = useCallback(async (): Promise<void> => {
+    setIsSettingUp(true);
+    setPluginInstallError(null);
+    onLog('Retrying plugin install...');
+    await window.electronAPI.retrySetupPlugins();
+  }, [onLog]);
+
+  const handleContinueWithoutPlugins = useCallback((): void => {
+    onLog('User chose to continue without plugins - entering main app');
+    setPluginInstallError(null);
+    setIsSettingUp(false);
+    setIsSetupComplete(true);
+  }, [onLog]);
 
   // Check dependencies on mount
   useEffect(() => {
@@ -82,7 +94,8 @@ export function useSetup(onLog: (message: string) => void) {
     setupProgress,
     isSettingUp,
     handleSetup,
-    showPluginPrompt,
-    setShowPluginPrompt,
+    pluginInstallError,
+    handleRetryPlugins,
+    handleContinueWithoutPlugins,
   };
 }
