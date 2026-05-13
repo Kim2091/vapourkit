@@ -549,19 +549,12 @@ export class DependencyManager {
         logger.dependency('FFmpeg already installed');
       }
 
-      // NOTE: Plugin extraction has been moved to the manual "Install Plugins" button
-      // in the Plugins modal. This allows users to install plugins on-demand rather
-      // than during initial setup.
-      
+      // Plugin install runs after this method returns, orchestrated by the
+      // setup-dependencies IPC handler. The final 'All Dependencies complete'
+      // event is emitted from the handler once plugins finish.
+
       // Initialize user config files
       await this.initializeUserConfig();
-
-      this.sendProgress({
-        type: 'complete',
-        component: 'All Dependencies',
-        progress: 100,
-        message: 'All dependencies installed successfully!'
-      });
 
       logger.dependency('All dependencies setup completed successfully');
       logger.separator();
