@@ -65,7 +65,7 @@ function App() {
   // Setup and initialization hooks
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup, pluginInstallError, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
-  const { useDirectML, toggleDirectML, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
+  const { useDirectML, toggleDirectML, numStreams, updateNumStreams, deviceId, updateDeviceId, availableGpus, isEnumerating } = useSettings(hasCudaSupport);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
   const { 
     ffmpegArgs, 
@@ -185,6 +185,7 @@ function App() {
     selectedModel,
     colorimetry: colorimetrySettings,
     segment,
+    deviceId,
   });
   
   // Destructure queue store for convenience
@@ -482,6 +483,7 @@ function App() {
     useDirectML,
     filters,
     numStreams,
+    deviceId,
     onLog: addConsoleLog,
     onUpdateVideoInfo: setVideoInfo,
     onError: (message) => notify.error('Workflow Validation Error', message),
@@ -545,7 +547,8 @@ function App() {
         filters,
         numStreams,
         startFrame,
-        endFrame
+        endFrame,
+        deviceId
       );
       
       if (result.success && result.previewPath) {
@@ -577,7 +580,8 @@ function App() {
         true,
         filters,
         numStreams,
-        segment
+        segment,
+        deviceId
       );
       
       if (result.success) {
@@ -933,6 +937,10 @@ function App() {
         numStreams={numStreams}
         onUpdateNumStreams={updateNumStreams}
         onToggleDirectML={handleToggleDirectML}
+        deviceId={deviceId}
+        onUpdateDeviceId={updateDeviceId}
+        availableGpus={availableGpus}
+        isEnumerating={isEnumerating}
         videoCompareArgs={videoCompareArgs}
         onUpdateVideoCompareArgs={handleUpdateVideoCompareArgs}
         onResetVideoCompareArgs={handleResetVideoCompareArgs}

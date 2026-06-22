@@ -1,5 +1,6 @@
 import { memo, useState, useEffect } from 'react';
-import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive } from 'lucide-react';
+import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive, Monitor } from 'lucide-react';
+import type { GpuDevice } from '../electron.d';
 
 interface SettingsModalProps {
   show: boolean;
@@ -16,6 +17,10 @@ interface SettingsModalProps {
   onResetDefaultOutputFolder: () => void;
   descriptiveNamingEnabled: boolean;
   onUpdateDescriptiveNamingEnabled: (enabled: boolean) => void;
+  deviceId: number;
+  onUpdateDeviceId: (value: number) => void;
+  availableGpus: GpuDevice[];
+  isEnumerating: boolean;
 }
 
 type Tab = 'general' | 'processing';
@@ -35,6 +40,10 @@ export const SettingsModal = memo<SettingsModalProps>(({
   onResetDefaultOutputFolder,
   descriptiveNamingEnabled,
   onUpdateDescriptiveNamingEnabled,
+  deviceId,
+  onUpdateDeviceId,
+  availableGpus,
+  isEnumerating,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [showVideoCompareOptions, setShowVideoCompareOptions] = useState(false);
@@ -198,6 +207,65 @@ export const SettingsModal = memo<SettingsModalProps>(({
                     </label>
                   </div>
                 )}
+
+                {/* GPU Device Selection */}
+                <div className="bg-dark-surface rounded-lg p-4 border border-gray-700 mt-4">
+                  <label className="block">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Monitor className="w-4 h-4 text-primary-blue" />
+                      <p className="text-sm font-medium text-white">GPU Device</p>
+                    </div>
+                    {isEnumerating ? (
+                      <div className="flex items-center gap-2 py-2">
+                        <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-sm text-gray-400">Detecting GPUs...</span>
+                      </div>
+                    ) : availableGpus.length > 0 ? (
+                      <>
+                        <select
+                          value={deviceId}
+                          onChange={(e) => onUpdateDeviceId(parseInt(e.target.value, 10))}
+                          className="w-full bg-dark-bg border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-blue"
+                        >
+                          {availableGpus.map((gpu) => (
+                            <option key={gpu.index} value={gpu.index}>
+                              [{gpu.index}] {gpu.name}{gpu.adapterRAM > 0 ? ` (${(gpu.adapterRAM / 1024).toFixed(1)} GB VRAM)` : ''}
+                            </option>
+                          ))}
+                          {!availableGpus.some(g => g.index === deviceId) && (
+                            <option value={deviceId}>[{deviceId}] Custom / Unlisted Device</option>
+                          )}
+                        </select>
+                      </>
+                    ) : (
+                      <p className="text-sm text-yellow-400">No compatible GPUs detected.</p>
+                    )}
+                  </label>
+                  <details className="mt-2 pt-2 border-t border-gray-700 group">
+                    <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300 select-none py-1">
+                      Advanced: Manual device_id override
+                    </summary>
+                    <div className="mt-2">
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 whitespace-nowrap">Override device_id:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="15"
+                          value={deviceId}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val) && val >= 0) onUpdateDeviceId(val);
+                          }}
+                          className="w-20 bg-dark-bg border border-gray-600 rounded px-2 py-1 text-sm text-white text-center focus:outline-none focus:ring-1 focus:ring-primary-blue font-mono"
+                        />
+                      </label>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Set the numeric index passed as device_id to the {useDirectML ? 'DirectML' : 'TensorRT'} provider. Only needed if the dropdown selection does not match the correct GPU.
+                      </p>
+                    </div>
+                  </details>
+                </div>
 
                 {/* Info Box */}
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mt-4">

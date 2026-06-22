@@ -6,6 +6,7 @@ export interface ElectronAPI {
   onSetupProgress: (callback: (progress: SetupProgress) => void) => () => void;
   detectCudaSupport: () => Promise<boolean>;
   getGpuStats: () => Promise<{ gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null>;
+  enumerateGpus: () => Promise<GpuDevice[]>;
   
   // Video operations
   selectVideoFile: () => Promise<string[] | null>;
@@ -24,7 +25,8 @@ export interface ElectronAPI {
     filters?: Filter[],
     upscalePosition?: number,
     numStreams?: number,
-    sourceFps?: number
+    sourceFps?: number,
+    deviceId?: number
   ) => Promise<{ 
     resolution: string | null; 
     fps: number | null;
@@ -64,7 +66,8 @@ export interface ElectronAPI {
     upscalePosition?: number,
     numStreams?: number,
     segment?: SegmentSelection,
-    benchmarkMode?: boolean
+    benchmarkMode?: boolean,
+    deviceId?: number
   ) => Promise<UpscaleResult>;
   previewSegment: (
     videoPath: string,
@@ -74,7 +77,8 @@ export interface ElectronAPI {
     filters?: Filter[],
     numStreams?: number,
     startFrame?: number,
-    endFrame?: number
+    endFrame?: number,
+    deviceId?: number
   ) => Promise<{ success: boolean; previewPath?: string; error?: string }>;
   cancelUpscale: () => Promise<{ success: boolean }>;
   killUpscale: () => Promise<{ success: boolean }>;
@@ -88,7 +92,8 @@ export interface ElectronAPI {
     upscalingEnabled?: boolean,
     filters?: Filter[],
     numStreams?: number,
-    segment?: SegmentSelection
+    segment?: SegmentSelection,
+    deviceId?: number
   ) => Promise<{ success: boolean; error?: string }>;
   
   // Shell operations
@@ -389,6 +394,13 @@ export interface SegmentSelection {
   enabled: boolean;
   startFrame: number;
   endFrame: number; // -1 means end of video
+}
+
+export interface GpuDevice {
+  index: number;
+  name: string;
+  adapterRAM: number;
+  vendor: 'nvidia' | 'amd' | 'intel' | 'other';
 }
 
 export interface ColorimetrySettings {

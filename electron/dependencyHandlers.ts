@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { logger } from './logger';
 import { configManager } from './configManager';
-import { detectCudaSupport, pollGpuStats } from './utils';
+import { detectCudaSupport, enumerateGpus, pollGpuStats } from './utils';
 import { createIpcHandler } from './ipcUtilities';
 import { DependencyManager } from './dependencyManager';
 import { PluginInstaller } from './pluginInstaller';
@@ -35,6 +35,10 @@ export function registerDependencyHandlers(
 
   ipcMain.handle('get-gpu-stats', async () => {
     return await pollGpuStats();
+  });
+
+  ipcMain.handle('enumerate-gpus', async () => {
+    return await enumerateGpus();
   });
 
   ipcMain.handle('setup-dependencies',

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
   detectCudaSupport: () => ipcRenderer.invoke('detect-cuda-support'),
   getGpuStats: () => ipcRenderer.invoke('get-gpu-stats'),
+  enumerateGpus: () => ipcRenderer.invoke('enumerate-gpus'),
   setupDependencies: () => ipcRenderer.invoke('setup-dependencies'),
   onSetupProgress: (callback: (progress: any) => void) => {
     const listener = (event: any, progress: any) => callback(progress);
