@@ -6,6 +6,7 @@ import * as os from 'os';
 import { PATHS } from './constants';
 import { configManager } from './configManager';
 import { logger } from './logger';
+import { getCachedGpus, enumerateGpus } from './utils';
 
 export type ModelType = 'vsr' | 'image';
 
@@ -49,6 +50,7 @@ export interface ScriptConfig {
   validationMode?: boolean; // If true, only process first 5 seconds for validation
   sourceFps?: number; // Source video FPS for validation frame calculation
   generatePreviewOutputs?: boolean; // If true, add output nodes after each filter for vs-view
+  deviceId?: number;
 }
 
 export class VapourSynthScriptGenerator {
@@ -69,6 +71,27 @@ export class VapourSynthScriptGenerator {
     const defaultPrimaries = config.colorimetry?.defaultPrimaries || '709';
     const defaultTransfer = config.colorimetry?.defaultTransfer || '709';
     const outputFormat = config.outputFormat || 'vs.YUV420P8';
+
+    // Translate OS-level device index for the active backend
+    // DirectML uses DXGI indexing (matches systeminformation order).
+    // TensorRT uses CUDA indexing (NVIDIA-only, 0-based).
+    let finalDeviceId = config.deviceId ?? 0;
+    if (!config.useDirectML) {
+      let gpus = getCachedGpus();
+      if (gpus.length === 0) {
+        gpus = await enumerateGpus();
+      }
+      let cudaIdx = 0;
+      for (const gpu of gpus) {
+        if (gpu.index === finalDeviceId) {
+          finalDeviceId = cudaIdx;
+          break;
+        }
+        if (gpu.vendor === 'nvidia') {
+          cudaIdx++;
+        }
+      }
+    }
 
     // Process filters sequentially
     const filters = config.filters || [];
@@ -114,7 +137,7 @@ export class VapourSynthScriptGenerator {
         const filterUseFp32 = configManager.isModelFp32(filter.modelPath);
         const filterModelType = configManager.getModelType(filter.modelPath);
         const filterTemporalFrames = configManager.getTemporalFrames(filter.modelPath);
-        filterCode += this.generateAIModelCode(filter, config.useDirectML || false, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams, filterTemporalFrames);
+        filterCode += this.generateAIModelCode(filter, config.useDirectML || false, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams, filterTemporalFrames, finalDeviceId);
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';
@@ -128,7 +151,7 @@ export class VapourSynthScriptGenerator {
         filterCode += `clip.set_output(${outputIndex})\n\n`;
       }
     }
-    
+
     // Replace all placeholders
     template = template
       .replace(/{{INPUT_VIDEO}}/g, config.inputVideo.replace(/\\/g, '/'))
@@ -159,7 +182,7 @@ export class VapourSynthScriptGenerator {
   /**
    * Generate VapourSynth code for an AI model filter
    */
-  private generateAIModelCode(filter: Filter, useDirectML: boolean, useFp32: boolean, modelType: ModelType, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number, temporalFrames?: number): string {
+  private generateAIModelCode(filter: Filter, useDirectML: boolean, useFp32: boolean, modelType: ModelType, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number, temporalFrames?: number, deviceId?: number): string {
     if (!filter.modelPath) return '';
     
     // Constants for VapourSynth variable names
@@ -190,12 +213,12 @@ export class VapourSynthScriptGenerator {
       modelPathParam = 'network_path';
       modelPath = filter.modelPath.replace(/\.engine$/, '.onnx');
       const useFp16 = !useFp32;
-      fp16Param = `, provider="DML", device_id=0, fp16=${useFp16 ? 'True' : 'False'}, verbosity=4`;
+      fp16Param = `, provider="DML", device_id=${deviceId ?? 0}, fp16=${useFp16 ? 'True' : 'False'}, verbosity=4`;
     } else {
       modelPlugin = 'trt';
       modelPathParam = 'engine_path';
       modelPath = filter.modelPath;
-      fp16Param = '';
+      fp16Param = `, device_id=${deviceId ?? 0}`;
     }
     
     // Determine num_streams value (default to 2 if not specified)

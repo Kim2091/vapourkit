@@ -133,7 +133,8 @@ export function registerVideoHandlers(
     filters?: any[],
     upscalePosition?: number,
     numStreams?: number,
-    sourceFps?: number
+    sourceFps?: number,
+    deviceId?: number
   ) => {
     logger.info(`Getting output info for: ${videoPath} (validation mode - first 5 seconds)`);
     try {
@@ -153,7 +154,8 @@ export function registerVideoHandlers(
         numStreams,
         undefined, // segment
         true, // validationMode - always enabled for get-output-resolution
-        sourceFps
+        sourceFps,
+        deviceId
       );
       
       const scriptPath = await scriptGenerator.generateScript(config);
@@ -228,7 +230,8 @@ export function registerVideoHandlers(
     upscalePosition?: number,
     numStreams?: number,
     segment?: { enabled: boolean; startFrame: number; endFrame: number },
-    benchmarkMode?: boolean
+    benchmarkMode?: boolean,
+    deviceId?: number
   ) => {
     return await withLogSeparator(async () => {
       const isUpscaling = upscalingEnabled !== false; // Default to true for backward compatibility
@@ -311,7 +314,10 @@ export function registerVideoHandlers(
           upscalingEnabled,
           filters,
           numStreams,
-          segment
+          segment,
+          undefined, // validationMode
+          undefined, // sourceFps
+          deviceId
         );
 
         if (config.upscalingEnabled && config.enginePath) {
@@ -475,7 +481,8 @@ export function registerVideoHandlers(
     upscalingEnabled?: boolean,
     filters?: any[],
     numStreams?: number,
-    segment?: { enabled: boolean; startFrame: number; endFrame: number }
+    segment?: { enabled: boolean; startFrame: number; endFrame: number },
+    deviceId?: number
   ) => {
     logger.info(`Launching vs-view for video: ${videoPath}`);
     try {
@@ -496,6 +503,7 @@ export function registerVideoHandlers(
         outputFormat: 'vs.YUV420P8',
         segment: segment,
         sourceFps: metadata.fps,
+        deviceId: deviceId,
         generatePreviewOutputs: true // Enable multi-output generation for filter comparison
       };
 
@@ -529,7 +537,8 @@ export function registerVideoHandlers(
     filters?: any[],
     numStreams?: number,
     startFrame?: number,
-    endFrame?: number
+    endFrame?: number,
+    deviceId?: number
   ) => {
     return await withLogSeparator(async () => {
       logger.upscale('Starting segment preview');
@@ -568,7 +577,10 @@ export function registerVideoHandlers(
           upscalingEnabled,
           filters,
           numStreams,
-          previewSegment
+          previewSegment,
+          undefined, // validationMode
+          undefined, // sourceFps
+          deviceId
         );
         
         const scriptPath = await scriptGenerator.generateScript(config);
@@ -824,7 +836,8 @@ function createScriptConfig(
   numStreams?: number,
   segment?: { enabled: boolean; startFrame: number; endFrame: number },
   validationMode?: boolean,
-  sourceFps?: number
+  sourceFps?: number,
+  deviceId?: number
 ) {
   const isUpscaling = upscalingEnabled !== false;
   
@@ -854,6 +867,7 @@ function createScriptConfig(
     outputFormat: outputFormat,
     segment: segment?.enabled ? segment : undefined,
     validationMode: validationMode,
-    sourceFps: sourceFps
+    sourceFps: sourceFps,
+    deviceId: deviceId
   };
 }

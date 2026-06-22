@@ -203,6 +203,14 @@ export async function enumerateGpus(): Promise<GpuDevice[]> {
 }
 
 /**
+ * Returns the cached GPU list without re-enumerating.
+ * Returns an empty array if enumeration has not occurred yet.
+ */
+export function getCachedGpus(): GpuDevice[] {
+  return gpuCache || [];
+}
+
+/**
  * Clears the cached GPU list. Useful for testing or manual refresh.
  */
 export function clearGpuCache(): void {
