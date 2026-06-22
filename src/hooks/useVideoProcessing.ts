@@ -13,6 +13,7 @@ interface UseVideoProcessingProps {
   selectedModel: string | null;
   colorimetry: any;
   segment: SegmentSelection;
+  deviceId?: number;
 }
 
 export function useVideoProcessing({
@@ -24,6 +25,7 @@ export function useVideoProcessing({
   selectedModel,
   colorimetry,
   segment,
+  deviceId = 0,
 }: UseVideoProcessingProps) {
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [outputPath, setOutputPath] = useState<string>('');
@@ -370,7 +372,8 @@ export function useVideoProcessing({
         0,
         numStreams,
         segment,
-        benchmarkMode
+        benchmarkMode,
+        deviceId
       );
       if (!result.success) {
         onLog(`Error: ${result.error}`);

@@ -9,7 +9,7 @@ import { PluginsModal } from './PluginsModal';
 import { UpdateNotificationModal } from './UpdateNotificationModal';
 import { VsMlrtUpdateModal } from './VsMlrtUpdateModal';
 import { FilterImportModal } from './FilterImportModal';
-import type { UpdateInfo, VsMlrtVersionInfo } from '../electron';
+import type { UpdateInfo, VsMlrtVersionInfo, GpuDevice } from '../electron';
 
 interface AppModalsProps {
   // Import Model
@@ -43,6 +43,10 @@ interface AppModalsProps {
   numStreams: number;
   onUpdateNumStreams: (streams: number) => void;
   onToggleDirectML: (value: boolean) => void;
+  deviceId: number;
+  onUpdateDeviceId: (value: number) => void;
+  availableGpus: GpuDevice[];
+  isEnumerating: boolean;
   videoCompareArgs: string;
   onUpdateVideoCompareArgs: (args: string) => void;
   onResetVideoCompareArgs: () => void;
@@ -124,6 +128,10 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
         onResetDefaultOutputFolder={props.onResetDefaultOutputFolder}
         descriptiveNamingEnabled={props.descriptiveNamingEnabled}
         onUpdateDescriptiveNamingEnabled={props.onUpdateDescriptiveNamingEnabled}
+        deviceId={props.deviceId}
+        onUpdateDeviceId={props.onUpdateDeviceId}
+        availableGpus={props.availableGpus}
+        isEnumerating={props.isEnumerating}
       />
 
       <AboutModal

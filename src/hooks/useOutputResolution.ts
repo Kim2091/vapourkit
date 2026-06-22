@@ -7,6 +7,7 @@ interface UseOutputResolutionProps {
   useDirectML: boolean;
   filters: Filter[];
   numStreams: number;
+  deviceId?: number;
   onLog: (message: string) => void;
   onUpdateVideoInfo: (updater: (prev: VideoInfo | null) => VideoInfo | null) => void;
   onError?: (message: string) => void;
@@ -29,6 +30,7 @@ export function useOutputResolution({
   useDirectML,
   filters,
   numStreams,
+  deviceId = 0,
   onLog,
   onUpdateVideoInfo,
   onError,
@@ -97,7 +99,8 @@ export function useOutputResolution({
         filters,
         0,
         numStreams,
-        videoInfo.fps || undefined // Pass source FPS for validation frame calculation
+        videoInfo.fps || undefined, // Pass source FPS for validation frame calculation
+        deviceId
       );
       
       // Check if validation was cancelled
@@ -156,7 +159,7 @@ export function useOutputResolution({
       isValidatingRef.current = false;
       setIsValidating(false);
     }
-  }, [videoInfo, selectedModel, useDirectML, filters, numStreams, onLog, onUpdateVideoInfo, onError]);
+  }, [videoInfo, selectedModel, useDirectML, filters, numStreams, deviceId, onLog, onUpdateVideoInfo, onError]);
 
   return {
     isValidating,

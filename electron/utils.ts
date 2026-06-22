@@ -1,6 +1,7 @@
 // electron/utils.ts
-import { spawn, ChildProcess } from 'child_process';
+import { spawn } from 'child_process';
 import * as path from 'path';
+import * as si from 'systeminformation';
 import { logger } from './logger';
 import { PATHS } from './constants';
 
@@ -148,6 +149,75 @@ export async function withLogSeparator<T>(
 }
 
 /**
+ * A detected GPU device from WMI enumeration
+ */
+export interface GpuDevice {
+  index: number;
+  name: string;
+  adapterRAM: number; // MB, 0 if unknown
+  vendor: 'nvidia' | 'amd' | 'intel' | 'other';
+}
+
+/**
+ * Enumerates available GPUs via systeminformation.
+ * The controller array order matches DXGI adapter indices.
+ * Results are cached after the first successful call.
+ */
+let gpuCache: GpuDevice[] | null = null;
+
+export async function enumerateGpus(): Promise<GpuDevice[]> {
+  if (gpuCache) return gpuCache;
+
+  try {
+    const graphics = await si.graphics();
+    const devices: GpuDevice[] = [];
+
+    graphics.controllers.forEach((controller, index) => {
+      const name = controller.model || controller.name || 'Unknown GPU';
+
+      // Filter out software renderers and basic display adapters
+      const lower = name.toLowerCase();
+      if (lower.includes('microsoft') || lower.includes('basic')) return;
+
+      const lowerVendor = (controller.vendor || '').toLowerCase();
+      let vendor: GpuDevice['vendor'] = 'other';
+      if (lowerVendor.includes('nvidia') || lower.includes('nvidia')) vendor = 'nvidia';
+      else if (lowerVendor.includes('amd') || lower.includes('radeon')) vendor = 'amd';
+      else if (lowerVendor.includes('intel') || lower.includes('intel')) vendor = 'intel';
+
+      devices.push({
+        index,
+        name,
+        adapterRAM: controller.vram || 0, // MB, from systeminformation
+        vendor
+      });
+    });
+
+    logger.info(`Enumerated ${devices.length} GPU(s): ${devices.map(g => g.name).join(', ')}`);
+    gpuCache = devices;
+    return devices;
+  } catch (error) {
+    logger.error(`GPU enumeration failed: ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
+}
+
+/**
+ * Returns the cached GPU list without re-enumerating.
+ * Returns an empty array if enumeration has not occurred yet.
+ */
+export function getCachedGpus(): GpuDevice[] {
+  return gpuCache || [];
+}
+
+/**
+ * Clears the cached GPU list. Useful for testing or manual refresh.
+ */
+export function clearGpuCache(): void {
+  gpuCache = null;
+}
+
+/**
  * GPU stats returned by pollGpuStats
  */
 export interface GpuStats {
@@ -157,12 +227,52 @@ export interface GpuStats {
 }
 
 /**
+ * Resolves the path to nvidia-smi.exe by checking PATH first,
+ * then falling back to the standard system location.
+ * Returns the command string (may be just 'nvidia-smi' if found on PATH)
+ * or null if not found anywhere.
+ */
+const NVIDIA_SMI_PATH = 'C:\\Windows\\System32\\nvidia-smi.exe';
+
+async function resolveNvidiaSmiPath(): Promise<string | null> {
+  // Try PATH first (fast path)
+  try {
+    const pathCheck = await new Promise<boolean>((resolve) => {
+      const proc = spawn('nvidia-smi', ['--version'], {
+        shell: true,
+        windowsHide: true,
+        stdio: 'ignore'
+      });
+      proc.on('close', (code) => resolve(code === 0));
+      proc.on('error', () => resolve(false));
+      setTimeout(() => { proc.kill(); resolve(false); }, 2000);
+    });
+    if (pathCheck) return 'nvidia-smi';
+  } catch {
+    // fall through
+  }
+
+  // Fallback: standard system location
+  try {
+    const exists = require('fs').existsSync(NVIDIA_SMI_PATH);
+    if (exists) return NVIDIA_SMI_PATH;
+  } catch {
+    // fall through
+  }
+
+  return null;
+}
+
+/**
  * Polls nvidia-smi for GPU memory and utilization stats.
  * Returns null if nvidia-smi is unavailable (non-NVIDIA systems).
  */
 export async function pollGpuStats(): Promise<GpuStats | null> {
   try {
-    const proc = spawn('nvidia-smi', [
+    const nvidiaSmi = await resolveNvidiaSmiPath();
+    if (!nvidiaSmi) return null;
+
+    const proc = spawn(nvidiaSmi, [
       '--query-gpu=memory.used,memory.total,utilization.gpu',
       '--format=csv,noheader,nounits'
     ], {
@@ -211,8 +321,14 @@ export async function pollGpuStats(): Promise<GpuStats | null> {
  */
 export async function detectCudaSupport(): Promise<boolean> {
   try {
+    const nvidiaSmi = await resolveNvidiaSmiPath();
+    if (!nvidiaSmi) {
+      logger.info('nvidia-smi not found - no CUDA support');
+      return false;
+    }
+
     // Try to run nvidia-smi to detect NVIDIA GPU
-    const proc = spawn('nvidia-smi', ['--query-gpu=name', '--format=csv,noheader'], {
+    const proc = spawn(nvidiaSmi, ['--query-gpu=name', '--format=csv,noheader'], {
       shell: true,
       windowsHide: true
     });
