@@ -202,9 +202,11 @@ runs at 12px. The first pass missed the filter panel’s expanded content (model
 description, editor), which kept card-era `text-base` and inverted the hierarchy. Sections are also
 separated by an 8px groove of bare column background before the next rule and header band.
 
-**The rail expands.** A toggle at its foot switches 56px icons ↔ 184px icons-with-labels (persisted).
-The queue toggle lives on the rail with a live count badge — panes are shown and hidden from the rail,
-not from inside a settings section.
+**The rail is 72px, one state: icon over label.** Every entry is self-labelled at 10px — no expand
+mode to discover (an expand toggle was tried and rejected; auto-expanded stole space, collapsed was
+unreadable). The queue toggle lives on the rail with a live count badge — panes are shown and hidden
+from the rail, not from inside a settings section. Workflow open/import/export are labeled buttons in
+the title strip, not a rail flyout.
 
 **The middle of the window is flush, like the top and bottom.** The strip and action bar run edge to
 edge, so the panes between them do too — no padded gutter, no rounded cards, hairline (`ink-800`)

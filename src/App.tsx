@@ -750,15 +750,11 @@ function App() {
         onToggleQueue={handleToggleQueue}
         isReloading={isReloading}
         privacyMode={privacyMode}
-        hasWorkflow={Boolean(currentWorkflow)}
         onSettingsClick={() => setShowSettings(true)}
         onPluginsClick={() => setShowPlugins(true)}
         onReloadBackend={handleReloadBackend}
         onTogglePrivacyMode={togglePrivacyMode}
         onAboutClick={() => setShowAbout(true)}
-        onLoadWorkflow={handleLoadWorkflow}
-        onImportWorkflow={handleImportWorkflow}
-        onExportWorkflow={handleExportWorkflow}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -769,6 +765,9 @@ function App() {
           onChangeBackend={handleChangeBackend}
           workflowName={currentWorkflow}
           onClearWorkflow={handleClearWorkflow}
+          onLoadWorkflow={handleLoadWorkflow}
+          onImportWorkflow={handleImportWorkflow}
+          onExportWorkflow={handleExportWorkflow}
           canUndo={canUndo}
           canRedo={canRedo}
           onUndo={handleUndo}

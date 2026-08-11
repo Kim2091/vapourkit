@@ -1,12 +1,15 @@
 // src/components/TitleStrip.tsx — 44px data strip across the top.
 //
+// Carries the workflow actions (open / import / export) as labeled buttons —
+// they were behind an unlabeled rail flyout and nobody could find them.
+//
 // The old header spent 80px on buttons whose labels repeated their tooltips,
 // a centred wordmark with a tagline, and three bordered boxes for workflow,
 // GPU and privacy. This carries the same information as data: chips and
 // meters, no boxes around boxes. See docs/design/README.md.
 
 import { memo, useMemo, useState, useRef, useEffect } from 'react';
-import { Cpu, ChevronDown, Check, X, FileCheck2, Undo, Redo, Lock } from 'lucide-react';
+import { Cpu, ChevronDown, Check, X, FileCheck2, Undo, Redo, Lock, FolderOpen, Download, Upload } from 'lucide-react';
 import type { BackendId } from '../electron.d';
 import { BACKENDS, getBackendDescriptor } from '../utils/backends';
 
@@ -16,6 +19,9 @@ interface TitleStripProps {
   onChangeBackend: (backend: BackendId) => void;
   workflowName?: string | null;
   onClearWorkflow?: () => void;
+  onLoadWorkflow?: () => void;
+  onImportWorkflow?: () => void;
+  onExportWorkflow?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
@@ -23,6 +29,8 @@ interface TitleStripProps {
   privacyMode: boolean;
   gpuStats?: { gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null;
 }
+
+const WORKFLOW_BTN = 'inline-flex items-center gap-1.5 h-[26px] px-2 rounded-md border border-ink-750 bg-ink-850 text-[12px] text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 
 /** Semantic, not decorative — these do not move with the accent. */
 const colorForPercent = (pct: number) => {
@@ -52,6 +60,9 @@ export const TitleStrip = memo<TitleStripProps>(({
   onChangeBackend,
   workflowName,
   onClearWorkflow,
+  onLoadWorkflow,
+  onImportWorkflow,
+  onExportWorkflow,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -95,6 +106,31 @@ export const TitleStrip = memo<TitleStripProps>(({
       </span>
 
       <span className="w-px h-5 bg-ink-800 flex-shrink-0" />
+
+      {/* Workflow actions — visible and labeled, not behind a flyout */}
+      {(onLoadWorkflow || onImportWorkflow || onExportWorkflow) && (
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span className="font-display text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-500 select-none mr-0.5">Workflow</span>
+          {onLoadWorkflow && (
+            <button onClick={onLoadWorkflow} disabled={isProcessing} title="Load a workflow temporarily — your current settings return when it’s cleared" className={WORKFLOW_BTN}>
+              <FolderOpen className="w-3.5 h-3.5" />
+              Open
+            </button>
+          )}
+          {onImportWorkflow && (
+            <button onClick={onImportWorkflow} disabled={isProcessing} title="Import filters from a workflow file into the current chain" className={WORKFLOW_BTN}>
+              <Download className="w-3.5 h-3.5" />
+              Import
+            </button>
+          )}
+          {onExportWorkflow && (
+            <button onClick={onExportWorkflow} disabled={isProcessing} title="Export the current settings as a workflow file" className={WORKFLOW_BTN}>
+              <Upload className="w-3.5 h-3.5" />
+              Export
+            </button>
+          )}
+        </div>
+      )}
 
       {workflowName && (
         <span

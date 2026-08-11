@@ -1,5 +1,5 @@
 import { memo, useRef } from 'react';
-import { Video, Loader2, CheckCircle, XCircle, FolderOpen, GitCompare } from 'lucide-react';
+import { Video, Loader2, XCircle, FolderOpen, GitCompare } from 'lucide-react';
 import { PrivacyVeil } from './PrivacyVeil';
 
 interface VideoPreviewPanelProps {
@@ -107,19 +107,16 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                   <p className="text-xs text-ink-500 mt-1.5">Use VLC or another player to view</p>
                 </div>
               ) : completedVideoBlobUrl ? (
-                <>
-                  <video
-                    ref={videoPlayerRef}
-                    src={completedVideoBlobUrl}
-                    controls
-                    className="w-full h-full rounded-lg object-contain shadow-lg"
-                    onError={onVideoError}
-                  />
-                  <div className="flex items-center gap-2 text-ok-400 bg-ok-500/10 px-3 py-1.5 rounded-lg border border-ok-500/30">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-xs font-medium">Upscale complete!</span>
-                  </div>
-                </>
+                // No completion badge under the player — an h-full video plus
+                // anything else overflows the pane into a scrollbar. Completion
+                // already shows via the header's Compare/Folder buttons.
+                <video
+                  ref={videoPlayerRef}
+                  src={completedVideoBlobUrl}
+                  controls
+                  className="w-full h-full rounded-lg object-contain shadow-lg"
+                  onError={onVideoError}
+                />
               ) : (
                 <div className="text-center">
                   <Loader2 className="w-8 h-8 text-accent-500 animate-spin mx-auto mb-4" />
