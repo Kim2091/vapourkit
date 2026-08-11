@@ -9,8 +9,9 @@
   - `vsview[full]` is installed with the main plugin step instead of a separate pinned install
 - TensorRT engine building now uses the TensorRT Python API instead of `trtexec` (the TensorRT pip wheels don't ship trtexec)
   - The Import Model dialog still accepts trtexec-style parameters; unsupported flags are ignored with a warning
-- Existing zip-based installs are migrated automatically: the old portable runtime, `vs-plugins` folder, and bundled script modules that PyPI now provides are cleaned up during setup, and re-running setup upgrades the Python environment in place
+- Portable installs that reuse an existing `data` folder are migrated in place: the old portable runtime, `vs-plugins` folder, and bundled script modules that PyPI now provides are cleaned up during setup, and the Python environment is upgraded in place
   - Existing TensorRT engines were built with an older TensorRT and need rebuilding — the existing vs-mlrt version-change prompt handles clearing them
+- NOTE: upgrading a **setup install** from 0.16.x or older starts fresh (the old installer's upgrade flow removes the `data` folder) — export your workflows and filters before upgrading, then re-import them
 - DPIR filter template now defaults to the ONNX Runtime CUDA backend on NVIDIA (the TRT backend relied on runtime `trtexec` engine builds)
 - Bundled `vs_deepdeinterlace` (not yet on PyPI) and the Hybrid scripts continue to install as before
 - Groundwork for Linux support: all platform-specific filenames and the site-packages layout are centralized in `electron/constants.ts`; the pip install phases are platform-neutral, leaving only the Python bootstrap (and FFmpeg/video-compare downloads) Windows-specific
@@ -28,8 +29,6 @@
   - The engine→ONNX path mapping now understands the doubled precision suffix of custom-built engines and picks whichever ONNX candidate exists on disk
 - Pre-included models now get the same ONNX auto-detection as custom imports when opening the build modal
   - Temporal frame count, precision, and static shapes were previously hardcoded (15 channels for any VSR model, precision from filename only), and the frame count was missing from the form entirely
-- Setup installer no longer wipes the `data` folder (Python env, models, engines, config) when upgrading
-  - The default upgrade flow runs the old uninstaller, which deleted the whole install directory; `data` is now moved aside before the old uninstaller runs and restored afterwards, and the new uninstaller preserves it natively on future updates (a real uninstall still removes everything)
 
 ## 0.16.1
 - Fix `Cannot read properties of null (reading 'execute')` crash when canceling or restarting an upscale during the frame count probe
