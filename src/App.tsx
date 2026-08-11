@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { NotificationContainer } from './components/NotificationContainer';
 import { notify } from './utils/notifications';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { QueuePanel } from './components/QueuePanel';
 import { AppModals } from './components/AppModals';
 import { ActionBar } from './components/ActionBar';
@@ -25,7 +24,6 @@ import { useFilterTemplates } from './hooks/useFilterTemplates';
 import { useWorkflow } from './hooks/useWorkflow';
 import { useSetup } from './hooks/useSetup';
 import { useVideoProcessing } from './hooks/useVideoProcessing';
-import { usePanelLayout } from './hooks/usePanelLayout';
 import { useOutputResolution } from './hooks/useOutputResolution';
 import { useColorimetry } from './hooks/useColorimetry';
 import { useFilterConfig } from './hooks/useFilterConfig';
@@ -45,6 +43,10 @@ import { VideoInfoPanel } from './components/VideoPanel';
 import { OutputSettingsPanel } from './components/OutputSettingsPanel';
 import { ModelSelectionPanel } from './components/ModelSelectionPanel';
 import { getPortableModelName } from './utils/modelUtils';
+
+// Settings column drag bounds, in pixels.
+const SETTINGS_MIN_W = 320;
+const SETTINGS_MAX_W = 720;
 
 function App() {
   // Ref to preserve scroll position in right panel
@@ -111,7 +113,6 @@ function App() {
   // State management hooks
   const { filters, handleSetFilters, canUndo, canRedo, handleUndo, handleRedo } = useFilterConfig(isSetupComplete, addConsoleLog);
   const { colorimetrySettings, handleColorimetryChange } = useColorimetry(isSetupComplete, addConsoleLog);
-  const { panelSizes, panelSizesLoaded, handlePanelResize } = usePanelLayout(isSetupComplete, addConsoleLog);
   const {
     showConsole,
     setShowConsole,
@@ -614,6 +615,45 @@ function App() {
   }, [videoInfo, selectedModel, defaultBackend, filters, numStreams, segment, addConsoleLog, isLaunchingPreviewer]);
 
   // Seek to a specific frame in the video preview (used by segment selector)
+  // Settings column width — pixel-based drag on its left edge, persisted.
+  // Pixels, not percentages: a proportional split is what stretched the
+  // column to ~970px on a 2560px display.
+  const [settingsWidth, setSettingsWidth] = useState(() => {
+    const stored = Number(window.localStorage.getItem('vk-settings-width'));
+    return Number.isFinite(stored) && stored >= SETTINGS_MIN_W && stored <= SETTINGS_MAX_W ? stored : 400;
+  });
+  const [isResizingSettings, setIsResizingSettings] = useState(false);
+  const resizeStartRef = useRef({ x: 0, width: 400 });
+
+  const handleSettingsResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizeStartRef.current = { x: e.clientX, width: settingsWidth };
+    setIsResizingSettings(true);
+  }, [settingsWidth]);
+
+  useEffect(() => {
+    if (!isResizingSettings) return;
+    const onMove = (e: MouseEvent) => {
+      const delta = resizeStartRef.current.x - e.clientX;
+      setSettingsWidth(Math.min(SETTINGS_MAX_W, Math.max(SETTINGS_MIN_W, resizeStartRef.current.width + delta)));
+    };
+    const onUp = () => setIsResizingSettings(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingSettings]);
+
+  useEffect(() => {
+    if (!isResizingSettings) window.localStorage.setItem('vk-settings-width', String(settingsWidth));
+  }, [settingsWidth, isResizingSettings]);
+
   // Which frame the preview is showing — drives the scrubber playhead.
   const [playheadFrame, setPlayheadFrame] = useState<number | null>(null);
 
@@ -705,6 +745,9 @@ function App() {
       {/* Tool rail — full height, left edge */}
       <AppRail
         isProcessing={isProcessing}
+        showQueue={queueStore.showQueue}
+        queueCount={queue.length}
+        onToggleQueue={handleToggleQueue}
         isReloading={isReloading}
         privacyMode={privacyMode}
         hasWorkflow={Boolean(currentWorkflow)}
@@ -767,15 +810,11 @@ function App() {
             />
           </div>
         )}
-        <div className="flex-1 min-w-0 p-3 overflow-hidden">
-        {panelSizesLoaded && (
-        <PanelGroup direction="vertical" className="h-full">
-          <Panel>
-            <PanelGroup direction="horizontal" onLayout={handlePanelResize} className="h-full gap-3">
-              {/* Left Panel - Output Preview & Controls */}
-              <Panel defaultSize={panelSizes.leftPanel} minSize={30}>
-                {/* Preview fills the column; the console opens over it */}
-                <div className="relative flex flex-col h-full min-h-0">
+        {/* Flush panes separated by hairlines — the strip and action bar are
+            edge-to-edge, so the middle is too. No floating cards. */}
+        <div className="flex-1 min-w-0 flex overflow-hidden">
+              {/* Preview pane — the console opens over it, the scrubber sits under it */}
+              <div className="relative flex flex-col flex-1 min-w-0 min-h-0">
                   <VideoPreviewPanel
                     previewFrame={previewFrame}
                     completedVideoPath={completedVideoPath}
@@ -806,30 +845,36 @@ function App() {
                     consoleEndRef={consoleEndRef}
                     privacyMode={privacyMode}
                   />
-                </div>
-              </Panel>
+              </div>
 
-              {/* Resize Handle */}
-              <PanelResizeHandle className="w-1 bg-ink-800 hover:bg-accent-500 transition-colors rounded-full" />
+              {/* Drag handle — a hairline with a 5px grab area */}
+              <div
+                onMouseDown={handleSettingsResizeStart}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize the settings column"
+                title="Drag to resize the settings column"
+                className={`w-[5px] flex-shrink-0 cursor-ew-resize relative transition-colors ${
+                  isResizingSettings ? 'bg-accent-500/30' : 'hover:bg-accent-500/20'
+                }`}
+              >
+                <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-ink-800" aria-hidden="true" />
+              </div>
 
-              {/* Right Panel - Input & Info */}
-              <Panel defaultSize={panelSizes.rightPanel} minSize={25}>
-                <div ref={rightPanelRef} className="flex flex-col overflow-y-auto overflow-x-hidden h-full min-h-0 bg-ink-950 border border-ink-800 rounded-lg">
+              {/* Settings column — pixel width, dragged at its left edge */}
+                <div ref={rightPanelRef} style={{ width: settingsWidth }} className="flex-shrink-0 flex flex-col overflow-y-auto overflow-x-hidden min-h-0 bg-ink-950">
                   {/* Video Input */}
                   <VideoInputPanel
                     editingLabel={queueEditingLabel}
                     videoInfo={videoInfo}
                     isDragging={isDragging}
                     isProcessing={isProcessing}
-                    queueCount={queue.length}
-                    showQueue={queueStore.showQueue}
                     indexingProgress={indexingProgress}
                     privacyMode={privacyMode}
                     onSelectVideo={handleSelectVideoWithQueue}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
-                    onToggleQueue={handleToggleQueue}
                   />
                   
                   <ModelSelectionPanel
@@ -882,11 +927,6 @@ function App() {
 
 
                 </div>
-              </Panel>
-            </PanelGroup>
-          </Panel>
-        </PanelGroup>
-        )}
         </div>
         </div>
 

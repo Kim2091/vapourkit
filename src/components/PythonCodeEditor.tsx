@@ -98,7 +98,8 @@ export const PythonCodeEditor = memo(({
   // Create custom dark theme with syntax highlighting
   const customDarkTheme = useMemo(() => EditorView.theme({
     '&': {
-      fontSize: '14px',
+      // Section content sits under a 13px header — the editor doesn't outrank it.
+      fontSize: '12px',
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       backgroundColor: '#0f1419 !important',
       color: '#ffffff',

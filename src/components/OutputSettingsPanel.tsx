@@ -256,7 +256,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
               </span>
             )}
           </div>
-          <span className="text-xs text-ink-500 group-hover:text-ink-400 transition-colors">
+          <span className="text-[10.5px] text-ink-500 group-hover:text-ink-400 transition-colors">
             {isExpanded ? 'Hide' : 'Show'}
           </span>
         </button>
@@ -273,7 +273,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {/* Codec Selection */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-medium text-ink-300">
+                <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
                   Video Codec
                 </label>
                 {/* Advanced Mode Toggle */}
@@ -305,7 +305,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
 
             {/* Pixel Format Selection (moved here) */}
             <div>
-              <label className="block text-sm font-medium text-ink-300 mb-1.5">
+              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1.5">
                 Pixel Format
               </label>
               <select
@@ -327,7 +327,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {/* Encoder Selection */}
             {availableEncoders.length > 1 && (
               <div>
-                <label className="block text-sm font-medium text-ink-300 mb-1.5">
+                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1.5">
                   Encoder
                 </label>
                 <select
@@ -349,10 +349,10 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {supportsPreset(config.codec) && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-medium text-ink-300">
+                  <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
                     Encoding Speed
                   </label>
-                  <span className="text-xs text-ink-500">
+                  <span className="text-[10.5px] text-ink-500">
                     {getPresetDisplayName(config.preset)}
                   </span>
                 </div>
@@ -429,7 +429,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {supportsCrf(config.codec) && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-medium text-ink-300">
+                  <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
                     Quality
                   </label>
                   <span className="text-sm font-medium text-accent-500">
@@ -445,7 +445,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                   disabled={isProcessing}
                   className="w-full h-2 bg-ink-900 rounded-lg appearance-none cursor-pointer accent-accent-500 disabled:opacity-50"
                 />
-                <div className="flex justify-between text-xs text-ink-500 mt-1">
+                <div className="flex justify-between text-[10.5px] text-ink-500 mt-1">
                   <span>Best ({crfRange.min})</span>
                   <span>Default ({crfRange.default})</span>
                   <span>Fast ({crfRange.max})</span>
@@ -459,7 +459,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
         {advancedMode && (
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-ink-300">
+              <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
                 FFmpeg Arguments
               </label>
               {/* Advanced Mode Toggle */}
@@ -485,9 +485,9 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
               disabled={isProcessing}
               placeholder="-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1"
               rows={3}
-              className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 text-sm font-mono resize-none"
+              className="w-full bg-ink-850 border border-ink-750 rounded px-2 py-1.5 focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 text-sm font-mono resize-none"
             />
-            <p className="text-xs text-ink-500 mt-1.5">
+            <p className="text-[10.5px] text-ink-500 mt-1.5">
               Custom FFmpeg encoding arguments
             </p>
           </div>

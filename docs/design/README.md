@@ -34,7 +34,7 @@ Concept A, with three revisions agreed after the first review:
 │    │          │  strip 44px                            │
 │rail├──────────┼────────────────────────┼───────────────┤
 │56px│ queue    │  preview               │ settings      │
-│    │ 240px    │                        │ 384px         │
+│    │ 240px    │                        │ 400px fixed   │
 │    │ collapsi-├────────────────────────┤ SOURCE        │
 │    │ ble      │  scrubber 36px         │ FILTERS       │
 │    │          │                        │ OUTPUT        │
@@ -45,7 +45,7 @@ Concept A, with three revisions agreed after the first review:
 └────────────────────────────────────────────────────────┘
 ```
 
-Minimum comfortable width is ~1150px (56 rail + 240 queue + 384 settings leaves 470px of preview).
+Minimum comfortable width is ~1150px (56 rail + 240 queue + 400 settings leaves 454px of preview).
 Below that the queue auto-collapses rather than squeezing the preview, and stays where the user last
 put it rather than re-opening when the window grows back.
 
@@ -189,6 +189,23 @@ with structure carried entirely by `ink-*`.
 
 **Migration aliases have been removed.** They served their purpose across steps 1–7 and are gone. Every
 colour class in `src/` now resolves through `ink-*` / `accent-*` / `ok` / `warn` / `bad`.
+
+**Nothing inside a section outranks its header.** The 13px section header is the largest text in the
+settings column; field labels are 10px uppercase, controls 11–12.5px at 28px tall, and the code editor
+runs at 12px. The first pass missed the filter panel’s expanded content (model picker, templates,
+description, editor), which kept card-era `text-base` and inverted the hierarchy. Sections are also
+separated by an 8px groove of bare column background before the next rule and header band.
+
+**The rail expands.** A toggle at its foot switches 56px icons ↔ 184px icons-with-labels (persisted).
+The queue toggle lives on the rail with a live count badge — panes are shown and hidden from the rail,
+not from inside a settings section.
+
+**The middle of the window is flush, like the top and bottom.** The strip and action bar run edge to
+edge, so the panes between them do too — no padded gutter, no rounded cards, hairline (`ink-800`)
+boundaries between panes. The settings column is a fixed 400px (not proportional): on a 2560px display
+a percentage column stretched to ~970px and the dense controls looked lost in it. Resizing is a
+pixel-based drag on the column’s left edge (320–720px clamp, persisted in localStorage), replacing
+the `react-resizable-panels` percentage split.
 
 **Verify colours in the built CSS as `rgb(R G B / …)`, not hex.** Tailwind emits the rgb form for any
 colour that supports opacity modifiers, so grepping the bundle for `#3b82f6` proves nothing — it only

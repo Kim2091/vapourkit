@@ -41,7 +41,8 @@ export const ConsoleDrawer = memo(function ConsoleDrawer({
   if (!open) return null;
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 h-[280px] flex flex-col bg-ink-900/97 backdrop-blur-sm border-t border-ink-750 rounded-b-lg overflow-hidden">
+    // bottom-10 keeps the scrubber visible and usable while the console is open
+    <div className="absolute inset-x-0 bottom-10 z-20 h-[280px] flex flex-col bg-ink-900/97 backdrop-blur-sm border-t border-ink-750 overflow-hidden">
       <div className="h-8 flex-shrink-0 flex items-center gap-2 px-3 border-b border-ink-800">
         <Terminal className="w-3.5 h-3.5 text-accent-500" />
         <span className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-300">

@@ -1,15 +1,13 @@
 import { memo } from 'react';
-import { Upload, Video, List, PanelRightOpen, PanelRightClose, RefreshCw } from 'lucide-react';
+import { Upload, Video, RefreshCw } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
 import { PrivacyText } from './PrivacyVeil';
-import { Section, SectionButton } from './Section';
+import { Section } from './Section';
 
 interface VideoInputPanelProps {
   videoInfo: VideoInfo | null;
   isDragging: boolean;
   isProcessing: boolean;
-  queueCount: number;
-  showQueue: boolean;
   indexingProgress: number | null;
   privacyMode: boolean;
   /** e.g. "editing 2 of 4" when a queue item is the edit target. */
@@ -18,15 +16,12 @@ interface VideoInputPanelProps {
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => Promise<void>;
-  onToggleQueue: () => void;
 }
 
 export const VideoInputPanel = memo<VideoInputPanelProps>(({
   videoInfo,
   isDragging,
   isProcessing,
-  queueCount,
-  showQueue,
   indexingProgress,
   privacyMode,
   editingLabel,
@@ -34,28 +29,14 @@ export const VideoInputPanel = memo<VideoInputPanelProps>(({
   onDragOver,
   onDragLeave,
   onDrop,
-  onToggleQueue,
 }: VideoInputPanelProps) => {
   // The whole row stays a drop target either way — but once a file is loaded
   // the instructions have done their job, so they stop taking up space.
+  // The queue toggle lives on the rail, where panes are shown and hidden.
   const loaded = Boolean(videoInfo);
 
   return (
-    <Section
-      title="Source"
-      meta={editingLabel}
-      actions={
-        <SectionButton
-          onClick={onToggleQueue}
-          active={showQueue}
-          title={showQueue ? 'Hide queue' : 'Show queue'}
-        >
-          <List className="w-3 h-3" />
-          Queue{queueCount > 0 && ` (${queueCount})`}
-          {showQueue ? <PanelRightClose className="w-3 h-3" /> : <PanelRightOpen className="w-3 h-3" />}
-        </SectionButton>
-      }
-    >
+    <Section title="Source" meta={editingLabel}>
       <div
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}

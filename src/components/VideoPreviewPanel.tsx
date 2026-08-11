@@ -30,7 +30,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
 
   return (
-    <div className="flex-1 bg-ink-950 rounded-lg border border-ink-800 overflow-hidden flex flex-col min-h-0">
+    <div className="flex-1 bg-ink-950 overflow-hidden flex flex-col min-h-0">
       <div className="flex-shrink-0 h-9 pr-3 border-b border-ink-800 flex items-stretch gap-2.5 bg-ink-850">
         <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
         <div className="flex items-center gap-2.5 min-w-0 flex-1">

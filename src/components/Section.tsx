@@ -34,12 +34,11 @@ export const Section = memo<SectionProps>(({
     </>
   );
 
-  // Three weights, so a boundary never reads like a row:
-  //   section start  →  ink-700 rule + a brighter ink-850 band + accent edge
-  //   header bottom  →  ink-800 hairline
-  //   rows inside    →  ink-900 hairline (see SECTION_ROW)
+  // A boundary must never read like a row. Between two sections there is a
+  // groove — 8px of bare column background — then an ink-700 rule, then the
+  // brighter header band. Rows inside get only an ink-900 hairline.
   return (
-    <section className="flex-shrink-0 border-t border-ink-700 first:border-t-0">
+    <section className="flex-shrink-0 mt-2 border-t border-ink-700 first:mt-0 first:border-t-0">
       <div className="sticky top-0 z-10 h-9 flex items-stretch gap-2.5 pr-3 bg-ink-850 border-b border-ink-800 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.5)]">
         <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
         {collapsible ? (
