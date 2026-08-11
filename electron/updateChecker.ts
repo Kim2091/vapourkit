@@ -25,27 +25,52 @@ const GITHUB_OWNER = 'Kim2091';
 const GITHUB_REPO = 'vapourkit';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
+export interface ParsedVersion {
+  core: number[];
+  prerelease: string | null;
+}
+
 /**
- * Compares two semantic version strings
- * Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+ * Parses "v0.16.1-nightly.2026-05-13" into { core: [0, 16, 1], prerelease: 'nightly.2026-05-13' }
  */
-function compareVersions(v1: string, v2: string): number {
-  // Remove 'v' prefix if present
-  const clean1 = v1.replace(/^v/, '');
-  const clean2 = v2.replace(/^v/, '');
-  
-  const parts1 = clean1.split('.').map(Number);
-  const parts2 = clean2.split('.').map(Number);
-  
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const num1 = parts1[i] || 0;
-    const num2 = parts2[i] || 0;
-    
-    if (num1 > num2) return 1;
-    if (num1 < num2) return -1;
+export function parseVersion(version: string): ParsedVersion {
+  const clean = version.replace(/^v/, '');
+  const dashIndex = clean.indexOf('-');
+  const corePart = dashIndex === -1 ? clean : clean.slice(0, dashIndex);
+  const prerelease = dashIndex === -1 ? null : clean.slice(dashIndex + 1);
+
+  const core = corePart.split('.').map(part => {
+    const num = parseInt(part, 10);
+    return Number.isNaN(num) ? 0 : num;
+  });
+
+  return { core, prerelease };
+}
+
+/**
+ * Returns true when the latest (stable) release is an actual upgrade from the
+ * current version.
+ *
+ * Only the numeric version core is compared. Nightly builds carry a prerelease
+ * suffix (e.g. 0.16.1-nightly.2026-05-13) that the old comparison mangled to
+ * NaN→0, making the same-version stable release look newer — nightly users were
+ * endlessly prompted to "update" to the stable build they were cut from. A
+ * nightly is only offered an update once a stable release with a strictly newer
+ * base version exists.
+ */
+export function isUpdateAvailable(currentVersion: string, latestVersion: string): boolean {
+  const current = parseVersion(currentVersion);
+  const latest = parseVersion(latestVersion);
+
+  for (let i = 0; i < Math.max(current.core.length, latest.core.length); i++) {
+    const currentNum = current.core[i] ?? 0;
+    const latestNum = latest.core[i] ?? 0;
+
+    if (latestNum > currentNum) return true;
+    if (latestNum < currentNum) return false;
   }
-  
-  return 0;
+
+  return false;
 }
 
 /**
@@ -87,7 +112,7 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
     logger.info(`Latest version: ${latestVersion}`);
     
     // Compare versions
-    const isNewer = compareVersions(latestVersion, currentVersion) > 0;
+    const isNewer = isUpdateAvailable(currentVersion, latestVersion);
     
     if (isNewer) {
       logger.info('Update available!');

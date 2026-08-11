@@ -318,7 +318,7 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                 This command is automatically generated based on the switches above. You can manually edit it if needed.
               </p>
               <div>
-                <label className="block text-xs font-medium mb-1.5 text-gray-400">trtexec Parameters</label>
+                <label className="block text-xs font-medium mb-1.5 text-gray-400">Engine Build Parameters (trtexec syntax)</label>
                 <textarea
                   value={importForm.customTrtexecParams}
                   onChange={(e) => setImportForm(prev => ({ ...prev, customTrtexecParams: e.target.value }))}

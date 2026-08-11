@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.17.0
+- Migrate the entire install path from manual zip downloads to PyPI
+  - VapourSynth (R79), vs-mlrt (16.1), BestSource, and all of pifroggi's plugins (`vs_temporalfix`, `vs_undistort`, `vs_colorfix`, `vs_grain`, `vs_tiletools`) now install via pip
+  - Native VapourSynth plugins (akarin, vszip, zsmooth, bestsource, ...) arrive automatically as dependencies of `vsjetpack[full,nvidia]` and the pifroggi packages, using the NVIDIA and JET vs-wheels package indexes
+  - `vspipe.exe` and the core runtime now come from the VapourSynth wheel in `Lib\site-packages\vapoursynth`; plugins autoload from `Lib\site-packages\vapoursynth\plugins`
+  - vsjetpack is no longer pinned to 1.1.0 (the old `vapoursynth==72` ABI pin is obsolete)
+  - `vsview[full]` is installed with the main plugin step instead of a separate pinned install
+- TensorRT engine building now uses the TensorRT Python API instead of `trtexec` (the TensorRT pip wheels don't ship trtexec)
+  - The Import Model dialog still accepts trtexec-style parameters; unsupported flags are ignored with a warning
+- Existing zip-based installs are migrated automatically: the old portable runtime, `vs-plugins` folder, and bundled script modules that PyPI now provides are cleaned up during setup, and re-running setup upgrades the Python environment in place
+  - Existing TensorRT engines were built with an older TensorRT and need rebuilding — the existing vs-mlrt version-change prompt handles clearing them
+- DPIR filter template now defaults to the ONNX Runtime CUDA backend on NVIDIA (the TRT backend relied on runtime `trtexec` engine builds)
+- Bundled `vs_deepdeinterlace` (not yet on PyPI) and the Hybrid scripts continue to install as before
+- Groundwork for Linux support: all platform-specific filenames and the site-packages layout are centralized in `electron/constants.ts`; the pip install phases are platform-neutral, leaving only the Python bootstrap (and FFmpeg/video-compare downloads) Windows-specific
+- Fix update checker falsely prompting nightly builds to "update" to the stable release they were cut from
+  - Nightly version suffixes (e.g. `0.16.1-nightly.2026-05-13`) broke the version comparison; nightlies are now only offered stable releases with a strictly newer base version
+- Fix vspipe crashing at startup with `v3bdg: unable to acquire api3 VSAPI, abort`
+  - The bundled `fft3dfilter.dll` build contains its own API3-bridge guard that aborts the process under VapourSynth R79; it is now removed at install (fft3dfilter is unavailable until an API4 build is sourced)
+  - Other API3 plugins load fine through VapourSynth's compat bridge (with deprecation warnings)
+- Replace API3-only bundled plugins with API4 wheels from PyPI: mvtools, CAS, adaptivegrain, WNNM, KNLMeansCL (nlm-cuda), SCXvid, DCTFilter
+- Fix vs-mlrt ONNX Runtime CUDA support: both `vapoursynth-mlrt-ort` (CPU/DirectML) and `vapoursynth-mlrt-ort-cuda` ship a `vsort.dll` and the CPU-only copy always won the autoload race; the redundant CPU-only folder is now removed post-install (the CUDA build bundles DirectML too)
+- Bundled plugins now extract with skip-existing semantics so they can never overwrite pip-managed plugin files (several share identical filenames)
+
 ## 0.16.1
 - Fix `Cannot read properties of null (reading 'execute')` crash when canceling or restarting an upscale during the frame count probe
   - Same fix applied to the preview-segment path

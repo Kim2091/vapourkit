@@ -5,9 +5,10 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as https from 'https';
 import { logger } from './logger';
-import { PATHS } from './constants';
+import { PATHS, VS_MLRT_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
+import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
 import * as _7z from '7zip-min';
 
 export interface PluginDependencyProgress {
@@ -231,17 +232,17 @@ export class PluginInstaller {
       this.sendProgress({
         type: 'installing',
         progress: 0,
-        message: 'Preparing to install PyTorch, torchvision, numpy, and positional_encodings...'
+        message: 'Preparing to install Python packages from PyPI...'
       });
 
       logger.info('Starting plugin dependency installation...');
-      
-      // Step 0: Ensure setuptools and wheel are installed (0-5% progress)
+
+      // Step 0: Ensure setuptools and wheel are installed (0-3% progress)
       logger.info('=== Step 0: Ensuring setuptools and wheel are installed ===');
       const setupResult = await this.runPipInstall(
         ['setuptools', 'wheel'],
         0,
-        5,
+        3,
         ['--upgrade']
       );
 
@@ -258,11 +259,13 @@ export class PluginInstaller {
         return { success: false, error: 'Installation cancelled by user' };
       }
 
+      // Step 1: PyTorch (3-35% progress) — needed by the bundled (non-PyPI)
+      // vs_deepdeinterlace scripts; everything else runs on TensorRT/ONNX Runtime.
       logger.info('=== Step 1: Installing PyTorch and torchvision ===');
       const pytorchResult = await this.runPipInstall(
         ['torch', 'torchvision'],
-        5,
-        65,
+        3,
+        32,
         ['--index-url', 'https://download.pytorch.org/whl/cu130']
       );
 
@@ -279,36 +282,75 @@ export class PluginInstaller {
         return { success: false, error: 'Installation cancelled by user' };
       }
 
-      // Step 2: Install numpy, positional-encodings, einops, timm, and vsjetpack (70-85% progress)
-      logger.info('=== Step 2: Installing numpy, positional-encodings, einops, timm, and vsjetpack ===');
-      const additionalResult = await this.runPipInstall(
-        ['numpy==2.3.3', 'positional-encodings', 'einops', 'timm', 'vsjetpack==1.1.0'],
-        70,
-        15
+      // Step 2: Extract bundled plugins without a PyPI counterpart (35-40% progress).
+      // This runs BEFORE the pip install so that when a bundled DLL and a pip
+      // wheel share a filename, the pip-managed (newer) copy wins.
+      logger.info('=== Step 2: Extracting plugins from plugins folder ===');
+      await this.extractAllPlugins();
+      // The bundled archive still contains DLLs that PyPI wheels now provide —
+      // remove those so the pip-managed versions are the only ones autoloaded.
+      await removeSupersededPlugins();
+
+      if (this.isCancelled) {
+        return { success: false, error: 'Installation cancelled by user' };
+      }
+
+      // Step 3: VapourSynth ecosystem from PyPI (40-80% progress).
+      // vsjetpack and the pifroggi packages pull all native plugins (akarin,
+      // vszip, bestsource, vs-mlrt, zsmooth, ...) and TensorRT as dependencies.
+      logger.info('=== Step 3: Installing VapourSynth ecosystem from PyPI ===');
+      const pypiPackages = [
+        'vapoursynth',
+        'vsjetpack[full,nvidia]',
+        'vsview[full]',
+        'vs_temporalfix',
+        'vs_undistort',
+        'vs_grain',
+        // Only a .dev release exists on PyPI so far; a bare name would not match it
+        'vs_tiletools>=1.0.0.dev0',
+        'vs_colorfix[tensorrt]',
+        // Pin vs-mlrt so the stored-version engine rebuild check stays truthful
+        `vapoursynth-mlrt-ort==${VS_MLRT_VERSION}`,
+        `vapoursynth-mlrt-trt==${VS_MLRT_VERSION}`,
+        // API4 rebuilds of plugins whose bundled copies were API3-only —
+        // VapourSynth R79 aborts on API3 plugins, so these come from PyPI now
+        'vapoursynth-mvtools',
+        'vapoursynth-cas',
+        'vapoursynth-adaptivegrain',
+        'vapoursynth-wnnm',
+        'vapoursynth-nlm-cuda',
+        'vapoursynth-scxvid',
+        'vapoursynth-dctfilter',
+        // Needed by the bundled (non-PyPI) vs_deepdeinterlace scripts
+        'positional-encodings',
+        'einops',
+        'timm',
+      ];
+      const pypiResult = await this.runPipInstall(
+        pypiPackages,
+        40,
+        40,
+        ['--upgrade', ...PYPI_EXTRA_INDEX_ARGS]
       );
 
-      if (!additionalResult.success) {
+      if (!pypiResult.success) {
         this.sendProgress({
           type: 'error',
           progress: 0,
-          message: additionalResult.error || 'Additional packages installation failed'
+          message: pypiResult.error || 'PyPI packages installation failed'
         });
-        return { success: false, error: additionalResult.error };
+        return { success: false, error: pypiResult.error };
       }
+
+      // Remove plugin builds that crash VapourSynth autoload and resolve the
+      // ort/ort-cuda duplicate in favor of the CUDA-capable build
+      await applyPluginCompatibilityFixes();
 
       if (this.isCancelled) {
         return { success: false, error: 'Installation cancelled by user' };
       }
 
-      // Step 3: Extract all plugins from plugins folder (85-90% progress)
-      logger.info('=== Step 3: Extracting plugins from plugins folder ===');
-      await this.extractAllPlugins();
-
-      if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
-      }
-
-      // Step 4: Download and extract VapourSynth scripts from GitHub (90-92% progress)
+      // Step 4: Download and extract VapourSynth scripts from GitHub (85-90% progress)
       logger.info('=== Step 4: Downloading VapourSynth scripts from GitHub ===');
       await this.downloadAndExtractVSScripts();
 
@@ -316,9 +358,11 @@ export class PluginInstaller {
         return { success: false, error: 'Installation cancelled by user' };
       }
 
-      // Step 5: Extract all scripts from scripts folder (92-95% progress)
+      // Step 5: Extract all scripts from scripts folder (90-95% progress)
       logger.info('=== Step 5: Extracting scripts from scripts folder ===');
       await this.extractAllScripts();
+      // Same for script modules that are now pip-installed (vs_temporalfix, ...)
+      await removeSupersededScripts();
 
       if (this.isCancelled) {
         return { success: false, error: 'Installation cancelled by user' };
@@ -393,8 +437,13 @@ export class PluginInstaller {
 
   async checkInstalled(): Promise<{ installed: boolean; packages: string[] }> {
     logger.info('Checking if plugin dependencies are installed');
-    
-    const packagesToCheck = ['torch', 'torchvision', 'numpy', 'positional-encodings', 'einops', 'timm', 'vsjetpack'];
+
+    // Normalized (PEP 503) names — compared against pip list output with
+    // underscores mapped to dashes.
+    const packagesToCheck = [
+      'vapoursynth', 'torch', 'vsjetpack', 'vsview',
+      'vs-temporalfix', 'vs-undistort', 'vs-colorfix', 'vs-grain', 'vs-tiletools'
+    ];
     const args = ['-m', 'pip', 'list', '--format=json'];
     
     logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
@@ -421,10 +470,10 @@ export class PluginInstaller {
         if (code === 0) {
           try {
             const installedPackages = JSON.parse(outputBuffer);
-            const installedNames = installedPackages.map((pkg: any) => pkg.name.toLowerCase());
-            
-            const foundPackages = packagesToCheck.filter(pkg => 
-              installedNames.includes(pkg.toLowerCase())
+            const installedNames = installedPackages.map((pkg: any) => pkg.name.toLowerCase().replace(/_/g, '-'));
+
+            const foundPackages = packagesToCheck.filter(pkg =>
+              installedNames.includes(pkg.toLowerCase().replace(/_/g, '-'))
             );
             
             const allInstalled = foundPackages.length === packagesToCheck.length;
@@ -468,7 +517,13 @@ export class PluginInstaller {
         message: 'Preparing to uninstall dependencies...'
       });
 
-      const packagesToUninstall = ['torch', 'torchvision', 'numpy', 'positional-encodings', 'einops', 'timm', 'vsjetpack'];
+      // The core runtime (vapoursynth, vapoursynth-bestsource, vs-mlrt) is
+      // intentionally left installed so the app itself keeps working.
+      const packagesToUninstall = [
+        'torch', 'torchvision', 'positional-encodings', 'einops', 'timm',
+        'vsjetpack', 'vsview',
+        'vs-temporalfix', 'vs-undistort', 'vs-colorfix', 'vs-grain', 'vs-tiletools'
+      ];
       const args = ['-m', 'pip', 'uninstall', '-y', ...packagesToUninstall];
       
       const commandStr = `${PATHS.PYTHON} ${args.join(' ')}`;
@@ -625,7 +680,7 @@ export class PluginInstaller {
 
     this.sendProgress({
       type: 'installing',
-      progress: 85,
+      progress: 35,
       message: 'Extracting plugins...'
     });
 
@@ -643,7 +698,7 @@ export class PluginInstaller {
     for (let i = 0; i < archiveFiles.length; i++) {
       const archiveFile = archiveFiles[i];
       const archivePath = path.join(pluginsFolder, archiveFile);
-      const progress = 85 + Math.floor((i / archiveFiles.length) * 5);
+      const progress = 35 + Math.floor((i / archiveFiles.length) * 5);
       
       logger.info(`Extracting ${archiveFile} (${i + 1}/${archiveFiles.length})`);
       
@@ -654,14 +709,18 @@ export class PluginInstaller {
       });
 
       try {
-        await this.extractArchive(archivePath, PATHS.PLUGINS, archiveFile);
+        // Skip-existing: the plugins folder is shared with pip-installed wheels,
+        // and several bundled DLLs share filenames with pip-managed ones — the
+        // bundle must never overwrite them. (On fresh installs pip runs after
+        // this and overwrites same-named bundled copies, so pip always wins.)
+        await this.extractArchive(archivePath, PATHS.PLUGINS, archiveFile, { skipExisting: true });
         logger.info(`Successfully extracted ${archiveFile}`);
       } catch (error) {
         logger.error(`Failed to extract ${archiveFile}:`, error);
         // Continue with other plugins even if one fails
       }
     }
-    
+
     logger.info('Plugin extraction completed');
   }
 
@@ -674,7 +733,7 @@ export class PluginInstaller {
     logger.info('Downloading VapourSynth scripts from GitHub');
     this.sendProgress({
       type: 'installing',
-      progress: 90,
+      progress: 85,
       message: 'Downloading VapourSynth scripts...'
     });
 
@@ -724,7 +783,7 @@ export class PluginInstaller {
       logger.info('Download completed, extracting...');
       this.sendProgress({
         type: 'installing',
-        progress: 91,
+        progress: 87,
         message: 'Extracting VapourSynth scripts...'
       });
 
@@ -794,7 +853,7 @@ export class PluginInstaller {
 
     this.sendProgress({
       type: 'installing',
-      progress: 92,
+      progress: 90,
       message: 'Extracting scripts...'
     });
 
@@ -812,7 +871,7 @@ export class PluginInstaller {
     for (let i = 0; i < archiveFiles.length; i++) {
       const archiveFile = archiveFiles[i];
       const archivePath = path.join(scriptsFolder, archiveFile);
-      const progress = 92 + Math.floor((i / archiveFiles.length) * 3);
+      const progress = 90 + Math.floor((i / archiveFiles.length) * 5);
       
       logger.info(`Extracting ${archiveFile} (${i + 1}/${archiveFiles.length})`);
       
@@ -834,8 +893,13 @@ export class PluginInstaller {
     logger.info('Script extraction completed');
   }
 
-  private async extractArchive(archivePath: string, outputPath: string, componentName: string): Promise<void> {
-    logger.info(`Extracting ${componentName} from ${archivePath} to ${outputPath}`);
+  private async extractArchive(
+    archivePath: string,
+    outputPath: string,
+    componentName: string,
+    options: { skipExisting?: boolean } = {}
+  ): Promise<void> {
+    logger.info(`Extracting ${componentName} from ${archivePath} to ${outputPath}${options.skipExisting ? ' (skip existing)' : ''}`);
     await fs.ensureDir(outputPath);
 
     const maxRetries = 5;
@@ -844,7 +908,12 @@ export class PluginInstaller {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await _7z.unpack(archivePath, outputPath);
+        if (options.skipExisting) {
+          // -aos = skip files that already exist in the destination
+          await _7z.cmd(['x', archivePath, `-o${outputPath}`, '-aos', '-y']);
+        } else {
+          await _7z.unpack(archivePath, outputPath);
+        }
         logger.info(`Extraction completed: ${componentName}`);
         return; // Success, exit the function
       } catch (err: any) {

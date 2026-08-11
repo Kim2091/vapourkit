@@ -484,7 +484,7 @@ export function registerVideoHandlers(
       
       const scriptConfig = {
         inputVideo: videoPath,
-        enginePath: PATHS.MLRT_PLUGIN,
+        enginePath: modelPath || '',
         pluginsPath: PATHS.PLUGINS,
         useDirectML: useDirectML || false,
         useFp32: modelPath ? configManager.isModelFp32(modelPath) : false,

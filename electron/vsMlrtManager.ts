@@ -1,11 +1,10 @@
 // electron/vsMlrtManager.ts
-import * as path from 'path';
 import * as fs from 'fs-extra';
-import axios from 'axios';
+import { spawn } from 'child_process';
 import { BrowserWindow } from 'electron';
-import { PATHS, VS_MLRT_VERSION } from './constants';
+import { PATHS, VS_MLRT_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { logger } from './logger';
-import * as _7z from '7zip-min';
+import { applyPluginCompatibilityFixes } from './legacyCleanup';
 
 export type VsMlrtComponent = 'onnx-runtime' | 'tensorrt';
 
@@ -16,18 +15,23 @@ export interface VsMlrtDownloadProgress {
 
 export type VsMlrtProgressCallback = (progress: VsMlrtDownloadProgress) => void;
 
+/**
+ * Installs the vs-mlrt inference plugins from PyPI.
+ *
+ * The wheels install into site-packages/vapoursynth/plugins/{ort,trt} where
+ * VapourSynth autoloads them; TensorRT itself comes from NVIDIA's PyPI index as
+ * a dependency of vapoursynth-mlrt-trt.
+ */
 export class VsMlrtManager {
   /**
-   * Get the download URL for a specific vs-mlrt component
+   * Get the PyPI requirement for a specific vs-mlrt component
    */
-  static getComponentUrl(component: VsMlrtComponent): string {
-    const baseUrl = `https://github.com/AmusementClub/vs-mlrt/releases/download/v${VS_MLRT_VERSION}`;
-    
+  static getPipRequirement(component: VsMlrtComponent): string {
     switch (component) {
       case 'onnx-runtime':
-        return `${baseUrl}/VSORT-Windows-x64.v${VS_MLRT_VERSION}.7z`;
+        return `vapoursynth-mlrt-ort==${VS_MLRT_VERSION}`;
       case 'tensorrt':
-        return `${baseUrl}/vsmlrt-windows-x64-tensorrt.v${VS_MLRT_VERSION}.7z`;
+        return `vapoursynth-mlrt-trt==${VS_MLRT_VERSION}`;
     }
   }
 
@@ -44,26 +48,15 @@ export class VsMlrtManager {
   }
 
   /**
-   * Get the archive name for a component
+   * Get the check paths that indicate a component is installed (any match counts)
    */
-  static getArchiveName(component: VsMlrtComponent): string {
+  static getCheckPaths(component: VsMlrtComponent): string[] {
     switch (component) {
       case 'onnx-runtime':
-        return 'vsort.7z';
+        // The CPU-only "ort" folder is removed when the CUDA build is present
+        return [PATHS.ORT_CUDA_PLUGIN_DLL, PATHS.ORT_PLUGIN_DLL];
       case 'tensorrt':
-        return 'vsmlrt.7z';
-    }
-  }
-
-  /**
-   * Get the check path to verify if a component is installed
-   */
-  static getCheckPath(component: VsMlrtComponent): string {
-    switch (component) {
-      case 'onnx-runtime':
-        return path.join(PATHS.PLUGINS, 'vsort.dll');
-      case 'tensorrt':
-        return path.join(PATHS.MLRT_PLUGIN, 'trtexec.exe');
+        return [PATHS.TRT_PLUGIN_DLL];
     }
   }
 
@@ -71,137 +64,109 @@ export class VsMlrtManager {
    * Check if a component is installed
    */
   static async isComponentInstalled(component: VsMlrtComponent): Promise<boolean> {
-    return await fs.pathExists(VsMlrtManager.getCheckPath(component));
+    for (const checkPath of VsMlrtManager.getCheckPaths(component)) {
+      if (await fs.pathExists(checkPath)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
-   * Download and install a vs-mlrt component
+   * Install or update a vs-mlrt component via pip
    */
   static async downloadAndInstall(
     component: VsMlrtComponent,
     progressCallback?: VsMlrtProgressCallback
   ): Promise<void> {
     const componentName = VsMlrtManager.getComponentName(component);
-    const url = VsMlrtManager.getComponentUrl(component);
-    const archiveName = VsMlrtManager.getArchiveName(component);
-    const archivePath = path.join(PATHS.APP_DATA, archiveName);
+    const requirement = VsMlrtManager.getPipRequirement(component);
 
-    try {
-      logger.info(`=== Downloading ${componentName} ===`);
-      progressCallback?.({ progress: 5, message: `Preparing to download ${componentName}...` });
+    logger.info(`=== Installing ${componentName} from PyPI ===`);
+    progressCallback?.({ progress: 5, message: `Preparing to install ${componentName}...` });
 
-      // Download the archive
-      logger.info(`Download URL: ${url}`);
-      progressCallback?.({ progress: 10, message: `Downloading ${componentName}...` });
+    const args = [
+      '-m', 'pip', 'install',
+      '--upgrade',
+      '--no-warn-script-location',
+      '--cache-dir', PATHS.PIP_CACHE,
+      requirement,
+      ...PYPI_EXTRA_INDEX_ARGS,
+    ];
 
-      const response = await axios({
-        method: 'get',
-        url,
-        responseType: 'stream',
-        timeout: 300000 // 5 minutes
+    logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(PATHS.PYTHON, args, {
+        cwd: PATHS.VS,
+        windowsHide: true
       });
 
-      const writer = fs.createWriteStream(archivePath);
-      const contentLength = response.headers['content-length'];
-      const totalLength = typeof contentLength === 'string' ? parseInt(contentLength, 10) : 0;
-      let downloadedLength = 0;
+      let errorBuffer = '';
+      let lastProgress = 5;
 
-      response.data.on('data', (chunk: Buffer) => {
-        downloadedLength += chunk.length;
-        const downloadProgress = totalLength > 0 ? (downloadedLength / totalLength) * 70 : 0;
-        const percentComplete = totalLength > 0 ? Math.round((downloadedLength / totalLength) * 100) : 0;
-        progressCallback?.({
-          progress: 10 + downloadProgress,
-          message: `Downloading: ${percentComplete}%`
-        });
-      });
+      const report = (progress: number, message: string) => {
+        lastProgress = Math.max(lastProgress, progress);
+        progressCallback?.({ progress: Math.min(lastProgress, 99), message });
+      };
 
-      await new Promise<void>((resolve, reject) => {
-        response.data.pipe(writer);
-        writer.on('finish', () => resolve());
-        writer.on('error', reject);
-      });
+      const processLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        logger.info(`[pip] ${trimmed}`);
 
-      logger.info(`Downloaded to: ${archivePath}`);
-
-      // Extract the archive
-      progressCallback?.({ progress: 80, message: `Extracting ${componentName}...` });
-      logger.info(`Extracting to: ${PATHS.PLUGINS}`);
-
-      // For TensorRT, remove old plugin directory first
-      if (component === 'tensorrt') {
-        const mlrtPluginPath = path.join(PATHS.PLUGINS, 'vsmlrt-cuda');
-        if (await fs.pathExists(mlrtPluginPath)) {
-          logger.info('Removing old vs-mlrt TensorRT plugin directory');
-          await fs.remove(mlrtPluginPath);
+        const collectingMatch = trimmed.match(/Collecting\s+([^\s(]+)/);
+        if (collectingMatch) {
+          report(15, `Collecting ${collectingMatch[1]}...`);
+          return;
         }
-      }
 
-      // Retry logic for file locking issues on Windows
-      const maxRetries = 5;
-      const retryDelay = 2000; // 2 seconds
-      let lastError: any = null;
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          await new Promise<void>((resolve, reject) => {
-            _7z.unpack(archivePath, PATHS.PLUGINS, (err: Error | null) => {
-              if (err) {
-                logger.error(`Extraction error: ${err.message}`);
-                reject(err);
-              } else {
-                resolve();
-              }
-            });
-          });
-          
-          // Success, break out of retry loop
-          break;
-        } catch (err: any) {
-          lastError = err;
-          const errorMessage = err.message || String(err);
-          
-          // Check if it's a file locking error
-          const isFileLockError = 
-            errorMessage.includes('Can not open the file as archive') ||
-            errorMessage.includes('The process cannot access the file because it is being used by another process') ||
-            errorMessage.includes("Can't open as archive");
-          
-          if (isFileLockError && attempt < maxRetries) {
-            logger.info(`File locked during extraction (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}ms...`);
-            progressCallback?.({ 
-              progress: 80 + Math.round((attempt / maxRetries) * 10), 
-              message: `${componentName} - file locked, retrying (${attempt}/${maxRetries})...` 
-            });
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-            continue;
-          }
-          
-          // If it's not a file lock error, or we've exhausted retries, throw
-          if (attempt === maxRetries) {
-            logger.error(`Failed to extract after ${maxRetries} attempts`);
-            throw lastError;
-          }
-          throw err;
+        const percentMatch = trimmed.match(/(\d+)%/);
+        if (percentMatch) {
+          const percent = parseInt(percentMatch[1], 10);
+          report(15 + percent * 0.7, `Downloading... ${percent}%`);
+          return;
         }
-      }
 
-      // Clean up
-      progressCallback?.({ progress: 90, message: 'Cleaning up temporary files...' });
-      await fs.remove(archivePath);
-      logger.info(`Removed archive: ${archivePath}`);
+        if (trimmed.includes('Installing collected packages')) {
+          report(90, 'Installing packages...');
+          return;
+        }
 
-      progressCallback?.({ progress: 100, message: `${componentName} installed successfully!` });
-      logger.info(`=== ${componentName} installation completed ===`);
+        if (trimmed.includes('Successfully installed')) {
+          report(98, `${componentName} installed`);
+        }
+      };
 
-    } catch (error) {
-      logger.error(`Error installing ${componentName}:`, error);
-      // Clean up on error
-      if (await fs.pathExists(archivePath)) {
-        await fs.remove(archivePath);
-      }
-      throw error;
-    }
+      proc.stdout?.on('data', (data: Buffer) => {
+        data.toString().split('\n').forEach(processLine);
+      });
+
+      proc.stderr?.on('data', (data: Buffer) => {
+        const output = data.toString();
+        errorBuffer += output;
+        output.split('\n').forEach(processLine);
+      });
+
+      proc.on('close', async (code: number | null) => {
+        if (code === 0) {
+          // Re-resolve the ort/ort-cuda duplicate a reinstall may have recreated
+          await applyPluginCompatibilityFixes();
+          progressCallback?.({ progress: 100, message: `${componentName} installed successfully!` });
+          logger.info(`=== ${componentName} installation completed ===`);
+          resolve();
+        } else {
+          const errorMsg = `pip install of ${componentName} failed with exit code ${code}: ${errorBuffer.trim()}`;
+          logger.error(errorMsg);
+          reject(new Error(errorMsg));
+        }
+      });
+
+      proc.on('error', (error: Error) => {
+        logger.error(`Failed to start pip for ${componentName}:`, error);
+        reject(error);
+      });
+    });
   }
 
   /**

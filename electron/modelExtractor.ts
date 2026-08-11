@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { logger } from './logger';
 import { PATHS } from './constants';
-import { getBundledBasePath } from './utils';
+import { getBundledBasePath, setupVSEnvironment } from './utils';
 
 export class ModelExtractor {
   private bundledModelsPath: string;
@@ -12,11 +12,23 @@ export class ModelExtractor {
 
   constructor() {
     this.bundledModelsPath = path.join(getBundledBasePath(), 'include', 'models');
-    
+
     logger.model(`Initialized ModelExtractor`);
     logger.model(`Bundled models path: ${this.bundledModelsPath}`);
     logger.model(`Target models path: ${PATHS.MODELS}`);
-    logger.model(`trtexec path: ${PATHS.TRTEXEC}`);
+  }
+
+  /**
+   * Copies the bundled TensorRT engine builder script out of the app bundle so
+   * the embedded Python can run it (external processes can't read from asar).
+   * The TensorRT pip wheels don't ship trtexec, so engines are built with the
+   * TensorRT Python API using trtexec-compatible arguments.
+   */
+  private async ensureEngineBuilderScript(): Promise<string> {
+    const bundledScript = path.join(getBundledBasePath(), 'include', 'build_trt_engine.py');
+    const targetScript = path.join(PATHS.APP_DATA, 'build_trt_engine.py');
+    await fs.copy(bundledScript, targetScript, { overwrite: true });
+    return targetScript;
   }
 
   /**
@@ -163,9 +175,9 @@ export class ModelExtractor {
     logger.model('Starting ONNX to TensorRT engine conversion');
     
     try {
-      // Check if trtexec exists
-      if (!await fs.pathExists(PATHS.TRTEXEC)) {
-        const error = `trtexec not found at: ${PATHS.TRTEXEC}`;
+      // Check the TensorRT Python package is installed (provides the engine builder)
+      if (!await fs.pathExists(PATHS.TENSORRT_PACKAGE)) {
+        const error = `TensorRT Python package not found at: ${PATHS.TENSORRT_PACKAGE}. Install plugins from the Plugins menu first.`;
         logger.error(error);
         throw new Error(error);
       }
@@ -435,10 +447,10 @@ export class ModelExtractor {
       );
     }
 
-    logger.model(`trtexec command: ${PATHS.TRTEXEC} ${args.join(' ')}`);
+    logger.model(`Engine build arguments: ${args.join(' ')}`);
 
     try {
-      await this.runTrtexecWithProgress(PATHS.TRTEXEC, args, PATHS.MODELS, progressCallback);
+      await this.runEngineBuildWithProgress(args, PATHS.MODELS, progressCallback);
       logger.model(`Successfully converted ${path.basename(onnxPath)} to ${path.basename(enginePath)}`);
     } catch (error) {
       // If we get a "Static model does not take explicit shapes" error, retry without shape parameters
@@ -484,10 +496,10 @@ export class ModelExtractor {
           '--verbose'
         );
         
-        logger.model(`Retrying with command: ${PATHS.TRTEXEC} ${argsWithoutShapes.join(' ')}`);
-        
+        logger.model(`Retrying with arguments: ${argsWithoutShapes.join(' ')}`);
+
         try {
-          await this.runTrtexecWithProgress(PATHS.TRTEXEC, argsWithoutShapes, PATHS.MODELS, progressCallback);
+          await this.runEngineBuildWithProgress(argsWithoutShapes, PATHS.MODELS, progressCallback);
           logger.model(`Successfully converted ${path.basename(onnxPath)} to ${path.basename(enginePath)}`);
           
           // Throw a special error to notify about the fallback
@@ -510,22 +522,24 @@ export class ModelExtractor {
   }
 
   /**
-   * Runs trtexec with real-time progress parsing
+   * Runs the TensorRT Python engine builder with real-time progress parsing.
+   * The builder emits trtexec-compatible progress/phase lines on stdout.
    */
-  private async runTrtexecWithProgress(
-    command: string,
+  private async runEngineBuildWithProgress(
     args: string[],
     cwd: string,
     progressCallback?: (progress: number) => void
   ): Promise<void> {
+    const builderScript = await this.ensureEngineBuilderScript();
+
     return new Promise((resolve, reject) => {
       const { spawn } = require('child_process');
-      
-      // Don't quote the command or args - spawn handles paths correctly without shell
-      const proc = spawn(command, args, {
+
+      // -u keeps Python's stdout unbuffered so progress lines arrive live
+      const proc = spawn(PATHS.PYTHON, ['-u', builderScript, ...args], {
         cwd,
-        shell: false, // Changed from true to false for proper argument handling
-        env: process.env
+        shell: false,
+        env: setupVSEnvironment(PATHS.PYTHON)
       });
 
       // Store the process reference for cancellation
@@ -553,7 +567,7 @@ export class ModelExtractor {
             if (progress > lastProgress && progress <= 100) {
               lastProgress = progress;
               progressCallback?.(progress);
-              logger.debug(`[trtexec progress] ${progress}%`);
+              logger.debug(`[engine build progress] ${progress}%`);
             }
           }
           
@@ -571,7 +585,7 @@ export class ModelExtractor {
             }
           }
           
-          logger.debug(`[trtexec stdout] ${output.trim()}`);
+          logger.debug(`[engine build stdout] ${output.trim()}`);
         });
       }
 
@@ -579,7 +593,7 @@ export class ModelExtractor {
         proc.stderr.on('data', (data: Buffer) => {
           const output = data.toString();
           stderr += output;
-          logger.debug(`[trtexec stderr] ${output.trim()}`);
+          logger.debug(`[engine build stderr] ${output.trim()}`);
         });
       }
 
@@ -589,10 +603,10 @@ export class ModelExtractor {
         
         if (code === 0) {
           progressCallback?.(100);
-          logger.debug(`trtexec completed successfully with code ${code}`);
+          logger.debug(`Engine build completed successfully with code ${code}`);
           resolve();
         } else {
-          const errorMsg = `trtexec failed with code ${code}: ${stderr || stdout}`;
+          const errorMsg = `Engine build failed with code ${code}: ${stderr || stdout}`;
           logger.error(errorMsg);
           reject(new Error(errorMsg));
         }
@@ -601,7 +615,7 @@ export class ModelExtractor {
       proc.on('error', (error: Error) => {
         // Clear the process reference
         this.currentTrtexecProcess = null;
-        logger.error('trtexec execution error:', error);
+        logger.error('Engine build execution error:', error);
         reject(error);
       });
     });

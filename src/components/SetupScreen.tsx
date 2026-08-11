@@ -26,32 +26,24 @@ export const SetupScreen = memo<SetupScreenProps>(({
   onRetryPlugins,
   onContinueWithoutPlugins,
 }: SetupScreenProps) => {
-  // Define the setup steps with their expected component names
-  // Note: component names must use startsWith matching because backend sends versioned names
-  // e.g., backend sends 'vs-mlrt TensorRT v15.13' but we match against 'vs-mlrt TensorRT'
+  // Define the setup steps with their expected component names, in the order the
+  // backend emits them. Component names use startsWith matching because the
+  // backend may send versioned names.
   const setupSteps = useMemo(() => {
     const steps = [
-      { id: 'vapoursynth', name: 'VapourSynth Portable R72', description: 'Video processing framework', component: 'VapourSynth R72' },
-      { id: 'bestsource', name: 'BestSource R13', description: 'Video source filter', component: 'BestSource R13' },
       { id: 'video-compare', name: 'Video Compare Tool', description: 'Side-by-side comparison viewer', component: 'Video Compare Tool' },
-      { id: 'onnx', name: 'vs-mlrt ONNX Runtime Plugin v15.13', description: 'DirectML support (AMD/Intel/NVIDIA GPUs)', component: 'vs-mlrt ONNX Runtime' },
-    ];
-
-    if (hasCudaSupport) {
-      steps.splice(4, 0, {
-        id: 'tensorrt',
-        name: 'vs-mlrt TensorRT Plugin v15.13',
-        description: 'AI inference engine (NVIDIA GPUs)',
-        component: 'vs-mlrt TensorRT'
-      });
-    }
-
-    steps.push(
-      { id: 'python', name: 'Python Embedded', description: 'Python runtime for VapourSynth', component: 'Python Embedded' },
+      { id: 'python', name: 'Python & VapourSynth', description: 'Embedded Python with the VapourSynth runtime from PyPI', component: 'Python Embedded' },
       { id: 'models', name: 'ONNX Models', description: 'Bundled AI upscaling models', component: 'ONNX Models' },
       { id: 'ffmpeg', name: 'FFmpeg', description: 'Video encoding/decoding', component: 'FFmpeg' },
-      { id: 'plugins', name: 'Plugins & Filters', description: 'PyTorch, vsjetpack, and bundled VapourSynth plugins', component: 'Plugins' }
-    );
+      {
+        id: 'plugins',
+        name: 'Plugins & Filters',
+        description: hasCudaSupport
+          ? 'PyTorch, vs-mlrt (TensorRT), vsjetpack, and plugin packages from PyPI'
+          : 'PyTorch, vs-mlrt, vsjetpack, and plugin packages from PyPI',
+        component: 'Plugins'
+      }
+    ];
 
     return steps;
   }, [hasCudaSupport]);
@@ -80,7 +72,7 @@ export const SetupScreen = memo<SetupScreenProps>(({
     }
 
     // Find the index of the current component
-    // Use startsWith matching because backend sends versioned names (e.g., 'vs-mlrt TensorRT v15.13')
+    // Use startsWith matching because the backend may send versioned names
     // but our step components are base names (e.g., 'vs-mlrt TensorRT')
     const currentIndex = setupSteps.findIndex(step => currentComponent.startsWith(step.component));
 
@@ -166,10 +158,6 @@ export const SetupScreen = memo<SetupScreenProps>(({
                       <Loader2 className="w-5 h-5 text-primary-purple animate-spin flex-shrink-0" />
                     ) : (
                       <Download className={`w-5 h-5 flex-shrink-0 ${
-                        step.id === 'vapoursynth' ? 'text-primary-blue' :
-                        step.id === 'tensorrt' ? 'text-primary-purple' :
-                        step.id === 'onnx' ? 'text-accent-cyan' :
-                        step.id === 'bestsource' ? 'text-green-400' :
                         step.id === 'video-compare' ? 'text-yellow-400' :
                         step.id === 'python' ? 'text-orange-400' :
                         step.id === 'models' ? 'text-pink-400' :

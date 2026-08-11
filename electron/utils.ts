@@ -2,7 +2,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import { logger } from './logger';
-import { PATHS } from './constants';
+import { PATHS, IS_WINDOWS } from './constants';
 
 export interface ProcessResult {
   stdout: string;
@@ -109,19 +109,22 @@ export async function runCommand(
  */
 export function setupVSEnvironment(pythonPath?: string): NodeJS.ProcessEnv {
   const env = { ...process.env };
-  
+
   // Setup Python environment if path provided
   if (pythonPath) {
     const pythonDir = path.dirname(pythonPath);
-    env['PATH'] = `${pythonDir};${env['PATH']}`;
-    env['PYTHONHOME'] = pythonDir;
-    env['PYTHONPATH'] = path.join(pythonDir, 'Lib', 'site-packages');
+    env['PATH'] = `${pythonDir}${path.delimiter}${env['PATH']}`;
+    if (IS_WINDOWS) {
+      // Embedded Python only — a venv must not have PYTHONHOME set
+      env['PYTHONHOME'] = pythonDir;
+    }
+    env['PYTHONPATH'] = PATHS.SITE_PACKAGES;
   }
-  
+
   // Setup VapourSynth plugin paths
   env['VS_PLUGINS_PATH'] = PATHS.PLUGINS;
   env['VAPOURSYNTH_PLUGINS_PATH'] = PATHS.PLUGINS;
-  
+
   return env;
 }
 

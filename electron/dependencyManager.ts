@@ -4,11 +4,11 @@ import axios from 'axios';
 import { app, BrowserWindow} from 'electron';
 import { ModelExtractor } from './modelExtractor';
 import { logger } from './logger';
-import { PATHS, VS_MLRT_VERSION } from './constants';
+import { PATHS, PYTHON_VERSION, IS_WINDOWS } from './constants';
 import { runCommand, getBundledBasePath } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
-import { VsMlrtManager } from './vsMlrtManager';
+import { migrateLegacyPortableLayout } from './legacyCleanup';
 import * as _7z from '7zip-min';
 
 export interface DownloadProgress {
@@ -47,7 +47,7 @@ export class DependencyManager {
 
   private async setupEmbeddedPython(): Promise<void> {
     logger.dependency('Setting up embedded Python');
-    
+
     this.sendProgress({
       type: 'python-setup',
       component: 'Python Embedded',
@@ -55,47 +55,43 @@ export class DependencyManager {
       message: 'Setting up embedded Python for VapourSynth...'
     });
 
-    // Check if Python is already set up
-    if (await fs.pathExists(PATHS.PYTHON)) {
-      logger.dependency(`Embedded Python already exists at: ${PATHS.PYTHON}`);
+    if (!await fs.pathExists(PATHS.PYTHON)) {
+      // The embedded-Python bootstrap is Windows-specific; a Linux build would
+      // create a venv from the system Python here instead. Everything after
+      // this point (pip installs) is platform-neutral.
+      if (!IS_WINDOWS) {
+        throw new Error('Automatic Python setup is only implemented for Windows so far');
+      }
+
       this.sendProgress({
         type: 'python-setup',
         component: 'Python Embedded',
-        progress: 100,
-        message: 'Embedded Python already configured'
+        progress: 10,
+        message: `Downloading Python ${PYTHON_VERSION} embedded...`
       });
-      return;
+
+      const pythonZipPath = path.join(PATHS.APP_DATA, `python-${PYTHON_VERSION}-embed-amd64.zip`);
+      logger.dependency(`Downloading Python ${PYTHON_VERSION}`);
+
+      await this.downloadFile(
+        `https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-embed-amd64.zip`,
+        pythonZipPath,
+        'Python Embedded'
+      );
+
+      this.sendProgress({
+        type: 'python-setup',
+        component: 'Python Embedded',
+        progress: 40,
+        message: 'Extracting Python...'
+      });
+
+      await this.extractArchive(pythonZipPath, PATHS.VS, 'Python Embedded');
+      await fs.remove(pythonZipPath);
+      logger.dependency('Python extracted successfully');
+    } else {
+      logger.dependency(`Embedded Python already exists at: ${PATHS.PYTHON}`);
     }
-
-    this.sendProgress({
-      type: 'python-setup',
-      component: 'Python Embedded',
-      progress: 10,
-      message: 'Downloading Python 3.13 embedded...'
-    });
-
-    // Determine latest Python 3.13.x version
-    const pythonVersion = '3.13.0';
-    const pythonZipPath = path.join(PATHS.APP_DATA, `python-${pythonVersion}-embed-amd64.zip`);
-    logger.dependency(`Downloading Python ${pythonVersion}`);
-    
-    await this.downloadFile(
-      `https://www.python.org/ftp/python/${pythonVersion}/python-${pythonVersion}-embed-amd64.zip`,
-      pythonZipPath,
-      'Python 3.13 Embedded'
-    );
-
-    this.sendProgress({
-      type: 'python-setup',
-      component: 'Python Embedded',
-      progress: 40,
-      message: 'Extracting Python to VapourSynth folder...'
-    });
-
-    // Extract Python to VapourSynth folder
-    await this.extractArchive(pythonZipPath, PATHS.VS, 'Python 3.13 Embedded');
-    await fs.remove(pythonZipPath);
-    logger.dependency('Python extracted successfully');
 
     this.sendProgress({
       type: 'python-setup',
@@ -104,99 +100,67 @@ export class DependencyManager {
       message: 'Configuring Python paths...'
     });
 
-    // Modify python313._pth to add import paths
-    const pthFilePath = path.join(PATHS.VS, 'python313._pth');
-    await fs.appendFile(pthFilePath, '\nvs-scripts\nLib\\site-packages\n', 'utf8');
-    logger.dependency('Python paths configured');
+    if (IS_WINDOWS) {
+      // Rewrite pythonXY._pth with the import roots the app relies on. This runs
+      // on every setup (not just fresh installs) so existing installs pick up path
+      // changes — site-packages must come before vs-scripts so pip-installed
+      // packages win over bundled scripts. (A Linux venv would get vs-scripts via
+      // a .pth file in site-packages instead.)
+      const pythonXY = PYTHON_VERSION.split('.').slice(0, 2).join('');
+      const pthFilePath = path.join(PATHS.VS, `python${pythonXY}._pth`);
+      await fs.writeFile(pthFilePath, `python${pythonXY}.zip\n.\nLib\\site-packages\nvs-scripts\n`, 'utf8');
+      logger.dependency('Python paths configured');
+    }
 
-    // Create required directories
-    await fs.ensureDir(PATHS.PLUGINS);
-    await fs.ensureDir(path.join(PATHS.VS, 'vs-scripts'));
+    await fs.ensureDir(PATHS.SCRIPTS);
 
-    this.sendProgress({
-      type: 'python-setup',
-      component: 'Python Embedded',
-      progress: 60,
-      message: 'Downloading pip installer...'
-    });
+    // Remove leftovers from the old zip-based install (VapourSynth R72 portable
+    // runtime, vs-plugins DLL folder, superseded script modules).
+    await migrateLegacyPortableLayout();
 
-    // Download get-pip.py
-    const getPipPath = path.join(PATHS.APP_DATA, 'get-pip.py');
-    await this.downloadFile(
-      'https://bootstrap.pypa.io/get-pip.py',
-      getPipPath,
-      'pip installer'
-    );
+    // Install pip if missing
+    if (!await fs.pathExists(path.join(PATHS.SITE_PACKAGES, 'pip'))) {
+      this.sendProgress({
+        type: 'python-setup',
+        component: 'Python Embedded',
+        progress: 60,
+        message: 'Downloading pip installer...'
+      });
 
-    this.sendProgress({
-      type: 'python-setup',
-      component: 'Python Embedded',
-      progress: 70,
-      message: 'Installing pip...'
-    });
+      const getPipPath = path.join(PATHS.APP_DATA, 'get-pip.py');
+      await this.downloadFile(
+        'https://bootstrap.pypa.io/get-pip.py',
+        getPipPath,
+        'pip installer'
+      );
 
-    // Install pip
-    logger.dependency('Installing pip');
-    await runCommand(PATHS.PYTHON, [getPipPath, '--no-warn-script-location'], PATHS.APP_DATA);
-    await fs.remove(getPipPath);
+      this.sendProgress({
+        type: 'python-setup',
+        component: 'Python Embedded',
+        progress: 70,
+        message: 'Installing pip...'
+      });
 
-    // Remove Scripts/*.exe as per the original script
-    const scriptsPath = path.join(PATHS.VS, 'Scripts');
-    if (await fs.pathExists(scriptsPath)) {
-      const exeFiles = (await fs.readdir(scriptsPath)).filter(f => f.endsWith('.exe'));
-      for (const exeFile of exeFiles) {
-        await fs.remove(path.join(scriptsPath, exeFile));
-      }
-      logger.dependency(`Removed ${exeFiles.length} .exe files from Scripts folder`);
+      logger.dependency('Installing pip');
+      await runCommand(PATHS.PYTHON, [getPipPath, '--no-warn-script-location'], PATHS.APP_DATA);
+      await fs.remove(getPipPath);
     }
 
     this.sendProgress({
       type: 'python-setup',
       component: 'Python Embedded',
-      progress: 80,
-      message: 'Handling VSScript DLL...'
+      progress: 85,
+      message: 'Installing VapourSynth from PyPI...'
     });
 
-    // Handle VSScript DLL (for Python 3.13, we remove the Python 3.8 version)
-    const vsScriptPy38 = path.join(PATHS.VS, 'VSScriptPython38.dll');
-    if (await fs.pathExists(vsScriptPy38)) {
-      await fs.remove(vsScriptPy38);
-      logger.dependency('Removed VSScriptPython38.dll');
-    }
-
-    this.sendProgress({
-      type: 'python-setup',
-      component: 'Python Embedded',
-      progress: 90,
-      message: 'Installing VapourSynth Python package...'
-    });
-
-    // Try to install VapourSynth wheel if it exists locally
-    const wheelPath = path.join(PATHS.VS, 'wheel', 'VapourSynth-72-cp312-abi3-win_amd64.whl');
-    if (await fs.pathExists(wheelPath)) {
-      logger.dependency('Installing VapourSynth from local wheel');
-      await runCommand(PATHS.PYTHON, ['-m', 'pip', 'install', wheelPath]);
-    } else {
-      // Install VapourSynth from PyPI if local wheel doesn't exist.
-      // Pin to match the bundled VapourSynth runtime — newer Python package
-      // versions are not ABI-compatible with older VapourSynth installs.
-      logger.dependency('Installing VapourSynth from PyPI');
-      await runCommand(PATHS.PYTHON, ['-m', 'pip', 'install', 'vapoursynth==72']);
-    }
-
-    // Install vstools (required by several vkfilters that import from vstools).
-    // vstools declares `Requires-Dist: vsjetpack` with no version pin — pip would
-    // resolve to the latest vsjetpack (1.5.0+), which requires vapoursynth>=73 and
-    // would silently upgrade the Python package away from the bundled R72 runtime,
-    // breaking VSScript initialization. Pin vsjetpack to a vapoursynth>=69 release
-    // and re-assert vapoursynth==72 to make pip's resolver refuse any upgrade.
-    logger.dependency('Installing vstools');
+    // Install the core VapourSynth runtime (vspipe.exe, VSScript, core DLLs all
+    // ship in the wheel) plus BestSource so the app can probe videos even if the
+    // plugin install phase is skipped. The plugin phase installs everything else.
+    logger.dependency('Installing VapourSynth and BestSource from PyPI');
     await runCommand(PATHS.PYTHON, [
-      '-m', 'pip', 'install',
-      'vstools',
-      'vsjetpack==1.1.0',
-      'vapoursynth==72',
-      '--no-warn-script-location',
+      '-m', 'pip', 'install', '--upgrade', '--no-warn-script-location',
+      'vapoursynth',
+      'vapoursynth-bestsource',
     ]);
 
     this.sendProgress({
@@ -211,30 +175,27 @@ export class DependencyManager {
 
   async checkDependencies(): Promise<boolean> {
     logger.dependency('Checking dependencies');
-    
-    // Import CUDA detection
-    const { detectCudaSupport } = await import('./utils');
-    const hasCuda = await detectCudaSupport();
-    
+
+    // vspipe.exe ships inside the VapourSynth wheel (site-packages/vapoursynth),
+    // BestSource inside the vapoursynth-bestsource wheel. Old zip-based installs
+    // fail these checks and get migrated by re-running setup.
     const vsExists = await fs.pathExists(PATHS.VSPIPE);
-    const mlrtExists = hasCuda ? await fs.pathExists(path.join(PATHS.MLRT_PLUGIN, 'trtexec.exe')) : true; // Skip if no CUDA
-    const ortExists = await fs.pathExists(path.join(PATHS.PLUGINS, 'vsort.dll'));
-    const bsExists = await fs.pathExists(path.join(PATHS.PLUGINS, 'bestsource.dll'));
+    const bsExists = await fs.pathExists(PATHS.BESTSOURCE_DLL);
     const pythonExists = await fs.pathExists(PATHS.PYTHON);
     const videoCompareExists = await fs.pathExists(PATHS.VIDEO_COMPARE_EXE);
     const ffmpegExists = await FFmpegManager.isInstalled();
+    // NOTE: vs-mlrt (ort/trt) is installed by the plugin phase and intentionally
+    // not part of the core health check, so "continue without plugins" installs
+    // don't get forced back into setup on every launch.
     // NOTE: No longer checking if models are converted - they will be initialized on-demand
-    
-    logger.dependency(`CUDA support: ${hasCuda}`);
-    logger.dependency(`VapourSynth: ${vsExists}`);
-    logger.dependency(`MLRT Plugin: ${mlrtExists} ${hasCuda ? '' : '(skipped - no CUDA)'}`);
-    logger.dependency(`ONNX Runtime Plugin: ${ortExists}`);
-    logger.dependency(`BestSource: ${bsExists}`);
+
+    logger.dependency(`VapourSynth (pip): ${vsExists}`);
+    logger.dependency(`BestSource (pip): ${bsExists}`);
     logger.dependency(`Python: ${pythonExists}`);
     logger.dependency(`Video Compare: ${videoCompareExists}`);
     logger.dependency(`FFmpeg: ${ffmpegExists}`);
 
-    const coreDepsPresent = vsExists && mlrtExists && ortExists && bsExists && pythonExists && videoCompareExists && ffmpegExists;
+    const coreDepsPresent = vsExists && bsExists && pythonExists && videoCompareExists && ffmpegExists;
 
     // If core deps are healthy, silently extract any missing bundled ONNX models rather than
     // failing the health check and forcing the user through the full setup flow.
@@ -423,28 +384,8 @@ export class DependencyManager {
     logger.dependency('Starting dependency setup process');
     
     try {
-      // Detect CUDA support first
-      const { detectCudaSupport } = await import('./utils');
-      const hasCuda = await detectCudaSupport();
-      logger.dependency(`=== CUDA DETECTION RESULT: ${hasCuda} ===`);
-      logger.dependency(`Will ${hasCuda ? 'DOWNLOAD' : 'SKIP'} TensorRT plugin`);
-      
-      // Component configurations (non-vs-mlrt components)
+      // Component configurations (everything else comes from PyPI)
       const components: ComponentConfig[] = [
-        {
-          name: 'VapourSynth R72',
-          url: 'https://github.com/vapoursynth/vapoursynth/releases/download/R72/VapourSynth64-Portable-R72.zip',
-          archiveName: 'vs-portable.zip',
-          checkPath: PATHS.VSPIPE,
-          extractTo: PATHS.VS
-        },
-        {
-          name: 'BestSource R13',
-          url: 'https://github.com/vapoursynth/bestsource/releases/download/R13/BestSource-R13.7z',
-          archiveName: 'bestsource.7z',
-          checkPath: path.join(PATHS.PLUGINS, 'bestsource.dll'),
-          extractTo: PATHS.PLUGINS
-        },
         {
           name: 'Video Compare Tool',
           url: 'https://github.com/pixop/video-compare/releases/download/20250928/video-compare-20250928-win10-x86_64.zip',
@@ -454,69 +395,17 @@ export class DependencyManager {
         }
       ];
 
-      // Check for vs-mlrt version change before installation
-      const storedVsMlrtVersion = configManager.getVsMlrtVersion();
-      const hasVsMlrtVersionChange = storedVsMlrtVersion && storedVsMlrtVersion !== VS_MLRT_VERSION;
-      
-      if (hasCuda && hasVsMlrtVersionChange) {
-        logger.dependency(`=== vs-mlrt VERSION CHANGE DETECTED: ${storedVsMlrtVersion} → ${VS_MLRT_VERSION} ===`);
-        logger.dependency('User will be notified to rebuild TensorRT engines');
-      }
-
       // Install standard components
       for (const component of components) {
         await this.downloadAndInstallComponent(component);
       }
 
-      // Install vs-mlrt components using the unified manager
-      // ONNX Runtime (always needed)
-      if (!(await VsMlrtManager.isComponentInstalled('onnx-runtime'))) {
-        logger.dependency('Installing vs-mlrt ONNX Runtime');
-        await VsMlrtManager.downloadAndInstall('onnx-runtime', (progress) => {
-          this.sendProgress({
-            type: 'download',
-            component: VsMlrtManager.getComponentName('onnx-runtime'),
-            progress: progress.progress,
-            message: progress.message
-          });
-        });
-      } else {
-        logger.dependency('vs-mlrt ONNX Runtime already installed');
-      }
-
-      // TensorRT (only if CUDA is available)
-      if (hasCuda) {
-        logger.dependency('=== CUDA DETECTED - Installing TensorRT plugin ===');
-        
-        // CRITICAL: Do NOT auto-update TensorRT if version changed and it's already installed
-        // This allows the user to be notified via modal and decide when to update
-        const isTensorRtInstalled = await VsMlrtManager.isComponentInstalled('tensorrt');
-        
-        if (hasVsMlrtVersionChange && isTensorRtInstalled) {
-          logger.dependency('TensorRT already installed with different version - skipping auto-update (user will be notified)');
-        } else if (!isTensorRtInstalled) {
-          await VsMlrtManager.downloadAndInstall('tensorrt', (progress) => {
-            this.sendProgress({
-              type: 'download',
-              component: VsMlrtManager.getComponentName('tensorrt'),
-              progress: progress.progress,
-              message: progress.message
-            });
-          });
-        } else {
-          logger.dependency('vs-mlrt TensorRT already installed');
-        }
-      } else {
-        logger.dependency('=== NO CUDA DETECTED - Skipping TensorRT plugin ===');
-      }
-
+      // Setup embedded Python + the pip-installed VapourSynth runtime.
+      // vs-mlrt (ort/trt) now comes from PyPI during the plugin install phase.
       // Note: We intentionally do NOT update the stored vs-mlrt version here.
-      // The version check in the frontend (App.tsx) will detect the mismatch and
-      // show a notification modal if there are existing engine files that need rebuilding.
-      // The version is only updated after the user acknowledges the notification or
-      // clears their engines, ensuring they are informed of the change.
-      
-      // Setup embedded Python
+      // The version check in the frontend (App.tsx) will detect a mismatch and
+      // show a notification modal if there are existing engine files that need
+      // rebuilding; the version is only updated after the user acknowledges it.
       await this.setupEmbeddedPython();
       
       // Extract bundled ONNX models to AppData
@@ -708,34 +597,5 @@ export class DependencyManager {
 
   getPythonExecutablePath(): string {
     return PATHS.PYTHON;
-  }
-
-  private async extractExtraPlugins(): Promise<void> {
-    logger.dependency('Checking for extra plugins');
-    
-    // Get bundled extra plugins path
-    const bundledBasePath = getBundledBasePath();
-    const extraPluginsPath = path.join(bundledBasePath, 'include', 'plugins', 'extra_plugins.7z');
-    
-    if (await fs.pathExists(extraPluginsPath)) {
-      logger.dependency(`Found extra plugins at: ${extraPluginsPath}`);
-      
-      this.sendProgress({
-        type: 'extract',
-        component: 'Extra Plugins',
-        progress: 0,
-        message: 'Extracting extra VapourSynth plugins...'
-      });
-      
-      try {
-        await this.extractArchive(extraPluginsPath, PATHS.PLUGINS, 'Extra Plugins');
-        logger.dependency('Extra plugins extracted successfully');
-      } catch (error) {
-        logger.error('Failed to extract extra plugins:', error);
-        // Don't fail the entire setup if extra plugins fail
-      }
-    } else {
-      logger.dependency('No extra plugins found, skipping');
-    }
   }
 }

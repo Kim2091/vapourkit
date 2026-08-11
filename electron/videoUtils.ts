@@ -175,8 +175,7 @@ export async function getVideoFrameCount(
       return undefined;
     }
 
-    const bestSourcePath = path.join(PATHS.PLUGINS, 'bestsource.dll');
-    if (!fs.existsSync(bestSourcePath)) {
+    if (!fs.existsSync(PATHS.BESTSOURCE_DLL)) {
       logger.warn('BestSource plugin not available for frame count extraction');
       return undefined;
     }

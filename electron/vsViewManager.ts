@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { spawn } from 'child_process';
-import { PATHS } from './constants';
+import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 
@@ -61,9 +61,11 @@ export class VsViewManager {
     
     try {
       const env = setupVSEnvironment();
-      
-      // Install vsview==0.5.0
-      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', 'vsview==0.5.0'], {
+
+      // vsview normally arrives with the main plugin install (vsview[full]);
+      // this is the fallback path when it's missing. Some of its dependencies
+      // are hosted on the JET wheels index rather than PyPI.
+      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', '--no-warn-script-location', 'vsview[full]', ...PYPI_EXTRA_INDEX_ARGS], {
         env,
         cwd: PATHS.VS,
         stdio: 'pipe'
@@ -196,11 +198,9 @@ export class VsViewManager {
       // Setup environment for VapourSynth
       const env = setupVSEnvironment();
 
-      // Use the pip-generated console_scripts wrapper directly.
-      // `python -m vsview` does not work — the vsview package has no __main__.py;
-      // its entry point is declared as `vsview = vsview.cli:main` in entry_points.txt,
-      // which pip materializes as Scripts/vsview.exe.
-      const vsviewExe = path.join(PATHS.VS, 'Scripts', 'vsview.exe');
+      // Use the pip-generated console_scripts wrapper directly (launching via
+      // `python -m vsview` has historically been unreliable).
+      const vsviewExe = PATHS.VSVIEW_EXE;
       if (!fs.existsSync(vsviewExe)) {
         const error = `vs-view executable not found at: ${vsviewExe}. The pip install may not have completed.`;
         logger.error(error);

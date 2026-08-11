@@ -1,6 +1,6 @@
 {
     "name": "vapourkit-gui",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "description": "Advanced GUI for VapourSynth and Video Upscaling",
     "main": "dist/electron/main.js",
     "scripts": {
@@ -79,6 +79,7 @@
             "include/scripts/**/*.7z",
             "include/filter_templates/**/*.vkfilter",
             "include/vapoursynth_template.vpy",
+            "include/build_trt_engine.py",
             "include/stock-app-config.json",
             "package.json",
             "!data/**/*"
@@ -90,6 +91,7 @@
             "include/scripts/**/*.7z",
             "include/filter_templates/**/*.vkfilter",
             "include/vapoursynth_template.vpy",
+            "include/build_trt_engine.py",
             "include/stock-app-config.json",
             "node_modules/7zip-bin/**/*"
         ],
