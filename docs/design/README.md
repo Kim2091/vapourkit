@@ -38,7 +38,7 @@ Concept A, with three revisions agreed after the first review:
 │    │ collapsi-├────────────────────────┤ SOURCE        │
 │    │ ble      │  scrubber 36px         │ FILTERS       │
 │    │          │                        │ OUTPUT        │
-│    │          │                        │ INPUT→OUTPUT  │
+│    │          │                        │ MEDIA INFO    │
 │    │          │                        │ ADVANCED      │
 ├────┴──────────┴────────────────────────┴───────────────┤
 │  action bar 44px — progress line is its top edge       │

@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { Sparkles, Github, Heart, X, FileText, ChevronDown, ChevronUp, Book } from 'lucide-react';
+import { Logo } from './Logo';
 import { MODEL_LICENSES } from '../data/modelLicenses';
 
 interface AboutModalProps {
@@ -44,124 +45,123 @@ export const AboutModal = memo<AboutModalProps>(({ show, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-ink-850 rounded-2xl border border-ink-800 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-ink-900 border border-ink-750 rounded-lg shadow-2xl shadow-black/60 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-ink-800">
-          <div className="flex items-center gap-3">
-            <Sparkles className="w-6 h-6 text-accent-500" />
-            <h2 className="text-2xl font-bold">About</h2>
+        <div className="h-10 flex-shrink-0 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800 rounded-t-lg overflow-hidden">
+          <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <Sparkles className="w-4 h-4 text-ink-500" />
+            <h2 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">About</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-ink-400 hover:text-white transition-colors"
+            aria-label="Close about"
+            className="w-7 h-7 self-center rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
           >
-            <X className="w-6 h-6" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto">
-          <div className="text-center">
-            <h3 className="text-xl font-bold bg-gradient-to-r from-accent-500 via-accent-500 to-accent-500 bg-clip-text text-transparent mb-2">
+        <div className="flex-1 overflow-y-auto">
+          <div className="text-center px-6 pt-6 pb-5">
+            {/* The one surface where the brand mark keeps its full colours (no monochrome prop) */}
+            <Logo className="w-12 h-12 mx-auto mb-3" />
+            <h3 className="font-display text-[15px] font-semibold uppercase tracking-[0.16em] text-ink-100 mb-1">
               Vapourkit
             </h3>
             {version && (
-              <p className="text-ink-500 text-s mb-1">
+              <p className="text-ink-400 text-[11.5px] font-mono tabular-nums mb-0.5">
                 v{version}
               </p>
             )}
-            <p className="text-ink-400 text-sm">
+            <p className="text-ink-400 text-[11.5px]">
               Made by Kim2091
             </p>
-            
+
             {/* Credits */}
-            <div className="mt-6 pt-5 border-t border-ink-800/50">
-              <div className="text-center space-y-2">
-                <p className="text-sm font-medium text-ink-300 italic">In loving memory of my Mom</p>
-                <p className="text-xs text-ink-400 leading-relaxed max-w-md mx-auto">
+            <div className="mt-5 pt-4 border-t border-ink-900">
+              <div className="text-center space-y-1.5">
+                <p className="text-[12px] font-medium text-ink-300 italic">In loving memory of my Mom</p>
+                <p className="text-[11px] text-ink-500 leading-relaxed max-w-md mx-auto">
                   Thank you for your love, support, and encouragement in everything I do
                 </p>
-                <p className="text-xs text-ink-450 pt-1">Rest in peace</p>
+                <p className="text-[11px] text-ink-500 pt-1">Rest in peace</p>
               </div>
             </div>
           </div>
 
-          <div className="space-y-3">
+          {/* Link ledger */}
+          <div className="border-t border-ink-800">
             <button
               onClick={() => openExternal('https://github.com/Kim2091/vapourkit')}
-              className="w-full bg-ink-900 hover:bg-ink-950 border border-ink-700 hover:border-accent-500 rounded-lg px-4 py-3 transition-all duration-300 flex items-center gap-3 group"
+              className="w-full h-9 flex items-center gap-2.5 px-4 border-b border-ink-900 text-left text-[12.5px] text-ink-300 hover:bg-ink-850 hover:text-ink-200 transition-colors group"
             >
-              <Github className="w-5 h-5 text-ink-400 group-hover:text-accent-500 transition-colors" />
-              <div className="flex-1 text-left">
-                <p className="text-sm font-medium text-white">View Vapourkit on GitHub</p>
-              </div>
+              <Github className="w-4 h-4 text-ink-500 group-hover:text-ink-400 transition-colors" />
+              <span className="flex-1 truncate">View Vapourkit on GitHub</span>
             </button>
 
             <button
               onClick={() => openExternal('https://github.com/Kim2091/vapourkit/tree/main/docs')}
-              className="w-full bg-ink-900 hover:bg-ink-950 border border-ink-700 hover:border-accent-500 rounded-lg px-4 py-3 transition-all duration-300 flex items-center gap-3 group"
+              className="w-full h-9 flex items-center gap-2.5 px-4 border-b border-ink-900 text-left text-[12.5px] text-ink-300 hover:bg-ink-850 hover:text-ink-200 transition-colors group"
             >
-              <Book className="w-5 h-5 text-ink-400 group-hover:text-accent-500 transition-colors" />
-              <div className="flex-1 text-left">
-                <p className="text-sm font-medium text-white">View Documentation</p>
-              </div>
+              <Book className="w-4 h-4 text-ink-500 group-hover:text-ink-400 transition-colors" />
+              <span className="flex-1 truncate">View Documentation</span>
             </button>
 
             <button
               onClick={() => openExternal('https://ko-fi.com/kim20913944')}
-              className="w-full bg-ink-900 hover:bg-ink-950 border border-ink-700 hover:border-pink-500 rounded-lg px-4 py-3 transition-all duration-300 flex items-center gap-3 group"
+              className="w-full h-9 flex items-center gap-2.5 px-4 border-b border-ink-900 text-left text-[12.5px] text-ink-300 hover:bg-ink-850 hover:text-ink-200 transition-colors group"
             >
-              <Heart className="w-5 h-5 text-ink-400 group-hover:text-pink-500 transition-colors" />
-              <div className="flex-1 text-left">
-                <p className="text-sm font-medium text-white">Support me on Ko-fi!</p>
-              </div>
+              <Heart className="w-4 h-4 text-ink-500 group-hover:text-pink-500 transition-colors" />
+              <span className="flex-1 truncate">Support me on Ko-fi!</span>
             </button>
           </div>
 
           {/* Model Licenses Section */}
-          <div className="border-t border-ink-800 pt-6">
+          <section className="mt-2 border-t border-ink-700">
             <button
               onClick={() => setLicensesExpanded(!licensesExpanded)}
-              className="w-full flex items-center justify-between gap-2 mb-4 hover:opacity-80 transition-opacity"
+              aria-expanded={licensesExpanded}
+              className="w-full h-9 flex items-stretch gap-2.5 pr-3 bg-ink-850 border-b border-ink-800 text-left hover:opacity-80 transition-opacity"
             >
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-accent-500" />
-                <h3 className="text-lg font-semibold text-white">Licenses for Included Models</h3>
-              </div>
+              <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
+              <span className="flex items-center gap-2 min-w-0 flex-1">
+                <FileText className="w-3.5 h-3.5 text-ink-500" />
+                <span className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Licenses for Included Models</span>
+              </span>
               {licensesExpanded ? (
-                <ChevronUp className="w-5 h-5 text-ink-400" />
+                <ChevronUp className="w-3.5 h-3.5 text-ink-500 self-center flex-shrink-0" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-ink-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-ink-500 self-center flex-shrink-0" />
               )}
             </button>
             {licensesExpanded && (
               <>
-                <p className="text-xs text-ink-500 mb-4">
+                <p className="text-[11px] text-ink-500 px-4 pt-2 pb-1.5">
                   The following list shows the licenses for the models included with Vapourkit.
                 </p>
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                <div className="max-h-64 overflow-y-auto">
                   {MODEL_LICENSES.map((model, index) => (
                     <div
                       key={index}
-                      className="bg-ink-900 border border-ink-700/50 rounded-lg px-3 py-2"
+                      className="h-8 flex items-center justify-between gap-3 px-4 border-b border-ink-900"
                     >
-                      <div className="flex justify-between items-start gap-2">
-                        <span className="text-sm text-white font-medium">{model.name}</span>
-                        <span className="text-xs text-ink-400 whitespace-nowrap">{model.license}</span>
-                      </div>
+                      <span className="text-[12px] text-ink-300 truncate">{model.name}</span>
+                      <span className="text-[10.5px] font-mono text-ink-500 whitespace-nowrap">{model.license}</span>
                     </div>
                   ))}
                 </div>
               </>
             )}
-          </div>
-          
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 pt-6 text-sm text-ink-400">
-            <kbd className="px-2 py-0.5 bg-ink-850 border border-ink-700 rounded text-ink-300">Esc</kbd>
-            <span>to close</span>
-          </div>
+          </section>
+        </div>
+
+        {/* Footer */}
+        <div className="h-9 flex-shrink-0 flex items-center justify-end gap-2 px-4 border-t border-ink-800 bg-ink-900 text-[11px] text-ink-500">
+          <kbd className="px-1.5 py-0.5 bg-ink-850 border border-ink-750 rounded text-[10px] font-mono text-ink-300">Esc</kbd>
+          <span>to close</span>
         </div>
       </div>
     </div>

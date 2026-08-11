@@ -338,30 +338,32 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
     <>
       {/* Edit Dialog Overlay */}
       {editingTemplate && (
-        <div 
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
           onClick={handleCancelEdit}
         >
-          <div 
-            className="bg-ink-850 rounded-xl shadow-2xl w-[500px] max-w-[90vw] border border-ink-800"
+          <div
+            className="bg-ink-900 border border-ink-750 rounded-lg shadow-2xl shadow-black/60 w-[500px] max-w-[90vw]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b border-ink-800">
-              <div className="flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-accent-500" />
-                <h3 className="text-xl font-semibold">Edit Template</h3>
+            <div className="h-10 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800 rounded-t-lg overflow-hidden">
+              <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <Edit3 className="w-4 h-4 text-ink-500" />
+                <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Edit Template</h3>
               </div>
               <button
                 onClick={handleCancelEdit}
-                className="p-2 hover:bg-ink-900 rounded-lg transition-colors"
+                aria-label="Close edit dialog"
+                className="w-7 h-7 self-center rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
-            
-            <div className="p-4 space-y-4">
+
+            <div className="p-4 space-y-3">
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-ink-300">
+                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
                   Template Name <span className="text-bad-400">*</span>
                 </label>
                 <input
@@ -369,29 +371,30 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   placeholder="Enter template name"
-                  className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
+                  className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
                   autoFocus
                 />
               </div>
-              
+
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-ink-300">
+                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
                   Categories
                 </label>
                 <div className="space-y-2">
                   {/* Display existing categories */}
                   {editCategories.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {editCategories.map((cat, index) => (
                         <span
                           key={index}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-accent-500/20 border border-accent-500/50 rounded-lg text-accent-500"
+                          className="inline-flex items-center gap-1 h-[18px] px-1.5 bg-accent-500/10 border border-accent-500/40 rounded text-accent-300 text-[10px]"
                         >
                           {cat}
                           <button
                             onClick={() => setEditCategories(prev => prev.filter((_, i) => i !== index))}
                             className="hover:text-bad-400 transition-colors"
                             type="button"
+                            aria-label={`Remove category ${cat}`}
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -415,7 +418,7 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                         }
                       }}
                       placeholder="Add category (press Enter)"
-                      className="flex-1 bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
+                      className="flex-1 min-w-0 h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
                     />
                     <button
                       type="button"
@@ -426,16 +429,16 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                         }
                       }}
                       disabled={!newCategoryInput.trim()}
-                      className="px-3 py-2 bg-accent-500 hover:bg-accent-500/90 disabled:bg-ink-900 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
+                      className="h-7 px-2.5 rounded inline-flex items-center text-[11.5px] font-semibold bg-accent-500 border border-accent-500 text-accent-ink hover:bg-accent-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
                     >
                       Add
                     </button>
                   </div>
                 </div>
               </div>
-              
+
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-ink-300">
+                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
                   Description
                 </label>
                 <textarea
@@ -443,22 +446,22 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                   onChange={(e) => setEditDescription(e.target.value)}
                   placeholder="Describe what this filter does..."
                   rows={3}
-                  className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500 resize-none"
+                  className="w-full bg-ink-850 border border-ink-750 rounded px-2 py-1.5 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500 resize-none"
                 />
               </div>
             </div>
-            
-            <div className="flex items-center gap-2 p-4 border-t border-ink-800 bg-ink-900">
+
+            <div className="flex items-center gap-2 px-4 py-3 border-t border-ink-800">
               <button
                 onClick={handleSaveEdit}
                 disabled={!editName.trim()}
-                className="flex-1 bg-accent-500 hover:bg-accent-500/90 disabled:bg-ink-900 disabled:cursor-not-allowed text-white text-sm py-2 rounded-lg transition-colors font-medium"
+                className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-accent-500 border border-accent-500 text-accent-ink hover:bg-accent-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Save Changes
               </button>
               <button
                 onClick={handleCancelEdit}
-                className="flex-1 bg-ink-900 hover:bg-ink-950 border border-ink-700 text-white text-sm py-2 rounded-lg transition-colors"
+                className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors"
               >
                 Cancel
               </button>
@@ -468,50 +471,53 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
       )}
 
       {/* Main Modal */}
-      <div 
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div 
+      <div
         ref={modalRef}
-        className="bg-ink-850 rounded-xl shadow-2xl w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col border border-ink-800"
+        className="bg-ink-900 border border-ink-750 rounded-lg shadow-2xl shadow-black/60 w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-ink-800">
-          <div className="flex items-center gap-2">
-            <FilterIcon className="w-5 h-5 text-accent-500" />
-            <h2 className="text-xl font-semibold">Select Filter Template</h2>
+        <div className="h-10 flex-shrink-0 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800 rounded-t-lg overflow-hidden">
+          <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <FilterIcon className="w-4 h-4 text-ink-500" />
+            <h2 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Select Filter Template</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-ink-900 rounded-lg transition-colors"
+            className="w-7 h-7 self-center rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
             title="Close"
+            aria-label="Close filter selector"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Search Bar */}
-        <div className="p-4 border-b border-ink-800">
+        <div className="flex-shrink-0 px-3 py-2 border-b border-ink-800">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-500" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search filters by name, category, or description..."
-              className="w-full bg-ink-900 border border-ink-700 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
+              className="w-full h-8 bg-ink-850 border border-ink-750 rounded pl-8 pr-8 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-ink-900 rounded transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
+                aria-label="Clear search"
               >
-                <X className="w-4 h-4 text-ink-400" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -520,31 +526,31 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
         {/* Main Content */}
         <div className="flex flex-1 overflow-hidden">
           {/* Category Sidebar */}
-          <div className="w-56 border-r border-ink-800 overflow-y-auto bg-ink-900">
-            <div className="p-3">
-              <div className="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-2">
+          <div className="w-56 flex-shrink-0 border-r border-ink-800 overflow-y-auto bg-ink-950">
+            <div className="pb-2">
+              <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
                 Categories
               </div>
-              <div className="space-y-0.5">
+              <div>
                 {categories.map(category => {
-                  const count = category === 'All' 
-                    ? filterTemplates.length 
+                  const count = category === 'All'
+                    ? filterTemplates.length
                     : (groupedTemplates[category]?.length || 0);
-                  
+
                   return (
                     <button
                       key={category}
                       onClick={() => setSelectedCategory(category)}
-                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between group ${
+                      className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
                         selectedCategory === category
-                          ? 'bg-accent-500 text-white'
-                          : 'text-ink-300 hover:bg-ink-850 hover:text-white'
+                          ? 'bg-ink-850 text-ink-100 shadow-[inset_2px_0_0] shadow-accent-500'
+                          : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
                       }`}
                     >
                       <span className="truncate">{category}</span>
-                      <span className={`text-xs ${
+                      <span className={`text-[10.5px] tabular-nums ${
                         selectedCategory === category
-                          ? 'text-accent-200'
+                          ? 'text-accent-400'
                           : 'text-ink-500 group-hover:text-ink-400'
                       }`}>
                         {count}
@@ -557,50 +563,44 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
           </div>
 
           {/* Filter List */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto bg-ink-950">
             {/* Custom/New Button */}
-            <div className="mb-4">
-              <button
-                onClick={() => handleSelectTemplate('')}
-                className={`w-full px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 text-sm font-medium ${
-                  currentSelection === ''
-                    ? 'bg-accent-500/20 border-accent-500 text-accent-500'
-                    : 'bg-accent-500/10 border-accent-500/40 hover:bg-accent-500/15 hover:border-accent-500/60 text-accent-500'
-                }`}
-                title="Start with a blank filter"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Custom/New Filter</span>
-              </button>
-            </div>
+            <button
+              onClick={() => handleSelectTemplate('')}
+              className={`w-full h-9 px-3 border-b border-ink-900 transition-colors flex items-center gap-2 text-[12.5px] font-medium text-left ${
+                currentSelection === ''
+                  ? 'bg-ink-850 text-accent-300 shadow-[inset_2px_0_0] shadow-accent-500'
+                  : 'text-accent-400 hover:bg-ink-900 hover:text-accent-300'
+              }`}
+              title="Start with a blank filter"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Custom/New Filter</span>
+            </button>
 
             {/* Current Selection */}
             {currentSelection && (
-              <div className="mb-4 p-3 bg-ink-900 border border-accent-500/50 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-ink-400 mb-1">Current Selection</div>
-                    <div className="font-medium text-accent-500">{currentSelection}</div>
-                  </div>
-                  <button
-                    onClick={handleClearSelection}
-                    className="px-3 py-1.5 bg-ink-850 hover:bg-ink-950 border border-ink-700 text-white text-xs rounded-lg transition-colors"
-                  >
-                    Clear (Custom)
-                  </button>
-                </div>
+              <div className="flex items-center gap-2.5 min-h-[36px] px-3 py-1.5 bg-ink-900 border-b border-ink-800 shadow-[inset_2px_0_0] shadow-accent-500">
+                <div className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 flex-shrink-0">Current Selection</div>
+                <div className="text-[12.5px] font-medium text-accent-400 truncate flex-1 min-w-0">{currentSelection}</div>
+                <button
+                  onClick={handleClearSelection}
+                  className="h-6 px-2 rounded inline-flex items-center text-[11px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors flex-shrink-0"
+                >
+                  Clear (Custom)
+                </button>
               </div>
             )}
 
             {/* Favorites Section */}
             {!searchQuery && selectedCategory === 'All' && favoriteFilterTemplates.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <Star className="w-4 h-4 text-warn-400 fill-warn-400" />
-                  <h3 className="font-semibold text-ink-200">Favorites</h3>
-                  <span className="text-sm text-ink-500">({favoriteFilterTemplates.length})</span>
+              <div className="mb-2">
+                <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                  <Star className="w-3 h-3 text-warn-400 fill-warn-400" />
+                  <h3>Favorites</h3>
+                  <span className="text-ink-500 tabular-nums">({favoriteFilterTemplates.length})</span>
                 </div>
-                <div className="grid grid-cols-1 gap-2">
+                <div>
                   {favoriteFilterTemplates.map(template => (
                     <FilterItem
                       key={template.name}
@@ -619,13 +619,13 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
 
             {/* Recent Section */}
             {!searchQuery && selectedCategory === 'All' && recentFilterTemplates.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <Clock className="w-4 h-4 text-accent-500" />
-                  <h3 className="font-semibold text-ink-200">Recent</h3>
-                  <span className="text-sm text-ink-500">({recentFilterTemplates.length})</span>
+              <div className="mb-2">
+                <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                  <Clock className="w-3 h-3 text-ink-500" />
+                  <h3>Recent</h3>
+                  <span className="text-ink-500 tabular-nums">({recentFilterTemplates.length})</span>
                 </div>
-                <div className="grid grid-cols-1 gap-2">
+                <div>
                   {recentFilterTemplates.map(template => (
                     <FilterItem
                       key={template.name}
@@ -644,23 +644,23 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
 
             {/* All Filters / Search Results */}
             <div>
-              <div className="flex items-center gap-2 mb-3">
-                <FilterIcon className="w-4 h-4 text-ink-400" />
-                <h3 className="font-semibold text-ink-200">
+              <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                <FilterIcon className="w-3 h-3 text-ink-500" />
+                <h3>
                   {searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Filters' : selectedCategory}
                 </h3>
-                <span className="text-sm text-ink-500">({filteredTemplates.length})</span>
+                <span className="text-ink-500 tabular-nums">({filteredTemplates.length})</span>
               </div>
               {filteredTemplates.length === 0 ? (
-                <div className="text-center py-12 text-ink-400">
-                  <FilterIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  <p>No filters found</p>
+                <div className="text-center py-12 text-ink-500">
+                  <FilterIcon className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                  <p className="text-[12.5px] text-ink-400">No filters found</p>
                   {searchQuery && (
-                    <p className="text-sm mt-1">Try adjusting your search query</p>
+                    <p className="text-[11px] mt-1">Try adjusting your search query</p>
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-2">
+                <div>
                   {filteredTemplates.map(template => (
                     <FilterItem
                       key={template.name}
@@ -680,17 +680,15 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-ink-800 px-4 py-3 bg-ink-900">
-          <div className="flex items-center justify-between text-sm text-ink-400">
-            <div className="flex items-center gap-4">
-              <span>{filteredTemplates.length} filters shown</span>
-              <span>•</span>
-              <span>{favorites.size} favorites</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-ink-850 border border-ink-700 rounded text-ink-300">Esc</kbd>
-              <span>to close</span>
-            </div>
+        <div className="flex-shrink-0 h-8 border-t border-ink-800 px-3 bg-ink-900 flex items-center justify-between text-[11px] text-ink-500">
+          <div className="flex items-center gap-3 tabular-nums">
+            <span>{filteredTemplates.length} filters shown</span>
+            <span>•</span>
+            <span>{favorites.size} favorites</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <kbd className="px-1.5 py-0.5 bg-ink-850 border border-ink-750 rounded text-[10px] font-mono text-ink-300">Esc</kbd>
+            <span>to close</span>
           </div>
         </div>
       </div>
@@ -723,98 +721,96 @@ const FilterItem = memo<FilterItemProps>(({
 }) => {
   return (
     <div
-      className={`group relative p-3 rounded-lg border transition-all cursor-pointer ${
+      className={`group relative flex items-start gap-2.5 px-3 py-1.5 border-b border-ink-900 cursor-pointer transition-colors ${
         isSelected
-          ? 'bg-accent-500/20 border-accent-500'
-          : 'bg-ink-900 border-ink-700 hover:border-ink-600 hover:bg-ink-850'
+          ? 'bg-ink-850 shadow-[inset_2px_0_0] shadow-accent-500'
+          : 'hover:bg-ink-900'
       }`}
       onClick={() => onSelect(template.name)}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <h4 className={`font-medium ${
-              isSelected ? 'text-accent-500' : 'text-white'
-            }`}>
-              {template.name}
-            </h4>
-            {/* Display category/categories */}
-            {Array.isArray(template.category) ? (
-              template.category.map((cat, index) => (
-                <span key={index} className="text-xs px-2 py-1 bg-ink-950 text-ink-400 rounded flex-shrink-0">
-                  {cat}
-                </span>
-              ))
-            ) : template.category ? (
-              <span className="text-xs px-2 py-1 bg-ink-950 text-ink-400 rounded flex-shrink-0">
-                {template.category}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap min-h-[20px]">
+          <h4 className={`text-[12.5px] font-medium min-w-0 break-words mr-1 ${
+            isSelected ? 'text-accent-300' : 'text-ink-200'
+          }`}>
+            {template.name}
+          </h4>
+          {/* Display category/categories */}
+          {Array.isArray(template.category) ? (
+            template.category.map((cat, index) => (
+              <span key={index} className="inline-flex items-center h-[18px] px-1.5 rounded border border-ink-750 bg-ink-850 text-[10px] text-ink-400 flex-shrink-0">
+                {cat}
               </span>
-            ) : null}
-          </div>
-          {template.description && (
-            <p className="text-sm text-ink-400 line-clamp-2">
-              {template.description}
-            </p>
-          )}
+            ))
+          ) : template.category ? (
+            <span className="inline-flex items-center h-[18px] px-1.5 rounded border border-ink-750 bg-ink-850 text-[10px] text-ink-400 flex-shrink-0">
+              {template.category}
+            </span>
+          ) : null}
           {template.metadata?.tags && template.metadata.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {template.metadata.tags.slice(0, 3).map((tag, i) => (
-                <span
-                  key={i}
-                  className="text-xs px-2 py-0.5 bg-ink-950/50 text-ink-500 rounded"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
+            template.metadata.tags.slice(0, 3).map((tag, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center h-[18px] px-1.5 rounded text-[10px] bg-ink-900 text-ink-500 flex-shrink-0"
+              >
+                {tag}
+              </span>
+            ))
           )}
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {onEdit && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(template);
-              }}
-              className="p-1.5 rounded-lg transition-all text-ink-600 hover:text-accent-500 hover:bg-ink-850"
-              title="Edit template"
-            >
-              <Edit3 className="w-4 h-4" />
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(template.name);
-              }}
-              className="p-1.5 rounded-lg transition-all text-ink-600 hover:text-bad-400 hover:bg-ink-850"
-              title="Delete template"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
+        {template.description && (
+          <p className="text-[11px] text-ink-500 line-clamp-2 mt-0.5">
+            {template.description}
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-0.5 flex-shrink-0">
+        {isSelected && (
+          <ChevronRight className="w-3.5 h-3.5 text-accent-400" aria-hidden="true" />
+        )}
+        {onEdit && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onToggleFavorite(template.name);
+              onEdit(template);
             }}
-            className={`p-1.5 rounded-lg transition-all ${
-              isFavorite
-                ? 'text-warn-400 hover:text-warn-500'
-                : 'text-ink-600 hover:text-warn-400'
-            }`}
-            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            className="w-6 h-6 rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-within:opacity-100"
+            title="Edit template"
+            aria-label="Edit template"
           >
-            <Star className={`w-4 h-4 ${isFavorite ? 'fill-warn-400' : ''}`} />
+            <Edit3 className="w-3.5 h-3.5" />
           </button>
-        </div>
+        )}
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(template.name);
+            }}
+            className="w-6 h-6 rounded grid place-items-center text-ink-500 hover:text-bad-400 hover:bg-bad-500/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-within:opacity-100"
+            title="Delete template"
+            aria-label="Delete template"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(template.name);
+          }}
+          className={`w-6 h-6 rounded grid place-items-center transition-colors ${
+            isFavorite
+              ? 'text-warn-400 hover:text-warn-500'
+              : 'text-ink-500 hover:text-warn-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-within:opacity-100'
+          }`}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-warn-400' : ''}`} />
+        </button>
       </div>
-      {isSelected && (
-        <div className="absolute top-2 right-2">
-          <ChevronRight className="w-4 h-4 text-accent-500" />
-        </div>
-      )}
     </div>
   );
 });

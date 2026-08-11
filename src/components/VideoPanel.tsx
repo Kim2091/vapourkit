@@ -95,7 +95,7 @@ export const VideoInfoPanel = memo<VideoInfoPanelProps>(({
 
   return (
     <Section
-      title="Input → Output"
+      title="Media Info"
       meta={videoInfo ? (changes === 1 ? '1 change' : `${changes} changes`) : undefined}
       collapsible
       open={showVideoInfo}
