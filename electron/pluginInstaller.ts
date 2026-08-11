@@ -9,6 +9,7 @@ import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
+import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { detectGpuVendor } from './gpuDetection';
 import {
   computeVendorPurge,
@@ -493,6 +494,24 @@ export class PluginInstaller {
       // Step 4: Download and extract VapourSynth scripts from GitHub (85-90% progress)
       logger.info('=== Step 4: Downloading VapourSynth scripts from GitHub ===');
       await this.downloadAndExtractVSScripts();
+
+      if (this.isCancelled) {
+        return { success: false, error: 'Installation cancelled by user' };
+      }
+
+      // Step 4.5: vs-mlrt model zoo for the bundled RIFE/DPIR templates (the
+      // pip wheels ship no models folder). Non-fatal: a download failure only
+      // affects those templates, and startup re-attempts it (checkDependencies).
+      if (await VsMlrtModelsManager.needsDownload()) {
+        logger.info('=== Step 4.5: Downloading vs-mlrt model zoo (RIFE/DPIR) ===');
+        try {
+          await VsMlrtModelsManager.ensureModels((message) => {
+            this.sendProgress({ type: 'installing', progress: 90, message });
+          });
+        } catch (error) {
+          logger.warn('vs-mlrt model zoo download failed (continuing; retried at next startup):', error);
+        }
+      }
 
       if (this.isCancelled) {
         return { success: false, error: 'Installation cancelled by user' };

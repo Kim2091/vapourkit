@@ -10,6 +10,10 @@
 - The Plugins modal reports "not installed" when the installed package set targets a different GPU than the one detected, so reinstalling repairs it
   - Existing NVIDIA installs are recognized as-is and are not forced through a reinstall; AMD/Intel users who installed the old CUDA-only package set are prompted to reinstall to get the correct packages
 - Set `VAPOURKIT_FORCE_GPU_VENDOR=nvidia|amd|intel|unknown` to override GPU detection
+- Fix the RIFE and DPIR filter templates failing with `"...models\rife\rife_v4.10.onnx" not found`
+  - The old zip-based vs-mlrt shipped its model zoo next to the plugin DLLs; the PyPI wheels don't, so the vsmlrt RIFE/DPIR wrappers had nothing to load
+  - The needed packs (RIFE v4.10, DPIR, ~75MB) now download to `data/vsmlrt-models` during plugin install, and existing installs fetch them automatically in the background at startup; generated scripts point `vsmlrt.models_path` there so pip reinstalls can't remove them
+  - Other RIFE model versions can be dropped into `data/vsmlrt-models/rife` manually
 - Rework inference backends into self-contained provider modules (`electron/providers/`)
   - Each backend (TensorRT, DirectML) owns its script codegen, model-file resolution, pip packages, plugin health checks, and engine building in one place; adding a backend (NCNN, OpenVINO) no longer touches the rest of the codebase
   - The DML/TRT header toggle is now a backend dropdown driven by the provider registry, with the same selection available in Settings

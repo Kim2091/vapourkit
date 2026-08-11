@@ -195,4 +195,13 @@ describe('inference backend selection', () => {
     expect(script).toContain('"tensorrt": Backend.ORT_CUDA');
     expect(script).toContain('"directml": Backend.ORT_DML');
   });
+
+  it('points vsmlrt at the app-managed model zoo', async () => {
+    const script = await generate([customFilter(0, 'CAS Sharpen')], false);
+
+    expect(script).toContain('import vsmlrt as _vk_vsmlrt');
+    expect(script).toMatch(/_vk_vsmlrt\.models_path = ".*vsmlrt-models"/);
+    // Guarded so scripts still run when no vs-mlrt plugin is installed
+    expect(script).toContain('except Exception:');
+  });
 });

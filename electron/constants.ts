@@ -55,6 +55,10 @@ export const PATHS = {
   PLUGINS: path.join(SITE_PACKAGES_PATH, 'vapoursynth', 'plugins'),
   SCRIPTS: path.join(VS_PATH, 'vs-scripts'),
   MODELS: path.join(APP_DATA_PATH, 'models'),
+  // vsmlrt.py model zoo (RIFE/DPIR for the bundled filter templates). App-owned
+  // so pip reinstalls can't remove it; generated scripts point
+  // vsmlrt.models_path here (the pip vs-mlrt wheels ship no models folder).
+  VSMLRT_MODELS: path.join(APP_DATA_PATH, 'vsmlrt-models'),
   CONFIG: path.join(APP_DATA_PATH, 'config'),
   VIDEO_COMPARE: path.join(APP_DATA_PATH, 'video-compare'),
   FILTER_TEMPLATES: path.join(APP_DATA_PATH, 'config', 'filter-templates'),

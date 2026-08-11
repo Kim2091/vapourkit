@@ -81,7 +81,14 @@ export class VapourSynthScriptGenerator {
     code += `VK_BACKEND = "${defaultBackend}"\n`;
     code += 'def vk_backend(**kwargs):\n';
     code += '    from vsmlrt import Backend\n';
-    code += `    return {${mapEntries}}[VK_BACKEND](**kwargs)\n\n`;
+    code += `    return {${mapEntries}}[VK_BACKEND](**kwargs)\n`;
+    code += '# vsmlrt model zoo location (downloaded by the app; the pip vs-mlrt wheels\n';
+    code += "# don't ship a models folder, so vsmlrt's default path doesn't exist)\n";
+    code += 'try:\n';
+    code += '    import vsmlrt as _vk_vsmlrt\n';
+    code += `    _vk_vsmlrt.models_path = "${PATHS.VSMLRT_MODELS.replace(/\\/g, '/')}"\n`;
+    code += 'except Exception:\n';
+    code += '    pass\n\n';
     return code;
   }
 

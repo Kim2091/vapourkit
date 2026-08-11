@@ -3,6 +3,7 @@ import * as fs from 'fs-extra';
 import axios from 'axios';
 import { app, BrowserWindow} from 'electron';
 import { ModelExtractor } from './modelExtractor';
+import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { logger } from './logger';
 import { PATHS, PYTHON_VERSION, IS_WINDOWS } from './constants';
 import { runCommand, getBundledBasePath } from './utils';
@@ -209,6 +210,17 @@ export class DependencyManager {
         logger.error('Silent model extraction failed:', extractError);
         // Non-fatal: don't block app startup over a model copy failure
       }
+    }
+
+    // Heal missing vs-mlrt zoo models (RIFE/DPIR templates) in the background —
+    // a ~75MB download, so deliberately NOT awaited: startup stays fast and the
+    // templates start working once it completes. Existing installs predate this
+    // download (the old zip-based vs-mlrt shipped the models, pip wheels don't).
+    if (coreDepsPresent && await VsMlrtModelsManager.needsDownload()) {
+      logger.dependency('vs-mlrt model zoo incomplete — downloading in the background');
+      VsMlrtModelsManager.ensureModels()
+        .then(() => logger.dependency('vs-mlrt model zoo download complete'))
+        .catch((error) => logger.error('vs-mlrt model zoo download failed (will retry next launch):', error));
     }
 
     // Detect app version change (upgrade-in-place) and update bundled files
