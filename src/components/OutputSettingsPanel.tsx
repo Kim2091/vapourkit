@@ -1,9 +1,10 @@
 // OutputSettingsPanel.tsx
 import { memo, useState, useEffect } from 'react';
-import { Download, ChevronDown, ChevronUp, Sliders, Gauge } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sliders, Gauge } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
 import type { Codec, Preset, Encoder } from '../utils/ffmpegConfig';
 import { PrivacyText } from './PrivacyVeil';
+import { Section, SectionButton } from './Section';
 import {
   parseFfmpegArgs,
   generateFfmpegArgs,
@@ -152,34 +153,28 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   const availableEncoders = getAvailableEncoders(config.codec);
 
   return (
-    <div className="flex-shrink-0 bg-dark-elevated rounded-xl border border-gray-800">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-        <div className="flex items-center gap-2">
-          <Download className="w-4 h-4 text-accent-cyan" />
-          <h3 className="text-base font-semibold">Output Settings</h3>
-        </div>
-        <button
+    <Section
+      title="Output"
+      meta={benchmarkMode ? 'benchmark — output discarded' : outputFormat.toUpperCase()}
+      actions={<>
+        <SectionButton
           onClick={() => onBenchmarkModeChange(!benchmarkMode)}
           disabled={isProcessing}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-            benchmarkMode
-              ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30'
-              : 'bg-dark-surface text-gray-400 border border-gray-700 hover:border-gray-600 hover:text-gray-300'
-          }`}
-          title="Benchmark mode: discard output and measure processing speed only"
+          active={benchmarkMode}
+          title="Benchmark mode: discard the output and measure processing speed only"
         >
-          <Gauge className="w-3.5 h-3.5" />
+          <Gauge className="w-3 h-3" />
           Benchmark
-        </button>
-      </div>
+        </SectionButton>
+      </>}
+    >
 
       {/* Benchmark Mode Info */}
       {benchmarkMode && (
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-            <Gauge className="w-4 h-4 text-orange-400 flex-shrink-0" />
-            <p className="text-xs text-orange-300">
+        <div className="px-3 py-2 border-b border-ink-900">
+          <div className="flex items-center gap-2 px-2.5 py-2 bg-warn-500/10 border border-warn-500/25 rounded">
+            <Gauge className="w-3.5 h-3.5 text-warn-400 flex-shrink-0" />
+            <p className="text-[11.5px] text-warn-400">
               Output will be discarded. Measures processing speed only.
             </p>
           </div>
@@ -188,17 +183,17 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
 
       {/* Always Visible: Format & Save Location (hidden in benchmark mode) */}
       {!benchmarkMode && (
-      <div className="px-4 py-3 space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+      <div className="px-3 py-2.5 space-y-2.5 border-b border-ink-900">
+        <div className="grid grid-cols-2 gap-2.5">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
+            <label className="block text-[10.5px] font-display font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1">
               Format
             </label>
             <select
               value={outputFormat}
               onChange={(e) => onFormatChange(e.target.value)}
               disabled={isProcessing}
-              className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-cyan transition-colors disabled:opacity-50 text-base disabled:cursor-not-allowed"
+              className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="mkv">MKV</option>
               <option value="mp4">MP4</option>
@@ -207,11 +202,11 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">Save To</label>
+            <label className="block text-[10.5px] font-display font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1">Save to</label>
             <button
               onClick={onSelectOutputFile}
               disabled={!videoInfo || isProcessing}
-              className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-left hover:border-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm truncate"
+              className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-left text-[12.5px] hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed truncate"
             >
               {outputPath ? (
                 <span className="truncate block">
@@ -222,7 +217,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                   />
                 </span>
               ) : (
-                <span className="text-gray-500">Browse...</span>
+                <span className="text-ink-500">Browse...</span>
               )}
             </button>
           </div>
@@ -232,36 +227,36 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
         <button
           onClick={handleToggleExpanded}
           disabled={isProcessing}
-          className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-800/30 border border-gray-700/50 rounded-lg hover:bg-gray-800/50 hover:border-accent-cyan/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+          className="w-full h-7 flex items-center justify-between px-2 bg-ink-850 border border-ink-750 rounded hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed group"
         >
           <div className="flex items-center gap-2">
             {isExpanded ? (
-              <ChevronUp className="w-4 h-4 text-accent-cyan group-hover:text-accent-cyan transition-colors" />
+              <ChevronUp className="w-4 h-4 text-accent-500 group-hover:text-accent-500 transition-colors" />
             ) : (
-              <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-accent-cyan transition-colors" />
+              <ChevronDown className="w-4 h-4 text-ink-400 group-hover:text-accent-500 transition-colors" />
             )}
-            <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
-              Encoding Settings
+            <span className="text-[12.5px] text-ink-300 group-hover:text-ink-100 transition-colors">
+              Encoding
             </span>
             {!advancedMode && (
               <>
-                <span className="text-xs text-primary-purple bg-primary-purple/10 px-2 py-0.5 rounded">
+                <span className="text-xs text-accent-500 bg-accent-500/10 px-2 py-0.5 rounded">
                   {config.codec === 'custom' ? 'H264' : config.codec.toUpperCase()}
                 </span>
                 {availableEncoders.length > 1 && (
-                  <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded">
+                  <span className="text-xs text-ink-400 bg-ink-800 px-2 py-0.5 rounded">
                     {getEncoderShortName(config.encoder)}
                   </span>
                 )}
               </>
             )}
             {advancedMode && (
-              <span className="text-xs text-accent-cyan bg-accent-cyan/10 px-2 py-0.5 rounded">
+              <span className="text-xs text-accent-500 bg-accent-500/10 px-2 py-0.5 rounded">
                 Custom
               </span>
             )}
           </div>
-          <span className="text-xs text-gray-500 group-hover:text-gray-400 transition-colors">
+          <span className="text-xs text-ink-500 group-hover:text-ink-400 transition-colors">
             {isExpanded ? 'Hide' : 'Show'}
           </span>
         </button>
@@ -270,7 +265,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
 
       {/* Expandable Encoding Settings (hidden in benchmark mode) */}
       {!benchmarkMode && isExpanded && (
-        <div className="px-4 pb-3 border-t border-gray-800 pt-3">
+        <div className="px-4 pb-3 border-t border-ink-900 pt-3">
           <div className="space-y-3">
           {/* Simple Mode */}
           {!advancedMode && (
@@ -278,7 +273,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {/* Codec Selection */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-medium text-gray-300">
+                <label className="text-sm font-medium text-ink-300">
                   Video Codec
                 </label>
                 {/* Advanced Mode Toggle */}
@@ -287,8 +282,8 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                   disabled={isProcessing}
                   className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
                     advancedMode
-                      ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 hover:bg-accent-cyan/30'
-                      : 'bg-dark-surface text-gray-400 border border-gray-700 hover:border-gray-600 hover:text-gray-300'
+                      ? 'bg-accent-500/20 text-accent-500 border border-accent-500/30 hover:bg-accent-500/30'
+                      : 'bg-ink-900 text-ink-400 border border-ink-700 hover:border-ink-600 hover:text-ink-300'
                   }`}
                 >
                   <Sliders className="w-3.5 h-3.5" />
@@ -299,7 +294,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                 value={config.codec === 'custom' ? 'h264' : config.codec}
                 onChange={(e) => handleCodecChange(e.target.value as Codec)}
                 disabled={isProcessing}
-                className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-cyan transition-colors disabled:opacity-50 text-base disabled:cursor-not-allowed"
+                className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value="h264">H.264 (AVC)</option>
                 <option value="h265">H.265 (HEVC)</option>
@@ -310,14 +305,14 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
 
             {/* Pixel Format Selection (moved here) */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1.5">
+              <label className="block text-sm font-medium text-ink-300 mb-1.5">
                 Pixel Format
               </label>
               <select
                 value={processingFormat}
                 onChange={(e) => onProcessingFormatChange(e.target.value)}
                 disabled={isProcessing}
-                className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-cyan transition-colors disabled:opacity-50 text-base disabled:cursor-not-allowed"
+                className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value="vs.YUV420P8" disabled={config.codec === 'prores'}>YUV 4:2:0 8-Bit</option>
                 <option value="vs.YUV420P10" disabled={config.codec === 'prores'}>YUV 4:2:0 10-Bit</option>
@@ -332,14 +327,14 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {/* Encoder Selection */}
             {availableEncoders.length > 1 && (
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                <label className="block text-sm font-medium text-ink-300 mb-1.5">
                   Encoder
                 </label>
                 <select
                   value={config.encoder}
                   onChange={(e) => handleEncoderChange(e.target.value as Encoder)}
                   disabled={isProcessing}
-                  className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-cyan transition-colors disabled:opacity-50 text-base disabled:cursor-not-allowed"
+                  className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {availableEncoders.map((encoder) => (
                     <option key={encoder} value={encoder}>
@@ -354,10 +349,10 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {supportsPreset(config.codec) && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-medium text-gray-300">
+                  <label className="text-sm font-medium text-ink-300">
                     Encoding Speed
                   </label>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-ink-500">
                     {getPresetDisplayName(config.preset)}
                   </span>
                 </div>
@@ -365,7 +360,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                   value={config.preset}
                   onChange={(e) => handlePresetChange(e.target.value as Preset)}
                   disabled={isProcessing}
-                  className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-cyan transition-colors disabled:opacity-50 text-base disabled:cursor-not-allowed"
+                  className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {config.encoder === 'nvidia' && (
                     <>
@@ -434,10 +429,10 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {supportsCrf(config.codec) && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-medium text-gray-300">
+                  <label className="text-sm font-medium text-ink-300">
                     Quality
                   </label>
-                  <span className="text-sm font-medium text-accent-cyan">
+                  <span className="text-sm font-medium text-accent-500">
                     CRF {config.crf}
                   </span>
                 </div>
@@ -448,9 +443,9 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                   value={config.crf}
                   onChange={(e) => handleCrfChange(parseInt(e.target.value, 10))}
                   disabled={isProcessing}
-                  className="w-full h-2 bg-dark-surface rounded-lg appearance-none cursor-pointer accent-accent-cyan disabled:opacity-50"
+                  className="w-full h-2 bg-ink-900 rounded-lg appearance-none cursor-pointer accent-accent-500 disabled:opacity-50"
                 />
-                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <div className="flex justify-between text-xs text-ink-500 mt-1">
                   <span>Best ({crfRange.min})</span>
                   <span>Default ({crfRange.default})</span>
                   <span>Fast ({crfRange.max})</span>
@@ -464,7 +459,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
         {advancedMode && (
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-gray-300">
+              <label className="text-sm font-medium text-ink-300">
                 FFmpeg Arguments
               </label>
               {/* Advanced Mode Toggle */}
@@ -473,8 +468,8 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                 disabled={isProcessing}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
                   advancedMode
-                    ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 hover:bg-accent-cyan/30'
-                    : 'bg-dark-surface text-gray-400 border border-gray-700 hover:border-gray-600 hover:text-gray-300'
+                    ? 'bg-accent-500/20 text-accent-500 border border-accent-500/30 hover:bg-accent-500/30'
+                    : 'bg-ink-900 text-ink-400 border border-ink-700 hover:border-ink-600 hover:text-ink-300'
                 }`}
               >
                 <Sliders className="w-3.5 h-3.5" />
@@ -490,9 +485,9 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
               disabled={isProcessing}
               placeholder="-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1"
               rows={3}
-              className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-cyan transition-colors disabled:opacity-50 text-sm font-mono resize-none"
+              className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 text-sm font-mono resize-none"
             />
-            <p className="text-xs text-gray-500 mt-1.5">
+            <p className="text-xs text-ink-500 mt-1.5">
               Custom FFmpeg encoding arguments
             </p>
           </div>
@@ -501,6 +496,6 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
         </div>
       </div>
       )}
-    </div>
+    </Section>
   );
 });

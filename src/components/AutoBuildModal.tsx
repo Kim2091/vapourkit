@@ -38,11 +38,11 @@ export const AutoBuildModal = memo<AutoBuildModalProps>(({
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-dark-elevated rounded-2xl border border-gray-800 shadow-2xl max-w-lg w-full">
+      <div className="bg-ink-850 rounded-2xl border border-ink-800 shadow-2xl max-w-lg w-full">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-800">
+        <div className="flex items-center justify-between p-6 border-b border-ink-800">
           <div className="flex items-center gap-3">
-            <Sparkles className="w-6 h-6 text-yellow-400" />
+            <Sparkles className="w-6 h-6 text-warn-400" />
             <h2 className="text-2xl font-bold">Building TensorRT Engine</h2>
           </div>
         </div>
@@ -50,26 +50,26 @@ export const AutoBuildModal = memo<AutoBuildModalProps>(({
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Model Info */}
-          <div className="bg-dark-surface rounded-lg p-4 border border-gray-700">
-            <h3 className="text-sm font-semibold mb-3 text-gray-300">Model Information</h3>
+          <div className="bg-ink-900 rounded-lg p-4 border border-ink-700">
+            <h3 className="text-sm font-semibold mb-3 text-ink-300">Model Information</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-400">Model Name:</span>
+                <span className="text-ink-400">Model Name:</span>
                 <span className="text-white font-medium">{modelName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Type:</span>
+                <span className="text-ink-400">Type:</span>
                 <span className="text-white font-medium">
                   {isVideoModel ? 'VSR (Video)' : 'Image (Single Frame)'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Precision:</span>
+                <span className="text-ink-400">Precision:</span>
                 <span className="text-white font-medium">FP16</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Shape Mode:</span>
-                <span className={`font-medium flex items-center gap-1.5 ${isStatic ? 'text-amber-400' : 'text-accent-cyan'}`}>
+                <span className="text-ink-400">Shape Mode:</span>
+                <span className={`font-medium flex items-center gap-1.5 ${isStatic ? 'text-warn-400' : 'text-accent-500'}`}>
                   {isStatic && <Lock className="w-3.5 h-3.5" />}
                   {isStatic ? 'Static' : 'Dynamic'}
                 </span>
@@ -78,32 +78,32 @@ export const AutoBuildModal = memo<AutoBuildModalProps>(({
           </div>
 
           {/* Supported Resolutions - Different display for static vs dynamic */}
-          <div className="bg-dark-surface rounded-lg p-4 border border-gray-700">
-            <h3 className="text-sm font-semibold mb-3 text-gray-300">
+          <div className="bg-ink-900 rounded-lg p-4 border border-ink-700">
+            <h3 className="text-sm font-semibold mb-3 text-ink-300">
               {isStatic ? 'Fixed Resolution' : 'Supported Resolutions'}
             </h3>
             {isStatic ? (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Resolution:</span>
-                  <span className="text-amber-400 font-medium">{staticResolution || staticShape}</span>
+                  <span className="text-ink-400">Resolution:</span>
+                  <span className="text-warn-400 font-medium">{staticResolution || staticShape}</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-ink-500 mt-2">
                   This model only supports a single fixed resolution.
                 </p>
               </div>
             ) : (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Minimum:</span>
+                  <span className="text-ink-400">Minimum:</span>
                   <span className="text-white font-medium">240x240</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Optimal:</span>
-                  <span className="text-accent-cyan font-medium">720x1280</span>
+                  <span className="text-ink-400">Optimal:</span>
+                  <span className="text-accent-500 font-medium">720x1280</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Maximum:</span>
+                  <span className="text-ink-400">Maximum:</span>
                   <span className="text-white font-medium">1080x1920</span>
                 </div>
               </div>
@@ -112,18 +112,18 @@ export const AutoBuildModal = memo<AutoBuildModalProps>(({
 
           {/* Progress */}
           {progress && (
-            <div className="bg-dark-surface rounded-lg p-4 border border-gray-700">
+            <div className="bg-ink-900 rounded-lg p-4 border border-ink-700">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">{progress.message}</span>
-                <span className="text-sm text-gray-400">{progress.progress}%</span>
+                <span className="text-sm text-ink-400">{progress.progress}%</span>
               </div>
-              <div className="w-full bg-dark-bg rounded-full h-2 mb-3">
+              <div className="w-full bg-ink-950 rounded-full h-2 mb-3">
                 <div 
-                  className="bg-gradient-to-r from-yellow-400 to-orange-500 h-2 rounded-full transition-all duration-300"
+                  className="bg-gradient-to-r from-warn-400 to-warn-500 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${progress.progress}%` }}
                 />
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex items-center gap-2 text-xs text-ink-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>This may take 5-15 minutes depending on your GPU...</span>
               </div>
@@ -131,12 +131,12 @@ export const AutoBuildModal = memo<AutoBuildModalProps>(({
           )}
 
           {/* Info Box */}
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+          <div className="bg-accent-500/10 border border-accent-500/30 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-gray-300">
+              <Info className="w-5 h-5 text-accent-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-ink-300">
                 <p className="font-medium mb-1">Building with preconfigured settings</p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-ink-400">
                   The TensorRT engine is being optimized for your GPU. This is a one-time process per model.
                   {isVideoModel && ' This model processes 5-frame temporal sequences for better video quality.'}
                   {isStatic && ' Static models are optimized for a single resolution.'}

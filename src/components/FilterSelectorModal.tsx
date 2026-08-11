@@ -343,17 +343,17 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
           onClick={handleCancelEdit}
         >
           <div 
-            className="bg-dark-elevated rounded-xl shadow-2xl w-[500px] max-w-[90vw] border border-gray-800"
+            className="bg-ink-850 rounded-xl shadow-2xl w-[500px] max-w-[90vw] border border-ink-800"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b border-gray-800">
+            <div className="flex items-center justify-between p-4 border-b border-ink-800">
               <div className="flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-primary-blue" />
+                <Edit3 className="w-5 h-5 text-accent-500" />
                 <h3 className="text-xl font-semibold">Edit Template</h3>
               </div>
               <button
                 onClick={handleCancelEdit}
-                className="p-2 hover:bg-dark-surface rounded-lg transition-colors"
+                className="p-2 hover:bg-ink-900 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -361,21 +361,21 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
             
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-gray-300">
-                  Template Name <span className="text-red-400">*</span>
+                <label className="block text-sm font-medium mb-1.5 text-ink-300">
+                  Template Name <span className="text-bad-400">*</span>
                 </label>
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   placeholder="Enter template name"
-                  className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-primary-blue transition-colors placeholder-gray-500"
+                  className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
                   autoFocus
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                <label className="block text-sm font-medium mb-1.5 text-ink-300">
                   Categories
                 </label>
                 <div className="space-y-2">
@@ -385,12 +385,12 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                       {editCategories.map((cat, index) => (
                         <span
                           key={index}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-blue/20 border border-primary-blue/50 rounded-lg text-primary-blue"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-accent-500/20 border border-accent-500/50 rounded-lg text-accent-500"
                         >
                           {cat}
                           <button
                             onClick={() => setEditCategories(prev => prev.filter((_, i) => i !== index))}
-                            className="hover:text-red-400 transition-colors"
+                            className="hover:text-bad-400 transition-colors"
                             type="button"
                           >
                             <X className="w-3 h-3" />
@@ -415,7 +415,7 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                         }
                       }}
                       placeholder="Add category (press Enter)"
-                      className="flex-1 bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-primary-blue transition-colors placeholder-gray-500"
+                      className="flex-1 bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
                     />
                     <button
                       type="button"
@@ -426,7 +426,7 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                         }
                       }}
                       disabled={!newCategoryInput.trim()}
-                      className="px-3 py-2 bg-primary-blue hover:bg-primary-blue/90 disabled:bg-dark-surface disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
+                      className="px-3 py-2 bg-accent-500 hover:bg-accent-500/90 disabled:bg-ink-900 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
                     >
                       Add
                     </button>
@@ -435,7 +435,7 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                <label className="block text-sm font-medium mb-1.5 text-ink-300">
                   Description
                 </label>
                 <textarea
@@ -443,22 +443,22 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                   onChange={(e) => setEditDescription(e.target.value)}
                   placeholder="Describe what this filter does..."
                   rows={3}
-                  className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-primary-blue transition-colors placeholder-gray-500 resize-none"
+                  className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500 resize-none"
                 />
               </div>
             </div>
             
-            <div className="flex items-center gap-2 p-4 border-t border-gray-800 bg-dark-surface">
+            <div className="flex items-center gap-2 p-4 border-t border-ink-800 bg-ink-900">
               <button
                 onClick={handleSaveEdit}
                 disabled={!editName.trim()}
-                className="flex-1 bg-primary-blue hover:bg-primary-blue/90 disabled:bg-dark-surface disabled:cursor-not-allowed text-white text-sm py-2 rounded-lg transition-colors font-medium"
+                className="flex-1 bg-accent-500 hover:bg-accent-500/90 disabled:bg-ink-900 disabled:cursor-not-allowed text-white text-sm py-2 rounded-lg transition-colors font-medium"
               >
                 Save Changes
               </button>
               <button
                 onClick={handleCancelEdit}
-                className="flex-1 bg-dark-surface hover:bg-dark-bg border border-gray-700 text-white text-sm py-2 rounded-lg transition-colors"
+                className="flex-1 bg-ink-900 hover:bg-ink-950 border border-ink-700 text-white text-sm py-2 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -476,18 +476,18 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
     >
       <div 
         ref={modalRef}
-        className="bg-dark-elevated rounded-xl shadow-2xl w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col border border-gray-800"
+        className="bg-ink-850 rounded-xl shadow-2xl w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col border border-ink-800"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+        <div className="flex items-center justify-between p-4 border-b border-ink-800">
           <div className="flex items-center gap-2">
-            <FilterIcon className="w-5 h-5 text-primary-blue" />
+            <FilterIcon className="w-5 h-5 text-accent-500" />
             <h2 className="text-xl font-semibold">Select Filter Template</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-dark-surface rounded-lg transition-colors"
+            className="p-2 hover:bg-ink-900 rounded-lg transition-colors"
             title="Close"
           >
             <X className="w-5 h-5" />
@@ -495,23 +495,23 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
         </div>
 
         {/* Search Bar */}
-        <div className="p-4 border-b border-gray-800">
+        <div className="p-4 border-b border-ink-800">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search filters by name, category, or description..."
-              className="w-full bg-dark-surface border border-gray-700 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:border-primary-blue transition-colors placeholder-gray-500"
+              className="w-full bg-ink-900 border border-ink-700 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-dark-surface rounded transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-ink-900 rounded transition-colors"
               >
-                <X className="w-4 h-4 text-gray-400" />
+                <X className="w-4 h-4 text-ink-400" />
               </button>
             )}
           </div>
@@ -520,9 +520,9 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
         {/* Main Content */}
         <div className="flex flex-1 overflow-hidden">
           {/* Category Sidebar */}
-          <div className="w-56 border-r border-gray-800 overflow-y-auto bg-dark-surface">
+          <div className="w-56 border-r border-ink-800 overflow-y-auto bg-ink-900">
             <div className="p-3">
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <div className="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-2">
                 Categories
               </div>
               <div className="space-y-0.5">
@@ -537,15 +537,15 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                       onClick={() => setSelectedCategory(category)}
                       className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between group ${
                         selectedCategory === category
-                          ? 'bg-primary-blue text-white'
-                          : 'text-gray-300 hover:bg-dark-elevated hover:text-white'
+                          ? 'bg-accent-500 text-white'
+                          : 'text-ink-300 hover:bg-ink-850 hover:text-white'
                       }`}
                     >
                       <span className="truncate">{category}</span>
                       <span className={`text-xs ${
                         selectedCategory === category
-                          ? 'text-blue-200'
-                          : 'text-gray-500 group-hover:text-gray-400'
+                          ? 'text-accent-200'
+                          : 'text-ink-500 group-hover:text-ink-400'
                       }`}>
                         {count}
                       </span>
@@ -564,8 +564,8 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
                 onClick={() => handleSelectTemplate('')}
                 className={`w-full px-3 py-2 rounded-lg border transition-colors flex items-center gap-2 text-sm font-medium ${
                   currentSelection === ''
-                    ? 'bg-primary-blue/20 border-primary-blue text-primary-blue'
-                    : 'bg-primary-blue/10 border-primary-blue/40 hover:bg-primary-blue/15 hover:border-primary-blue/60 text-primary-blue'
+                    ? 'bg-accent-500/20 border-accent-500 text-accent-500'
+                    : 'bg-accent-500/10 border-accent-500/40 hover:bg-accent-500/15 hover:border-accent-500/60 text-accent-500'
                 }`}
                 title="Start with a blank filter"
               >
@@ -576,15 +576,15 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
 
             {/* Current Selection */}
             {currentSelection && (
-              <div className="mb-4 p-3 bg-dark-surface border border-primary-blue/50 rounded-lg">
+              <div className="mb-4 p-3 bg-ink-900 border border-accent-500/50 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs text-gray-400 mb-1">Current Selection</div>
-                    <div className="font-medium text-primary-blue">{currentSelection}</div>
+                    <div className="text-xs text-ink-400 mb-1">Current Selection</div>
+                    <div className="font-medium text-accent-500">{currentSelection}</div>
                   </div>
                   <button
                     onClick={handleClearSelection}
-                    className="px-3 py-1.5 bg-dark-elevated hover:bg-dark-bg border border-gray-700 text-white text-xs rounded-lg transition-colors"
+                    className="px-3 py-1.5 bg-ink-850 hover:bg-ink-950 border border-ink-700 text-white text-xs rounded-lg transition-colors"
                   >
                     Clear (Custom)
                   </button>
@@ -596,9 +596,9 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
             {!searchQuery && selectedCategory === 'All' && favoriteFilterTemplates.length > 0 && (
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-3">
-                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                  <h3 className="font-semibold text-gray-200">Favorites</h3>
-                  <span className="text-sm text-gray-500">({favoriteFilterTemplates.length})</span>
+                  <Star className="w-4 h-4 text-warn-400 fill-warn-400" />
+                  <h3 className="font-semibold text-ink-200">Favorites</h3>
+                  <span className="text-sm text-ink-500">({favoriteFilterTemplates.length})</span>
                 </div>
                 <div className="grid grid-cols-1 gap-2">
                   {favoriteFilterTemplates.map(template => (
@@ -621,9 +621,9 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
             {!searchQuery && selectedCategory === 'All' && recentFilterTemplates.length > 0 && (
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-3">
-                  <Clock className="w-4 h-4 text-primary-blue" />
-                  <h3 className="font-semibold text-gray-200">Recent</h3>
-                  <span className="text-sm text-gray-500">({recentFilterTemplates.length})</span>
+                  <Clock className="w-4 h-4 text-accent-500" />
+                  <h3 className="font-semibold text-ink-200">Recent</h3>
+                  <span className="text-sm text-ink-500">({recentFilterTemplates.length})</span>
                 </div>
                 <div className="grid grid-cols-1 gap-2">
                   {recentFilterTemplates.map(template => (
@@ -645,14 +645,14 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
             {/* All Filters / Search Results */}
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <FilterIcon className="w-4 h-4 text-gray-400" />
-                <h3 className="font-semibold text-gray-200">
+                <FilterIcon className="w-4 h-4 text-ink-400" />
+                <h3 className="font-semibold text-ink-200">
                   {searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Filters' : selectedCategory}
                 </h3>
-                <span className="text-sm text-gray-500">({filteredTemplates.length})</span>
+                <span className="text-sm text-ink-500">({filteredTemplates.length})</span>
               </div>
               {filteredTemplates.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-ink-400">
                   <FilterIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
                   <p>No filters found</p>
                   {searchQuery && (
@@ -680,15 +680,15 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-800 px-4 py-3 bg-dark-surface">
-          <div className="flex items-center justify-between text-sm text-gray-400">
+        <div className="border-t border-ink-800 px-4 py-3 bg-ink-900">
+          <div className="flex items-center justify-between text-sm text-ink-400">
             <div className="flex items-center gap-4">
               <span>{filteredTemplates.length} filters shown</span>
               <span>•</span>
               <span>{favorites.size} favorites</span>
             </div>
             <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-dark-elevated border border-gray-700 rounded text-gray-300">Esc</kbd>
+              <kbd className="px-2 py-0.5 bg-ink-850 border border-ink-700 rounded text-ink-300">Esc</kbd>
               <span>to close</span>
             </div>
           </div>
@@ -725,8 +725,8 @@ const FilterItem = memo<FilterItemProps>(({
     <div
       className={`group relative p-3 rounded-lg border transition-all cursor-pointer ${
         isSelected
-          ? 'bg-primary-blue/20 border-primary-blue'
-          : 'bg-dark-surface border-gray-700 hover:border-gray-600 hover:bg-dark-elevated'
+          ? 'bg-accent-500/20 border-accent-500'
+          : 'bg-ink-900 border-ink-700 hover:border-ink-600 hover:bg-ink-850'
       }`}
       onClick={() => onSelect(template.name)}
     >
@@ -734,25 +734,25 @@ const FilterItem = memo<FilterItemProps>(({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h4 className={`font-medium ${
-              isSelected ? 'text-primary-blue' : 'text-white'
+              isSelected ? 'text-accent-500' : 'text-white'
             }`}>
               {template.name}
             </h4>
             {/* Display category/categories */}
             {Array.isArray(template.category) ? (
               template.category.map((cat, index) => (
-                <span key={index} className="text-xs px-2 py-1 bg-dark-bg text-gray-400 rounded flex-shrink-0">
+                <span key={index} className="text-xs px-2 py-1 bg-ink-950 text-ink-400 rounded flex-shrink-0">
                   {cat}
                 </span>
               ))
             ) : template.category ? (
-              <span className="text-xs px-2 py-1 bg-dark-bg text-gray-400 rounded flex-shrink-0">
+              <span className="text-xs px-2 py-1 bg-ink-950 text-ink-400 rounded flex-shrink-0">
                 {template.category}
               </span>
             ) : null}
           </div>
           {template.description && (
-            <p className="text-sm text-gray-400 line-clamp-2">
+            <p className="text-sm text-ink-400 line-clamp-2">
               {template.description}
             </p>
           )}
@@ -761,7 +761,7 @@ const FilterItem = memo<FilterItemProps>(({
               {template.metadata.tags.slice(0, 3).map((tag, i) => (
                 <span
                   key={i}
-                  className="text-xs px-2 py-0.5 bg-dark-bg/50 text-gray-500 rounded"
+                  className="text-xs px-2 py-0.5 bg-ink-950/50 text-ink-500 rounded"
                 >
                   {tag}
                 </span>
@@ -776,7 +776,7 @@ const FilterItem = memo<FilterItemProps>(({
                 e.stopPropagation();
                 onEdit(template);
               }}
-              className="p-1.5 rounded-lg transition-all text-gray-600 hover:text-primary-blue hover:bg-dark-elevated"
+              className="p-1.5 rounded-lg transition-all text-ink-600 hover:text-accent-500 hover:bg-ink-850"
               title="Edit template"
             >
               <Edit3 className="w-4 h-4" />
@@ -788,7 +788,7 @@ const FilterItem = memo<FilterItemProps>(({
                 e.stopPropagation();
                 onDelete(template.name);
               }}
-              className="p-1.5 rounded-lg transition-all text-gray-600 hover:text-red-400 hover:bg-dark-elevated"
+              className="p-1.5 rounded-lg transition-all text-ink-600 hover:text-bad-400 hover:bg-ink-850"
               title="Delete template"
             >
               <Trash2 className="w-4 h-4" />
@@ -801,18 +801,18 @@ const FilterItem = memo<FilterItemProps>(({
             }}
             className={`p-1.5 rounded-lg transition-all ${
               isFavorite
-                ? 'text-yellow-400 hover:text-yellow-500'
-                : 'text-gray-600 hover:text-yellow-400'
+                ? 'text-warn-400 hover:text-warn-500'
+                : 'text-ink-600 hover:text-warn-400'
             }`}
             title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
-            <Star className={`w-4 h-4 ${isFavorite ? 'fill-yellow-400' : ''}`} />
+            <Star className={`w-4 h-4 ${isFavorite ? 'fill-warn-400' : ''}`} />
           </button>
         </div>
       </div>
       {isSelected && (
         <div className="absolute top-2 right-2">
-          <ChevronRight className="w-4 h-4 text-primary-blue" />
+          <ChevronRight className="w-4 h-4 text-accent-500" />
         </div>
       )}
     </div>

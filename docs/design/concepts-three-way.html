@@ -1,0 +1,1631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vapourkit — GUI Direction</title>
+
+<style>
+/* ============================================================
+   TOKENS
+   Greys are one HSL ramp driven by --gh / --gs so the
+   "grey temperature" control can retune the whole page.
+   ============================================================ */
+:root {
+  --gh: 220;          /* grey hue  */
+  --gs: 5%;           /* grey sat  */
+
+  --a: #3fb9a6;       /* secondary / accent, swapped by the picker */
+  --a-ink: #0d0f10;   /* text that sits on a solid accent fill      */
+
+  --ok:   #3ecf8e;
+  --warn: #e0b341;
+  --bad:  #ef5f5f;
+
+  /* deck surfaces — light default */
+  --page:  hsl(var(--gh) var(--gs) 96.5%);
+  --surf:  hsl(var(--gh) var(--gs) 100%);
+  --surf2: hsl(var(--gh) var(--gs) 93%);
+  --line:  hsl(var(--gh) var(--gs) 86%);
+  --line2: hsl(var(--gh) var(--gs) 91%);
+  --text:  hsl(var(--gh) 10% 12%);
+  --muted: hsl(var(--gh) 6% 40%);
+  --dim:   hsl(var(--gh) 6% 56%);
+  --a-txt: color-mix(in oklab, var(--a), #000 32%);
+  --shadow: 0 1px 2px hsl(var(--gh) 12% 10% / .06), 0 12px 30px -12px hsl(var(--gh) 12% 10% / .18);
+
+  /* mockup interior — always dark, it depicts a dark app */
+  --m-bg:   hsl(var(--gh) var(--gs) 6%);
+  --m-1:    hsl(var(--gh) var(--gs) 9.5%);
+  --m-2:    hsl(var(--gh) var(--gs) 13%);
+  --m-3:    hsl(var(--gh) var(--gs) 17%);
+  --m-line: hsl(var(--gh) var(--gs) 21%);
+  --m-t:    hsl(var(--gh) 8% 91%);
+  --m-t2:   hsl(var(--gh) 6% 63%);
+  --m-t3:   hsl(var(--gh) 6% 43%);
+
+  --font-display: Bahnschrift, "DIN Alternate", "Segoe UI Variable Display", "Segoe UI Semibold", system-ui, sans-serif;
+  --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page:  hsl(var(--gh) var(--gs) 7%);
+    --surf:  hsl(var(--gh) var(--gs) 10.5%);
+    --surf2: hsl(var(--gh) var(--gs) 14%);
+    --line:  hsl(var(--gh) var(--gs) 19%);
+    --line2: hsl(var(--gh) var(--gs) 15%);
+    --text:  hsl(var(--gh) 8% 92%);
+    --muted: hsl(var(--gh) 6% 60%);
+    --dim:   hsl(var(--gh) 6% 44%);
+    --a-txt: var(--a);
+    --shadow: 0 1px 2px #0006, 0 16px 40px -16px #000a;
+  }
+}
+:root[data-theme="dark"] {
+  --page:  hsl(var(--gh) var(--gs) 7%);
+  --surf:  hsl(var(--gh) var(--gs) 10.5%);
+  --surf2: hsl(var(--gh) var(--gs) 14%);
+  --line:  hsl(var(--gh) var(--gs) 19%);
+  --line2: hsl(var(--gh) var(--gs) 15%);
+  --text:  hsl(var(--gh) 8% 92%);
+  --muted: hsl(var(--gh) 6% 60%);
+  --dim:   hsl(var(--gh) 6% 44%);
+  --a-txt: var(--a);
+  --shadow: 0 1px 2px #0006, 0 16px 40px -16px #000a;
+}
+:root[data-theme="light"] {
+  --page:  hsl(var(--gh) var(--gs) 96.5%);
+  --surf:  hsl(var(--gh) var(--gs) 100%);
+  --surf2: hsl(var(--gh) var(--gs) 93%);
+  --line:  hsl(var(--gh) var(--gs) 86%);
+  --line2: hsl(var(--gh) var(--gs) 91%);
+  --text:  hsl(var(--gh) 10% 12%);
+  --muted: hsl(var(--gh) 6% 40%);
+  --dim:   hsl(var(--gh) 6% 56%);
+  --a-txt: color-mix(in oklab, var(--a), #000 32%);
+  --shadow: 0 1px 2px hsl(var(--gh) 12% 10% / .06), 0 12px 30px -12px hsl(var(--gh) 12% 10% / .18);
+}
+
+/* ============================================================
+   PAGE
+   ============================================================ */
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+svg { display: block; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+.wrap-wide { max-width: 1420px; margin: 0 auto; padding: 0 28px; }
+
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: .005em; }
+h1 { font-size: clamp(34px, 5vw, 58px); line-height: 1.02; letter-spacing: -.012em; }
+h2 { font-size: clamp(24px, 3vw, 34px); line-height: 1.1; }
+h3 { font-size: 20px; line-height: 1.2; }
+p { margin: 0; }
+
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .18em; text-transform: uppercase;
+  color: var(--a-txt);
+}
+.eyebrow-mute { color: var(--dim); }
+.lede { font-size: 18px; color: var(--muted); max-width: 62ch; }
+.note { font-size: 14px; color: var(--muted); max-width: 68ch; }
+.mono { font-family: var(--font-mono); font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; }
+
+hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+/* ============================================================
+   MASTHEAD
+   ============================================================ */
+.masthead { padding: 68px 0 40px; }
+.masthead h1 { margin: 14px 0 20px; max-width: 16ch; }
+.mast-meta {
+  display: flex; flex-wrap: wrap; gap: 8px 22px;
+  margin-top: 26px; font-size: 12.5px; color: var(--dim);
+  font-family: var(--font-mono);
+}
+
+/* ============================================================
+   STICKY CONTROL BAR — the colour decision lives here
+   ============================================================ */
+.controls {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--page) 88%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.controls-in {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 26px;
+  padding: 11px 28px; max-width: 1420px; margin: 0 auto;
+}
+.ctl-group { display: flex; align-items: center; gap: 9px; }
+.ctl-label {
+  font-family: var(--font-display); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .15em; text-transform: uppercase; color: var(--dim);
+}
+.swatches { display: flex; gap: 6px; }
+.sw {
+  width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line);
+  padding: 0; cursor: pointer; position: relative; background: var(--sc);
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+.sw:hover { transform: translateY(-2px); }
+.sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--sc); }
+.sw:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button {
+  font: inherit; font-size: 12.5px; padding: 5px 12px; cursor: pointer;
+  background: transparent; color: var(--muted); border: 0;
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--surf2); color: var(--text); }
+.seg button:focus-visible { outline: 2px solid var(--a-txt); outline-offset: -2px; }
+.ctl-readout {
+  margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--dim);
+  display: flex; align-items: center; gap: 10px;
+}
+.ctl-readout b { color: var(--a-txt); font-weight: 600; }
+
+/* ============================================================
+   AUDIT
+   ============================================================ */
+section { padding: 62px 0; }
+.sec-head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; margin-bottom: 10px; }
+
+.audit { list-style: none; padding: 0; margin: 34px 0 0; border-top: 1px solid var(--line); }
+.audit li {
+  display: grid; grid-template-columns: 84px 1fr 190px;
+  gap: 20px; align-items: baseline;
+  padding: 16px 0; border-bottom: 1px solid var(--line2);
+}
+.audit .px {
+  font-family: var(--font-display); font-size: 26px; font-weight: 600;
+  color: var(--a-txt); font-variant-numeric: tabular-nums; line-height: 1;
+}
+.audit .px small { font-size: 12px; color: var(--dim); font-weight: 500; margin-left: 2px; }
+.audit .why { font-size: 14.5px; }
+.audit .why b { font-weight: 600; }
+.audit .src { font-family: var(--font-mono); font-size: 11.5px; color: var(--dim); }
+@media (max-width: 760px) {
+  .audit li { grid-template-columns: 1fr; gap: 4px; }
+}
+
+.tally {
+  margin-top: 28px; padding: 20px 22px; border-radius: 12px;
+  background: var(--surf); border: 1px solid var(--line);
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+}
+.tally .big {
+  font-family: var(--font-display); font-size: 40px; font-weight: 600; line-height: 1;
+  color: var(--a-txt); font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   CONCEPT BLOCKS
+   ============================================================ */
+.concept { padding: 58px 0; border-top: 1px solid var(--line); }
+.concept-head {
+  display: grid; grid-template-columns: 1fr 300px; gap: 40px; align-items: end;
+  margin-bottom: 30px;
+}
+@media (max-width: 900px) { .concept-head { grid-template-columns: 1fr; gap: 22px; } }
+.concept-title { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.concept-title h2 { font-size: clamp(28px, 3.4vw, 40px); }
+.concept-kicker {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--dim);
+  letter-spacing: .04em;
+}
+.thesis { font-size: 17px; color: var(--muted); max-width: 56ch; margin-top: 12px; }
+
+.disrupt { display: flex; flex-direction: column; gap: 7px; }
+.disrupt .lab { font-family: var(--font-display); font-size: 10.5px; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); }
+.bars { display: flex; gap: 4px; }
+.bars i { width: 34px; height: 6px; border-radius: 2px; background: var(--line); }
+.bars i.on { background: var(--a); }
+.disrupt .d-txt { font-size: 13px; color: var(--muted); }
+
+/* mockup frame */
+.frame {
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  background: var(--m-bg); box-shadow: var(--shadow);
+}
+.frame-bar {
+  height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  background: hsl(var(--gh) var(--gs) 11%); border-bottom: 1px solid var(--m-line);
+}
+.frame-bar .dots { display: flex; gap: 6px; }
+.frame-bar .dots i { width: 9px; height: 9px; border-radius: 50%; background: hsl(var(--gh) var(--gs) 24%); }
+.frame-bar .ttl {
+  font-family: var(--font-mono); font-size: 11px; color: var(--m-t3);
+  margin: 0 auto; letter-spacing: .04em;
+}
+.mk-fit { overflow-x: auto; overflow-y: hidden; }
+.mk-stage { position: relative; }
+.mk { position: absolute; inset: 0; width: 1240px; height: 760px; transform-origin: 0 0; }
+
+.legend { margin: 26px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px 32px; }
+.legend li { display: flex; gap: 11px; font-size: 14px; color: var(--muted); line-height: 1.5; }
+.legend .pin-n {
+  flex: 0 0 auto; width: 19px; height: 19px; border-radius: 50%;
+  background: var(--a); color: var(--a-ink);
+  font-family: var(--font-display); font-size: 11px; font-weight: 700;
+  display: grid; place-items: center; margin-top: 2px;
+}
+.legend b { color: var(--text); font-weight: 600; }
+
+.tradeoff {
+  margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+}
+@media (max-width: 760px) { .tradeoff { grid-template-columns: 1fr; } }
+.tradeoff > div { padding: 18px 22px; }
+.tradeoff > div:first-child { border-right: 1px solid var(--line); background: var(--surf); }
+.tradeoff > div:last-child { background: color-mix(in srgb, var(--surf) 55%, var(--page)); }
+@media (max-width: 760px) {
+  .tradeoff > div:first-child { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+.tradeoff h4 { font-size: 11px; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); margin-bottom: 9px; }
+.tradeoff ul { margin: 0; padding-left: 17px; font-size: 14px; color: var(--muted); }
+.tradeoff li { margin-bottom: 5px; }
+.tradeoff li::marker { color: var(--a-txt); }
+
+/* ============================================================
+   COLOUR SECTION
+   ============================================================ */
+.ramp { display: flex; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); margin-top: 22px; }
+.ramp div { flex: 1; height: 76px; display: flex; align-items: flex-end; padding: 7px 8px; }
+.ramp span { font-family: var(--font-mono); font-size: 10px; letter-spacing: .02em; }
+
+.acc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(262px, 1fr)); gap: 16px; margin-top: 26px; }
+.acc {
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  background: var(--surf); text-align: left; padding: 0; cursor: pointer;
+  font: inherit; color: inherit; transition: border-color .15s ease, transform .15s ease;
+  display: flex; flex-direction: column;
+}
+.acc:hover { transform: translateY(-2px); border-color: var(--dim); }
+.acc[aria-pressed="true"] { border-color: var(--ac); box-shadow: inset 0 0 0 1px var(--ac); }
+.acc:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.acc-chip { height: 58px; background: var(--ac); display: flex; align-items: center; justify-content: space-between; padding: 0 14px; }
+.acc-chip .nm { font-family: var(--font-display); font-size: 17px; font-weight: 600; color: #0d0f10; letter-spacing: .02em; }
+.acc-chip .hx { font-family: var(--font-mono); font-size: 11px; color: #0d0f10; opacity: .62; }
+.acc-body { padding: 13px 15px 15px; }
+.acc-body .clash { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.acc-body .tag {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  font-family: var(--font-display); font-size: 10px; letter-spacing: .13em; text-transform: uppercase;
+}
+.tag.safe { color: var(--ok); }
+.tag.mind { color: var(--warn); }
+.tag.risk { color: var(--bad); }
+.tag i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.semantics { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+.sem-pill {
+  display: flex; align-items: center; gap: 8px; padding: 7px 13px;
+  border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--muted);
+}
+.sem-pill i { width: 9px; height: 9px; border-radius: 2px; }
+
+pre.code {
+  margin: 22px 0 0; padding: 18px 20px; border-radius: 12px; overflow-x: auto;
+  background: var(--m-bg); border: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: var(--m-t2);
+}
+pre.code .k { color: var(--m-t); }
+pre.code .v { color: var(--a); }
+pre.code .c { color: var(--m-t3); font-style: italic; }
+
+/* ============================================================
+   CLOSING
+   ============================================================ */
+.rec {
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surf);
+  padding: 30px 32px; margin-top: 30px;
+}
+.rec-row { display: grid; grid-template-columns: 200px 1fr; gap: 26px; padding: 16px 0; border-top: 1px solid var(--line2); align-items: start; }
+.rec-row:first-of-type { border-top: 0; padding-top: 4px; }
+.rec-row .k { font-family: var(--font-display); font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+.rec-row .k em { display: block; font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--dim); letter-spacing: .04em; margin-top: 3px; }
+.rec-row .b { font-size: 14.5px; color: var(--muted); }
+@media (max-width: 700px) { .rec-row { grid-template-columns: 1fr; gap: 6px; } }
+
+footer { padding: 46px 0 70px; border-top: 1px solid var(--line); color: var(--dim); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* ============================================================
+   MOCKUP INTERIOR  — everything below is scoped under .mk
+   ============================================================ */
+.mk {
+  background: var(--m-bg); color: var(--m-t);
+  font-family: var(--font-body); font-size: 12px; line-height: 1.35;
+  display: flex; flex-direction: column;
+}
+.mk .r { display: flex; align-items: center; }
+.mk .col { display: flex; flex-direction: column; }
+.mk .sp { flex: 1 1 auto; min-width: 0; }
+.mk .ic { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.mk .ic-s { width: 12px; height: 12px; }
+.mk .ic-f { fill: currentColor; stroke: none; }
+.mk .t2 { color: var(--m-t2); }
+.mk .t3 { color: var(--m-t3); }
+.mk .acc { color: var(--a); }
+.mk .num { font-variant-numeric: tabular-nums; }
+.mk .mn { font-family: var(--font-mono); }
+.mk .trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* -- shared slim chrome (concepts A + B) -- */
+.mk .rail {
+  width: 46px; flex: 0 0 46px; background: var(--m-1); border-right: 1px solid var(--m-line);
+  display: flex; flex-direction: column; align-items: center; padding: 8px 0 10px; gap: 3px;
+}
+.mk .rail .mark {
+  width: 24px; height: 24px; border-radius: 6px; background: var(--a);
+  display: grid; place-items: center; margin-bottom: 9px; color: var(--a-ink);
+}
+.mk .rail .rb {
+  width: 32px; height: 30px; border-radius: 7px; display: grid; place-items: center;
+  color: var(--m-t2);
+}
+.mk .rail .rb.on { background: var(--m-3); color: var(--m-t); }
+.mk .rail .rb.acc-on { background: color-mix(in srgb, var(--a) 18%, transparent); color: var(--a); }
+
+.mk .strip {
+  height: 34px; flex: 0 0 34px; border-bottom: 1px solid var(--m-line);
+  display: flex; align-items: center; gap: 14px; padding: 0 12px; background: var(--m-1);
+}
+.mk .wordmark {
+  font-family: var(--font-display); font-size: 12px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--m-t);
+}
+.mk .strip-div { width: 1px; height: 16px; background: var(--m-line); flex: 0 0 1px; }
+
+.mk .chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px;
+  border-radius: 5px; border: 1px solid var(--m-line); background: var(--m-2);
+  font-size: 11px; color: var(--m-t2); white-space: nowrap;
+}
+.mk .chip.acc-chip { border-color: color-mix(in srgb, var(--a) 45%, transparent); color: var(--a); background: color-mix(in srgb, var(--a) 12%, transparent); }
+.mk .chip b { color: var(--m-t); font-weight: 600; }
+
+.mk .meter { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--m-t2); }
+.mk .meter .lbl { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--m-t3); }
+.mk .meter .track { width: 46px; height: 4px; border-radius: 2px; background: var(--m-3); overflow: hidden; }
+.mk .meter .track i { display: block; height: 100%; border-radius: 2px; }
+
+/* -- panes -- */
+.mk .body { flex: 1 1 auto; display: flex; min-height: 0; }
+.mk .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.mk .pane + .pane { border-left: 1px solid var(--m-line); }
+
+/* preview surface */
+.mk .preview {
+  flex: 1 1 auto; position: relative; overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 30% 15%, hsl(var(--gh) 14% 22%) 0%, transparent 60%),
+    radial-gradient(90% 80% at 78% 82%, color-mix(in srgb, var(--a) 22%, transparent) 0%, transparent 62%),
+    linear-gradient(160deg, hsl(var(--gh) 10% 13%), hsl(var(--gh) 8% 7%));
+}
+.mk .preview::after {
+  content: ""; position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(0deg, #fff1 0 1px, transparent 1px 3px);
+  opacity: .35; mix-blend-mode: overlay;
+}
+.mk .pv-tag {
+  position: absolute; z-index: 2; display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 8px; border-radius: 5px; font-size: 11px;
+  background: #0b0c0ecc; border: 1px solid var(--m-line); color: var(--m-t2);
+  backdrop-filter: blur(6px);
+}
+
+/* section header used in the flat right column (concept A) */
+.mk .sec {
+  height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  background: var(--m-1); border-bottom: 1px solid var(--m-line);
+  font-family: var(--font-display); font-size: 10px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--m-t2);
+}
+.mk .sec .tick { width: 2px; height: 11px; background: var(--a); border-radius: 1px; }
+.mk .sec .cnt { color: var(--m-t3); letter-spacing: .06em; }
+
+.mk .rowline { border-bottom: 1px solid var(--m-line); }
+.mk .pad { padding: 9px 12px; }
+
+/* filter chain rows */
+.mk .frow {
+  height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 8px;
+  border-bottom: 1px solid hsl(var(--gh) var(--gs) 15%);
+}
+.mk .frow.sel { background: var(--m-2); box-shadow: inset 2px 0 0 var(--a); }
+.mk .frow.off { opacity: .45; }
+.mk .frow .idx {
+  width: 16px; height: 16px; border-radius: 4px; flex: 0 0 16px;
+  display: grid; place-items: center; font-size: 9.5px; font-weight: 700;
+  font-family: var(--font-display); background: var(--m-3); color: var(--m-t2);
+}
+.mk .frow.ai .idx { background: color-mix(in srgb, var(--a) 22%, transparent); color: var(--a); }
+.mk .frow .nm { font-size: 11.5px; color: var(--m-t); }
+.mk .toggle { width: 22px; height: 12px; border-radius: 7px; background: var(--m-3); position: relative; flex: 0 0 22px; }
+.mk .toggle i { position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--m-t3); }
+.mk .toggle.on { background: color-mix(in srgb, var(--a) 55%, transparent); }
+.mk .toggle.on i { left: 12px; background: var(--a); }
+
+/* field grid */
+.mk .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 10px; padding: 9px 12px; }
+.mk .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mk .field .fl { font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--m-t3); }
+.mk .field .fv {
+  height: 22px; border-radius: 5px; border: 1px solid var(--m-line); background: var(--m-2);
+  display: flex; align-items: center; gap: 6px; padding: 0 7px; font-size: 11px; color: var(--m-t);
+}
+.mk .field .fv .ic { color: var(--m-t3); }
+.mk .field.wide { grid-column: 1 / -1; }
+
+/* bottom action bar */
+.mk .actionbar {
+  height: 44px; flex: 0 0 44px; border-top: 1px solid var(--m-line); background: var(--m-1);
+  display: flex; align-items: center; gap: 12px; padding: 0 12px; position: relative;
+}
+.mk .actionbar .prog {
+  position: absolute; top: -1px; left: 0; height: 2px; background: var(--a);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--a) 60%, transparent);
+}
+.mk .stat { display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: var(--m-t2); }
+.mk .stat b { color: var(--m-t); font-weight: 600; }
+.mk .stat-div { width: 1px; height: 13px; background: var(--m-line); }
+
+.mk .btn {
+  height: 28px; padding: 0 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; border: 1px solid var(--m-line); background: var(--m-2); color: var(--m-t2);
+}
+.mk .btn.ghost { background: transparent; }
+.mk .btn.primary { background: var(--a); border-color: var(--a); color: var(--a-ink); }
+.mk .btn.danger { background: transparent; border-color: color-mix(in srgb, var(--bad) 50%, transparent); color: var(--bad); }
+
+/* pipeline (concept B) */
+.mk .pipe { position: relative; padding: 10px 0 4px; }
+.mk .pipe .spine {
+  position: absolute; left: 21px; top: 26px; bottom: 24px; width: 1px;
+  background: linear-gradient(var(--m-line), var(--m-line));
+}
+.mk .node {
+  display: flex; align-items: center; gap: 9px; margin: 0 12px 8px; padding: 7px 9px;
+  border-radius: 7px; border: 1px dashed var(--m-line); background: var(--m-1); position: relative;
+}
+.mk .node.src { border-style: solid; border-color: color-mix(in srgb, var(--a) 40%, transparent); }
+.mk .prow {
+  display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 12px 0 8px; position: relative;
+}
+.mk .prow .dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--m-bg);
+  border: 2px solid var(--m-line); flex: 0 0 9px; margin-left: 8px; z-index: 1;
+}
+.mk .prow.sel { background: var(--m-2); }
+.mk .prow.sel .dot { border-color: var(--a); background: var(--a); }
+.mk .prow.ai .dot { border-color: color-mix(in srgb, var(--a) 60%, transparent); }
+.mk .insert {
+  height: 14px; margin-left: 30px; display: flex; align-items: center; gap: 7px;
+  color: var(--a); font-size: 10px;
+}
+.mk .insert .ln { flex: 1; height: 1px; background: color-mix(in srgb, var(--a) 32%, transparent); }
+.mk .inspector { border-top: 1px solid var(--m-line); background: var(--m-1); display: flex; flex-direction: column; }
+.mk .insp-head {
+  height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  border-bottom: 1px solid var(--m-line);
+}
+
+/* scrubber */
+.mk .scrub {
+  height: 36px; flex: 0 0 36px; border-top: 1px solid var(--m-line); background: var(--m-1);
+  display: flex; align-items: center; gap: 10px; padding: 0 12px;
+}
+.mk .track2 { flex: 1; height: 18px; position: relative; border-radius: 4px; background: var(--m-2); overflow: hidden; }
+.mk .track2 .ticks {
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(90deg, var(--m-line) 0 1px, transparent 1px 26px);
+  opacity: .55;
+}
+.mk .track2 .seg2 {
+  position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--a) 26%, transparent);
+  border-left: 2px solid var(--a); border-right: 2px solid var(--a);
+}
+.mk .track2 .head { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--m-t); }
+
+/* tabs */
+.mk .tabs { height: 28px; flex: 0 0 28px; display: flex; align-items: stretch; border-bottom: 1px solid var(--m-line); background: var(--m-1); }
+.mk .tabs button, .mk .tabs span {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0 13px;
+  font-size: 11px; color: var(--m-t3); border-right: 1px solid var(--m-line);
+  font-family: var(--font-body);
+}
+.mk .tabs .on { color: var(--m-t); background: var(--m-2); box-shadow: inset 0 -2px 0 var(--a); }
+
+/* media list (concept C) */
+.mk .media {
+  height: 40px; display: flex; align-items: center; gap: 9px; padding: 0 10px;
+  border-bottom: 1px solid hsl(var(--gh) var(--gs) 15%); position: relative;
+}
+.mk .media.sel { background: var(--m-2); box-shadow: inset 2px 0 0 var(--a); }
+.mk .media .st { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+.mk .media .thumb { width: 30px; height: 18px; border-radius: 3px; flex: 0 0 30px; background: linear-gradient(135deg, hsl(var(--gh) 12% 26%), hsl(var(--gh) 8% 15%)); }
+.mk .media .lineprog { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--a); }
+.mk .drop {
+  margin: 9px 10px; height: 30px; border: 1px dashed var(--m-line); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; color: var(--m-t3);
+}
+
+/* status bar (concept C) */
+.mk .statusbar {
+  height: 26px; flex: 0 0 26px; border-top: 1px solid var(--m-line);
+  background: var(--m-1); display: flex; align-items: center; gap: 0; padding: 0 4px;
+  font-size: 10.5px; color: var(--m-t2);
+}
+.mk .statusbar .si { display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; height: 100%; }
+.mk .statusbar .si.acc-si { color: var(--a); }
+
+/* pins */
+.mk .pin {
+  position: absolute; z-index: 20; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--a); color: var(--a-ink);
+  font-family: var(--font-display); font-size: 11.5px; font-weight: 700;
+  display: grid; place-items: center;
+  box-shadow: 0 0 0 3px var(--m-bg), 0 2px 8px #000a;
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M2.5 12h3M18.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2.5v5.5M15 2.5v5.5M6 8h12v3a6 6 0 0 1-12 0V8ZM12 17v4.5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 11.5a8.5 8.5 0 1 0-2.6 6.6M20.5 5v6.5H14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11.2v5.6M12 7.6v.3"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M7 4.5v15M17 4.5v15M2.5 12h19"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6.5 9.5l5.5 5.5 5.5-5.5"/></symbol>
+    <symbol id="i-chevr" viewBox="0 0 24 24"><path d="M9.5 5.5l6 6.5-6 6.5"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><path stroke-width="2.6" d="M9.5 6h.01M9.5 12h.01M9.5 18h.01M14.5 6h.01M14.5 12h.01M14.5 18h.01"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path class="ic-f" d="M7 4.5l13 7.5-13 7.5z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="M6.5 9.5l3.5 3-3.5 3M13 15.5h4.5"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18.5a9 9 0 1 1 16 0"/><path d="M12 14.5l4.2-4.2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8.5 6.5h12M8.5 12h12M8.5 17.5h12" /><path stroke-width="2.4" d="M4 6.5h.01M4 12h.01M4 17.5h.01"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="M12 3v3.5M12 17.5V21M3 12h3.5M17.5 12H21M5.6 5.6l2.5 2.5M15.9 15.9l2.5 2.5M18.4 5.6l-2.5 2.5M8.1 15.9l-2.5 2.5"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 8h9M19 8h1M4 16h5M15 16h5"/><circle cx="15.5" cy="8" r="2.2"/><circle cx="11.5" cy="16" r="2.2"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9.5 14.5L4.5 9.5l5-5"/><path d="M4.5 9.5h9.5a5.5 5.5 0 0 1 0 11h-3"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M14.5 14.5l5-5-5-5"/><path d="M19.5 9.5H10a5.5 5.5 0 0 0 0 11h3"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M4.5 20h15"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 20V9M7 13.5l5-5 5 5M4.5 4.5h15"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/><path d="M9.5 3v3.5M14.5 3v3.5M9.5 17.5V21M14.5 17.5V21M3 9.5h3.5M3 14.5h3.5M17.5 9.5H21M17.5 14.5H21"/></symbol>
+  </defs>
+</svg>
+
+<!-- ============================================================ MASTHEAD -->
+<div class="wrap masthead">
+  <div class="eyebrow">Vapourkit · Interface direction · v0.17</div>
+  <h1>Three ways to get the space back.</h1>
+  <p class="lede">
+    The workflow stays exactly as it is — drop a file, stack filters in order, set the output, hit start.
+    What changes is how much of the window that workflow is allowed to use, and what colour it wears
+    while it does it.
+  </p>
+  <div class="mast-meta">
+    <span>3 layout concepts</span>
+    <span>6 secondary colours, live</span>
+    <span>Grey ramp retunable</span>
+    <span>Pick one, then we build it</span>
+  </div>
+</div>
+
+<!-- ============================================================ CONTROLS -->
+<div class="controls">
+  <div class="controls-in">
+    <div class="ctl-group">
+      <span class="ctl-label">Secondary</span>
+      <div class="swatches" id="swatches" role="group" aria-label="Secondary colour"></div>
+    </div>
+    <div class="ctl-group">
+      <span class="ctl-label">Grey</span>
+      <div class="seg" id="greyseg" role="group" aria-label="Grey temperature">
+        <button type="button" data-gh="28" data-gs="6%">Warm</button>
+        <button type="button" data-gh="0" data-gs="0%">True</button>
+        <button type="button" data-gh="220" data-gs="5%" aria-pressed="true">Cool</button>
+      </div>
+    </div>
+    <div class="ctl-readout">
+      <span>now showing</span><b id="accName">Teal</b><span class="mono" id="accHex">#3fb9a6</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ AUDIT -->
+<section class="wrap">
+  <div class="sec-head">
+    <h2>Where the space goes today</h2>
+    <span class="eyebrow eyebrow-mute">Measured from the current class lists</span>
+  </div>
+  <p class="note">
+    Nothing here is a layout problem — it's a chrome problem. Every panel is a floating card with its own
+    border, its own 16px padding and its own gap, and several of them are cards inside cards. Stack five of
+    those down one column and the settings get squeezed into whatever's left.
+  </p>
+
+  <ul class="audit">
+    <li>
+      <span class="px num">80<small>px</small></span>
+      <span class="why"><b>The header</b> — five buttons that each stack a 20px icon over a 12px text label, plus 12px padding top and bottom. The labels repeat what the tooltips already say.</span>
+      <span class="src">Header.tsx</span>
+    </li>
+    <li>
+      <span class="px num">~200<small>px</small></span>
+      <span class="why"><b>Card chrome in the right column</b> — five panels × (2px border + 24–32px vertical padding), plus the gaps between them. Before a single setting is drawn.</span>
+      <span class="src">App.tsx · right Panel</span>
+    </li>
+    <li>
+      <span class="px num">~50<small>px</small></span>
+      <span class="why"><b>Cards inside cards</b> — the filter panel wraps a bordered <span class="mono">rounded-xl</span> surface in another bordered <span class="mono">rounded-xl p-4</span> surface. Two borders and two paddings for one boundary.</span>
+      <span class="src">FilterStepPanel.tsx</span>
+    </li>
+    <li>
+      <span class="px num">~150<small>px</small></span>
+      <span class="why"><b>Progress + console headers</b> — a full card carrying four numbers (message, percent, fps, ETA) at <span class="mono">text-base</span>, and a second card whose only job when collapsed is a title row.</span>
+      <span class="src">ProgressPanel.tsx</span>
+    </li>
+    <li>
+      <span class="px num">~150<small>px</small></span>
+      <span class="why"><b>The drop zone</b> — a 32px icon and three lines of instructions kept on screen permanently, long after a file has been loaded and the instructions stopped being useful.</span>
+      <span class="src">VideoInputPanel.tsx</span>
+    </li>
+    <li>
+      <span class="px num">56<small>px</small></span>
+      <span class="why"><b>The action row</b> — <span class="mono">py-4 px-6</span> on three side-by-side buttons, at the bottom of a column that has to scroll to reach them.</span>
+      <span class="src">ActionButtons.tsx</span>
+    </li>
+  </ul>
+
+  <div class="tally">
+    <span class="big num">~430px</span>
+    <p class="note" style="margin:0">
+      of vertical space spent on borders, padding and repeated labels rather than on controls — roughly
+      <b>half the height of a 900px window</b>. All three concepts below spend that budget differently;
+      none of them removes a feature.
+    </p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============================================================ CONCEPT A -->
+<div class="wrap-wide concept" id="concept-a">
+  <div class="concept-head">
+    <div>
+      <div class="concept-title">
+        <span class="eyebrow">Concept A</span>
+        <h2>Console</h2>
+        <span class="concept-kicker">same layout · ruthless chrome diet</span>
+      </div>
+      <p class="thesis">
+        Your layout is fine. Put the tool buttons on a vertical rail, collapse the right column's five
+        floating cards into one continuous surface with sticky section headers, and give every number and
+        every action a single 44px bar at the bottom of the window.
+      </p>
+    </div>
+    <div class="disrupt">
+      <span class="lab">Change to muscle memory</span>
+      <div class="bars"><i class="on"></i><i></i><i></i></div>
+      <span class="d-txt">Everything is where it was, just smaller and in fewer boxes.</span>
+    </div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-bar">
+      <div class="dots"><i></i><i></i><i></i></div>
+      <span class="ttl">Vapourkit — Concept A · Console</span>
+    </div>
+    <div class="mk-fit"><div class="mk-stage"><div class="mk">
+
+      <div class="body" style="flex:1 1 auto">
+        <!-- icon rail -->
+        <div class="rail">
+          <div class="mark"><svg class="ic ic-s"><use href="#i-wand"/></svg></div>
+          <div class="rb"><svg class="ic"><use href="#i-gear"/></svg></div>
+          <div class="rb"><svg class="ic"><use href="#i-plug"/></svg></div>
+          <div class="rb"><svg class="ic"><use href="#i-refresh"/></svg></div>
+          <div class="rb"><svg class="ic"><use href="#i-lock"/></svg></div>
+          <div class="rb acc-on"><svg class="ic"><use href="#i-folder"/></svg></div>
+          <div class="sp"></div>
+          <div class="rb"><svg class="ic"><use href="#i-info"/></svg></div>
+        </div>
+
+        <div class="col sp">
+          <!-- title strip -->
+          <div class="strip">
+            <span class="wordmark">Vapourkit</span>
+            <span class="strip-div"></span>
+            <span class="chip acc-chip"><svg class="ic ic-s"><use href="#i-check"/></svg>anime · 2x</span>
+            <span class="chip"><svg class="ic ic-s"><use href="#i-cpu"/></svg><b>TRT</b><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span>
+            <div class="sp"></div>
+            <div class="r" style="gap:2px">
+              <div class="rb" style="width:26px;height:24px;border-radius:5px;display:grid;place-items:center;color:var(--m-t2)"><svg class="ic ic-s"><use href="#i-undo"/></svg></div>
+              <div class="rb" style="width:26px;height:24px;border-radius:5px;display:grid;place-items:center;color:var(--m-t3)"><svg class="ic ic-s"><use href="#i-redo"/></svg></div>
+            </div>
+            <span class="strip-div"></span>
+            <div class="meter">
+              <span class="lbl">Vram</span>
+              <span class="track"><i style="width:57%;background:var(--warn)"></i></span>
+              <span class="num t2">6.8/12.0</span>
+            </div>
+            <div class="meter">
+              <span class="lbl">Gpu</span>
+              <span class="track"><i style="width:97%;background:var(--bad)"></i></span>
+              <span class="num t2">97%</span>
+            </div>
+          </div>
+
+          <!-- main split -->
+          <div class="body">
+            <div class="pane sp">
+              <div class="preview">
+                <span class="pv-tag" style="left:10px;bottom:10px">
+                  <span class="mn num">1920 × 1440</span><span class="t3">·</span><span class="mn num t3">frame 16,842</span>
+                </span>
+                <span class="pv-tag" style="right:10px;top:10px">
+                  <svg class="ic ic-s"><use href="#i-swap"/></svg>Compare
+                </span>
+                <span class="pv-tag" style="right:96px;top:10px">
+                  <svg class="ic ic-s"><use href="#i-folder"/></svg>Folder
+                </span>
+              </div>
+            </div>
+
+            <!-- right column: ONE surface -->
+            <div class="pane" style="width:384px;flex:0 0 384px;background:var(--m-bg)">
+
+              <div class="sec"><span class="tick"></span>Source<span class="sp"></span><span class="cnt">Queue 3</span><svg class="ic ic-s t3"><use href="#i-list"/></svg></div>
+              <div class="r rowline" style="gap:9px;padding:7px 12px">
+                <span class="media-thumb" style="width:44px;height:26px;border-radius:4px;flex:0 0 44px;background:linear-gradient(135deg,hsl(var(--gh) 12% 28%),hsl(var(--gh) 8% 14%))"></span>
+                <span class="col sp" style="gap:1px">
+                  <span class="trunc" style="font-size:11.5px">episode_04_remux.mkv</span>
+                  <span class="mn num t3" style="font-size:10px">640×480 · 23.976 · 1.42 GB · 24m 12s</span>
+                </span>
+                <svg class="ic ic-s t3"><use href="#i-swap"/></svg>
+              </div>
+
+              <div class="sec"><span class="tick"></span>Filters<span class="sp"></span><span class="cnt num">3 of 4 on</span></div>
+              <div class="frow"><span class="idx">1</span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="nm sp trunc">Resize (px) — 1440p</span><span class="toggle on"><i></i></span></div>
+              <div class="frow ai sel"><span class="idx">2</span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="nm sp trunc">2x_AnimeJaNai_HD_V3Sharp1</span><span class="chip" style="height:16px;font-size:9.5px;padding:0 5px">TRT</span><span class="toggle on"><i></i></span></div>
+              <div class="fields" style="background:var(--m-1);border-bottom:1px solid var(--m-line)">
+                <div class="field wide">
+                  <span class="fl">Model</span>
+                  <span class="fv"><svg class="ic ic-s acc"><use href="#i-wand"/></svg><span class="sp trunc">2x_AnimeJaNai_HD_V3Sharp1_UltraCompact_fp16</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span>
+                </div>
+                <div class="field"><span class="fl">Backend</span><span class="fv"><span class="sp">TensorRT</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+                <div class="field"><span class="fl">Streams</span><span class="fv"><span class="sp num">2</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+              </div>
+              <div class="frow"><span class="idx">3</span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="nm sp trunc">CAS Sharpen</span><span class="toggle on"><i></i></span></div>
+              <div class="frow off"><span class="idx">4</span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="nm sp trunc">Shift Chroma</span><span class="toggle"><i></i></span></div>
+              <div class="r rowline" style="height:26px;padding:0 12px;gap:7px;color:var(--a)">
+                <svg class="ic ic-s"><use href="#i-plus"/></svg><span style="font-size:11px">Add filter</span>
+              </div>
+
+              <div class="sec"><span class="tick"></span>Output</div>
+              <div class="fields">
+                <div class="field"><span class="fl">Container</span><span class="fv"><span class="sp">MKV</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+                <div class="field"><span class="fl">Codec</span><span class="fv"><span class="sp">x265</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+                <div class="field"><span class="fl">Encoder</span><span class="fv"><span class="sp">NVENC</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+                <div class="field"><span class="fl">Quality</span><span class="fv"><span class="sp num">CRF 18</span><svg class="ic ic-s t3"><use href="#i-sliders"/></svg></span></div>
+                <div class="field wide"><span class="fl">Save to</span><span class="fv"><svg class="ic ic-s"><use href="#i-folder"/></svg><span class="sp trunc t2">D:\out\episode_04_remux_2x.mkv</span></span></div>
+              </div>
+
+              <div class="sec"><span class="tick"></span>Advanced<span class="sp"></span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></div>
+              <div class="r rowline" style="height:28px;padding:0 12px;gap:8px">
+                <span class="t3 trunc" style="font-size:10.5px">Colorimetry BT.709 · Segment off · Benchmark off</span>
+              </div>
+              <div class="sp"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- global action bar -->
+      <div class="actionbar">
+        <span class="prog" style="width:47%"></span>
+        <span class="chip acc-chip"><svg class="ic ic-s"><use href="#i-play"/></svg>Processing</span>
+        <span class="stat"><b class="num">47%</b></span>
+        <span class="stat-div"></span>
+        <span class="stat"><span>Speed</span><b class="num">21.4 fps</b></span>
+        <span class="stat-div"></span>
+        <span class="stat"><span>ETA</span><b class="num">8m 03s</b></span>
+        <span class="stat-div"></span>
+        <span class="stat mn num t3">16,842 / 35,760</span>
+        <div class="sp"></div>
+        <span class="btn ghost"><svg class="ic ic-s"><use href="#i-term"/></svg>Console</span>
+        <span class="btn"><svg class="ic ic-s"><use href="#i-check"/></svg>Validate</span>
+        <span class="btn"><svg class="ic ic-s"><use href="#i-play"/></svg>Preview</span>
+        <span class="btn danger"><svg class="ic ic-s"><use href="#i-x"/></svg>Stop</span>
+      </div>
+
+      <span class="pin" style="left:13px;top:56px">1</span>
+      <span class="pin" style="left:1052px;top:8px">2</span>
+      <span class="pin" style="left:836px;top:52px">3</span>
+      <span class="pin" style="left:836px;top:110px">4</span>
+      <span class="pin" style="left:836px;top:200px">5</span>
+      <span class="pin" style="left:270px;top:706px">6</span>
+      <span class="pin" style="left:944px;top:706px">7</span>
+
+    </div></div></div>
+  </div>
+
+  <ul class="legend">
+    <li><span class="pin-n">1</span><span><b>46px icon rail</b> replaces the five stacked icon+label buttons. The labels move into tooltips, which already existed.</span></li>
+    <li><span class="pin-n">2</span><span><b>GPU, backend and workflow become data in the strip</b>, not bordered boxes stacked beside each other. 80px of header becomes 34px.</span></li>
+    <li><span class="pin-n">3</span><span><b>One surface, not five cards.</b> Sticky 26px section headers and hairlines do the separating that borders + padding + gaps were doing.</span></li>
+    <li><span class="pin-n">4</span><span><b>Source collapses to one 40px row</b> once a file is loaded. The drop target is still the whole row — the instructions just stop shouting.</span></li>
+    <li><span class="pin-n">5</span><span><b>Filter rows at 30px</b>, one expanded at a time. The chain stays readable instead of scrolling off when you open a step.</span></li>
+    <li><span class="pin-n">6</span><span><b>Progress is the bar's top edge.</b> Percent, speed, ETA and frame count in one line — no card, no <span class="mono">text-base</span>.</span></li>
+    <li><span class="pin-n">7</span><span><b>Actions are always on screen</b> at the window's bottom edge instead of at the end of a scrolling column. Console opens as a drawer over the preview.</span></li>
+  </ul>
+
+  <div class="tradeoff">
+    <div>
+      <h4>What you gain</h4>
+      <ul>
+        <li>Roughly 380px of vertical space back in the right column</li>
+        <li>Start / Stop reachable at any scroll position</li>
+        <li>Smallest diff of the three — mostly Header, ProgressPanel, ActionButtons and the panel wrappers</li>
+      </ul>
+    </div>
+    <div>
+      <h4>What it doesn't fix</h4>
+      <ul>
+        <li>Expanding a filter still pushes the rows below it down</li>
+        <li>The right column still scrolls once you have 6+ filters</li>
+        <li>Queue still takes height from the main area when open</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ CONCEPT B -->
+<div class="wrap-wide concept" id="concept-b">
+  <div class="concept-head">
+    <div>
+      <div class="concept-title">
+        <span class="eyebrow">Concept B</span>
+        <h2>Pipeline</h2>
+        <span class="concept-kicker">same chrome as A · the filter chain gets an editor model</span>
+      </div>
+      <p class="thesis">
+        Filters run in order, so draw them as a chain with pinned endpoints — source at the top, encode at the
+        bottom. Selecting a step opens a docked inspector below instead of expanding in place, so the chain
+        never reflows while you're editing it. Segment selection becomes a scrubber under the preview.
+      </p>
+    </div>
+    <div class="disrupt">
+      <span class="lab">Change to muscle memory</span>
+      <div class="bars"><i class="on"></i><i class="on"></i><i></i></div>
+      <span class="d-txt">Same controls, new editing model for the one panel you spend all your time in.</span>
+    </div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-bar">
+      <div class="dots"><i></i><i></i><i></i></div>
+      <span class="ttl">Vapourkit — Concept B · Pipeline</span>
+    </div>
+    <div class="mk-fit"><div class="mk-stage"><div class="mk">
+
+      <div class="body" style="flex:1 1 auto">
+        <div class="rail">
+          <div class="mark"><svg class="ic ic-s"><use href="#i-wand"/></svg></div>
+          <div class="rb"><svg class="ic"><use href="#i-gear"/></svg></div>
+          <div class="rb"><svg class="ic"><use href="#i-plug"/></svg></div>
+          <div class="rb"><svg class="ic"><use href="#i-refresh"/></svg></div>
+          <div class="rb"><svg class="ic"><use href="#i-lock"/></svg></div>
+          <div class="rb acc-on"><svg class="ic"><use href="#i-folder"/></svg></div>
+          <div class="sp"></div>
+          <div class="rb"><svg class="ic"><use href="#i-info"/></svg></div>
+        </div>
+
+        <div class="col sp">
+          <div class="strip">
+            <span class="wordmark">Vapourkit</span>
+            <span class="strip-div"></span>
+            <span class="chip acc-chip"><svg class="ic ic-s"><use href="#i-check"/></svg>anime · 2x</span>
+            <span class="chip"><svg class="ic ic-s"><use href="#i-cpu"/></svg><b>TRT</b><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span>
+            <div class="sp"></div>
+            <div class="meter"><span class="lbl">Vram</span><span class="track"><i style="width:57%;background:var(--warn)"></i></span><span class="num t2">6.8/12.0</span></div>
+            <div class="meter"><span class="lbl">Gpu</span><span class="track"><i style="width:97%;background:var(--bad)"></i></span><span class="num t2">97%</span></div>
+          </div>
+
+          <div class="body">
+            <!-- left pane: preview + scrubber, queue as a tab -->
+            <div class="pane sp">
+              <div class="tabs">
+                <span class="on"><svg class="ic ic-s"><use href="#i-film"/></svg>Preview</span>
+                <span><svg class="ic ic-s"><use href="#i-list"/></svg>Queue <span class="t3 num">3</span></span>
+                <span><svg class="ic ic-s"><use href="#i-term"/></svg>Log</span>
+                <span class="sp" style="border:0"></span>
+                <span style="border:0"><svg class="ic ic-s"><use href="#i-swap"/></svg>Compare</span>
+              </div>
+              <div class="preview">
+                <span class="pv-tag" style="left:10px;bottom:10px">
+                  <span class="mn num">1920 × 1440</span><span class="t3">·</span><span class="mn num t3">frame 16,842</span>
+                </span>
+              </div>
+              <div class="scrub">
+                <svg class="ic t2"><use href="#i-play"/></svg>
+                <span class="mn num t2" style="font-size:10.5px">00:04:12</span>
+                <span class="track2">
+                  <span class="ticks"></span>
+                  <span class="seg2" style="left:17%;right:41%"></span>
+                  <span class="head" style="left:34%"></span>
+                </span>
+                <span class="mn num t2" style="font-size:10.5px">00:09:40</span>
+                <span class="chip acc-chip">Segment on</span>
+              </div>
+            </div>
+
+            <!-- right pane: chain + docked inspector -->
+            <div class="pane" style="width:404px;flex:0 0 404px;background:var(--m-bg)">
+              <div class="sec"><span class="tick"></span>Pipeline<span class="sp"></span><span class="cnt num">4 steps</span><svg class="ic ic-s t3"><use href="#i-plus"/></svg></div>
+
+              <div class="pipe">
+                <span class="spine"></span>
+
+                <div class="node src">
+                  <svg class="ic ic-s acc"><use href="#i-film"/></svg>
+                  <span class="col sp" style="gap:1px">
+                    <span class="trunc" style="font-size:11px">episode_04_remux.mkv</span>
+                    <span class="mn num t3" style="font-size:9.5px">640×480 · 23.976 fps · YUV420P8</span>
+                  </span>
+                  <svg class="ic ic-s t3"><use href="#i-swap"/></svg>
+                </div>
+
+                <div class="prow"><span class="dot"></span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="sp trunc" style="font-size:11.5px">Resize (px) — 1440p</span><span class="chip" style="height:16px;font-size:9.5px;padding:0 5px">custom</span><span class="toggle on"><i></i></span></div>
+
+                <div class="insert"><span class="ln"></span><svg class="ic ic-s"><use href="#i-plus"/></svg><span>insert</span><span class="ln"></span></div>
+
+                <div class="prow ai sel"><span class="dot"></span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="sp trunc" style="font-size:11.5px">2x_AnimeJaNai_HD_V3Sharp1</span><span class="chip" style="height:16px;font-size:9.5px;padding:0 5px">TRT</span><span class="toggle on"><i></i></span></div>
+
+                <div class="prow"><span class="dot"></span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="sp trunc" style="font-size:11.5px">CAS Sharpen</span><span class="chip" style="height:16px;font-size:9.5px;padding:0 5px">custom</span><span class="toggle on"><i></i></span></div>
+
+                <div class="prow" style="opacity:.45"><span class="dot"></span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="sp trunc" style="font-size:11.5px">Shift Chroma</span><span class="chip" style="height:16px;font-size:9.5px;padding:0 5px">custom</span><span class="toggle"><i></i></span></div>
+
+                <div class="node" style="margin-top:10px">
+                  <svg class="ic ic-s t2"><use href="#i-down"/></svg>
+                  <span class="col sp" style="gap:1px">
+                    <span class="trunc" style="font-size:11px">x265 · NVENC · CRF 18 · MKV</span>
+                    <span class="mn num t3" style="font-size:9.5px">1280×960 → D:\out\episode_04_remux_2x.mkv</span>
+                  </span>
+                  <svg class="ic ic-s t3"><use href="#i-chevr"/></svg>
+                </div>
+              </div>
+
+              <div class="sp"></div>
+
+              <!-- docked inspector -->
+              <div class="inspector" style="height:250px">
+                <div class="insp-head">
+                  <span class="chip acc-chip" style="height:17px;font-size:10px">Step 2</span>
+                  <span class="sp trunc" style="font-size:11.5px">AI Model</span>
+                  <svg class="ic ic-s t3"><use href="#i-x"/></svg>
+                </div>
+                <div class="fields">
+                  <div class="field wide">
+                    <span class="fl">Model</span>
+                    <span class="fv"><svg class="ic ic-s acc"><use href="#i-wand"/></svg><span class="sp trunc">2x_AnimeJaNai_HD_V3Sharp1_UltraCompact_fp16</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span>
+                  </div>
+                  <div class="field"><span class="fl">Backend</span><span class="fv"><span class="sp">TensorRT</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+                  <div class="field"><span class="fl">Precision</span><span class="fv"><span class="sp">fp16</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+                  <div class="field"><span class="fl">Streams</span><span class="fv"><span class="sp num">2</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+                  <div class="field"><span class="fl">Scale</span><span class="fv"><span class="sp num">2×</span><span class="t3 num">→ 1280×960</span></span></div>
+                  <div class="field wide">
+                    <span class="fl">Engine</span>
+                    <span class="fv" style="border-color:color-mix(in srgb, var(--ok) 40%, transparent)">
+                      <svg class="ic ic-s" style="color:var(--ok)"><use href="#i-check"/></svg>
+                      <span class="sp t2">Built · 640×480 static · 412 MB</span>
+                      <span class="t3 mn" style="font-size:10px">rebuild</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actionbar">
+        <span class="prog" style="width:47%"></span>
+        <span class="chip acc-chip"><svg class="ic ic-s"><use href="#i-play"/></svg>Processing</span>
+        <span class="stat"><b class="num">47%</b></span>
+        <span class="stat-div"></span>
+        <span class="stat"><span>Speed</span><b class="num">21.4 fps</b></span>
+        <span class="stat-div"></span>
+        <span class="stat"><span>ETA</span><b class="num">8m 03s</b></span>
+        <span class="stat-div"></span>
+        <span class="stat mn num t3">16,842 / 35,760</span>
+        <div class="sp"></div>
+        <span class="btn"><svg class="ic ic-s"><use href="#i-check"/></svg>Validate</span>
+        <span class="btn"><svg class="ic ic-s"><use href="#i-play"/></svg>Preview</span>
+        <span class="btn danger"><svg class="ic ic-s"><use href="#i-x"/></svg>Stop</span>
+      </div>
+
+      <span class="pin" style="left:56px;top:52px">1</span>
+      <span class="pin" style="left:816px;top:118px">2</span>
+      <span class="pin" style="left:816px;top:452px">3</span>
+      <span class="pin" style="left:816px;top:246px">4</span>
+      <span class="pin" style="left:300px;top:640px">5</span>
+      <span class="pin" style="left:150px;top:52px">6</span>
+
+    </div></div></div>
+  </div>
+
+  <ul class="legend">
+    <li><span class="pin-n">1</span><span><b>Identical slim chrome to Concept A.</b> The rail and the 34px strip are independent of which body layout you pick — you get them either way.</span></li>
+    <li><span class="pin-n">2</span><span><b>Endpoints are pinned.</b> Source at the top, encode at the bottom, filters strung between them — the chain reads as what it actually is.</span></li>
+    <li><span class="pin-n">3</span><span><b>The inspector is docked</b>, not inline. Editing step 2 never moves steps 3 and 4. Engine state gets a real row instead of a modal you have to go find.</span></li>
+    <li><span class="pin-n">4</span><span><b>Insert between steps in place</b> — hover the gap, click, and the new filter lands exactly where you meant it to.</span></li>
+    <li><span class="pin-n">5</span><span><b>Segment becomes spatial.</b> In and out handles on a scrubber welded to the preview, instead of frame numbers in a card 400px away from the picture.</span></li>
+    <li><span class="pin-n">6</span><span><b>Queue and log are tabs on the preview</b>, so opening them costs zero height from the settings side.</span></li>
+  </ul>
+
+  <div class="tradeoff">
+    <div>
+      <h4>What you gain</h4>
+      <ul>
+        <li>The whole chain stays visible while you edit any step</li>
+        <li>Filter order becomes the primary visual, which is what the app is actually about</li>
+        <li>The queue stops competing with the preview for height</li>
+      </ul>
+    </div>
+    <div>
+      <h4>What it costs</h4>
+      <ul>
+        <li>Inspector takes a fixed ~250px of the right column even when nothing is selected</li>
+        <li>DynamicFilterPanel gets rewritten, not just restyled</li>
+        <li>The custom-code editor has to live in the inspector, so it gets less room than it has today</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ CONCEPT C -->
+<div class="wrap-wide concept" id="concept-c">
+  <div class="concept-head">
+    <div>
+      <div class="concept-title">
+        <span class="eyebrow">Concept C</span>
+        <h2>Workbench</h2>
+        <span class="concept-kicker">three panes · queue absorbs the input · settings become tabs</span>
+      </div>
+      <p class="thesis">
+        The queue and the file picker are the same idea, so make them the same panel — a media list on the
+        left where one file is a list of one. Settings move into a tabbed inspector on the right, which
+        removes the long vertical scroll entirely. The preview gets the whole middle.
+      </p>
+    </div>
+    <div class="disrupt">
+      <span class="lab">Change to muscle memory</span>
+      <div class="bars"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+      <span class="d-txt">Same steps in the same order, but you'll be re-learning where two of them live.</span>
+    </div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-bar">
+      <div class="dots"><i></i><i></i><i></i></div>
+      <span class="ttl">Vapourkit — Concept C · Workbench</span>
+    </div>
+    <div class="mk-fit"><div class="mk-stage"><div class="mk">
+
+      <!-- single 32px strip, no rail -->
+      <div class="strip" style="height:32px;flex:0 0 32px">
+        <span class="r" style="gap:7px">
+          <span class="mark" style="width:19px;height:19px;border-radius:5px;background:var(--a);display:grid;place-items:center;color:var(--a-ink)"><svg class="ic" style="width:11px;height:11px"><use href="#i-wand"/></svg></span>
+          <span class="wordmark" style="font-size:11px">Vapourkit</span>
+        </span>
+        <span class="strip-div"></span>
+        <span class="r t2" style="gap:16px;font-size:11px">
+          <span class="r" style="gap:5px"><svg class="ic ic-s"><use href="#i-gear"/></svg>Settings</span>
+          <span class="r" style="gap:5px"><svg class="ic ic-s"><use href="#i-plug"/></svg>Plugins</span>
+          <span class="r" style="gap:5px"><svg class="ic ic-s"><use href="#i-folder"/></svg>Workflow<svg class="ic ic-s t3"><use href="#i-chev"/></svg></span>
+          <span class="r" style="gap:5px"><svg class="ic ic-s"><use href="#i-lock"/></svg>Privacy</span>
+        </span>
+        <div class="sp"></div>
+        <span class="chip acc-chip"><svg class="ic ic-s"><use href="#i-check"/></svg>anime · 2x</span>
+        <span class="chip"><svg class="ic ic-s"><use href="#i-cpu"/></svg><b>TRT</b><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span>
+        <div class="r" style="gap:2px">
+          <span style="width:24px;height:22px;border-radius:5px;display:grid;place-items:center;color:var(--m-t2)"><svg class="ic ic-s"><use href="#i-undo"/></svg></span>
+          <span style="width:24px;height:22px;border-radius:5px;display:grid;place-items:center;color:var(--m-t3)"><svg class="ic ic-s"><use href="#i-redo"/></svg></span>
+          <span style="width:24px;height:22px;border-radius:5px;display:grid;place-items:center;color:var(--m-t2)"><svg class="ic ic-s"><use href="#i-info"/></svg></span>
+        </div>
+      </div>
+
+      <div class="body">
+        <!-- media list -->
+        <div class="pane" style="width:246px;flex:0 0 246px;background:var(--m-bg)">
+          <div class="sec"><span class="tick"></span>Media<span class="sp"></span><span class="cnt num">4</span><svg class="ic ic-s t3"><use href="#i-plus"/></svg></div>
+
+          <div class="media">
+            <span class="st" style="background:var(--ok)"></span>
+            <span class="thumb"></span>
+            <span class="col sp" style="gap:1px">
+              <span class="trunc" style="font-size:11px">episode_02_remux.mkv</span>
+              <span class="mn num t3" style="font-size:9.5px">640×480 → 1280×960 · done</span>
+            </span>
+            <svg class="ic ic-s t3"><use href="#i-folder"/></svg>
+          </div>
+
+          <div class="media sel">
+            <span class="st" style="background:var(--a)"></span>
+            <span class="thumb"></span>
+            <span class="col sp" style="gap:1px">
+              <span class="trunc" style="font-size:11px">episode_04_remux.mkv</span>
+              <span class="mn num t3" style="font-size:9.5px">47% · 21.4 fps · 8m 03s left</span>
+            </span>
+            <span class="lineprog" style="width:47%"></span>
+          </div>
+
+          <div class="media">
+            <span class="st" style="background:var(--m-t3)"></span>
+            <span class="thumb"></span>
+            <span class="col sp" style="gap:1px">
+              <span class="trunc" style="font-size:11px">episode_05_remux.mkv</span>
+              <span class="mn num t3" style="font-size:9.5px">640×480 · queued</span>
+            </span>
+            <svg class="ic ic-s t3"><use href="#i-grip"/></svg>
+          </div>
+
+          <div class="media">
+            <span class="st" style="background:var(--m-t3)"></span>
+            <span class="thumb"></span>
+            <span class="col sp" style="gap:1px">
+              <span class="trunc" style="font-size:11px">episode_06_remux.mkv</span>
+              <span class="mn num t3" style="font-size:9.5px">640×480 · queued</span>
+            </span>
+            <svg class="ic ic-s t3"><use href="#i-grip"/></svg>
+          </div>
+
+          <div class="drop"><svg class="ic ic-s"><use href="#i-up"/></svg>Drop files or click to add</div>
+          <div class="sp"></div>
+          <div class="r" style="height:30px;padding:0 10px;gap:8px;border-top:1px solid var(--m-line)">
+            <span class="t3" style="font-size:10.5px">Clear done</span>
+            <div class="sp"></div>
+            <span class="t3 mn num" style="font-size:10.5px">2 pending</span>
+          </div>
+        </div>
+
+        <!-- centre -->
+        <div class="pane sp">
+          <div class="preview">
+            <span class="pv-tag" style="left:10px;top:10px"><span class="mn num">1920 × 1440</span></span>
+            <span class="pv-tag" style="right:10px;top:10px"><svg class="ic ic-s"><use href="#i-swap"/></svg>Compare</span>
+            <span class="pv-tag" style="left:10px;bottom:10px"><span class="mn num t3">frame 16,842 / 35,760</span></span>
+          </div>
+          <div class="scrub" style="height:32px;flex:0 0 32px">
+            <svg class="ic t2"><use href="#i-play"/></svg>
+            <span class="mn num t2" style="font-size:10.5px">00:04:12</span>
+            <span class="track2" style="height:14px">
+              <span class="ticks"></span>
+              <span class="seg2" style="left:17%;right:41%"></span>
+              <span class="head" style="left:34%"></span>
+            </span>
+            <span class="mn num t2" style="font-size:10.5px">00:09:40</span>
+          </div>
+          <div class="r" style="height:44px;flex:0 0 44px;border-top:1px solid var(--m-line);background:var(--m-1);padding:0 12px;gap:11px;position:relative">
+            <span class="prog" style="position:absolute;top:-1px;left:0;height:2px;width:47%;background:var(--a);box-shadow:0 0 8px color-mix(in srgb, var(--a) 60%, transparent)"></span>
+            <span class="stat"><b class="num">47%</b></span>
+            <span class="stat-div"></span>
+            <span class="stat"><span>Speed</span><b class="num">21.4 fps</b></span>
+            <span class="stat-div"></span>
+            <span class="stat"><span>ETA</span><b class="num">8m 03s</b></span>
+            <div class="sp"></div>
+            <span class="btn"><svg class="ic ic-s"><use href="#i-check"/></svg>Validate</span>
+            <span class="btn"><svg class="ic ic-s"><use href="#i-play"/></svg>Preview</span>
+            <span class="btn danger"><svg class="ic ic-s"><use href="#i-x"/></svg>Stop queue</span>
+          </div>
+        </div>
+
+        <!-- inspector -->
+        <div class="pane" style="width:348px;flex:0 0 348px;background:var(--m-bg)">
+          <div class="tabs">
+            <span class="on"><svg class="ic ic-s"><use href="#i-sliders"/></svg>Filters</span>
+            <span><svg class="ic ic-s"><use href="#i-down"/></svg>Output</span>
+            <span><svg class="ic ic-s"><use href="#i-gauge"/></svg>Advanced</span>
+          </div>
+
+          <div class="frow"><span class="idx">1</span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="nm sp trunc">Resize (px) — 1440p</span><span class="toggle on"><i></i></span></div>
+          <div class="frow ai sel"><span class="idx">2</span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="nm sp trunc">2x_AnimeJaNai_HD_V3Sharp1</span><span class="chip" style="height:16px;font-size:9.5px;padding:0 5px">TRT</span><span class="toggle on"><i></i></span></div>
+          <div class="fields" style="background:var(--m-1);border-bottom:1px solid var(--m-line)">
+            <div class="field wide">
+              <span class="fl">Model</span>
+              <span class="fv"><svg class="ic ic-s acc"><use href="#i-wand"/></svg><span class="sp trunc">2x_AnimeJaNai_HD_V3Sharp1_UltraCompact_fp16</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="field"><span class="fl">Backend</span><span class="fv"><span class="sp">TensorRT</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+            <div class="field"><span class="fl">Precision</span><span class="fv"><span class="sp">fp16</span><svg class="ic ic-s t3"><use href="#i-chev"/></svg></span></div>
+            <div class="field wide">
+              <span class="fl">Engine</span>
+              <span class="fv" style="border-color:color-mix(in srgb, var(--ok) 40%, transparent)">
+                <svg class="ic ic-s" style="color:var(--ok)"><use href="#i-check"/></svg>
+                <span class="sp t2">Built · 640×480 static · 412 MB</span>
+              </span>
+            </div>
+          </div>
+          <div class="frow"><span class="idx">3</span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="nm sp trunc">CAS Sharpen</span><span class="toggle on"><i></i></span></div>
+          <div class="frow off"><span class="idx">4</span><svg class="ic ic-s t3"><use href="#i-grip"/></svg><span class="nm sp trunc">Shift Chroma</span><span class="toggle"><i></i></span></div>
+          <div class="r rowline" style="height:28px;padding:0 12px;gap:7px;color:var(--a)">
+            <svg class="ic ic-s"><use href="#i-plus"/></svg><span style="font-size:11px">Add filter</span>
+            <div class="sp"></div>
+            <span class="t3" style="font-size:10.5px">Templates</span>
+          </div>
+          <div class="sp"></div>
+          <div class="r" style="height:30px;padding:0 12px;gap:8px;border-top:1px solid var(--m-line);background:var(--m-1)">
+            <span class="t3 mn" style="font-size:10.5px">640×480</span>
+            <svg class="ic ic-s t3"><use href="#i-chevr"/></svg>
+            <span class="mn acc" style="font-size:10.5px">1280×960</span>
+            <div class="sp"></div>
+            <span class="chip" style="height:17px;font-size:9.5px">est. 4.1 GB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- status bar -->
+      <div class="statusbar">
+        <span class="si acc-si"><svg class="ic ic-s"><use href="#i-cpu"/></svg>TensorRT</span>
+        <span class="si mn">CUDA 12.6</span>
+        <span class="si mn">VapourSynth R70</span>
+        <div class="sp"></div>
+        <span class="si mn num">VRAM 6.8 / 12.0 GB</span>
+        <span class="si mn num">GPU 97%</span>
+        <span class="si"><svg class="ic ic-s"><use href="#i-term"/></svg>Log</span>
+      </div>
+
+      <span class="pin" style="left:14px;top:44px">1</span>
+      <span class="pin" style="left:218px;top:130px">2</span>
+      <span class="pin" style="left:600px;top:44px">3</span>
+      <span class="pin" style="left:866px;top:44px">4</span>
+      <span class="pin" style="left:14px;top:722px">5</span>
+      <span class="pin" style="left:820px;top:646px">6</span>
+
+    </div></div></div>
+  </div>
+
+  <ul class="legend">
+    <li><span class="pin-n">1</span><span><b>Media list = input + queue, merged.</b> One file is a list of one. Dropping four files is the same gesture as dropping one, and reordering is dragging.</span></li>
+    <li><span class="pin-n">2</span><span><b>Per-item progress on the row</b>, so a running batch tells you where it is without a separate panel open at the bottom.</span></li>
+    <li><span class="pin-n">3</span><span><b>The preview gets the middle, uncontested</b> — no bottom queue panel eating into it, no console card below it.</span></li>
+    <li><span class="pin-n">4</span><span><b>Tabs kill the scroll.</b> Filters, Output and Advanced each fit their pane, so you stop hunting for Save-To below the fold.</span></li>
+    <li><span class="pin-n">5</span><span><b>26px status bar</b> carries backend, versions, VRAM and the log toggle — the ambient stuff that doesn't deserve a card.</span></li>
+    <li><span class="pin-n">6</span><span><b>Resolution maths where the decisions are</b>: input → output and an estimated file size, pinned under the filter chain that determines them.</span></li>
+  </ul>
+
+  <div class="tradeoff">
+    <div>
+      <h4>What you gain</h4>
+      <ul>
+        <li>Densest of the three — nothing scrolls at 1280×800</li>
+        <li>Queue stops being a mode you toggle; it's just the media list</li>
+        <li>Preview area roughly doubles versus today</li>
+      </ul>
+    </div>
+    <div>
+      <h4>What it costs</h4>
+      <ul>
+        <li>Biggest rewrite: App.tsx layout, VideoInputPanel and QueuePanel merge, OutputSettingsPanel becomes a tab</li>
+        <li>Tabs hide state — you can no longer see filters and output settings at the same time</li>
+        <li>Needs ≥1200px width to breathe; below that the left pane has to collapse</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<hr class="rule">
+
+<!-- ============================================================ COLOUR -->
+<section class="wrap" id="colour">
+  <div class="sec-head">
+    <h2>The grey, and what sits on it</h2>
+    <span class="eyebrow eyebrow-mute">Everything above recolours live</span>
+  </div>
+  <p class="note">
+    The base is one HSL ramp rather than six hand-picked hexes, so the whole app can be nudged warm or cool
+    from a single pair of values. <b>Cool</b> keeps a faint blue bias that reads as "screen"; <b>True</b> is
+    dead neutral and the most severe; <b>Warm</b> leans toward the paper end and softens the dark UI. Try them
+    in the bar at the top — the mockups follow.
+  </p>
+
+  <div class="ramp" id="ramp"></div>
+
+  <h3 style="margin-top:52px">Six candidates for the secondary</h3>
+  <p class="note" style="margin-top:10px">
+    The real constraint isn't taste — it's that Vapourkit already spends colour on meaning. Green is "valid",
+    amber is "warning / privacy / engine building", red is "error / stop", orange is "benchmark / stopping".
+    An accent that lands on top of one of those makes the interface lie. Each card says which one it collides
+    with. Click to apply it everywhere on this page.
+  </p>
+
+  <div class="acc-grid" id="accGrid"></div>
+
+  <h3 style="margin-top:52px">Semantic colours stay separate</h3>
+  <p class="note" style="margin-top:10px">
+    Whichever secondary you pick, these four keep their jobs and don't shift with it. That's what makes the
+    accent free to be decorative.
+  </p>
+  <div class="semantics">
+    <span class="sem-pill"><i style="background:var(--ok)"></i> Valid · complete · engine built</span>
+    <span class="sem-pill"><i style="background:var(--warn)"></i> Warning · privacy on · building engine</span>
+    <span class="sem-pill"><i style="background:var(--bad)"></i> Error · stop · destructive</span>
+    <span class="sem-pill"><i style="background:var(--a)"></i> Accent — active, selected, primary action</span>
+  </div>
+
+  <h3 style="margin-top:52px">What this becomes in the config</h3>
+  <p class="note" style="margin-top:10px">
+    The current <span class="mono">tailwind.config.js</span> hard-codes <span class="mono">dark-bg</span>,
+    <span class="mono">primary-blue</span>, <span class="mono">primary-purple</span> and
+    <span class="mono">accent-cyan</span>, which is why the blue-purple is sprayed across 30 files. Replacing
+    them with a numbered neutral ramp plus one accent means the next colour change is a two-line edit.
+  </p>
+  <pre class="code" id="tokens"></pre>
+</section>
+
+<hr class="rule">
+
+<!-- ============================================================ CLOSING -->
+<section class="wrap">
+  <div class="sec-head">
+    <h2>What I'd build</h2>
+  </div>
+  <div class="rec">
+    <div class="rec-row">
+      <span class="k">Concept A, then B<em>layout</em></span>
+      <span class="b">
+        A and B share the same chrome — the rail, the 34px strip, the flat right column, the 44px action bar.
+        That's where nearly all of the ~430px comes from and it touches Header, ProgressPanel, ActionButtons
+        and the panel wrappers without rewriting any logic. Ship that first, live with it for a week, then
+        decide whether the filter panel wants B's chain-plus-inspector model. B is a clean addition on top of
+        A, not a different road. C is the strongest layout but it merges two panels and hides state behind
+        tabs; that's worth doing deliberately, not as part of a restyle.
+      </span>
+    </div>
+    <div class="rec-row">
+      <span class="k">Cool grey<em>--gh 220 · --gs 5%</em></span>
+      <span class="b">
+        Neutral enough to read as grey, with just enough blue in it that the greys look chosen rather than
+        left at default. True neutral is the more severe option if you want zero hue in the UI at all.
+      </span>
+    </div>
+    <div class="rec-row">
+      <span class="k">Teal or Steel<em>secondary</em></span>
+      <span class="b">
+        Teal is the only warm-free hue that doesn't sit on an existing semantic — the nearest neighbour is
+        success green and it stays distinguishable at 10px. Steel is the austere answer: barely an accent at
+        all, where "active" is just a lighter, slightly blue grey and colour is reserved entirely for
+        meaning. Ember is the most striking of the six, but taking it means moving benchmark and stopping
+        states off orange first.
+      </span>
+    </div>
+    <div class="rec-row">
+      <span class="k">Order of work<em>implementation</em></span>
+      <span class="b">
+        Tokens in <span class="mono">tailwind.config.js</span> → a codemod pass over the
+        <span class="mono">primary-blue</span> / <span class="mono">primary-purple</span> /
+        <span class="mono">accent-cyan</span> / <span class="mono">dark-*</span> class names → Header becomes
+        rail + strip → ProgressPanel and ActionButtons merge into the bottom bar → right column loses its
+        cards → filter rows tighten. Each step is independently shippable and independently revertable.
+      </span>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">
+  Mockups are live HTML at 1240×760, not images — the colour controls at the top of the page retint every
+  screen above. Content shown is representative: real backend names, real template names, real model names
+  from <span class="mono">include/models</span>.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- accent definitions ---------- */
+  var ACCENTS = [
+    { id: 'ember',  name: 'Ember',  hex: '#e0703c', ink: '#160a03',
+      risk: 'risk', riskLabel: 'Collides',
+      note: 'Warm and high-energy, reads as "rendering". Sits directly on the orange already used for benchmark mode and the stopping state — taking it means moving those to red first.' },
+    { id: 'brass',  name: 'Brass',  hex: '#c9a35a', ink: '#150f04',
+      risk: 'risk', riskLabel: 'Collides',
+      note: 'Filmic and warm-neutral, the most flattering match for a grey UI. Also the closest to the amber that means warning, privacy mode and "engine building" — the highest-traffic warning colour in the app.' },
+    { id: 'signal', name: 'Signal', hex: '#b6d94d', ink: '#101502',
+      risk: 'mind', riskLabel: 'Watch',
+      note: 'Chartreuse. Distinctive and unmistakably a tool colour. Clearly separate from success green at button size, muddier against it at 10px on a chip.' },
+    { id: 'teal',   name: 'Teal',   hex: '#3fb9a6', ink: '#04120f',
+      risk: 'safe', riskLabel: 'Clear',
+      note: 'Technical and calm, no warm-hue collisions at all. Nearest neighbour is success green and it stays distinguishable at small sizes. The safe pick.' },
+    { id: 'clay',   name: 'Clay',   hex: '#cd6a55', ink: '#170805',
+      risk: 'mind', riskLabel: 'Watch',
+      note: 'Muted terracotta — sophisticated and quiet. Its neighbour is error red, so it works on chrome and selection but should never fill a button that could be read as destructive.' },
+    { id: 'steel',  name: 'Steel',  hex: '#93a7bd', ink: '#0b1016',
+      risk: 'safe', riskLabel: 'Clear',
+      note: 'The "no accent" option. Barely saturated — active states are just a lighter, cooler grey, and every saturated colour left in the UI means something. The most austere direction here.' }
+  ];
+
+  var root = document.documentElement;
+  var accName = document.getElementById('accName');
+  var accHex  = document.getElementById('accHex');
+  var current = 'teal';
+
+  function applyAccent(id) {
+    var a = ACCENTS.filter(function (x) { return x.id === id; })[0];
+    if (!a) return;
+    current = id;
+    root.style.setProperty('--a', a.hex);
+    root.style.setProperty('--a-ink', a.ink);
+    accName.textContent = a.name;
+    accHex.textContent = a.hex;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-acc]'), function (el) {
+      el.setAttribute('aria-pressed', el.getAttribute('data-acc') === id ? 'true' : 'false');
+    });
+    renderTokens();
+  }
+
+  /* ---------- swatches in the sticky bar ---------- */
+  var swWrap = document.getElementById('swatches');
+  ACCENTS.forEach(function (a) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sw';
+    b.style.setProperty('--sc', a.hex);
+    b.setAttribute('data-acc', a.id);
+    b.setAttribute('aria-pressed', a.id === current ? 'true' : 'false');
+    b.setAttribute('title', a.name + ' ' + a.hex);
+    b.setAttribute('aria-label', 'Use ' + a.name);
+    b.addEventListener('click', function () { applyAccent(a.id); });
+    swWrap.appendChild(b);
+  });
+
+  /* ---------- accent cards ---------- */
+  var grid = document.getElementById('accGrid');
+  ACCENTS.forEach(function (a) {
+    var card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'acc';
+    card.style.setProperty('--ac', a.hex);
+    card.setAttribute('data-acc', a.id);
+    card.setAttribute('aria-pressed', a.id === current ? 'true' : 'false');
+    card.innerHTML =
+      '<span class="acc-chip"><span class="nm">' + a.name + '</span><span class="hx">' + a.hex + '</span></span>' +
+      '<span class="acc-body">' +
+        '<span class="tag ' + a.risk + '"><i></i>' + a.riskLabel + '</span>' +
+        '<span class="clash">' + a.note + '</span>' +
+      '</span>';
+    card.addEventListener('click', function () { applyAccent(a.id); });
+    grid.appendChild(card);
+  });
+
+  /* ---------- grey temperature ---------- */
+  var seg = document.getElementById('greyseg');
+  Array.prototype.forEach.call(seg.querySelectorAll('button'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(seg.querySelectorAll('button'), function (o) {
+        o.setAttribute('aria-pressed', o === b ? 'true' : 'false');
+      });
+      root.style.setProperty('--gh', b.getAttribute('data-gh'));
+      root.style.setProperty('--gs', b.getAttribute('data-gs'));
+      renderRamp();
+      renderTokens();
+    });
+  });
+
+  /* ---------- grey ramp swatches ---------- */
+  var RAMP = [
+    { l: 6,   n: '950', t: 'app background' },
+    { l: 9.5, n: '900', t: 'panel' },
+    { l: 13,  n: '850', t: 'raised' },
+    { l: 17,  n: '800', t: 'input' },
+    { l: 21,  n: '750', t: 'border' },
+    { l: 43,  n: '500', t: 'dim text' },
+    { l: 63,  n: '400', t: 'muted text' },
+    { l: 91,  n: '100', t: 'text' }
+  ];
+  var rampEl = document.getElementById('ramp');
+  function renderRamp() {
+    var gh = getComputedStyle(root).getPropertyValue('--gh').trim();
+    var gs = getComputedStyle(root).getPropertyValue('--gs').trim();
+    rampEl.innerHTML = RAMP.map(function (s) {
+      var bg = 'hsl(' + gh + ' ' + gs + ' ' + s.l + '%)';
+      var fg = s.l > 45 ? '#111' : 'hsl(' + gh + ' 6% 62%)';
+      return '<div style="background:' + bg + '"><span style="color:' + fg + '">' + s.n + ' · ' + s.t + '</span></div>';
+    }).join('');
+  }
+
+  /* ---------- token code block ---------- */
+  var tokensEl = document.getElementById('tokens');
+  function hsl(l) {
+    var gh = getComputedStyle(root).getPropertyValue('--gh').trim();
+    var gs = parseFloat(getComputedStyle(root).getPropertyValue('--gs'));
+    return hslToHex(parseFloat(gh), gs, l);
+  }
+  function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    var c = (1 - Math.abs(2 * l - 1)) * s;
+    var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    var m = l - c / 2;
+    var r = 0, g = 0, b = 0;
+    if (h < 60)       { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else              { r = c; b = x; }
+    return '#' + [r, g, b].map(function (v) {
+      return Math.round((v + m) * 255).toString(16).padStart(2, '0');
+    }).join('');
+  }
+  function renderTokens() {
+    var a = ACCENTS.filter(function (x) { return x.id === current; })[0];
+    tokensEl.innerHTML =
+'<span class="c">// tailwind.config.js — replaces dark-bg / primary-blue / primary-purple / accent-cyan</span>\n' +
+'colors: {\n' +
+'  <span class="k">ink</span>: {\n' +
+'    950: <span class="v">\'' + hsl(6)    + '\'</span>,  <span class="c">// app background</span>\n' +
+'    900: <span class="v">\'' + hsl(9.5)  + '\'</span>,  <span class="c">// panel</span>\n' +
+'    850: <span class="v">\'' + hsl(13)   + '\'</span>,  <span class="c">// raised / hover</span>\n' +
+'    800: <span class="v">\'' + hsl(17)   + '\'</span>,  <span class="c">// input fill</span>\n' +
+'    750: <span class="v">\'' + hsl(21)   + '\'</span>,  <span class="c">// border</span>\n' +
+'  },\n' +
+'  <span class="k">accent</span>: <span class="v">\'' + a.hex + '\'</span>,        <span class="c">// ' + a.name + ' — active, selected, primary</span>\n' +
+'  <span class="k">ok</span>:     <span class="v">\'#3ecf8e\'</span>,        <span class="c">// valid, complete</span>\n' +
+'  <span class="k">warn</span>:   <span class="v">\'#e0b341\'</span>,        <span class="c">// warning, privacy, engine build</span>\n' +
+'  <span class="k">bad</span>:    <span class="v">\'#ef5f5f\'</span>,        <span class="c">// error, stop</span>\n' +
+'}';
+  }
+
+  /* ---------- fit the 1240×760 mockups to their column ---------- */
+  var DESIGN_W = 1240, DESIGN_H = 760, MIN_SCALE = 0.55;
+  function fitAll() {
+    Array.prototype.forEach.call(document.querySelectorAll('.mk-fit'), function (fit) {
+      var stage = fit.querySelector('.mk-stage');
+      var mk = fit.querySelector('.mk');
+      if (!stage || !mk) return;
+      var s = Math.max(MIN_SCALE, Math.min(1, fit.clientWidth / DESIGN_W));
+      stage.style.width = (DESIGN_W * s) + 'px';
+      stage.style.height = (DESIGN_H * s) + 'px';
+      mk.style.transform = 'scale(' + s + ')';
+    });
+  }
+  if (window.ResizeObserver) {
+    var ro = new ResizeObserver(fitAll);
+    Array.prototype.forEach.call(document.querySelectorAll('.mk-fit'), function (f) { ro.observe(f); });
+  }
+  window.addEventListener('resize', fitAll);
+
+  renderRamp();
+  renderTokens();
+  applyAccent(current);
+  fitAll();
+})();
+</script>
+
+</body>
+</html>

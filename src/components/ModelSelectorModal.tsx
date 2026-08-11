@@ -491,17 +491,17 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
           onClick={handleCancelEdit}
         >
           <div 
-            className="bg-dark-elevated rounded-xl shadow-2xl w-[500px] max-w-[90vw] border border-gray-800"
+            className="bg-ink-850 rounded-xl shadow-2xl w-[500px] max-w-[90vw] border border-ink-800"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b border-gray-800">
+            <div className="flex items-center justify-between p-4 border-b border-ink-800">
               <div className="flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-purple-300" />
+                <Edit3 className="w-5 h-5 text-accent-300" />
                 <h3 className="text-xl font-semibold">Edit Model</h3>
               </div>
               <button
                 onClick={handleCancelEdit}
-                className="p-2 hover:bg-dark-surface rounded-lg transition-colors"
+                className="p-2 hover:bg-ink-900 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -509,7 +509,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                <label className="block text-sm font-medium mb-1.5 text-ink-300">
                   Model Name
                 </label>
                 <input
@@ -517,12 +517,12 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                   value={editModelName}
                   onChange={(e) => setEditModelName(e.target.value)}
                   placeholder="Model name"
-                  className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors text-sm"
+                  className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-300 transition-colors text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                <label className="block text-sm font-medium mb-1.5 text-ink-300">
                   Display Tag
                 </label>
                 <input
@@ -530,20 +530,20 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                   value={editDisplayTag}
                   onChange={(e) => setEditDisplayTag(e.target.value)}
                   placeholder="Optional display name"
-                  className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors placeholder-gray-500"
+                  className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-300 transition-colors placeholder-ink-500"
                   autoFocus
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                  <label className="block text-sm font-medium mb-1.5 text-ink-300">
                     Model Type
                   </label>
                   <select
                     value={editModelType}
                     onChange={(e) => setEditModelType(e.target.value as 'vsr' | 'image')}
-                    className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors"
+                    className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-300 transition-colors"
                   >
                     <option value="vsr">Video</option>
                     <option value="image">Image</option>
@@ -551,7 +551,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                  <label className="block text-sm font-medium mb-1.5 text-ink-300">
                     Inference Precision
                   </label>
                   {editingModel.backend === 'tensorrt' ? (
@@ -562,7 +562,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         setEditUseFp32(precision === 'fp32');
                         setEditUseBf16(precision === 'bf16');
                       }}
-                      className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors"
+                      className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-300 transition-colors"
                     >
                       <option value="fp16">FP16 (RGBH)</option>
                       <option value="bf16">BF16 (RGBH)</option>
@@ -575,7 +575,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         setEditUseFp32(e.target.value === 'fp32');
                         setEditUseBf16(false);
                       }}
-                      className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors"
+                      className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-300 transition-colors"
                     >
                       <option value="fp16">FP16 (RGBH)</option>
                       <option value="fp32">FP32 (RGBS)</option>
@@ -586,7 +586,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
 
               {editModelType === 'vsr' && (
                 <div>
-                  <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                  <label className="block text-sm font-medium mb-1.5 text-ink-300">
                     Temporal Frames
                   </label>
                   <input
@@ -599,13 +599,13 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                       const value = parseInt(e.target.value, 10);
                       setEditTemporalFrames(Number.isNaN(value) ? undefined : value);
                     }}
-                    className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors"
+                    className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-300 transition-colors"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                <label className="block text-sm font-medium mb-1.5 text-ink-300">
                   Categories
                 </label>
                 <div className="space-y-2">
@@ -615,12 +615,12 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                       {editCategories.map((cat, index) => (
                         <span
                           key={index}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/10 border border-purple-400/35 rounded-lg text-purple-300 text-sm"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-accent-500/10 border border-accent-400/35 rounded-lg text-accent-300 text-sm"
                         >
                           {cat}
                           <button
                             onClick={() => setEditCategories(prev => prev.filter((_, i) => i !== index))}
-                            className="hover:text-red-400 transition-colors ml-0.5"
+                            className="hover:text-bad-400 transition-colors ml-0.5"
                             type="button"
                           >
                             <X className="w-3 h-3" />
@@ -668,7 +668,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         setTimeout(() => setShowCategoryDropdown(false), 150);
                       }}
                       placeholder="Search or add a category…"
-                      className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors placeholder-gray-500 text-sm"
+                      className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-300 transition-colors placeholder-ink-500 text-sm"
                     />
 
                     {/* Dropdown */}
@@ -684,7 +684,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                       if (suggestions.length === 0 && !canCreate) return null;
 
                       return (
-                        <div className="absolute z-10 top-full mt-1 w-full bg-dark-elevated border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+                        <div className="absolute z-10 top-full mt-1 w-full bg-ink-850 border border-ink-700 rounded-lg shadow-xl overflow-hidden">
                           {suggestions.length > 0 && (
                             <div className="max-h-40 overflow-y-auto">
                               {suggestions.map(cat => (
@@ -693,7 +693,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                                   type="button"
                                   onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => handleAddCategory(cat)}
-                                  className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-purple-500/20 hover:text-purple-200 transition-colors"
+                                  className="w-full text-left px-3 py-2 text-sm text-ink-200 hover:bg-accent-500/20 hover:text-accent-200 transition-colors"
                                 >
                                   {cat}
                                 </button>
@@ -705,9 +705,9 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                               type="button"
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => handleAddCategory(newCategoryInput)}
-                              className="w-full text-left px-3 py-2 text-sm text-purple-300 hover:bg-purple-500/20 transition-colors border-t border-gray-700 flex items-center gap-2"
+                              className="w-full text-left px-3 py-2 text-sm text-accent-300 hover:bg-accent-500/20 transition-colors border-t border-ink-700 flex items-center gap-2"
                             >
-                              <span className="text-purple-400">+</span> Create &ldquo;{newCategoryInput.trim()}&rdquo;
+                              <span className="text-accent-400">+</span> Create &ldquo;{newCategoryInput.trim()}&rdquo;
                             </button>
                           )}
                         </div>
@@ -718,7 +718,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                <label className="block text-sm font-medium mb-1.5 text-ink-300">
                   Description
                 </label>
                 <textarea
@@ -726,18 +726,18 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                   onChange={(e) => setEditDescription(e.target.value)}
                   placeholder="Describe what this model does..."
                   rows={3}
-                  className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-300 transition-colors placeholder-gray-500 resize-none"
+                  className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-300 transition-colors placeholder-ink-500 resize-none"
                 />
               </div>
             </div>
             
-            <div className="flex items-center gap-2 p-4 border-t border-gray-800 bg-dark-surface">
+            <div className="flex items-center gap-2 p-4 border-t border-ink-800 bg-ink-900">
               <button
                 onClick={() => {
                   if (editingModel) handleDeleteModel(editingModel);
                 }}
                 disabled={isSavingEdit}
-                className="p-2 rounded-lg transition-colors text-gray-500 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-lg transition-colors text-ink-500 hover:text-bad-400 hover:bg-bad-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Delete model"
               >
                 <Trash2 className="w-4 h-4" />
@@ -745,14 +745,14 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
               <button
                 onClick={handleSaveEdit}
                 disabled={isSavingEdit || !editModelName.trim()}
-                className="flex-1 bg-purple-500/65 hover:bg-purple-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm py-2 rounded-lg transition-colors font-medium"
+                className="flex-1 bg-accent-500/65 hover:bg-accent-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm py-2 rounded-lg transition-colors font-medium"
               >
                 {isSavingEdit ? 'Saving...' : 'Save Changes'}
               </button>
               <button
                 onClick={handleCancelEdit}
                 disabled={isSavingEdit}
-                className="flex-1 bg-dark-surface hover:bg-dark-bg disabled:opacity-50 disabled:cursor-not-allowed border border-gray-700 text-white text-sm py-2 rounded-lg transition-colors"
+                className="flex-1 bg-ink-900 hover:bg-ink-950 disabled:opacity-50 disabled:cursor-not-allowed border border-ink-700 text-white text-sm py-2 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -770,13 +770,13 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
       >
         <div 
           ref={modalRef}
-          className="bg-dark-elevated rounded-xl shadow-2xl w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col border border-gray-800"
+          className="bg-ink-850 rounded-xl shadow-2xl w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col border border-ink-800"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-800">
+          <div className="flex items-center justify-between p-4 border-b border-ink-800">
             <div className="flex items-center gap-2">
-              <Cpu className="w-5 h-5 text-purple-300" />
+              <Cpu className="w-5 h-5 text-accent-300" />
               <h2 className="text-xl font-semibold">Select Model</h2>
             </div>
             <div className="flex items-center gap-2">
@@ -786,7 +786,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                     onImportModel();
                     onClose();
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-400/25 text-purple-300 text-sm rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-500/10 hover:bg-accent-500/20 border border-accent-400/25 text-accent-300 text-sm rounded-lg transition-colors"
                 >
                   <Download className="w-4 h-4" />
                   Import Model
@@ -794,7 +794,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
               )}
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-dark-surface rounded-lg transition-colors"
+                className="p-2 hover:bg-ink-900 rounded-lg transition-colors"
                 title="Close"
               >
                 <X className="w-5 h-5" />
@@ -803,23 +803,23 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
           </div>
 
           {/* Search Bar */}
-          <div className="p-4 border-b border-gray-800">
+          <div className="p-4 border-b border-ink-800">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search models by name, category, type, or description..."
-                className="w-full bg-dark-surface border border-gray-700 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:border-purple-300 transition-colors placeholder-gray-500"
+                className="w-full bg-ink-900 border border-ink-700 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:border-accent-300 transition-colors placeholder-ink-500"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-dark-surface rounded transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-ink-900 rounded transition-colors"
                 >
-                  <X className="w-4 h-4 text-gray-400" />
+                  <X className="w-4 h-4 text-ink-400" />
                 </button>
               )}
             </div>
@@ -828,12 +828,12 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
           {/* Main Content */}
           <div className="flex flex-1 overflow-hidden">
             {/* Category Sidebar */}
-            <div className="w-56 border-r border-gray-800 overflow-y-auto bg-dark-surface">
+            <div className="w-56 border-r border-ink-800 overflow-y-auto bg-ink-900">
               <div className="p-3">
                 {/* File-kind filter - only for engine-building backends with both kinds present */}
                 {getBackendDescriptor(backendId).requiresEngineBuild && backendCounts.tensorrt > 0 && backendCounts.onnx > 0 && (
                   <>
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                    <div className="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-2">
                       Backend
                     </div>
                     <div className="space-y-0.5 mb-4">
@@ -847,15 +847,15 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                           onClick={() => setSelectedBackend(backend.key)}
                           className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between group ${
                             selectedBackend === backend.key
-                              ? 'bg-purple-500/65 text-white'
-                              : 'text-gray-300 hover:bg-dark-elevated hover:text-white'
+                              ? 'bg-accent-500/65 text-white'
+                              : 'text-ink-300 hover:bg-ink-850 hover:text-white'
                           }`}
                         >
                           <span className="truncate">{backend.label}</span>
                           <span className={`text-xs ${
                             selectedBackend === backend.key
-                              ? 'text-purple-200'
-                              : 'text-gray-500 group-hover:text-gray-400'
+                              ? 'text-accent-200'
+                              : 'text-ink-500 group-hover:text-ink-400'
                           }`}>
                             {backend.count}
                           </span>
@@ -865,7 +865,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                   </>
                 )}
 
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                <div className="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-2">
                   Model Type
                 </div>
                 <div className="space-y-0.5 mb-4">
@@ -879,15 +879,15 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         onClick={() => setSelectedCategory(type)}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between group ${
                           selectedCategory === type
-                            ? 'bg-purple-500/65 text-white'
-                            : 'text-gray-300 hover:bg-dark-elevated hover:text-white'
+                            ? 'bg-accent-500/65 text-white'
+                            : 'text-ink-300 hover:bg-ink-850 hover:text-white'
                         }`}
                       >
                         <span className="truncate">{type}</span>
                         <span className={`text-xs ${
                           selectedCategory === type
-                            ? 'text-purple-200'
-                            : 'text-gray-500 group-hover:text-gray-400'
+                            ? 'text-accent-200'
+                            : 'text-ink-500 group-hover:text-ink-400'
                         }`}>
                           {count}
                         </span>
@@ -896,7 +896,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                   })}
                 </div>
 
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                <div className="text-xs font-semibold text-ink-400 uppercase tracking-wider mb-2">
                   Categories
                 </div>
                 <div className="space-y-0.5">
@@ -910,15 +910,15 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         onClick={() => setSelectedUserCategory(cat)}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between group ${
                           selectedUserCategory === cat
-                            ? 'bg-purple-500/65 text-white'
-                            : 'text-gray-300 hover:bg-dark-elevated hover:text-white'
+                            ? 'bg-accent-500/65 text-white'
+                            : 'text-ink-300 hover:bg-ink-850 hover:text-white'
                         }`}
                       >
                         <span className="truncate">{cat}</span>
                         <span className={`text-xs ${
                           selectedUserCategory === cat
-                            ? 'text-purple-200'
-                            : 'text-gray-500 group-hover:text-gray-400'
+                            ? 'text-accent-200'
+                            : 'text-ink-500 group-hover:text-ink-400'
                         }`}>
                           {count}
                         </span>
@@ -933,17 +933,17 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             <div className="flex-1 overflow-y-auto p-4">
               {/* Current Selection */}
               {currentSelection && (
-                <div className="mb-4 p-3 bg-dark-surface border border-purple-400/35 rounded-lg">
+                <div className="mb-4 p-3 bg-ink-900 border border-accent-400/35 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs text-gray-400 mb-1">Current Selection</div>
-                      <div className="font-medium text-purple-300">
+                      <div className="text-xs text-ink-400 mb-1">Current Selection</div>
+                      <div className="font-medium text-accent-300">
                         {availableModels.find(m => m.path === currentSelection)?.name || currentSelection}
                       </div>
                     </div>
                     <button
                       onClick={handleClearSelection}
-                      className="px-3 py-1.5 bg-dark-elevated hover:bg-dark-bg border border-gray-700 text-white text-xs rounded-lg transition-colors"
+                      className="px-3 py-1.5 bg-ink-850 hover:bg-ink-950 border border-ink-700 text-white text-xs rounded-lg transition-colors"
                     >
                       Clear Selection
                     </button>
@@ -955,9 +955,9 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
               {!searchQuery && selectedCategory === 'All' && favoriteModelFiles.length > 0 && (
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-3">
-                    <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                    <h3 className="font-semibold text-gray-200">Favorites</h3>
-                    <span className="text-sm text-gray-500">({favoriteModelFiles.length})</span>
+                    <Star className="w-4 h-4 text-warn-400 fill-warn-400" />
+                    <h3 className="font-semibold text-ink-200">Favorites</h3>
+                    <span className="text-sm text-ink-500">({favoriteModelFiles.length})</span>
                   </div>
                   <div className="grid grid-cols-1 gap-2">
                     {favoriteModelFiles.map(model => (
@@ -982,9 +982,9 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
               {!searchQuery && selectedCategory === 'All' && recentModelFiles.length > 0 && (
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-3">
-                    <Clock className="w-4 h-4 text-purple-300" />
-                    <h3 className="font-semibold text-gray-200">Recent</h3>
-                    <span className="text-sm text-gray-500">({recentModelFiles.length})</span>
+                    <Clock className="w-4 h-4 text-accent-300" />
+                    <h3 className="font-semibold text-ink-200">Recent</h3>
+                    <span className="text-sm text-ink-500">({recentModelFiles.length})</span>
                   </div>
                   <div className="grid grid-cols-1 gap-2">
                     {recentModelFiles.map(model => (
@@ -1008,14 +1008,14 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
               {/* All Models / Search Results */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <Cpu className="w-4 h-4 text-gray-400" />
-                  <h3 className="font-semibold text-gray-200">
+                  <Cpu className="w-4 h-4 text-ink-400" />
+                  <h3 className="font-semibold text-ink-200">
                     {searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Models' : selectedCategory}
                   </h3>
-                  <span className="text-sm text-gray-500">({filteredModels.length})</span>
+                  <span className="text-sm text-ink-500">({filteredModels.length})</span>
                 </div>
                 {filteredModels.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400">
+                  <div className="text-center py-12 text-ink-400">
                     <Cpu className="w-12 h-12 mx-auto mb-3 opacity-20" />
                     <p>No models found</p>
                     {searchQuery && (
@@ -1027,7 +1027,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                           onImportModel();
                           onClose();
                         }}
-                        className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-400/25 text-purple-300 text-sm rounded-lg transition-colors"
+                        className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-accent-500/10 hover:bg-accent-500/20 border border-accent-400/25 text-accent-300 text-sm rounded-lg transition-colors"
                       >
                         <Download className="w-4 h-4" />
                         Import a Model
@@ -1057,15 +1057,15 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
           </div>
 
           {/* Footer */}
-          <div className="border-t border-gray-800 px-4 py-3 bg-dark-surface">
-            <div className="flex items-center justify-between text-sm text-gray-400">
+          <div className="border-t border-ink-800 px-4 py-3 bg-ink-900">
+            <div className="flex items-center justify-between text-sm text-ink-400">
               <div className="flex items-center gap-4">
                 <span>{filteredModels.length} models shown</span>
                 <span>•</span>
                 <span>{favorites.size} favorites</span>
               </div>
               <div className="flex items-center gap-2">
-                <kbd className="px-2 py-0.5 bg-dark-elevated border border-gray-700 rounded text-gray-300">Esc</kbd>
+                <kbd className="px-2 py-0.5 bg-ink-850 border border-ink-700 rounded text-ink-300">Esc</kbd>
                 <span>to close</span>
               </div>
             </div>
@@ -1113,8 +1113,8 @@ const ModelItem = memo<ModelItemProps>(({
     <div
       className={`group relative p-3 rounded-lg border transition-all cursor-pointer ${
         isSelected
-          ? 'bg-purple-500/10 border-purple-400/60'
-          : 'bg-dark-surface border-gray-700 hover:border-gray-600 hover:bg-dark-elevated'
+          ? 'bg-accent-500/10 border-accent-400/60'
+          : 'bg-ink-900 border-ink-700 hover:border-ink-600 hover:bg-ink-850'
       }`}
       onClick={() => onSelect(model.path)}
     >
@@ -1122,7 +1122,7 @@ const ModelItem = memo<ModelItemProps>(({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3 mb-2">
             <h4 className={`font-medium leading-6 min-w-0 break-words ${
-              isSelected ? 'text-purple-300' : 'text-white'
+              isSelected ? 'text-accent-300' : 'text-white'
             }`}>
               {cleanDisplayName}
             </h4>
@@ -1133,7 +1133,7 @@ const ModelItem = memo<ModelItemProps>(({
                     e.stopPropagation();
                     onEdit(model);
                   }}
-                  className="p-1.5 rounded-lg transition-all text-gray-600 hover:text-purple-300 hover:bg-dark-elevated"
+                  className="p-1.5 rounded-lg transition-all text-ink-600 hover:text-accent-300 hover:bg-ink-850"
                   title="Edit model"
                 >
                   <Edit3 className="w-4 h-4" />
@@ -1145,7 +1145,7 @@ const ModelItem = memo<ModelItemProps>(({
                     e.stopPropagation();
                     onDelete(model);
                   }}
-                  className="p-1.5 rounded-lg transition-all text-gray-600 hover:text-red-400 hover:bg-dark-elevated"
+                  className="p-1.5 rounded-lg transition-all text-ink-600 hover:text-bad-400 hover:bg-ink-850"
                   title="Delete model"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -1158,44 +1158,44 @@ const ModelItem = memo<ModelItemProps>(({
                 }}
                 className={`p-1.5 rounded-lg transition-all ${
                   isFavorite
-                    ? 'text-yellow-400 hover:text-yellow-500'
-                    : 'text-gray-600 hover:text-yellow-400'
+                    ? 'text-warn-400 hover:text-warn-500'
+                    : 'text-ink-600 hover:text-warn-400'
                 }`}
                 title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
               >
-                <Star className={`w-4 h-4 ${isFavorite ? 'fill-yellow-400' : ''}`} />
+                <Star className={`w-4 h-4 ${isFavorite ? 'fill-warn-400' : ''}`} />
               </button>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             {isUnbuilt && (
-              <span className="text-xs px-2 py-0.5 rounded border flex-shrink-0 bg-red-900/40 text-red-300 border-red-700/50">
+              <span className="text-xs px-2 py-0.5 rounded border flex-shrink-0 bg-bad-900/40 text-bad-300 border-bad-700/50">
                 Unbuilt
               </span>
             )}
             <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
               model.backend === 'tensorrt'
-                ? 'bg-green-900/50 text-green-400 border border-green-700/50'
-                : 'bg-blue-900/50 text-blue-400 border border-blue-700/50'
+                ? 'bg-ok-900/50 text-ok-400 border border-ok-700/50'
+                : 'bg-accent-900/50 text-accent-400 border border-accent-700/50'
             }`}>
               {model.backend === 'tensorrt' ? 'TensorRT' : 'ONNX'}
             </span>
             {model.modelType && (
               <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
                 model.modelType === 'vsr'
-                  ? 'bg-amber-900/50 text-amber-400 border border-amber-700/50'
-                  : 'bg-indigo-900/50 text-indigo-400 border border-indigo-700/50'
+                  ? 'bg-warn-900/50 text-warn-400 border border-warn-700/50'
+                  : 'bg-accent-900/50 text-accent-400 border border-accent-700/50'
               }`}>
                 {model.modelType === 'vsr' ? 'VSR' : 'Image'}
               </span>
             )}
 
-            <span className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded flex-shrink-0">
+            <span className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded flex-shrink-0">
               {model.precision}
             </span>
             {userCategoryBadges.map((cat, index) => (
-              <span key={index} className="text-xs px-2 py-0.5 bg-dark-bg text-gray-400 rounded flex-shrink-0">
+              <span key={index} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded flex-shrink-0">
                 {cat}
               </span>
             ))}
@@ -1209,8 +1209,8 @@ const ModelItem = memo<ModelItemProps>(({
                   }}
                   className={`text-xs px-2 py-0.5 rounded border transition-colors ${
                     showMatchingEngines
-                      ? 'bg-dark-elevated text-gray-200 border-gray-600'
-                      : 'bg-dark-bg text-gray-400 border-gray-700 hover:border-gray-600 hover:text-gray-300'
+                      ? 'bg-ink-850 text-ink-200 border-ink-600'
+                      : 'bg-ink-950 text-ink-400 border-ink-700 hover:border-ink-600 hover:text-ink-300'
                   }`}
                   title="Show matching built TensorRT engines"
                 >
@@ -1220,18 +1220,18 @@ const ModelItem = memo<ModelItemProps>(({
             </div>
           </div>
           {model.description && (
-            <p className="text-sm text-gray-400 line-clamp-2">
+            <p className="text-sm text-ink-400 line-clamp-2">
               {model.description}
             </p>
           )}
           {model.backend === 'onnx' && showMatchingEngines && hasMatchingEngines && (
-            <div className="mt-2 bg-dark-bg border border-gray-700 rounded-lg p-2">
-              <div className="text-xs text-gray-400 mb-1">Built engines</div>
+            <div className="mt-2 bg-ink-950 border border-ink-700 rounded-lg p-2">
+              <div className="text-xs text-ink-400 mb-1">Built engines</div>
               <div className="space-y-1">
                 {matchingEngineModels.map(engine => (
                   <div
                     key={engine.path}
-                    className="text-xs text-gray-300 truncate"
+                    className="text-xs text-ink-300 truncate"
                     title={engine.path}
                   >
                     {engine.name}
@@ -1244,7 +1244,7 @@ const ModelItem = memo<ModelItemProps>(({
       </div>
       {isSelected && (
         <div className="absolute top-2 right-2">
-          <ChevronRight className="w-4 h-4 text-purple-300" />
+          <ChevronRight className="w-4 h-4 text-accent-300" />
         </div>
       )}
     </div>

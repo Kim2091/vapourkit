@@ -6,16 +6,18 @@ import { notify } from './utils/notifications';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { QueuePanel } from './components/QueuePanel';
 import { AppModals } from './components/AppModals';
-import { ProgressPanel } from './components/ProgressPanel';
-import { ActionButtons } from './components/ActionButtons';
+import { ActionBar } from './components/ActionBar';
+import { ConsoleDrawer } from './components/ConsoleDrawer';
+import { Scrubber } from './components/Scrubber';
+import { EngineBuildBanner } from './components/EngineBuildBanner';
 import type { BackendId, EngineBuildStatus, UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
 import { getBackendDescriptor, resolveFilterBackend } from './utils/backends';
-import { Header } from './components/Header';
+import { AppRail } from './components/AppRail';
+import { TitleStrip } from './components/TitleStrip';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
 import { useModels } from './hooks/useModels';
 import { useSettings } from './hooks/useSettings';
 import { usePrivacyMode } from './hooks/usePrivacyMode';
-import { PrivacyText } from './components/PrivacyVeil';
 import { useConsoleLog } from './hooks/useConsoleLog';
 import { useModelImport } from './hooks/useModelImport';
 import { useVideoDragDrop } from './hooks/useVideoDragDrop';
@@ -612,6 +614,9 @@ function App() {
   }, [videoInfo, selectedModel, defaultBackend, filters, numStreams, segment, addConsoleLog, isLaunchingPreviewer]);
 
   // Seek to a specific frame in the video preview (used by segment selector)
+  // Which frame the preview is showing — drives the scrubber playhead.
+  const [playheadFrame, setPlayheadFrame] = useState<number | null>(null);
+
   const handleSeekFrame = useCallback(async (frameNumber: number) => {
     if (!videoInfo) return;
     
@@ -624,6 +629,7 @@ function App() {
       
       if (frameImage) {
         updatePreviewFrame(frameImage);
+        setPlayheadFrame(frameNumber);
       }
     } catch (error) {
       // Silently fail - frame extraction is non-critical
@@ -632,6 +638,20 @@ function App() {
   }, [videoInfo, updatePreviewFrame]);
 
   // Determine if processing should be disabled
+  // Console drawer — stable identities so the memoised bar and drawer don't
+  // re-render on every parent tick.
+  const handleToggleConsole = useCallback(() => setShowConsole(!showConsole), [showConsole, setShowConsole]);
+  const handleCloseConsole = useCallback(() => setShowConsole(false), [setShowConsole]);
+
+  // Determine if processing should be disabled
+  // With the queue a persistent selectable list, the Source header states
+  // which item these settings apply to — the old editing banner is gone.
+  const queueEditingLabel = (() => {
+    if (!queueStore.editingQueueItemId) return undefined;
+    const index = queue.findIndex(q => q.id === queueStore.editingQueueItemId);
+    return index === -1 ? undefined : `editing ${index + 1} of ${queue.length}`;
+  })();
+
   const isStartDisabled = (() => {
     // Disable if stopping
     if (isStopping) return true;
@@ -679,51 +699,83 @@ function App() {
 
   // Main App UI
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-dark-bg via-dark-surface to-dark-bg overflow-hidden">
+    <div className="h-screen flex bg-ink-950 overflow-hidden">
       <NotificationContainer />
-      {/* Header */}
-      <Header
+
+      {/* Tool rail — full height, left edge */}
+      <AppRail
         isProcessing={isProcessing}
-        defaultBackend={defaultBackend}
+        isReloading={isReloading}
         privacyMode={privacyMode}
-        onTogglePrivacyMode={togglePrivacyMode}
+        hasWorkflow={Boolean(currentWorkflow)}
         onSettingsClick={() => setShowSettings(true)}
         onPluginsClick={() => setShowPlugins(true)}
         onReloadBackend={handleReloadBackend}
+        onTogglePrivacyMode={togglePrivacyMode}
         onAboutClick={() => setShowAbout(true)}
-        onChangeBackend={handleChangeBackend}
         onLoadWorkflow={handleLoadWorkflow}
         onImportWorkflow={handleImportWorkflow}
         onExportWorkflow={handleExportWorkflow}
-        onClearWorkflow={handleClearWorkflow}
-        workflowName={currentWorkflow}
-        isReloading={isReloading}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        gpuStats={gpuStats}
       />
 
-      {/* Notification Bar for Uninitialized Models */}
-      <ModelBuildNotification
-        defaultBackend={defaultBackend}
-        availableModels={availableModels}
-        uninitializedModels={uninitializedModels}
-        filters={filters}
-        onBuildModel={handleBuildModel}
-      />
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Title strip */}
+        <TitleStrip
+          isProcessing={isProcessing}
+          defaultBackend={defaultBackend}
+          onChangeBackend={handleChangeBackend}
+          workflowName={currentWorkflow}
+          onClearWorkflow={handleClearWorkflow}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          privacyMode={privacyMode}
+          gpuStats={gpuStats}
+        />
 
-      {/* Main Content */}
-      <div className="flex-1 p-4 overflow-hidden">
+        {/* Notification Bar for Uninitialized Models */}
+        <ModelBuildNotification
+          defaultBackend={defaultBackend}
+          availableModels={availableModels}
+          uninitializedModels={uninitializedModels}
+          filters={filters}
+          onBuildModel={handleBuildModel}
+        />
+
+        {/* Main Content */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Queue — a pane you show or hide, not a mode that reshapes the window */}
+        {queueStore.showQueue && (
+          <div className="w-[240px] flex-shrink-0 min-h-0">
+            <QueuePanel
+              queue={queue}
+              isQueueStarted={queueStore.isQueueStarted}
+              editingItemId={queueStore.editingQueueItemId}
+              privacyMode={privacyMode}
+              onRemoveItem={removeFromQueue}
+              onSelectItem={handleSelectQueueItem}
+              onClearCompleted={clearCompletedItems}
+              onClearAll={clearQueue}
+              onReorder={reorderQueue}
+              onCancelItem={handleCancelQueueItem}
+              onRequeueItem={handleRequeueItem}
+              onCompareItem={handleCompareQueueItem}
+              onOpenItemFolder={handleOpenQueueItemFolder}
+              onDropFiles={handleBatchFiles}
+              onDuplicateItem={duplicateQueueItem}
+            />
+          </div>
+        )}
+        <div className="flex-1 min-w-0 p-3 overflow-hidden">
         {panelSizesLoaded && (
-        <PanelGroup direction="vertical" className="h-full gap-4">
+        <PanelGroup direction="vertical" className="h-full">
           <Panel>
-            <PanelGroup direction="horizontal" onLayout={handlePanelResize} className="h-full gap-4">
+            <PanelGroup direction="horizontal" onLayout={handlePanelResize} className="h-full gap-3">
               {/* Left Panel - Output Preview & Controls */}
               <Panel defaultSize={panelSizes.leftPanel} minSize={30}>
-                <div className="flex flex-col gap-4 h-full min-h-0">
-                  {/* Preview Area */}
+                {/* Preview fills the column; the console opens over it */}
+                <div className="relative flex flex-col h-full min-h-0">
                   <VideoPreviewPanel
                     previewFrame={previewFrame}
                     completedVideoPath={completedVideoPath}
@@ -737,11 +789,19 @@ function App() {
                     onVideoError={handleVideoError}
                   />
 
-                  <ProgressPanel
-                    upscaleProgress={upscaleProgress}
-                    engineBuild={engineBuild}
-                    showConsole={showConsole}
-                    setShowConsole={setShowConsole}
+                  <Scrubber
+                    videoInfo={videoInfo}
+                    segment={segment}
+                    isProcessing={isProcessing}
+                    playhead={playheadFrame}
+                    onSegmentChange={handleSegmentChange}
+                    onSeekFrame={handleSeekFrame}
+                    onPreviewSegment={handlePreviewSegment}
+                  />
+
+                  <ConsoleDrawer
+                    open={showConsole}
+                    onClose={handleCloseConsole}
                     consoleOutput={consoleOutput}
                     consoleEndRef={consoleEndRef}
                     privacyMode={privacyMode}
@@ -750,13 +810,14 @@ function App() {
               </Panel>
 
               {/* Resize Handle */}
-              <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-primary-purple transition-colors rounded-full" />
+              <PanelResizeHandle className="w-1 bg-ink-800 hover:bg-accent-500 transition-colors rounded-full" />
 
               {/* Right Panel - Input & Info */}
               <Panel defaultSize={panelSizes.rightPanel} minSize={25}>
-                <div ref={rightPanelRef} className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden h-full min-h-0 pr-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                <div ref={rightPanelRef} className="flex flex-col overflow-y-auto overflow-x-hidden h-full min-h-0 bg-ink-950 border border-ink-800 rounded-lg">
                   {/* Video Input */}
                   <VideoInputPanel
+                    editingLabel={queueEditingLabel}
                     videoInfo={videoInfo}
                     isDragging={isDragging}
                     isProcessing={isProcessing}
@@ -780,7 +841,6 @@ function App() {
                     videoInfo={videoInfo}
                     filterTemplates={filterTemplates}
                     filters={filters}
-                    segment={segment}
                     onImportClick={() => {
                       setModalMode('import');
                       setShowImportModal(true);
@@ -793,9 +853,6 @@ function App() {
                     onFiltersChange={handleSetFilters}
                     onSaveTemplate={saveTemplate}
                     onDeleteTemplate={deleteTemplate}
-                    onSegmentChange={handleSegmentChange}
-                    onPreviewSegment={handlePreviewSegment}
-                    onSeekFrame={handleSeekFrame}
                   />
 
                   {/* Output Settings */}
@@ -822,99 +879,51 @@ function App() {
                     onToggle={handleToggleVideoInfo}
                   />
 
-                  {/* Editing Queue Item Banner */}
-                  {queueStore.editingQueueItemId && (() => {
-                    const editingItem = queue.find(q => q.id === queueStore.editingQueueItemId);
-                    return editingItem ? (
-                      <div className="flex-shrink-0 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/50 rounded-xl p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-blue-400 font-medium mb-1">Editing Queue Item</p>
-                            <p className="text-sm truncate" title={privacyMode ? undefined : editingItem.videoName}>
-                              <PrivacyText
-                                enabled={privacyMode}
-                                value={editingItem.videoName}
-                                maskLength={12}
-                              />
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              queueStore.setEditingQueueItemId(null);
-                              queueStore.setShowQueue(false);
-                            }}
-                            className="ml-2 px-3 py-1 text-xs bg-dark-surface hover:bg-dark-bg rounded-lg transition-colors"
-                          >
-                            Exit
-                          </button>
-                        </div>
-                      </div>
-                    ) : null;
-                  })()}
 
-                  {/* Action Buttons */}
-                  <ActionButtons
-                    isProcessing={isProcessing}
-                    isStopping={isStopping}
-                    isStartDisabled={isStartDisabled}
-                    upscaleProgress={upscaleProgress}
-                    isValidating={isValidating}
-                    validationStatus={validationStatus}
-                    validationError={validationError}
-                    validateWorkflow={validateWorkflow}
-                    cancelValidation={cancelValidation}
-                    isLaunchingPreviewer={isLaunchingPreviewer}
-                    previewerStatus={previewerStatus}
-                    videoInfo={videoInfo}
-                    selectedModel={selectedModel}
-                    defaultBackend={defaultBackend}
-                    filters={filters}
-                    numStreams={numStreams}
-                    segment={segment}
-                    benchmarkMode={benchmarkMode}
-                    showQueue={queueStore.showQueue}
-                    isQueueStarted={queueStore.isQueueStarted}
-                    isQueueStopping={queueStore.isQueueStopping}
-                    queue={queue}
-                    handleForceStop={handleForceStop}
-                    handleLaunchPreviewer={handleLaunchPreviewer}
-                    handleUpscale={handleUpscale}
-                    handleCancelUpscale={handleCancelUpscale}
-                    handleStartQueue={handleStartQueue}
-                    handleStopQueue={handleStopQueue}
-                  />
+
                 </div>
               </Panel>
             </PanelGroup>
           </Panel>
-          
-          {/* Queue Panel - Collapsible at the bottom */}
-          {queueStore.showQueue && (
-            <>
-              <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-primary-purple transition-colors rounded-full" />
-              <Panel defaultSize={20} minSize={15} maxSize={40}>
-                <QueuePanel
-                  queue={queue}
-                  isQueueStarted={queueStore.isQueueStarted}
-                  editingItemId={queueStore.editingQueueItemId}
-                  privacyMode={privacyMode}
-                  onRemoveItem={removeFromQueue}
-                  onSelectItem={handleSelectQueueItem}
-                  onClearCompleted={clearCompletedItems}
-                  onClearAll={clearQueue}
-                  onReorder={reorderQueue}
-                  onCancelItem={handleCancelQueueItem}
-                  onRequeueItem={handleRequeueItem}
-                  onCompareItem={handleCompareQueueItem}
-                  onOpenItemFolder={handleOpenQueueItemFolder}
-                  onDropFiles={handleBatchFiles}
-                  onDuplicateItem={duplicateQueueItem}
-                />
-              </Panel>
-            </>
-          )}
         </PanelGroup>
         )}
+        </div>
+        </div>
+
+        {/* Engine build notice, then the one action bar */}
+        <EngineBuildBanner engineBuild={engineBuild} />
+        <ActionBar
+          isProcessing={isProcessing}
+          isStopping={isStopping}
+          isStartDisabled={isStartDisabled}
+          upscaleProgress={upscaleProgress}
+          isValidating={isValidating}
+          validationStatus={validationStatus}
+          validationError={validationError}
+          validateWorkflow={validateWorkflow}
+          cancelValidation={cancelValidation}
+          isLaunchingPreviewer={isLaunchingPreviewer}
+          previewerStatus={previewerStatus}
+          videoInfo={videoInfo}
+          selectedModel={selectedModel}
+          defaultBackend={defaultBackend}
+          filters={filters}
+          numStreams={numStreams}
+          segment={segment}
+          benchmarkMode={benchmarkMode}
+          showQueue={queueStore.showQueue}
+          isQueueStarted={queueStore.isQueueStarted}
+          isQueueStopping={queueStore.isQueueStopping}
+          queue={queue}
+          handleForceStop={handleForceStop}
+          handleLaunchPreviewer={handleLaunchPreviewer}
+          handleUpscale={handleUpscale}
+          handleCancelUpscale={handleCancelUpscale}
+          handleStartQueue={handleStartQueue}
+          handleStopQueue={handleStopQueue}
+          showConsole={showConsole}
+          onToggleConsole={handleToggleConsole}
+        />
       </div>
 
       {/* Modals */}

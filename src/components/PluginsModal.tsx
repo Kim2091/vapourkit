@@ -121,18 +121,18 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-dark-elevated rounded-2xl border border-gray-800 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-ink-850 rounded-2xl border border-ink-800 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-800">
+        <div className="flex items-center justify-between p-6 border-b border-ink-800">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary-purple/20 rounded-lg">
-              <Download className="w-6 h-6 text-primary-purple" />
+            <div className="p-2 bg-accent-500/20 rounded-lg">
+              <Download className="w-6 h-6 text-accent-500" />
             </div>
             <h2 className="text-2xl font-bold">Install Plugins</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg"
+            className="text-ink-400 hover:text-white transition-colors p-2 hover:bg-ink-900 rounded-lg"
           >
             <X className="w-6 h-6" />
           </button>
@@ -144,7 +144,7 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
           <div className="space-y-4">
             <div>
               <h3 className="text-lg font-semibold mb-2">Install Plugins & Dependencies</h3>
-              <div className="text-gray-300 text-sm mb-4 space-y-2 leading-relaxed">
+              <div className="text-ink-300 text-sm mb-4 space-y-2 leading-relaxed">
                 <p>
                   Install plugins and dependencies to get a lot of filters to enhance your workflows!
                 </p>
@@ -162,19 +162,19 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
 
             {/* Progress Display */}
             {progress && (
-              <div className="bg-dark-surface rounded-lg p-4 space-y-3">
+              <div className="bg-ink-900 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">{progress.message}</span>
-                  <span className="text-sm text-gray-400">{progress.progress}%</span>
+                  <span className="text-sm text-ink-400">{progress.progress}%</span>
                 </div>
-                <div className="w-full bg-dark-bg rounded-full h-2">
+                <div className="w-full bg-ink-950 rounded-full h-2">
                   <div
-                    className="bg-gradient-to-r from-primary-blue to-primary-purple h-2 rounded-full transition-all duration-300"
+                    className="bg-gradient-to-r from-accent-500 to-accent-500 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${progress.progress}%` }}
                   />
                 </div>
                 {progress.type === 'complete' && (
-                  <div className="flex items-center gap-2 text-green-400">
+                  <div className="flex items-center gap-2 text-ok-400">
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-sm">Installation completed successfully!</span>
                   </div>
@@ -184,12 +184,12 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
 
             {/* Error Display */}
             {installError && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+              <div className="bg-bad-500/10 border border-bad-500/30 rounded-lg p-4">
                 <div className="flex items-start gap-2">
-                  <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                  <XCircle className="w-5 h-5 text-bad-400 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <p className="text-red-400 text-sm font-medium mb-1">Installation Failed</p>
-                    <p className="text-red-300 text-sm">{installError}</p>
+                    <p className="text-bad-400 text-sm font-medium mb-1">Installation Failed</p>
+                    <p className="text-bad-300 text-sm">{installError}</p>
                   </div>
                 </div>
               </div>
@@ -201,7 +201,7 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
                 <button
                   onClick={handleInstallDependencies}
                   disabled={isCheckingStatus}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-blue to-primary-purple rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-accent-500 to-accent-500 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Download className="w-4 h-4" />
                   Install Plugins
@@ -212,14 +212,14 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
                 <>
                   <button
                     onClick={handleInstallDependencies}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-blue to-primary-purple rounded-lg hover:opacity-90 transition-opacity"
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-accent-500 to-accent-500 rounded-lg hover:opacity-90 transition-opacity"
                   >
                     <RefreshCw className="w-4 h-4" />
                     Reinstall
                   </button>
                   <button
                     onClick={handleUninstallDependencies}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-bad-500/20 text-bad-400 rounded-lg hover:bg-bad-500/30 transition-colors"
                   >
                     <X className="w-4 h-4" />
                     Uninstall
@@ -230,7 +230,7 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
               {isInstalling && (
                 <button
                   onClick={handleCancelInstall}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-bad-500/20 text-bad-400 rounded-lg hover:bg-bad-500/30 transition-colors"
                 >
                   <X className="w-4 h-4" />
                   Cancel
@@ -240,7 +240,7 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
               {installError && (
                 <button
                   onClick={handleRetry}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-blue to-primary-purple rounded-lg hover:opacity-90 transition-opacity"
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-accent-500 to-accent-500 rounded-lg hover:opacity-90 transition-opacity"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Retry Installation
@@ -250,21 +250,21 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
 
             {/* Status Indicator */}
             {isCheckingStatus && (
-              <div className="flex items-center gap-2 text-gray-400">
+              <div className="flex items-center gap-2 text-ink-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">Checking installation status...</span>
               </div>
             )}
 
             {isInstalling && (
-              <div className="flex items-center gap-2 text-gray-400">
+              <div className="flex items-center gap-2 text-ink-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">Processing...</span>
               </div>
             )}
 
             {!isInstalling && !installError && isInstalled && !isCheckingStatus && (
-              <div className="flex items-center gap-2 text-green-400">
+              <div className="flex items-center gap-2 text-ok-400">
                 <CheckCircle className="w-4 h-4" />
                 <span className="text-sm">Plugins are installed</span>
               </div>
@@ -272,34 +272,34 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
           </div>
 
           {/* Console Output Section */}
-          <div className="border-t border-gray-800 pt-6">
-            <div className="bg-dark-elevated rounded-lg border border-gray-800 overflow-hidden">
+          <div className="border-t border-ink-800 pt-6">
+            <div className="bg-ink-850 rounded-lg border border-ink-800 overflow-hidden">
               <button
                 onClick={() => setShowConsole(!showConsole)}
-                className="w-full px-4 py-3 flex items-center justify-between hover:bg-dark-surface transition-colors"
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-ink-900 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Terminal className="w-5 h-5 text-primary-purple" />
+                  <Terminal className="w-5 h-5 text-accent-500" />
                   <h3 className="font-semibold">Installation Console</h3>
                   {consoleOutput.length > 0 && (
-                    <span className="text-xs text-gray-400">({consoleOutput.length} lines)</span>
+                    <span className="text-xs text-ink-400">({consoleOutput.length} lines)</span>
                   )}
                 </div>
                 {showConsole ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
               </button>
               {showConsole && (
-                <div className="p-4 max-h-64 overflow-y-auto font-mono text-xs bg-black/30 border-t border-gray-800">
+                <div className="p-4 max-h-64 overflow-y-auto font-mono text-xs bg-black/30 border-t border-ink-800">
                   {consoleOutput.length > 0 ? (
                     <>
                       {consoleOutput.map((log, index) => (
-                        <div key={index} className="text-gray-300 mb-1">
+                        <div key={index} className="text-ink-300 mb-1">
                           {log}
                         </div>
                       ))}
                       <div ref={consoleEndRef} />
                     </>
                   ) : (
-                    <div className="text-gray-500 italic">No output yet...</div>
+                    <div className="text-ink-500 italic">No output yet...</div>
                   )}
                 </div>
               )}
@@ -307,50 +307,50 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
           </div>
 
           {/* Plugin Links Section */}
-          <div className="border-t border-gray-800 pt-6">
+          <div className="border-t border-ink-800 pt-6">
             <h3 className="text-lg font-semibold mb-3">Plugin Resources</h3>
-            <div className="bg-dark-surface rounded-lg p-4 space-y-3">
-              <p className="text-gray-400 text-sm mb-2">
+            <div className="bg-ink-900 rounded-lg p-4 space-y-3">
+              <p className="text-ink-400 text-sm mb-2">
                 Links to plugin documentation and resources:
               </p>
               <div className="space-y-2 text-sm">
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 min-w-fit">•</span>
+                  <span className="text-ink-400 min-w-fit">•</span>
                   <div>
-                    <span className="text-gray-300">Most of pifroggi's filters: </span>
+                    <span className="text-ink-300">Most of pifroggi's filters: </span>
                     <a 
                       href="https://github.com/pifroggi" 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-primary-blue hover:text-primary-purple underline transition-colors"
+                      className="text-accent-500 hover:text-accent-500 underline transition-colors"
                     >
                       https://github.com/pifroggi
                     </a>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 min-w-fit">•</span>
+                  <span className="text-ink-400 min-w-fit">•</span>
                   <div>
-                    <span className="text-gray-300">The entirety of vs-jetpack: </span>
+                    <span className="text-ink-300">The entirety of vs-jetpack: </span>
                     <a 
                       href="https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack/" 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-primary-blue hover:text-primary-purple underline transition-colors"
+                      className="text-accent-500 hover:text-accent-500 underline transition-colors"
                     >
                       https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack/
                     </a>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-400 min-w-fit">•</span>
+                  <span className="text-ink-400 min-w-fit">•</span>
                   <div>
-                    <span className="text-gray-300">The filters from Hybrid hosted here: </span>
+                    <span className="text-ink-300">The filters from Hybrid hosted here: </span>
                     <a 
                       href="https://github.com/Selur/VapoursynthScriptsInHybrid//" 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-primary-blue hover:text-primary-purple underline transition-colors"
+                      className="text-accent-500 hover:text-accent-500 underline transition-colors"
                     >
                       https://github.com/Selur/VapoursynthScriptsInHybrid/
                     </a>
@@ -362,10 +362,10 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t border-gray-800">
+        <div className="flex justify-end gap-3 p-6 border-t border-ink-800">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-dark-surface hover:bg-gray-700 rounded-lg transition-colors"
+            className="px-4 py-2 bg-ink-900 hover:bg-ink-700 rounded-lg transition-colors"
           >
             Close
           </button>

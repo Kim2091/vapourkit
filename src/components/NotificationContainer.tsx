@@ -6,24 +6,24 @@ import { useState } from 'react';
 
 const notificationStyles: Record<NotificationType, { bg: string; border: string; icon: JSX.Element }> = {
   error: {
-    bg: 'bg-red-900/90',
-    border: 'border-red-500',
-    icon: <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />,
+    bg: 'bg-bad-900/90',
+    border: 'border-bad-500',
+    icon: <AlertCircle className="w-5 h-5 text-bad-400 flex-shrink-0" />,
   },
   warning: {
-    bg: 'bg-yellow-900/90',
-    border: 'border-yellow-500',
-    icon: <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />,
+    bg: 'bg-warn-900/90',
+    border: 'border-warn-500',
+    icon: <AlertTriangle className="w-5 h-5 text-warn-400 flex-shrink-0" />,
   },
   success: {
-    bg: 'bg-green-900/90',
-    border: 'border-green-500',
-    icon: <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />,
+    bg: 'bg-ok-900/90',
+    border: 'border-ok-500',
+    icon: <CheckCircle className="w-5 h-5 text-ok-400 flex-shrink-0" />,
   },
   info: {
-    bg: 'bg-blue-900/90',
-    border: 'border-blue-500',
-    icon: <Info className="w-5 h-5 text-blue-400 flex-shrink-0" />,
+    bg: 'bg-accent-900/90',
+    border: 'border-accent-500',
+    icon: <Info className="w-5 h-5 text-accent-400 flex-shrink-0" />,
   },
 };
 
@@ -67,18 +67,18 @@ function NotificationToast({ notification, onDismiss }: { notification: Notifica
       {style.icon}
       <div className="flex-1 min-w-0">
         <h4 className="font-semibold text-white text-sm mb-1">{notification.title}</h4>
-        <p className="text-gray-200 text-sm whitespace-pre-wrap break-words">{notification.message}</p>
+        <p className="text-ink-200 text-sm whitespace-pre-wrap break-words">{notification.message}</p>
       </div>
       <div className="flex gap-1 flex-shrink-0">
         {(notification.type === 'error' || notification.type === 'warning') && (
           <button
             onClick={handleCopy}
-            className="text-gray-400 hover:text-white transition-colors p-1"
+            className="text-ink-400 hover:text-white transition-colors p-1"
             aria-label="Copy error message"
             title={copied ? 'Copied!' : 'Copy to clipboard'}
           >
             {copied ? (
-              <CheckCircle className="w-4 h-4 text-green-400" />
+              <CheckCircle className="w-4 h-4 text-ok-400" />
             ) : (
               <Copy className="w-4 h-4" />
             )}
@@ -86,7 +86,7 @@ function NotificationToast({ notification, onDismiss }: { notification: Notifica
         )}
         <button
           onClick={onDismiss}
-          className="text-gray-400 hover:text-white transition-colors p-1"
+          className="text-ink-400 hover:text-white transition-colors p-1"
           aria-label="Dismiss notification"
         >
           <X className="w-4 h-4" />

@@ -26,7 +26,7 @@ class LinkWidget extends WidgetType {
     const link = document.createElement('a');
     link.href = this.url;
     link.textContent = this.url;
-    link.className = 'text-blue-400 hover:text-blue-300 underline cursor-pointer';
+    link.className = 'text-accent-400 hover:text-accent-300 underline cursor-pointer';
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.onclick = (e) => {

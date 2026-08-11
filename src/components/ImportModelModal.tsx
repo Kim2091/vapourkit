@@ -49,17 +49,17 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-dark-elevated rounded-2xl border border-gray-800 shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-ink-850 rounded-2xl border border-ink-800 shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-800">
+        <div className="flex items-center justify-between p-5 border-b border-ink-800">
           <div className="flex items-center gap-3">
-            <FileUp className="w-6 h-6 text-primary-purple" />
+            <FileUp className="w-6 h-6 text-accent-500" />
             <h2 className="text-2xl font-bold">{title}</h2>
           </div>
           <button
             onClick={onClose}
             disabled={isImporting}
-            className="text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            className="text-ink-400 hover:text-white transition-colors disabled:opacity-50"
           >
             <X className="w-6 h-6" />
           </button>
@@ -78,12 +78,12 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                   value={importForm.onnxPath}
                   readOnly
                   placeholder="No file selected"
-                  className="flex-1 bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                  className="flex-1 bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 text-sm text-white"
                 />
                 <button
                   onClick={handleSelectOnnxFile}
                   disabled={isImporting}
-                  className="bg-primary-blue hover:bg-blue-600 disabled:bg-gray-700 text-white font-semibold px-3 py-2 rounded-lg transition-all flex items-center gap-2"
+                  className="bg-accent-500 hover:bg-accent-600 disabled:bg-ink-700 text-white font-semibold px-3 py-2 rounded-lg transition-all flex items-center gap-2"
                 >
                   <Upload className="w-4 h-4" />
                   Browse
@@ -100,9 +100,9 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                 onChange={(e) => setImportForm(prev => ({ ...prev, modelName: e.target.value }))}
                 disabled={isImporting || isBuilding}
                 placeholder="e.g., my_custom_model"
-                className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-blue disabled:opacity-50"
+                className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
               />
-              <p className="text-xs text-gray-500 mt-1">This name will appear in the model dropdown</p>
+              <p className="text-xs text-ink-500 mt-1">This name will appear in the model dropdown</p>
             </div>
           </div>
 
@@ -115,23 +115,23 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
               onChange={(e) => setImportForm(prev => ({ ...prev, displayTag: e.target.value }))}
               disabled={isImporting}
               placeholder="e.g., Modern Anime, Old Anime, Realistic"
-              className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-blue disabled:opacity-50"
+              className="w-full bg-ink-900 border border-ink-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
             />
-            <p className="text-xs text-gray-500 mt-1">Add a custom tag to help identify this model (e.g., &quot;Modern Anime&quot;)</p>
+            <p className="text-xs text-ink-500 mt-1">Add a custom tag to help identify this model (e.g., &quot;Modern Anime&quot;)</p>
           </div>
 
           {/* Configuration Switches - Horizontal Layout */}
-          <div className="bg-dark-surface rounded-lg p-4 border border-gray-700">
+          <div className="bg-ink-900 rounded-lg p-4 border border-ink-700">
             <label className="block text-sm font-medium mb-2">Configuration Switches</label>
-            <p className="text-xs text-gray-400 mb-3">
+            <p className="text-xs text-ink-400 mb-3">
               These switches automatically update the TensorRT command below with good defaults. You can manually edit the command if needed.
             </p>
             <div className="grid grid-cols-3 gap-3">
               {/* Model Type Toggle */}
-              <div className="bg-dark-bg rounded-lg p-3">
+              <div className="bg-ink-950 rounded-lg p-3">
                 <div className="mb-2">
                   <p className="text-sm font-medium text-white">Model Type</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-ink-400 mt-0.5">
                     {importForm.modelType === 'vsr' ? 'VSR (temporal/multi-frame)' : 'Image (single frame)'}
                   </p>
                 </div>
@@ -141,8 +141,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                     disabled={isImporting}
                     className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                       importForm.modelType === 'image'
-                        ? 'bg-primary-blue text-white'
-                        : 'bg-dark-elevated text-gray-400 hover:text-white'
+                        ? 'bg-accent-500 text-white'
+                        : 'bg-ink-850 text-ink-400 hover:text-white'
                     }`}
                   >
                     Image
@@ -152,8 +152,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                     disabled={isImporting}
                     className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                       importForm.modelType === 'vsr'
-                        ? 'bg-primary-blue text-white'
-                        : 'bg-dark-elevated text-gray-400 hover:text-white'
+                        ? 'bg-accent-500 text-white'
+                        : 'bg-ink-850 text-ink-400 hover:text-white'
                     }`}
                   >
                     VSR
@@ -162,10 +162,10 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
               </div>
 
               {/* Shape Mode Toggle */}
-              <div className="bg-dark-bg rounded-lg p-3">
+              <div className="bg-ink-950 rounded-lg p-3">
                 <div className="mb-2">
                   <p className="text-sm font-medium text-white">Shape Mode</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-ink-400 mt-0.5">
                     {importForm.useStaticShape ? 'Static (single resolution)' : 'Dynamic (multiple resolutions)'}
                   </p>
                 </div>
@@ -175,8 +175,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                     disabled={isImporting}
                     className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                       !importForm.useStaticShape
-                        ? 'bg-primary-blue text-white'
-                        : 'bg-dark-elevated text-gray-400 hover:text-white'
+                        ? 'bg-accent-500 text-white'
+                        : 'bg-ink-850 text-ink-400 hover:text-white'
                     }`}
                   >
                     Dynamic
@@ -186,8 +186,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                     disabled={isImporting}
                     className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                       importForm.useStaticShape
-                        ? 'bg-primary-blue text-white'
-                        : 'bg-dark-elevated text-gray-400 hover:text-white'
+                        ? 'bg-accent-500 text-white'
+                        : 'bg-ink-850 text-ink-400 hover:text-white'
                     }`}
                   >
                     Static
@@ -196,10 +196,10 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
               </div>
 
               {/* Precision Toggle */}
-              <div className="bg-dark-bg rounded-lg p-3">
+              <div className="bg-ink-950 rounded-lg p-3">
                 <div className="mb-2">
                   <p className="text-sm font-medium text-white">Precision</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-ink-400 mt-0.5">
                     {!backend.requiresEngineBuild
                       ? (importForm.useFp32 ? 'FP32 (inference + RGB format)' : 'FP16 (inference + RGB format)')
                       : (importForm.useFp32 ? 'FP32 (build + inference)' : importForm.useBf16 ? 'BF16 (build + inference)' : 'FP16 (build + inference, recommended)')
@@ -214,8 +214,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                       disabled={isImporting}
                       className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                         !importForm.useFp32
-                          ? 'bg-primary-blue text-white'
-                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                          ? 'bg-accent-500 text-white'
+                          : 'bg-ink-850 text-ink-400 hover:text-white'
                       }`}
                     >
                       FP16
@@ -225,8 +225,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                       disabled={isImporting}
                       className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                         importForm.useFp32
-                          ? 'bg-primary-blue text-white'
-                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                          ? 'bg-accent-500 text-white'
+                          : 'bg-ink-850 text-ink-400 hover:text-white'
                       }`}
                     >
                       FP32
@@ -240,8 +240,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                       disabled={isImporting}
                       className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                         !importForm.useFp32 && !importForm.useBf16
-                          ? 'bg-primary-blue text-white'
-                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                          ? 'bg-accent-500 text-white'
+                          : 'bg-ink-850 text-ink-400 hover:text-white'
                       }`}
                     >
                       FP16
@@ -251,8 +251,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                       disabled={isImporting}
                       className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                         !importForm.useFp32 && importForm.useBf16
-                          ? 'bg-primary-blue text-white'
-                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                          ? 'bg-accent-500 text-white'
+                          : 'bg-ink-850 text-ink-400 hover:text-white'
                       }`}
                     >
                       BF16
@@ -262,8 +262,8 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                       disabled={isImporting}
                       className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
                         importForm.useFp32
-                          ? 'bg-primary-blue text-white'
-                          : 'bg-dark-elevated text-gray-400 hover:text-white'
+                          ? 'bg-accent-500 text-white'
+                          : 'bg-ink-850 text-ink-400 hover:text-white'
                       }`}
                     >
                       FP32
@@ -276,7 +276,7 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
             {/* Temporal Frames - Only show for VSR models */}
             {importForm.modelType === 'vsr' && (
               <div className="mt-3">
-                <label className="block text-sm font-medium mb-1.5 text-gray-300">
+                <label className="block text-sm font-medium mb-1.5 text-ink-300">
                   Temporal Frames
                 </label>
                 <input
@@ -292,18 +292,18 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                     }
                   }}
                   disabled={isImporting}
-                  className="w-full bg-dark-bg border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-blue disabled:opacity-50"
+                  className="w-full bg-ink-950 border border-ink-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
                 />
-                <p className="text-xs text-gray-400 mt-1">Number of frames used by the VSR model (default: 5)</p>
+                <p className="text-xs text-ink-400 mt-1">Number of frames used by the VSR model (default: 5)</p>
               </div>
             )}
           </div>
 
           {/* Detection failed warning */}
           {importForm.detectionFailed && importForm.onnxPath && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-              <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-              <p className="text-xs text-yellow-300/80">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warn-500/10 border border-warn-500/20">
+              <AlertTriangle className="w-4 h-4 text-warn-400 flex-shrink-0" />
+              <p className="text-xs text-warn-300/80">
                 Automatic model detection failed. Please verify the settings above are correct.
               </p>
             </div>
@@ -311,24 +311,24 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
 
           {/* Build command - only for backends with a custom build step */}
           {backend.supportsCustomBuildParams && (
-            <div className="bg-dark-surface rounded-lg p-4 border border-gray-700">
+            <div className="bg-ink-900 rounded-lg p-4 border border-ink-700">
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                <Info className="w-4 h-4 text-accent-cyan" />
+                <Info className="w-4 h-4 text-accent-500" />
                 TensorRT Build Command
               </h3>
-              <p className="text-xs text-gray-400 mb-3">
+              <p className="text-xs text-ink-400 mb-3">
                 This command is automatically generated based on the switches above. You can manually edit it if needed.
               </p>
               <div>
-                <label className="block text-xs font-medium mb-1.5 text-gray-400">Engine Build Parameters (trtexec syntax)</label>
+                <label className="block text-xs font-medium mb-1.5 text-ink-400">Engine Build Parameters (trtexec syntax)</label>
                 <textarea
                   value={importForm.customTrtexecParams}
                   onChange={(e) => setImportForm(prev => ({ ...prev, customTrtexecParams: e.target.value }))}
                   disabled={isImporting}
                   rows={3}
-                  className="w-full bg-dark-bg border border-gray-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-primary-blue disabled:opacity-50 resize-y"
+                  className="w-full bg-ink-950 border border-ink-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50 resize-y"
                 />
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-xs text-ink-400 mt-2">
                   💡 Tip: Use OUTPUT_PATH as the placeholder for --saveEngine. The switches above will automatically update this command.
                 </p>
               </div>
@@ -341,24 +341,24 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                   checked={importForm.skipValidation}
                   onChange={(e) => setImportForm(prev => ({ ...prev, skipValidation: e.target.checked }))}
                   disabled={isImporting}
-                  className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-primary-blue focus:ring-primary-blue focus:ring-offset-0"
+                  className="w-4 h-4 rounded border-ink-600 bg-ink-950 text-accent-500 focus:ring-accent-500 focus:ring-offset-0"
                 />
-                <label htmlFor="skipValidation" className="text-sm text-gray-300 cursor-pointer">
+                <label htmlFor="skipValidation" className="text-sm text-ink-300 cursor-pointer">
                   Skip ONNX validation
                 </label>
-                <span className="text-xs text-gray-500">(skips auto-detection and build-time validation)</span>
+                <span className="text-xs text-ink-500">(skips auto-detection and build-time validation)</span>
               </div>
             </div>
           )}
 
           {/* ONNX-direct backend info */}
           {!backend.requiresEngineBuild && (
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <div className="bg-accent-500/10 border border-accent-500/30 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-gray-300">
+                <Info className="w-5 h-5 text-accent-400 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-ink-300">
                   <p className="font-medium mb-1">{backend.label} Mode</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-ink-400">
                     Model will be used directly with {backend.label} (no engine conversion needed). The precision toggle controls both the internal precision AND the RGB format (RGBS for FP32, RGBH for FP16).
                   </p>
                 </div>
@@ -368,15 +368,15 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
 
           {/* Progress */}
           {importProgress && (
-            <div className="bg-dark-surface rounded-lg p-3 border border-gray-700">
+            <div className="bg-ink-900 rounded-lg p-3 border border-ink-700">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-sm font-medium">{importProgress.message}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-400">{importProgress.progress}%</span>
+                  <span className="text-sm text-ink-400">{importProgress.progress}%</span>
                   {isImporting && importProgress.type === 'converting' && (
                     <button
                       onClick={handleCancelBuild}
-                      className="text-xs px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded transition-colors"
+                      className="text-xs px-2 py-1 bg-bad-600/20 hover:bg-bad-600/40 text-bad-400 rounded transition-colors"
                       title="Cancel engine build"
                     >
                       Cancel
@@ -384,14 +384,14 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
                   )}
                 </div>
               </div>
-              <div className="w-full bg-dark-bg rounded-full h-1.5">
+              <div className="w-full bg-ink-950 rounded-full h-1.5">
                 <div 
-                  className="bg-gradient-to-r from-primary-blue to-primary-purple h-1.5 rounded-full transition-all duration-300"
+                  className="bg-gradient-to-r from-accent-500 to-accent-500 h-1.5 rounded-full transition-all duration-300"
                   style={{ width: `${importProgress.progress}%` }}
                 />
               </div>
               {importProgress.type === 'error' && (
-                <p className="text-red-400 text-sm mt-1.5 flex items-center gap-2">
+                <p className="text-bad-400 text-sm mt-1.5 flex items-center gap-2">
                   <XCircle className="w-4 h-4" />
                   {importProgress.message}
                 </p>
@@ -400,12 +400,12 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
           )}
 
           {/* Validation Info */}
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+          <div className="bg-accent-500/10 border border-accent-500/30 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-gray-300">
+              <Info className="w-5 h-5 text-accent-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-ink-300">
                 <p className="font-medium mb-1">Quick Tips:</p>
-                <ul className="list-disc list-inside space-y-1 text-xs text-gray-400">
+                <ul className="list-disc list-inside space-y-1 text-xs text-ink-400">
                   <li>Use the switches above to quickly configure the model with good defaults</li>
                   <li>The command textbox is automatically updated but remains editable for custom tweaks</li>
                   {backend.requiresEngineBuild && (
@@ -423,18 +423,18 @@ export const ImportModelModal = memo<ImportModelModalProps>(({
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-4 border-t border-gray-800">
+        <div className="flex gap-3 p-4 border-t border-ink-800">
           <button
             onClick={onClose}
             disabled={isImporting}
-            className="flex-1 bg-dark-surface hover:bg-dark-bg border border-gray-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-all disabled:opacity-50"
+            className="flex-1 bg-ink-900 hover:bg-ink-950 border border-ink-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-all disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleImportModel}
             disabled={isImporting || !importForm.onnxPath || !importForm.modelName}
-            className="flex-1 bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 disabled:from-gray-700 disabled:to-gray-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-all flex items-center justify-center gap-2"
+            className="flex-1 bg-gradient-to-r from-accent-500 to-accent-500 hover:from-accent-600 hover:to-accent-600 disabled:from-ink-700 disabled:to-ink-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-all flex items-center justify-center gap-2"
           >
             {isImporting ? (
               <>

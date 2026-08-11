@@ -1,7 +1,8 @@
 // src/components/ColorimetryPanel.tsx
 import { memo, useState } from 'react';
-import { Palette, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import type { ColorimetrySettings, VideoInfo } from '../electron';
+import { Section } from './Section';
 
 interface ColorimetryPanelProps {
   settings: ColorimetrySettings;
@@ -33,41 +34,31 @@ export const ColorimetryPanel = memo<ColorimetryPanelProps>(({
   };
 
   return (
-    <div className="flex-shrink-0 bg-dark-elevated rounded-xl border border-gray-800">
-      {/* Header - Collapsible */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <button
-          onClick={() => settings.overwriteMatrix && !isRgbFormat && setIsExpanded(!isExpanded)}
-          className="flex items-center gap-3 flex-1 hover:opacity-80 transition-opacity"
-          disabled={!settings.overwriteMatrix || isRgbFormat}
-        >
-          <Palette className="w-4 h-4 text-accent-cyan" />
-          <h3 className="text-base font-semibold">Colorimetry</h3>
-          {settings.overwriteMatrix && !isRgbFormat && (
-            <span className="text-sm text-accent-cyan bg-accent-cyan/10 px-2 py-0.5 rounded">
-              {settings.matrix709 ? 'BT.709' : 'BT.601'}
-            </span>
-          )}
-          {settings.overwriteMatrix && !isRgbFormat && (isExpanded ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />)}
-        </button>
-        <div className="flex items-center gap-2 ml-2">
-          <input
-            type="checkbox"
-            id="colorimetry-override"
-            checked={settings.overwriteMatrix && !isRgbFormat}
-            onChange={(e) => handleCheckboxChange(e.target.checked)}
-            disabled={isProcessing || isRgbFormat}
-            className="w-4 h-4 rounded border-gray-700 bg-dark-surface text-accent-cyan focus:ring-2 focus:ring-accent-cyan focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-        </div>
-      </div>
+    <Section
+      title="Colorimetry"
+      meta={settings.overwriteMatrix && !isRgbFormat ? (settings.matrix709 ? 'BT.709' : 'BT.601') : 'off'}
+      actions={
+        <input
+          type="checkbox"
+          id="colorimetry-override"
+          checked={settings.overwriteMatrix && !isRgbFormat}
+          onChange={(e) => handleCheckboxChange(e.target.checked)}
+          disabled={isProcessing || isRgbFormat}
+          title="Override the video’s colour matrix metadata"
+          className="w-3.5 h-3.5 rounded border-ink-700 bg-ink-850 disabled:opacity-40 disabled:cursor-not-allowed"
+        />
+      }
+      collapsible={settings.overwriteMatrix && !isRgbFormat}
+      open={isExpanded}
+      onToggle={() => setIsExpanded(!isExpanded)}
+    >
 
       {/* RGB Warning */}
       {isRgbFormat && (
-        <div className="px-4 pb-3">
-          <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-            <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-yellow-500">
+        <div className="px-3 py-2 border-b border-ink-900">
+          <div className="flex items-start gap-2 p-3 bg-warn-500/10 border border-warn-500/30 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-warn-400 flex-shrink-0 mt-0.5" />
+            <p className="text-[12px] text-warn-400">
               Colorimetry override is not available for RGB video formats
             </p>
           </div>
@@ -76,27 +67,27 @@ export const ColorimetryPanel = memo<ColorimetryPanelProps>(({
 
       {/* Expandable Content */}
       {isExpanded && settings.overwriteMatrix && !isRgbFormat && (
-        <div className="px-4 pb-3 space-y-3">
+        <div className="px-3 py-2.5 space-y-2 border-b border-ink-900">
           {/* Matrix Selection Dropdown */}
           <div className="space-y-2">
-            <label className="text-sm text-gray-400 block">
+            <label className="text-[11px] uppercase tracking-wide text-ink-500 block">
               Select color matrix:
             </label>
             <select
               value={settings.matrix709 ? '709' : '601'}
               onChange={(e) => onSettingsChange({ ...settings, matrix709: e.target.value === '709' })}
               disabled={isProcessing}
-              className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-accent-cyan transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base"
+              className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="709">BT.709 (HD - 720p and above)</option>
               <option value="601">BT.601 (SD - below 720p)</option>
             </select>
-            <p className="text-sm text-gray-500">
+            <p className="text-[11px] text-ink-500">
               Does not apply to RGB inputs. Allows you to override the video's color space metadata (e.g. if it's incorrectly tagged). 
             </p>
           </div>
         </div>
       )}
-    </div>
+    </Section>
   );
 });

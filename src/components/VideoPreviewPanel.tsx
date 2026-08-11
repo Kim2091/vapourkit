@@ -30,13 +30,13 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
 
   return (
-    <div className="flex-1 bg-dark-elevated rounded-xl border border-gray-800/70 overflow-hidden flex flex-col min-h-0 card-hover">
-      <div className="flex-shrink-0 px-3 py-2 border-b border-gray-800/70 flex items-center justify-between bg-dark-elevated/95 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <Video className="w-4 h-4 text-primary-purple" />
-          <h2 className="font-semibold text-base">Output Preview</h2>
+    <div className="flex-1 bg-ink-950 rounded-lg border border-ink-800 overflow-hidden flex flex-col min-h-0">
+      <div className="flex-shrink-0 h-9 pr-3 border-b border-ink-800 flex items-stretch gap-2.5 bg-ink-850">
+        <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <span className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100 whitespace-nowrap">Preview</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 self-center">
           {/* Compare and Open Folder buttons - Only visible after processing */}
           {completedVideoPath && (
             <>
@@ -47,10 +47,10 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                   onCompareVideos();
                 }}
                 disabled={segmentEnabled}
-                className={`text-xs transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${
+                className={`h-[22px] px-2 rounded inline-flex items-center gap-1.5 text-[11px] font-medium border transition-colors ${
                   segmentEnabled 
-                    ? 'text-gray-500 cursor-not-allowed bg-dark-surface/50' 
-                    : 'text-primary-purple hover:text-purple-400 hover:bg-primary-purple/10'
+                    ? 'text-ink-600 cursor-not-allowed bg-ink-850 border-ink-800' 
+                    : 'bg-ink-850 border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700'
                 }`}
                 title={segmentEnabled ? "Compare not available for segment-processed videos" : "Compare input and output videos side-by-side"}
               >
@@ -59,7 +59,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
               </button>
               <button
                 onClick={onOpenOutputFolder}
-                className="text-xs text-accent-cyan hover:text-cyan-400 transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-accent-cyan/10"
+                className="h-[22px] px-2 rounded inline-flex items-center gap-1.5 text-[11px] font-medium border bg-ink-850 border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
                 <span>Open Folder</span>
@@ -84,9 +84,9 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 onDragStart={(e) => e.preventDefault()}
               />
               {isProcessing && (
-                <div className="absolute top-3 right-3 bg-dark-bg/90 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-primary-purple/30">
+                <div className="absolute top-3 right-3 bg-ink-950/90 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-accent-500/30">
                   <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 text-primary-purple animate-spin" />
+                    <Loader2 className="w-4 h-4 text-accent-500 animate-spin" />
                     <span className="text-xs">Processing...</span>
                   </div>
                 </div>
@@ -102,9 +102,9 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
             <div className="w-full h-full flex flex-col items-center justify-center gap-3">
               {videoLoadError ? (
                 <div className="text-center">
-                  <XCircle className="w-14 h-14 text-red-400 mx-auto mb-3 animate-pulse" />
-                  <p className="text-gray-400 text-sm">Video format not supported in browser</p>
-                  <p className="text-xs text-gray-500 mt-1.5">Use VLC or another player to view</p>
+                  <XCircle className="w-14 h-14 text-bad-400 mx-auto mb-3 animate-pulse" />
+                  <p className="text-ink-400 text-sm">Video format not supported in browser</p>
+                  <p className="text-xs text-ink-500 mt-1.5">Use VLC or another player to view</p>
                 </div>
               ) : completedVideoBlobUrl ? (
                 <>
@@ -115,23 +115,23 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                     className="w-full h-full rounded-lg object-contain shadow-lg"
                     onError={onVideoError}
                   />
-                  <div className="flex items-center gap-2 text-green-400 bg-green-500/10 px-3 py-1.5 rounded-lg border border-green-500/30">
+                  <div className="flex items-center gap-2 text-ok-400 bg-ok-500/10 px-3 py-1.5 rounded-lg border border-ok-500/30">
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-xs font-medium">Upscale complete!</span>
                   </div>
                 </>
               ) : (
                 <div className="text-center">
-                  <Loader2 className="w-8 h-8 text-primary-purple animate-spin mx-auto mb-4" />
-                  <p className="text-gray-400">Loading video...</p>
+                  <Loader2 className="w-8 h-8 text-accent-500 animate-spin mx-auto mb-4" />
+                  <p className="text-ink-400">Loading video...</p>
                 </div>
               )}
             </div>
           </PrivacyVeil>
         ) : (
-          <div className="text-center text-gray-500">
-            <Video className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p>Preview will appear here during processing</p>
+          <div className="text-center text-ink-600">
+            <Video className="w-10 h-10 mx-auto mb-3 opacity-60" />
+            <p className="text-[12.5px]">Preview will appear here during processing</p>
           </div>
         )}
       </div>

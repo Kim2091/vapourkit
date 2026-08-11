@@ -40,7 +40,7 @@ export const PrivacyVeil = memo<PrivacyVeilProps>(({
         {children}
         <button
           onClick={hide}
-          className="absolute top-3 right-3 z-20 px-3.5 py-2 text-sm font-medium bg-black/75 text-white rounded-lg border border-gray-600 hover:bg-black/90 hover:border-gray-500 backdrop-blur-sm flex items-center gap-1.5 shadow-lg"
+          className="absolute top-3 right-3 z-20 px-3.5 py-2 text-sm font-medium bg-black/75 text-white rounded-lg border border-ink-600 hover:bg-black/90 hover:border-ink-500 backdrop-blur-sm flex items-center gap-1.5 shadow-lg"
           title="Hide (privacy mode)"
         >
           <EyeOff className="w-4 h-4" />
@@ -53,7 +53,7 @@ export const PrivacyVeil = memo<PrivacyVeilProps>(({
   return (
     <button
       onClick={reveal}
-      className={`relative bg-dark-surface border border-dashed border-gray-700 rounded-lg flex items-center justify-center text-gray-500 hover:border-gray-600 hover:text-gray-400 transition-colors cursor-pointer ${className ?? ''}`}
+      className={`relative bg-ink-900 border border-dashed border-ink-700 rounded-lg flex items-center justify-center text-ink-500 hover:border-ink-600 hover:text-ink-400 transition-colors cursor-pointer ${className ?? ''}`}
       title="Click to reveal (privacy mode is on)"
     >
       <div className="flex flex-col items-center gap-2 py-6 px-4">

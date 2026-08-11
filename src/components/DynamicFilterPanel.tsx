@@ -3,6 +3,7 @@ import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, 
 import type { BackendId, FilterBackend, Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { BACKENDS, getBackendDescriptor, resolveFilterBackend } from '../utils/backends';
 import { PythonCodeEditor } from './PythonCodeEditor';
+import { Section, SectionButton } from './Section';
 import { FilterSelectorModal } from './FilterSelectorModal';
 import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
@@ -460,110 +461,97 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   };
 
   return (
-    <div className="bg-gray-900/50 rounded-xl border border-gray-700/70 p-4">
-      <div className="space-y-3">
-        {/* Header with Add Filter Button */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-medium text-gray-300">{title}</h3>
-            <div className="relative group">
-              <Info className="w-4 h-4 text-gray-500 hover:text-blue-400 transition-colors cursor-help" />
-              <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 w-64 bg-gray-950 border border-gray-700 rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[100] shadow-xl">
-                <p className="text-xs text-gray-300 mb-2 font-medium">Tips:</p>
-                <ul className="list-disc list-inside space-y-1 text-xs text-gray-400">
-                  <li>Use <code className="bg-gray-900 px-1 rounded text-blue-400">clip</code> variable for the video stream</li>
-                  <li>Use <code className="bg-gray-900 px-1 rounded text-blue-400">original_clip</code> variable to reference the original/input video stream</li>
-                  <li>Filters are applied in the order shown (top to bottom)</li>
-                  <li>Add AI models anywhere in the filter workflow</li>
-                </ul>
-              </div>
+    <>
+    <Section
+      title={title}
+      meta={pendingFilters.length > 0
+        ? `${pendingFilters.filter(f => f.enabled).length} of ${pendingFilters.length} on`
+        : undefined}
+      actions={<>
+          <div className="relative group flex items-center">
+            <Info className="w-3.5 h-3.5 text-ink-500 hover:text-accent-400 transition-colors cursor-help" />
+            <div className="absolute right-0 top-full mt-2 w-64 bg-ink-950 border border-ink-750 rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[100] shadow-xl">
+              <p className="text-xs text-ink-300 mb-2 font-medium">Tips:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs text-ink-400">
+                <li>Use <code className="bg-ink-900 px-1 rounded text-accent-400">clip</code> variable for the video stream</li>
+                <li>Use <code className="bg-ink-900 px-1 rounded text-accent-400">original_clip</code> variable to reference the original/input video stream</li>
+                <li>Filters are applied in the order shown (top to bottom)</li>
+                <li>Add AI models anywhere in the filter workflow</li>
+              </ul>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {/* Toggle All Filters Button */}
             {pendingFilters.length > 0 && (
               <>
-                <button
+                <SectionButton
                   onClick={handleToggleAllFilters}
                   disabled={isProcessing}
-                  className="py-1.5 px-3 bg-gray-700/50 border border-gray-600 rounded-lg hover:bg-gray-700 hover:border-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-gray-300"
                   title={pendingFilters.every(f => f.enabled) ? "Disable all filters" : "Enable all filters"}
                 >
                   {pendingFilters.every(f => f.enabled) ? (
-                    <>
-                      <ToggleRight className="w-3.5 h-3.5 text-green-400" />
-                      <span className="text-xs font-medium">Disable All</span>
-                    </>
+                    <><ToggleRight className="w-3 h-3" />Disable all</>
                   ) : (
-                    <>
-                      <ToggleLeft className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="text-xs font-medium">Enable All</span>
-                    </>
+                    <><ToggleLeft className="w-3 h-3" />Enable all</>
                   )}
-                </button>
-                <button
+                </SectionButton>
+                <SectionButton
                   onClick={handleToggleAllExpanded}
                   disabled={isProcessing}
-                  className="py-1.5 px-3 bg-gray-700/50 border border-gray-600 rounded-lg hover:bg-gray-700 hover:border-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-gray-300"
                   title={pendingFilters.every(f => expandedFilters.has(f.id)) ? "Collapse all filters" : "Expand all filters"}
                 >
                   {pendingFilters.every(f => expandedFilters.has(f.id)) ? (
-                    <>
-                      <ChevronsUpDown className="w-3.5 h-3.5 text-blue-400" />
-                      <span className="text-xs font-medium">Collapse All</span>
-                    </>
+                    <><ChevronsUpDown className="w-3 h-3" />Collapse</>
                   ) : (
-                    <>
-                      <ChevronsDownUp className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="text-xs font-medium">Expand All</span>
-                    </>
+                    <><ChevronsDownUp className="w-3 h-3" />Expand</>
                   )}
-                </button>
+                </SectionButton>
               </>
             )}
-            {/* Add Filter Button */}
+            {/* Add Filter Button — the section's one accented control */}
             <div className="relative">
-              <button
+              <SectionButton
                 onClick={() => setShowAddMenu(!showAddMenu)}
                 disabled={isProcessing}
-                className="py-1.5 px-3 bg-blue-500/15 border border-blue-500/40 rounded-lg hover:bg-blue-500/25 hover:border-blue-500/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-blue-400"
+                active
                 title="Add filter"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="text-xs font-medium">Add Filter</span>
-              </button>
+                <Plus className="w-3 h-3" />
+                Add filter
+              </SectionButton>
               {showAddMenu && (
-                <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 min-w-[160px]">
+                <div className="absolute right-0 top-full mt-1 bg-ink-850 border border-ink-750 rounded-lg shadow-xl shadow-black/50 z-50 min-w-[160px] overflow-hidden">
                   <button
                     onClick={handleAddAIModelFilter}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-800 transition-colors flex items-center gap-2 text-gray-200 border-b border-gray-700"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200 border-b border-ink-800"
                   >
-                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <Sparkles className="w-4 h-4 text-accent-400" />
                     AI Model
                   </button>
                   <button
                     onClick={handleAddCustomFilter}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-800 transition-colors flex items-center gap-2 text-gray-200"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200"
                   >
-                    <LucideFilter className="w-4 h-4 text-blue-400" />
+                    <LucideFilter className="w-4 h-4 text-ink-400" />
                     VS Filter
                   </button>
                 </div>
               )}
             </div>
           </div>
-        </div>
+        </>}
+      >
 
         {/* Empty State with Drop Zone */}
         {pendingFilters.length === 0 && (
           <div 
-            className="bg-gray-800/30 border border-dashed border-gray-600/60 rounded-xl p-6 text-center transition-colors hover:border-blue-500/40"
+            className="border-b border-ink-900 px-3 py-6 text-center transition-colors hover:bg-ink-850/60"
             onDrop={handleEmptyDrop}
             onDragOver={handleEmptyDragOver}
           >
-            <LucideFilter className="w-10 h-10 text-gray-600 mx-auto mb-2" />
-            <p className="text-gray-400 text-sm mb-1">No filters added yet</p>
-            <p className="text-gray-500 text-xs">Click "+ Add Filter" to get started</p>
+            <LucideFilter className="w-7 h-7 text-ink-600 mx-auto mb-2" />
+            <p className="text-ink-300 text-[12.5px] mb-0.5">No filters added yet</p>
+            <p className="text-ink-500 text-[11px]">Use “Add filter” above to get started</p>
           </div>
         )}
 
@@ -589,42 +577,42 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
               } ${
                 !isDragging ? 'transition-opacity duration-200' : ''
               } ${
-                isNewlyDuplicated ? 'animate-[highlight_0.33s_ease-in-out] bg-blue-500/20 border-blue-500/50 border-2 shadow-lg shadow-blue-500/50 transition-all duration-200' : ''
+                isNewlyDuplicated ? 'animate-[highlight_0.33s_ease-in-out] bg-accent-500/20 border-accent-500/50 border-2 shadow-lg shadow-accent-500/50 transition-all duration-200' : ''
               }`}
             >
               {/* Drop indicator */}
               {dragOverId === filter.id && !isDragging && (
-                <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-blue-500 rounded-full shadow-lg shadow-blue-500/50 z-10" />
+                <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-accent-500 rounded-full shadow-lg shadow-accent-500/50 z-10" />
               )}
 
-              <div className={`bg-gray-800/60 rounded-lg border ${
-                filter.enabled 
-                  ? isAIModel ? 'border-purple-500/60' : 'border-gray-600/80'
-                  : 'border-gray-700/50 opacity-60'
+              <div className={`border-b border-ink-900 border-l-2 transition-colors ${
+                filter.enabled
+                  ? isAIModel ? 'border-l-accent-500/70' : 'border-l-ink-700'
+                  : 'border-l-transparent opacity-50'
               } ${
-                isHovered && !isDragging ? 'border-blue-500/50 shadow-blue-500/10 transition-all duration-200' : ''
+                isHovered && !isDragging ? 'bg-ink-850' : ''
               }`}>
                 {/* Filter Header */}
                 <div 
                   draggable={!isProcessing}
                   onDragStart={(e) => handleDragStart(e, filter.id)}
                   onDragEnd={handleDragEnd}
-                  className={`flex items-center gap-2.5 px-3 py-2 bg-gray-700/40 cursor-grab active:cursor-grabbing ${
+                  className={`flex items-center gap-2.5 px-3 py-1.5 hover:bg-ink-850/60 transition-colors cursor-grab active:cursor-grabbing ${
                     isExpanded ? 'sticky top-0 z-10 rounded-t-lg' : ''
                   }`}
                 >
                   {/* Filter Order Number */}
                   <div className={`flex-shrink-0 w-5 h-5 rounded ${
-                    isAIModel ? 'bg-purple-500/20 border-purple-500/50' : 'bg-blue-500/20 border-blue-500/50'
+                    isAIModel ? 'bg-accent-500/20 border-accent-500/45' : 'bg-ink-800 border-ink-700'
                   } border flex items-center justify-center`}>
-                    <span className={`text-xs font-bold ${isAIModel ? 'text-purple-400' : 'text-blue-400'}`}>
+                    <span className={`text-xs font-bold ${isAIModel ? 'text-accent-400' : 'text-ink-400'}`}>
                       {index + 1}
                     </span>
                   </div>
 
                   {/* Drag Handle */}
                   <div
-                    className="text-gray-500 hover:text-blue-400 transition-colors flex-shrink-0 relative group pointer-events-none"
+                    className="text-ink-500 hover:text-accent-400 transition-colors flex-shrink-0 relative group pointer-events-none"
                     onMouseEnter={() => setHoveredDragHandle(filter.id)}
                     onMouseLeave={() => setHoveredDragHandle(null)}
                   >
@@ -633,7 +621,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
 
                   {/* Filter Icon */}
                   {isAIModel && (
-                    <Sparkles className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                    <Sparkles className="w-4 h-4 text-accent-400 flex-shrink-0" />
                   )}
 
                   {/* Filter Title - Clickable to expand */}
@@ -642,7 +630,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                     disabled={!filter.enabled}
                     className="flex-1 flex items-center gap-2 text-left hover:opacity-80 transition-opacity disabled:opacity-50 min-w-0"
                   >
-                    <span className="text-sm font-medium truncate text-gray-200">
+                    <span className="text-sm font-medium truncate text-ink-200">
                       {isAIModel
                         ? (availableModels.find(m => m.path === filter.modelPath)?.name || 'Select AI Model')
                         : (filter.preset || 'Custom Filter')
@@ -651,7 +639,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                     {/* Backend override badge - only when this filter deviates from the app default */}
                     {isAIModel && filter.backend && filter.backend !== 'auto' && (
                       <span
-                        className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300"
+                        className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-500/20 border border-accent-500/40 text-accent-300"
                         title={`Backend override: ${getBackendDescriptor(filter.backend).label}`}
                       >
                         {getBackendDescriptor(filter.backend).shortLabel}
@@ -659,8 +647,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                     )}
                     {filter.enabled && (
                       isExpanded 
-                        ? <ChevronUp className="w-4 h-4 ml-auto flex-shrink-0 text-gray-400" /> 
-                        : <ChevronDown className="w-4 h-4 ml-auto flex-shrink-0 text-gray-400" />
+                        ? <ChevronUp className="w-4 h-4 ml-auto flex-shrink-0 text-ink-400" /> 
+                        : <ChevronDown className="w-4 h-4 ml-auto flex-shrink-0 text-ink-400" />
                     )}
                   </button>
 
@@ -670,8 +658,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                     checked={filter.enabled}
                     onChange={(e) => handleToggleFilter(filter.id, e.target.checked)}
                     disabled={isProcessing}
-                    className={`w-4 h-4 rounded border-gray-600 bg-gray-700 ${
-                      isAIModel ? 'text-purple-500 focus:ring-purple-500' : 'text-blue-500 focus:ring-blue-500'
+                    className={`w-4 h-4 rounded border-ink-600 bg-ink-700 ${
+                      isAIModel ? 'focus:ring-accent-500' : 'focus:ring-ink-500'
                     } focus:ring-2 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
                     title={filter.enabled ? "Disable filter" : "Enable filter"}
                   />
@@ -680,7 +668,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                   <button
                     onClick={() => handleDuplicateFilter(filter.id)}
                     disabled={isProcessing}
-                    className="text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 p-1 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                    className="text-accent-400 hover:text-accent-300 hover:bg-accent-900/30 p-1 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                     title="Duplicate filter"
                   >
                     <Copy className="w-4 h-4" />
@@ -690,7 +678,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                   <button
                     onClick={() => handleRemoveFilter(filter.id)}
                     disabled={isProcessing}
-                    className="text-red-400 hover:text-red-300 hover:bg-red-900/30 p-1 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                    className="text-bad-400 hover:text-bad-300 hover:bg-bad-900/30 p-1 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                     title="Remove filter"
                   >
                     <X className="w-4 h-4" />
@@ -699,18 +687,18 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
 
                 {/* Filter Content - AI Model or Custom */}
                 {filter.enabled && isExpanded && (
-                  <div className="px-3 pb-2.5 space-y-2.5 border-t border-gray-600/50 pt-2.5 bg-gray-750/30">
+                  <div className="px-3 pb-2.5 space-y-2.5 border-t border-ink-900 pt-2.5 bg-ink-900/70">
                     {isAIModel ? (
                       // AI Model Filter Content
                       <>
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <label className="text-sm text-gray-300 font-medium">Model Selection</label>
+                            <label className="text-sm text-ink-300 font-medium">Model Selection</label>
                             <div className="flex items-center gap-3">
                               {onImportClick && (
                                 <button
                                   onClick={onImportClick}
-                                  className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                                  className="text-sm text-accent-400 hover:text-accent-300 transition-colors flex items-center gap-1"
                                   disabled={isProcessing}
                                 >
                                   <Download className="w-3 h-3" />
@@ -722,10 +710,10 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                           <button
                             onClick={() => !isProcessing && setShowModelSelector(filter.id)}
                             disabled={isProcessing}
-                            className={`w-full bg-gray-900/90 border rounded-md px-2.5 py-1.5 text-base text-left focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                            className={`w-full bg-ink-900/90 border rounded-md px-2.5 py-1.5 text-base text-left focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                               filter.modelPath
-                                ? 'border-purple-500/50 text-gray-200 hover:border-purple-500'
-                                : 'border-gray-600 text-gray-400 hover:border-gray-500'
+                                ? 'border-accent-500/50 text-ink-200 hover:border-accent-500'
+                                : 'border-ink-600 text-ink-400 hover:border-ink-500'
                             }`}
                           >
                             {filter.modelPath
@@ -738,12 +726,12 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               when an override is active so it stays clearable. */}
                           {(showBackendOverrides || (filter.backend && filter.backend !== 'auto')) && (
                           <div className="flex items-center gap-2">
-                            <label className="text-xs text-gray-400 flex-shrink-0">Backend</label>
+                            <label className="text-xs text-ink-400 flex-shrink-0">Backend</label>
                             <select
                               value={filter.backend && filter.backend !== 'auto' ? filter.backend : 'auto'}
                               onChange={(e) => handleFilterBackendChange(filter.id, e.target.value as FilterBackend)}
                               disabled={isProcessing}
-                              className="flex-1 bg-gray-900/90 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="flex-1 bg-ink-900/90 border border-ink-600 rounded-md px-2 py-1 text-xs text-ink-300 focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <option value="auto">Auto ({getBackendDescriptor(defaultBackend).label})</option>
                               {BACKENDS.map(backend => (
@@ -793,7 +781,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                   setNewCategoryInput('');
                                 }
                               }}
-                              className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                              className="text-sm text-accent-400 hover:text-accent-300 transition-colors flex items-center gap-1"
                               disabled={isProcessing}
                             >
                               <Save className="w-3 h-3" />
@@ -801,7 +789,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             </button>
                             <button
                               onClick={handleImportTemplate}
-                              className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                              className="text-sm text-accent-400 hover:text-accent-300 transition-colors flex items-center gap-1"
                               disabled={isProcessing}
                             >
                               <Download className="w-3 h-3" />
@@ -812,15 +800,15 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
 
                         {/* Save Template Dialog */}
                         {showSaveDialog === filter.id && (
-                          <div className="p-2.5 bg-gray-800/70 rounded-md border border-gray-600/60">
-                            <h4 className="text-sm font-medium mb-2 text-gray-200">Save as Template</h4>
+                          <div className="p-2.5 bg-ink-800/70 rounded-md border border-ink-600/60">
+                            <h4 className="text-sm font-medium mb-2 text-ink-200">Save as Template</h4>
                             <input
                               type="text"
                               placeholder="Template name"
                               value={presetName}
                               onChange={(e) => setPresetName(e.target.value)}
                               onMouseDown={(e) => e.stopPropagation()}
-                              className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5 mb-2 text-sm focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
+                              className="w-full bg-ink-900 border border-ink-600 rounded px-2 py-1.5 mb-2 text-sm focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-ink-200"
                             />
                             
                             {/* Categories */}
@@ -830,12 +818,12 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                   {presetCategories.map((cat, index) => (
                                     <span
                                       key={index}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600/20 border border-blue-500/50 rounded text-xs text-blue-300"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-600/20 border border-accent-500/50 rounded text-xs text-accent-300"
                                     >
                                       {cat}
                                       <button
                                         onClick={() => setPresetCategories(prev => prev.filter((_, i) => i !== index))}
-                                        className="hover:text-red-400 transition-colors"
+                                        className="hover:text-bad-400 transition-colors"
                                         type="button"
                                       >
                                         <X className="w-3 h-3" />
@@ -861,7 +849,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                   }}
                                   onMouseDown={(e) => e.stopPropagation()}
                                   list="category-suggestions"
-                                  className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 transition-colors text-gray-200"
+                                  className="flex-1 bg-ink-900 border border-ink-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-accent-500 transition-colors text-ink-200"
                                 />
                                 <button
                                   type="button"
@@ -872,7 +860,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                     }
                                   }}
                                   disabled={!newCategoryInput.trim()}
-                                  className="px-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-xs rounded transition-colors"
+                                  className="px-2 bg-accent-600 hover:bg-accent-700 disabled:bg-ink-700 disabled:cursor-not-allowed text-white text-xs rounded transition-colors"
                                 >
                                   <Plus className="w-3 h-3" />
                                 </button>
@@ -890,13 +878,13 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               value={presetDescription}
                               onChange={(e) => setPresetDescription(e.target.value)}
                               onMouseDown={(e) => e.stopPropagation()}
-                              className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5 mb-2 text-sm focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200"
+                              className="w-full bg-ink-900 border border-ink-600 rounded px-2 py-1.5 mb-2 text-sm focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-ink-200"
                             />
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleSaveTemplate(filter.id)}
                                 disabled={!presetName.trim()}
-                                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-sm py-1.5 rounded transition-colors"
+                                className="flex-1 bg-accent-600 hover:bg-accent-500 disabled:bg-ink-700 disabled:cursor-not-allowed text-white text-sm py-1.5 rounded transition-colors"
                               >
                                 Save
                               </button>
@@ -908,7 +896,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                   setPresetCategories([]);
                                   setNewCategoryInput('');
                                 }}
-                                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-1.5 rounded transition-colors"
+                                className="flex-1 bg-ink-700 hover:bg-ink-600 text-white text-sm py-1.5 rounded transition-colors"
                               >
                                 Cancel
                               </button>
@@ -921,34 +909,34 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                           <button
                             onClick={() => setShowFilterSelector(filter.id)}
                             disabled={isProcessing}
-                            className="flex-1 bg-gray-900/90 border border-gray-600 rounded-md px-2.5 py-1.5 text-base focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-200 text-left flex items-center justify-between hover:bg-gray-800/90"
+                            className="flex-1 bg-ink-900/90 border border-ink-600 rounded-md px-2.5 py-1.5 text-base focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-ink-200 text-left flex items-center justify-between hover:bg-ink-800/90"
                           >
-                            <span className={filter.preset ? 'text-gray-200' : 'text-gray-500'}>
+                            <span className={filter.preset ? 'text-ink-200' : 'text-ink-500'}>
                               {filter.preset || 'Custom - Click to select template'}
                             </span>
-                            <LucideFilter className="w-4 h-4 text-gray-400" />
+                            <LucideFilter className="w-4 h-4 text-ink-400" />
                           </button>
                           {filter.preset && onDeleteTemplate && (
                             <button
                               onClick={() => handleDeleteTemplate(filter.preset, filter.id)}
                               disabled={isProcessing}
-                              className="px-2.5 bg-gray-900/90 border border-gray-600 rounded-md hover:bg-red-900/30 hover:border-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="px-2.5 bg-ink-900/90 border border-ink-600 rounded-md hover:bg-bad-900/30 hover:border-bad-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Delete template"
                             >
-                              <Trash2 className="w-4 h-4 text-red-400" />
+                              <Trash2 className="w-4 h-4 text-bad-400" />
                             </button>
                           )}
                         </div>
 
                         {/* Description */}
                         {selectedTemplate?.description && (
-                          <div className="p-2.5 bg-gray-900 rounded-md border border-gray-600">
-                            <p className="text-sm text-gray-200 font-medium">{selectedTemplate.description}</p>
+                          <div className="p-2.5 bg-ink-900 rounded-md border border-ink-600">
+                            <p className="text-sm text-ink-200 font-medium">{selectedTemplate.description}</p>
                           </div>
                         )}
 
                         {/* Code Editor */}
-                        <div className="relative rounded-md overflow-hidden border border-gray-600" onMouseDown={(e) => e.stopPropagation()} style={{ contain: 'layout' }}>
+                        <div className="relative rounded-md overflow-hidden border border-ink-600" onMouseDown={(e) => e.stopPropagation()} style={{ contain: 'layout' }}>
                           <PythonCodeEditor
                             value={pendingFilters.find(f => f.id === filter.id)?.code || ''}
                             onChange={(code) => handleCodeChange(filter.id, code)}
@@ -967,7 +955,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
             </div>
           );
         })}
-      </div>
+    </Section>
 
       {/* Filter Selector Modal */}
       {showFilterSelector && (
@@ -1013,6 +1001,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
           onModelsUpdated={onModelsUpdated}
         />
       )}
-    </div>
+    </>
   );
 });

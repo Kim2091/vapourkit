@@ -52,18 +52,18 @@ export const BatchConfigModal = memo<BatchConfigModalProps>(({
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-dark-elevated rounded-2xl border border-gray-800 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-ink-850 rounded-2xl border border-ink-800 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-800">
+        <div className="flex items-center justify-between p-6 border-b border-ink-800">
           <div>
             <h2 className="text-xl font-semibold">Add Videos to Queue</h2>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-ink-400 mt-1">
               {configs.length} video{configs.length !== 1 ? 's' : ''} selected - Review and adjust output paths
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-dark-surface rounded-lg transition-colors"
+            className="p-2 hover:bg-ink-900 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -74,46 +74,46 @@ export const BatchConfigModal = memo<BatchConfigModalProps>(({
           {configs.map((config, index) => (
             <div
               key={index}
-              className="bg-dark-surface border border-gray-800 rounded-xl overflow-hidden"
+              className="bg-ink-900 border border-ink-800 rounded-xl overflow-hidden"
             >
               {/* Video Header - Always visible */}
               <div
-                className="flex items-center justify-between p-4 cursor-pointer hover:bg-dark-bg transition-colors"
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-ink-950 transition-colors"
                 onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{config.videoName}</p>
-                  <p className="text-xs text-gray-500 truncate mt-1">
+                  <p className="text-xs text-ink-500 truncate mt-1">
                     {config.outputPath.split(/[\\/]/).pop()}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                  <span className="text-xs text-gray-500">#{index + 1}</span>
+                  <span className="text-xs text-ink-500">#{index + 1}</span>
                   {expandedIndex === index ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
+                    <ChevronUp className="w-5 h-5 text-ink-400" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                    <ChevronDown className="w-5 h-5 text-ink-400" />
                   )}
                 </div>
               </div>
 
               {/* Expanded Configuration */}
               {expandedIndex === index && (
-                <div className="p-4 pt-0 space-y-4 border-t border-gray-800/50">
+                <div className="p-4 pt-0 space-y-4 border-t border-ink-800/50">
                   {/* Output Path */}
                   <div>
-                    <label className="block text-xs font-medium mb-2 text-gray-400">Output Path</label>
+                    <label className="block text-xs font-medium mb-2 text-ink-400">Output Path</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={config.outputPath}
                         onChange={(e) => updateConfig(index, { outputPath: e.target.value })}
-                        className="flex-1 bg-dark-elevated border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-blue"
+                        className="flex-1 bg-ink-850 border border-ink-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-accent-500"
                         placeholder="Output file path"
                       />
                       <button
                         onClick={() => handleSelectOutputPath(index)}
-                        className="px-3 py-2 bg-dark-elevated hover:bg-dark-bg border border-gray-800 rounded-lg transition-colors text-xs"
+                        className="px-3 py-2 bg-ink-850 hover:bg-ink-950 border border-ink-800 rounded-lg transition-colors text-xs"
                       >
                         Browse
                       </button>
@@ -121,9 +121,9 @@ export const BatchConfigModal = memo<BatchConfigModalProps>(({
                   </div>
 
                   {/* Workflow Summary (Read-only) */}
-                  <div className="bg-dark-elevated rounded-lg p-3 border border-gray-800/50">
-                    <h3 className="text-xs font-medium mb-2 text-gray-400">Current Workflow</h3>
-                    <div className="space-y-1 text-xs text-gray-500">
+                  <div className="bg-ink-850 rounded-lg p-3 border border-ink-800/50">
+                    <h3 className="text-xs font-medium mb-2 text-ink-400">Current Workflow</h3>
+                    <div className="space-y-1 text-xs text-ink-500">
                       <p>Format: {config.workflow.outputFormat.toUpperCase()}</p>
                       <p>Backend: {getBackendDescriptor(config.workflow.defaultBackend).label}</p>
                       <p>Num Streams: {config.workflow.numStreams}</p>
@@ -137,16 +137,16 @@ export const BatchConfigModal = memo<BatchConfigModalProps>(({
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-gray-800">
+        <div className="flex gap-3 p-6 border-t border-ink-800">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 bg-dark-surface hover:bg-dark-bg rounded-lg transition-colors"
+            className="flex-1 px-4 py-2 bg-ink-900 hover:bg-ink-950 rounded-lg transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => onConfirm(configs)}
-            className="flex-1 px-4 py-2 bg-gradient-to-r from-primary-blue to-primary-purple hover:from-blue-600 hover:to-purple-600 rounded-lg transition-colors font-medium"
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-accent-500 to-accent-500 hover:from-accent-600 hover:to-accent-600 rounded-lg transition-colors font-medium"
           >
             Add {configs.length} Video{configs.length !== 1 ? 's' : ''} to Queue
           </button>

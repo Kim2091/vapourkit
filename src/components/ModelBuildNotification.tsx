@@ -44,22 +44,22 @@ export const ModelBuildNotification = memo<ModelBuildNotificationProps>(({
   if (!uninitModel) return null;
 
   return (
-    <div className="flex-shrink-0 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-b border-yellow-500/30 px-6 py-3">
+    <div className="flex-shrink-0 bg-gradient-to-r from-warn-500/20 to-warn-500/20 border-b border-warn-500/30 px-6 py-3">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+          <AlertCircle className="w-5 h-5 text-warn-400 flex-shrink-0" />
           <div>
             <p className="text-sm font-medium text-white">
               A model in your filter workflow needs to be built before use
             </p>
-            <p className="text-xs text-gray-300">
+            <p className="text-xs text-ink-300">
               Click to configure and build TensorRT engine for optimal performance
             </p>
           </div>
         </div>
         <button
           onClick={() => onBuildModel(uninitModel)}
-          className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold px-4 py-2 rounded-lg transition-all duration-300 flex items-center gap-2 flex-shrink-0"
+          className="bg-warn-500 hover:bg-warn-600 text-black font-semibold px-4 py-2 rounded-lg transition-all duration-300 flex items-center gap-2 flex-shrink-0"
         >
           <Sparkles className="w-4 h-4" />
           Configure & Build
