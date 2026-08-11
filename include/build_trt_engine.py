@@ -149,6 +149,11 @@ def parse_args(argv):
 
 def report_progress(percent):
     print(f'Building engine: {int(percent)}%', flush=True)
+    # Machine-readable build status for the Vapourkit UI. When this builder runs
+    # inside vspipe (vsmlrt engine builds via the trtexec shim), stdout is
+    # redirected to vspipe's stderr, where the app's executors parse these
+    # lines and show a "building engine" banner instead of an apparent freeze.
+    print(f'[vk-build] progress {int(percent)}', flush=True)
 
 
 def make_progress_monitor(trt):
@@ -339,9 +344,14 @@ def build(opts):
         print('Error: TensorRT engine build failed (see log above)', file=sys.stderr)
         return 2
 
+    # Write-then-rename so a killed build never leaves a truncated engine at
+    # the final path (a corrupt engine there would be silently reused as a
+    # cache hit by vsmlrt and the app and break the filter until deleted).
     print('Serializing engine', flush=True)
-    with open(opts['save_engine'], 'wb') as f:
+    tmp_engine_path = opts['save_engine'] + '.building'
+    with open(tmp_engine_path, 'wb') as f:
         f.write(serialized_engine)
+    os.replace(tmp_engine_path, opts['save_engine'])
 
     if timing_cache is not None and opts['timing_cache_file']:
         try:
@@ -383,7 +393,15 @@ def main(argv):
         )
         return 1
 
-    return build(opts)
+    # Build-status protocol markers (see report_progress). The label is what
+    # the app shows to the user while the build runs.
+    label = os.path.splitext(os.path.basename(opts['onnx']))[0]
+    print(f'[vk-build] begin Building TensorRT engine: {label}', flush=True)
+    try:
+        result = build(opts)
+    finally:
+        print(f'[vk-build] end {label}', flush=True)
+    return result
 
 
 if __name__ == '__main__':
