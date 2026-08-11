@@ -57,37 +57,78 @@ export function useBackendOperations({
   }, [onLog, loadModels, loadUninitializedModels, loadTemplates, setIsReloading]);
 
   const handleBuildModel = useCallback(async (model: UninitializedModel): Promise<void> => {
-    // Use existing metadata from ONNX model if available
-    const modelType = model.modelType || 'image';
+    // Metadata defaults (from the stock config), refined by ONNX detection below
     const displayTag = model.displayTag || '';
-    
-    // Detect precision from filename
+    let modelType: 'vsr' | 'image' = model.modelType || 'image';
+    let temporalFrames = 5;
+
+    // Filename precision suffixes are authoritative for curated bundled models
+    // (many fp16-weight exports still report fp32 I/O, so the detected data
+    // type is only used when the filename has no suffix)
     const modelNameLower = model.name.toLowerCase();
-    const useFp32 = modelNameLower.includes('_fp32');
-    const useBf16 = modelNameLower.includes('_bf16');
-    
-    // Extract input name from the model
+    const hasPrecisionSuffix = /_(fp16|fp32|bf16)/.test(modelNameLower);
+    let useFp32 = modelNameLower.includes('_fp32');
+    let useBf16 = modelNameLower.includes('_bf16');
+
     let inputName = 'input'; // Default fallback
+    let useStaticShape = false;
+    let detectedShape: number[] | undefined;
+    let detectionFailed = false;
+
+    // Same ONNX auto-detection as the custom import path
     try {
       const validation = await window.electronAPI.validateOnnxModel(model.onnxPath);
+      if (!validation.isValid) {
+        detectionFailed = true;
+      }
       if (validation.isValid && validation.inputName) {
         inputName = validation.inputName;
         onLog(`Detected input name: ${inputName}`);
       }
+      if (validation.isValid && validation.inputShape && validation.inputShape.length >= 4) {
+        const inputChannels = Number(validation.inputShape[1]);
+        if (Number.isInteger(inputChannels) && inputChannels > 3 && inputChannels % 3 === 0) {
+          modelType = 'vsr';
+          temporalFrames = inputChannels / 3;
+          onLog(`Detected VSR model with ${temporalFrames} temporal frames (${inputChannels} channels)`);
+        } else if (inputChannels === 3) {
+          modelType = 'image';
+          onLog('Detected image model (3 channels)');
+        }
+        if (validation.isStatic) {
+          useStaticShape = true;
+          detectedShape = validation.inputShape;
+          onLog(`Detected static model with shape: ${detectedShape.join('x')}`);
+        }
+      }
+      if (validation.isValid && validation.inputDataType && !hasPrecisionSuffix) {
+        const dt = validation.inputDataType.toLowerCase();
+        useFp32 = dt === 'float32';
+        useBf16 = dt === 'bfloat16';
+        onLog(`Detected ${useFp32 ? 'FP32' : useBf16 ? 'BF16' : 'FP16'} precision`);
+      }
     } catch (validationError) {
       console.warn('Could not validate ONNX model:', validationError);
+      detectionFailed = true;
     }
-    
-    // Set default shapes based on model type and extracted input name
-    const isVideoModel = modelType === 'vsr';
-    const channels = isVideoModel ? '15' : '3';
+
+    // Shapes based on detected type/frames and extracted input name
+    const channels = modelType === 'vsr' ? String(temporalFrames * 3) : '3';
     const minShapes = `${inputName}:1x${channels}x240x240`;
-    const optShapes = `${inputName}:1x${channels}x720x1280`;
+    const optShapes = useStaticShape && detectedShape
+      ? `${inputName}:${detectedShape.join('x')}`
+      : `${inputName}:1x${channels}x720x1280`;
     const maxShapes = `${inputName}:1x${channels}x1080x1920`;
-    
-    // Generate the trtexec command with proper parameters
-    const customTrtexecParams = generateTrtexecCommand(modelType as 'vsr' | 'image', useFp32, false, inputName, useBf16);
-    
+
+    // Generate the trtexec-style build command with proper parameters
+    let customTrtexecParams = generateTrtexecCommand(modelType, useFp32, useStaticShape, inputName, useBf16, temporalFrames);
+    if (useStaticShape && detectedShape) {
+      customTrtexecParams = customTrtexecParams.replace(
+        `--shapes=${inputName}:1x${channels}x720x1280`,
+        `--shapes=${inputName}:${detectedShape.join('x')}`
+      );
+    }
+
     setImportForm({
       onnxPath: model.onnxPath,
       modelName: model.name,
@@ -98,16 +139,18 @@ export function useBackendOperations({
       useFp32: useFp32,
       useBf16: useBf16,
       modelType,
+      temporalFrames,
       useDirectML: useDirectML,
       displayTag,
-      useStaticShape: false,
+      useStaticShape,
       useCustomTrtexecParams: true,
-      customTrtexecParams
+      customTrtexecParams,
+      detectionFailed
     });
     setModalMode('build');
     setShowImportModal(true);
-    
-    onLog(`Opening build modal for ${model.name} (${modelType}, ${useFp32 ? 'FP32' : useBf16 ? 'BF16' : 'FP16'})`);
+
+    onLog(`Opening build modal for ${model.name} (${modelType}${modelType === 'vsr' ? `, ${temporalFrames} frames` : ''}, ${useFp32 ? 'FP32' : useBf16 ? 'BF16' : 'FP16'})`);
   }, [setImportForm, setModalMode, setShowImportModal, useDirectML, onLog]);
 
   const handleAutoBuild = useCallback(async (model: UninitializedModel): Promise<void> => {

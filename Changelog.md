@@ -26,6 +26,8 @@
   - A race persisted `useDirectML=true` to localStorage before async CUDA detection resolved, permanently blocking the detection-based default
 - Fix DirectML failing with `open ..._fp16_fp16.onnx failed` when a TensorRT engine model is selected
   - The engine→ONNX path mapping now understands the doubled precision suffix of custom-built engines and picks whichever ONNX candidate exists on disk
+- Pre-included models now get the same ONNX auto-detection as custom imports when opening the build modal
+  - Temporal frame count, precision, and static shapes were previously hardcoded (15 channels for any VSR model, precision from filename only), and the frame count was missing from the form entirely
 
 ## 0.16.1
 - Fix `Cannot read properties of null (reading 'execute')` crash when canceling or restarting an upscale during the frame count probe
