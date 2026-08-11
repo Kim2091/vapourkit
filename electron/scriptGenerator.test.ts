@@ -34,7 +34,7 @@ vi.mock('./logger', () => ({
 
 import { VapourSynthScriptGenerator, Filter } from './scriptGenerator';
 
-const aiFilter = (order: number, modelPath: string, backend?: Filter['backend']): Filter => ({
+const aiFilter = (order: number, modelPath: string, backend?: Filter['backend'], numStreams?: number): Filter => ({
   id: `ai-${order}`,
   enabled: true,
   filterType: 'aiModel',
@@ -43,6 +43,7 @@ const aiFilter = (order: number, modelPath: string, backend?: Filter['backend'])
   order,
   modelPath,
   backend,
+  numStreams,
 });
 
 const customFilter = (order: number, preset: string, code = 'clip = core.std.BoxBlur(clip)'): Filter => ({
@@ -54,7 +55,7 @@ const customFilter = (order: number, preset: string, code = 'clip = core.std.Box
   order,
 });
 
-async function generate(filters: Filter[], generatePreviewOutputs = true, defaultBackend?: string): Promise<string> {
+async function generate(filters: Filter[], generatePreviewOutputs = true, defaultBackend?: string, numStreams?: number): Promise<string> {
   const generator = new VapourSynthScriptGenerator();
   const scriptPath = await generator.generateScript({
     inputVideo: 'C:\\videos\\input.mkv',
@@ -63,6 +64,7 @@ async function generate(filters: Filter[], generatePreviewOutputs = true, defaul
     filters,
     generatePreviewOutputs,
     defaultBackend,
+    numStreams,
   });
   const content = await fs.readFile(scriptPath, 'utf-8');
   await fs.remove(scriptPath);
@@ -170,6 +172,38 @@ describe('inference backend selection', () => {
     const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.onnx', 'auto')], false, 'directml');
 
     expect(script).toContain('core.ort.Model');
+  });
+
+  it('honors a per-filter num_streams override against the global value', async () => {
+    const script = await generate(
+      [aiFilter(0, 'C:\\models\\m_fp16.engine', undefined, 4)],
+      false, 'tensorrt', 2,
+    );
+
+    expect(script).toContain('num_streams=4');
+    expect(script).not.toContain('num_streams=2');
+  });
+
+  it('inherits the global num_streams when a filter has no override', async () => {
+    const script = await generate(
+      [aiFilter(0, 'C:\\models\\m_fp16.engine')],
+      false, 'tensorrt', 3,
+    );
+
+    expect(script).toContain('num_streams=3');
+  });
+
+  it('applies per-filter num_streams independently per model', async () => {
+    const script = await generate(
+      [
+        aiFilter(0, 'C:\\models\\a_fp16.engine', undefined, 1),
+        aiFilter(1, 'C:\\models\\b_fp16.engine'),
+      ],
+      false, 'tensorrt', 2,
+    );
+
+    expect(script).toContain('num_streams=1');
+    expect(script).toContain('num_streams=2');
   });
 
   it('maps legacy useDirectML booleans to backend ids', async () => {

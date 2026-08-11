@@ -882,6 +882,7 @@ function App() {
                     isProcessing={isProcessing}
                     defaultBackend={defaultBackend}
                     showBackendOverrides={showBackendOverrides}
+                    numStreams={numStreams}
                     colorimetrySettings={colorimetrySettings}
                     videoInfo={videoInfo}
                     filterTemplates={filterTemplates}

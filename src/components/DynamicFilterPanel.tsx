@@ -15,6 +15,8 @@ interface DynamicFilterPanelProps {
   isProcessing: boolean;
   availableModels?: ModelFile[];
   defaultBackend?: BackendId;
+  /** App-level num_streams — what an unset per-filter value inherits. */
+  defaultNumStreams?: number;
   /** Shows the per-filter backend selector (Settings toggle, off by default). */
   showBackendOverrides?: boolean;
   onFiltersChange: (filters: Filter[]) => void;
@@ -35,6 +37,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   isProcessing,
   availableModels = [],
   defaultBackend = 'tensorrt',
+  defaultNumStreams = 2,
   showBackendOverrides = false,
   onFiltersChange,
   onSaveTemplate,
@@ -234,6 +237,14 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const handleFilterBackendChange = (id: string, backend: FilterBackend) => {
     const updatedFilters = pendingFilters.map(f =>
       f.id === id ? { ...f, backend: backend === 'auto' ? undefined : backend } : f
+    );
+    setPendingFilters(updatedFilters);
+    onFiltersChange(updatedFilters);
+  };
+
+  const handleFilterStreamsChange = (id: string, value: number | undefined) => {
+    const updatedFilters = pendingFilters.map(f =>
+      f.id === id ? { ...f, numStreams: value } : f
     );
     setPendingFilters(updatedFilters);
     onFiltersChange(updatedFilters);
@@ -570,7 +581,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
               onDragOver={(e) => handleDragOver(e, filter.id)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, filter.id)}
-              className={`relative ${
+              className={`relative mb-1 ${
                 isDragging ? 'opacity-40 scale-95' : 'opacity-100 scale-100'
               } ${
                 isHovered && !isDragging ? 'scale-[1.01] transition-transform duration-200' : ''
@@ -585,9 +596,11 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                 <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-accent-500 rounded-full shadow-lg shadow-accent-500/50 z-10" />
               )}
 
-              <div className={`border-b border-ink-900 border-l-2 transition-colors ${
+              <div className={`bg-ink-900 border-l-2 transition-colors ${
                 filter.enabled
-                  ? isAIModel ? 'border-l-accent-500/70' : 'border-l-ink-700'
+                  ? isAIModel
+                    ? isExpanded ? 'border-l-accent-500' : 'border-l-accent-500/70'
+                    : isExpanded ? 'border-l-ink-500' : 'border-l-ink-700'
                   : 'border-l-transparent opacity-50'
               } ${
                 isHovered && !isDragging ? 'bg-ink-850' : ''
@@ -597,8 +610,10 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                   draggable={!isProcessing}
                   onDragStart={(e) => handleDragStart(e, filter.id)}
                   onDragEnd={handleDragEnd}
-                  className={`flex items-center gap-2.5 px-3 py-1.5 hover:bg-ink-850/60 transition-colors cursor-grab active:cursor-grabbing ${
-                    isExpanded ? 'sticky top-0 z-10 rounded-t-lg' : ''
+                  className={`flex items-center gap-2.5 px-3 py-1.5 transition-colors cursor-grab active:cursor-grabbing ${
+                    isExpanded
+                      ? 'bg-ink-850 sticky top-9 z-[5]'
+                      : 'hover:bg-ink-850/60'
                   }`}
                 >
                   {/* Filter Order Number */}
@@ -630,7 +645,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                     disabled={!filter.enabled}
                     className="flex-1 flex items-center gap-2 text-left hover:opacity-80 transition-opacity disabled:opacity-50 min-w-0"
                   >
-                    <span className="text-[12.5px] font-medium truncate text-ink-200">
+                    <span className={`text-[12.5px] font-medium truncate ${isExpanded ? 'text-ink-100' : 'text-ink-200'}`}>
                       {isAIModel
                         ? (availableModels.find(m => m.path === filter.modelPath)?.name || 'Select AI Model')
                         : (filter.preset || 'Custom Filter')
@@ -643,6 +658,15 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                         title={`Backend override: ${getBackendDescriptor(filter.backend).label}`}
                       >
                         {getBackendDescriptor(filter.backend).shortLabel}
+                      </span>
+                    )}
+                    {/* Streams override badge */}
+                    {isAIModel && filter.numStreams != null && (
+                      <span
+                        className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-500/20 border border-accent-500/40 text-accent-300 tabular-nums"
+                        title={`num_streams override: ${filter.numStreams}`}
+                      >
+                        {filter.numStreams}s
                       </span>
                     )}
                     {filter.enabled && (
@@ -687,7 +711,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
 
                 {/* Filter Content - AI Model or Custom */}
                 {filter.enabled && isExpanded && (
-                  <div className="px-3 pb-2.5 space-y-2.5 border-t border-ink-900 pt-2.5 bg-ink-900/70">
+                  <div className="px-3 pb-2.5 space-y-2.5 border-t border-ink-800 pt-2.5">
                     {isAIModel ? (
                       // AI Model Filter Content
                       <>
@@ -724,7 +748,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                           {/* Backend override - 'auto' inherits the app default.
                               Hidden unless enabled in Settings, but always shown
                               when an override is active so it stays clearable. */}
-                          {(showBackendOverrides || (filter.backend && filter.backend !== 'auto')) && (
+                          {(showBackendOverrides || (filter.backend && filter.backend !== 'auto') || filter.numStreams != null) && (
                           <div className="flex items-center gap-2">
                             <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 flex-shrink-0">Backend</label>
                             <select
@@ -736,6 +760,19 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               <option value="auto">Auto ({getBackendDescriptor(defaultBackend).label})</option>
                               {BACKENDS.map(backend => (
                                 <option key={backend.id} value={backend.id}>{backend.label}</option>
+                              ))}
+                            </select>
+                            <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 flex-shrink-0">Streams</label>
+                            <select
+                              value={filter.numStreams ?? 'auto'}
+                              onChange={(e) => handleFilterStreamsChange(filter.id, e.target.value === 'auto' ? undefined : Number(e.target.value))}
+                              disabled={isProcessing}
+                              title="Parallel inference streams for this model. Higher can be faster on high-end GPUs; TensorRT backend only."
+                              className="w-[76px] flex-shrink-0 bg-ink-850 border border-ink-750 rounded h-6 px-1.5 text-[11px] text-ink-300 focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <option value="auto">Auto ({defaultNumStreams})</option>
+                              {[1, 2, 3, 4].map(n => (
+                                <option key={n} value={n}>{n}</option>
                               ))}
                             </select>
                           </div>

@@ -190,6 +190,12 @@ with structure carried entirely by `ink-*`.
 **Migration aliases have been removed.** They served their purpose across steps 1–7 and are gone. Every
 colour class in `src/` now resolves through `ink-*` / `accent-*` / `ok` / `warn` / `bad`.
 
+**Selection is a fill; headers are edges.** A grey `ink-850` band with an accent edge is the header
+recipe — a selected row must never reuse it or it reads as chrome. Selected rows are bounded objects: an
+accent-tinted field (`bg-accent-500/15`), a full `ring-1 ring-inset` accent outline, and a filled accent
+disc holding a check. Headers never have an outline or an accent fill — an edge-only marker at full row
+width reads as a band, which is what made the first two attempts fail.
+
 **Nothing inside a section outranks its header.** The 13px section header is the largest text in the
 settings column; field labels are 10px uppercase, controls 11–12.5px at 28px tall, and the code editor
 runs at 12px. The first pass missed the filter panel’s expanded content (model picker, templates,

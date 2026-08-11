@@ -51,8 +51,14 @@ export const VideoInputPanel = memo<VideoInputPanelProps>(({
           }
         }}
         title={loaded ? 'Click to choose a different video' : 'Click to browse, or drop files here'}
-        className={`border-b border-ink-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 ${
-          isDragging ? 'bg-accent-500/12 ring-1 ring-inset ring-accent-500/50' : 'hover:bg-ink-850/60'
+        // An inset pad on the column ground, so it reads as a control, not
+        // background: dashed while inviting a drop, solid once a file is in.
+        className={`m-1.5 rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 ${
+          isDragging
+            ? 'border-dashed border-accent-500/60 bg-accent-500/10'
+            : loaded
+              ? 'border-ink-750 bg-ink-900 hover:bg-ink-850 hover:border-ink-700'
+              : 'border-dashed border-ink-700 bg-ink-900 hover:bg-ink-850 hover:border-ink-600'
         } ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         {loaded ? (

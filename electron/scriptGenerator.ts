@@ -28,6 +28,8 @@ export interface Filter {
   modelType?: 'vsr' | 'image';
   /** Inference backend override for this filter; 'auto' or unset inherits the app default. */
   backend?: FilterBackend;
+  /** num_streams override for this AI model; unset inherits config.numStreams. */
+  numStreams?: number;
 }
 
 export interface SegmentSelection {
@@ -199,7 +201,7 @@ export class VapourSynthScriptGenerator {
         const filterUseFp32 = configManager.isModelFp32(filter.modelPath);
         const filterModelType = configManager.getModelType(filter.modelPath);
         const filterTemporalFrames = configManager.getTemporalFrames(filter.modelPath);
-        filterCode += this.generateAIModelCode(filter, provider, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams, filterTemporalFrames);
+        filterCode += this.generateAIModelCode(filter, provider, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, filter.numStreams ?? config.numStreams, filterTemporalFrames);
         stageLabel = path.basename(filter.modelPath).replace(/\.(onnx|engine)$/i, '');
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code

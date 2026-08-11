@@ -8,6 +8,7 @@ interface ModelSelectionPanelProps {
   isProcessing: boolean;
   defaultBackend: BackendId;
   showBackendOverrides: boolean;
+  numStreams: number;
   colorimetrySettings: ColorimetrySettings;
   videoInfo: VideoInfo | null;
   filterTemplates: FilterTemplate[];
@@ -25,6 +26,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
   isProcessing,
   defaultBackend,
   showBackendOverrides,
+  numStreams,
   colorimetrySettings,
   videoInfo,
   filterTemplates,
@@ -57,6 +59,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         availableModels={availableModels}
         defaultBackend={defaultBackend}
         showBackendOverrides={showBackendOverrides}
+        defaultNumStreams={numStreams}
         onFiltersChange={onFiltersChange}
         onSaveTemplate={onSaveTemplate}
         onDeleteTemplate={onDeleteTemplate}

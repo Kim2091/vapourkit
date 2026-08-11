@@ -401,6 +401,8 @@ export interface Filter {
   category?: string | string[];
   /** Inference backend override; 'auto' or unset inherits the app default. */
   backend?: FilterBackend;
+  /** num_streams override for this AI model; unset inherits the app default. */
+  numStreams?: number;
 }
 
 export interface SegmentSelection {

@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X, Star, Clock, Cpu, ChevronRight, Trash2, Edit3, Download } from 'lucide-react';
+import { Search, X, Star, Clock, Cpu, Check, Trash2, Edit3, Download } from 'lucide-react';
 import type { BackendId, ModelFile } from '../electron.d';
 import { getModelDisplayName, filterModels, getPortableModelName } from '../utils/modelUtils';
 import { getBackendDescriptor } from '../utils/backends';
@@ -854,7 +854,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                           onClick={() => setSelectedBackend(backend.key)}
                           className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
                             selectedBackend === backend.key
-                              ? 'bg-ink-850 text-ink-100 shadow-[inset_2px_0_0] shadow-accent-500'
+                              ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
                               : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
                           }`}
                         >
@@ -886,7 +886,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         onClick={() => setSelectedCategory(type)}
                         className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
                           selectedCategory === type
-                            ? 'bg-ink-850 text-ink-100 shadow-[inset_2px_0_0] shadow-accent-500'
+                            ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
                             : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
                         }`}
                       >
@@ -917,7 +917,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         onClick={() => setSelectedUserCategory(cat)}
                         className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
                           selectedUserCategory === cat
-                            ? 'bg-ink-850 text-ink-100 shadow-[inset_2px_0_0] shadow-accent-500'
+                            ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
                             : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
                         }`}
                       >
@@ -940,7 +940,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             <div className="flex-1 overflow-y-auto bg-ink-950">
               {/* Current Selection */}
               {currentSelection && (
-                <div className="flex items-center gap-2.5 min-h-[36px] px-3 py-1.5 bg-ink-900 border-b border-ink-800 shadow-[inset_2px_0_0] shadow-accent-500">
+                <div className="flex items-center gap-2.5 min-h-[36px] px-3 py-1.5 bg-accent-500/10 border-b border-ink-800 shadow-[inset_3px_0_0] shadow-accent-500">
                   <div className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 flex-shrink-0">Current Selection</div>
                   <div className="text-[12.5px] font-medium text-accent-400 truncate flex-1 min-w-0">
                     {availableModels.find(m => m.path === currentSelection)?.name || currentSelection}
@@ -1114,7 +1114,7 @@ const ModelItem = memo<ModelItemProps>(({
     <div
       className={`group relative flex items-start gap-2.5 px-3 py-1.5 border-b border-ink-900 cursor-pointer transition-colors ${
         isSelected
-          ? 'bg-ink-850 shadow-[inset_2px_0_0] shadow-accent-500'
+          ? 'bg-accent-500/15 ring-1 ring-inset ring-accent-500/50'
           : 'hover:bg-ink-900'
       }`}
       onClick={() => onSelect(model.path)}
@@ -1122,7 +1122,7 @@ const ModelItem = memo<ModelItemProps>(({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap min-h-[20px]">
           <h4 className={`text-[12.5px] font-medium min-w-0 break-words mr-1 ${
-            isSelected ? 'text-accent-300' : 'text-ink-200'
+            isSelected ? 'text-ink-100' : 'text-ink-200'
           }`}>
             {cleanDisplayName}
           </h4>
@@ -1195,7 +1195,7 @@ const ModelItem = memo<ModelItemProps>(({
 
       <div className="flex items-center gap-0.5 flex-shrink-0">
         {isSelected && (
-          <ChevronRight className="w-3.5 h-3.5 text-accent-400" aria-hidden="true" />
+          <span className="w-5 h-5 rounded-full bg-accent-500 text-accent-ink grid place-items-center flex-shrink-0" aria-hidden="true"><Check className="w-3.5 h-3.5" strokeWidth={3} /></span>
         )}
         {onEdit && (
           <button
