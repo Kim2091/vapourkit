@@ -1,9 +1,10 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { spawn } from 'child_process';
-import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
+import { PATHS, PYPI_EXTRA_INDEX_ARGS, VSVIEW_MIN_VERSION } from './constants';
 import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
+import { isUpdateAvailable } from './updateChecker';
 
 /**
  * Manager for vs-view - VapourSynth script previewer tool
@@ -14,35 +15,51 @@ import { setupVSEnvironment } from './utils';
  */
 export class VsViewManager {
   /**
-   * Check if vs-view is installed in the Python environment
+   * Check if vs-view is installed and at least VSVIEW_MIN_VERSION.
+   * An older install reports false so the launch path upgrades it.
    */
   static async isInstalled(): Promise<boolean> {
     try {
       const env = setupVSEnvironment();
-      
-      // Check if vsview is installed by running pip list
-      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'list'], {
+
+      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'list', '--format=json'], {
         env,
         cwd: PATHS.VS
       });
-      
+
       return new Promise((resolve) => {
         let output = '';
-        
+
         child.stdout?.on('data', (data) => {
           output += data.toString();
         });
-        
+
         child.on('close', (code) => {
-          if (code === 0) {
-            // Check if vsview is in the pip list output
-            const isInstalled = output.toLowerCase().includes('vsview');
-            resolve(isInstalled);
-          } else {
+          if (code !== 0) {
+            resolve(false);
+            return;
+          }
+          try {
+            // Exact-name match: the plugin packages (vsview-comp, ...) also
+            // contain "vsview", so a substring check would false-positive
+            const packages: { name: string; version: string }[] = JSON.parse(output);
+            const vsview = packages.find(pkg => pkg.name.toLowerCase() === 'vsview');
+            if (!vsview) {
+              resolve(false);
+              return;
+            }
+            if (isUpdateAvailable(vsview.version, VSVIEW_MIN_VERSION)) {
+              logger.info(`vsview ${vsview.version} is older than required ${VSVIEW_MIN_VERSION}`);
+              resolve(false);
+              return;
+            }
+            resolve(true);
+          } catch (error) {
+            logger.error('Error parsing pip list output:', error);
             resolve(false);
           }
         });
-        
+
         child.on('error', () => {
           resolve(false);
         });
@@ -63,9 +80,10 @@ export class VsViewManager {
       const env = setupVSEnvironment();
 
       // vsview normally arrives with the main plugin install (vsview[full]);
-      // this is the fallback path when it's missing. Some of its dependencies
-      // are hosted on the JET wheels index rather than PyPI.
-      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', '--no-warn-script-location', 'vsview[full]', ...PYPI_EXTRA_INDEX_ARGS], {
+      // this is the fallback path when it's missing or below the version floor.
+      // Some of its dependencies are hosted on the JET wheels index rather
+      // than PyPI.
+      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', '--upgrade', '--no-warn-script-location', `vsview[full]>=${VSVIEW_MIN_VERSION}`, ...PYPI_EXTRA_INDEX_ARGS], {
         env,
         cwd: PATHS.VS,
         stdio: 'pipe'
@@ -185,10 +203,10 @@ export class VsViewManager {
       // Uninstall vs-preview if present (from a prior build)
       await this.migrateFromVsPreview();
 
-      // Check if vs-view is installed
+      // Check if vs-view is installed and recent enough
       const isInstalled = await this.isInstalled();
       if (!isInstalled) {
-        logger.info('vs-view not found, attempting to install...');
+        logger.info('vs-view missing or outdated, attempting to install...');
         const installResult = await this.install();
         if (!installResult.success) {
           return { success: false, error: installResult.error };

@@ -5,6 +5,11 @@ import { app } from 'electron';
 // Update this when upgrading vs-mlrt; a change prompts users to rebuild engines.
 export const VS_MLRT_VERSION = '16.1';
 
+// Minimum vsview version the app requires (named preview outputs rely on its
+// set_output API). The vs-view launch path upgrades older installs to satisfy
+// this floor; the main plugin install already runs pip with --upgrade.
+export const VSVIEW_MIN_VERSION = '0.9.0';
+
 // Extra package indexes required by the PyPI install:
 // - pypi.nvidia.com hosts the TensorRT (tensorrt-cu13*) wheels
 // - the JET vs-wheels index hosts vapoursynth-* plugin wheels not on PyPI

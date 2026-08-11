@@ -1,5 +1,4 @@
 // electron/scriptGenerator.ts
-import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as os from 'os';
@@ -102,12 +101,26 @@ export class VapourSynthScriptGenerator {
       }
     }
     
-    // Process filters and optionally add output nodes for preview
-    const totalFilters = enabledFilters.length;
-    
+    // For vs-view previews, name output tabs via vsview's set_output API and
+    // always register the unprocessed (but trimmed) input as output 0, so a
+    // single-stage workflow still has a "before" clip to compare against.
+    if (config.generatePreviewOutputs) {
+      filterCode += '# Preview outputs (named tabs in vs-view)\n';
+      filterCode += 'try:\n';
+      filterCode += '    from vsview import set_output as _vk_set_output\n';
+      filterCode += 'except ImportError:\n';
+      filterCode += '    def _vk_set_output(c, i, n=None):\n';
+      filterCode += '        c.set_output(i)\n';
+      filterCode += '_vk_set_output(original_clip, 0, "Source")\n\n';
+    }
+
+    const pyStr = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+    let previewOutputIndex = 0;
+
     for (let i = 0; i < enabledFilters.length; i++) {
       const filter = enabledFilters[i];
-      
+      let stageLabel: string | null = null;
+
       if (filter.filterType === 'aiModel' && filter.modelPath) {
         // Generate AI model upscaling code
         // Check precision and model type for THIS specific model from config, not filter state
@@ -115,17 +128,18 @@ export class VapourSynthScriptGenerator {
         const filterModelType = configManager.getModelType(filter.modelPath);
         const filterTemporalFrames = configManager.getTemporalFrames(filter.modelPath);
         filterCode += this.generateAIModelCode(filter, config.useDirectML || false, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams, filterTemporalFrames);
+        stageLabel = path.basename(filter.modelPath).replace(/\.(onnx|engine)$/i, '');
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';
         filterCode += filter.code.trim() + '\n\n';
+        stageLabel = filter.preset || 'Custom Filter';
       }
-      
-      // Add output node after each filter if generatePreviewOutputs is enabled
-      if (config.generatePreviewOutputs) {
-        // Output index: sequential order (0, 1, 2...)
-        const outputIndex = i;
-        filterCode += `clip.set_output(${outputIndex})\n\n`;
+
+      // Register an output after each stage that actually emitted code
+      if (config.generatePreviewOutputs && stageLabel !== null) {
+        previewOutputIndex++;
+        filterCode += `_vk_set_output(clip, ${previewOutputIndex}, ${pyStr(`${previewOutputIndex}. ${stageLabel}`)})\n\n`;
       }
     }
     

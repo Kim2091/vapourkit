@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as https from 'https';
 import { logger } from './logger';
-import { PATHS, VS_MLRT_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
+import { PATHS, VS_MLRT_VERSION, VSVIEW_MIN_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
@@ -302,7 +302,7 @@ export class PluginInstaller {
       const pypiPackages = [
         'vapoursynth',
         'vsjetpack[full,nvidia]',
-        'vsview[full]',
+        `vsview[full]>=${VSVIEW_MIN_VERSION}`,
         'vs_temporalfix',
         'vs_undistort',
         'vs_grain',
