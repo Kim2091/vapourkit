@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { ModelImportProgress } from '../electron.d';
+import type { BackendId, ModelImportProgress } from '../electron.d';
 import { notify } from '../utils/notifications';
 
 export interface ImportForm {
@@ -13,7 +13,7 @@ export interface ImportForm {
   useBf16: boolean;
   modelType: 'vsr' | 'image';
   temporalFrames: number;
-  useDirectML: boolean;
+  backend: BackendId;
   displayTag: string;
   useStaticShape: boolean;
   useCustomTrtexecParams: boolean;
@@ -56,7 +56,7 @@ const DEFAULT_IMPORT_FORM: ImportForm = {
   useBf16: false,
   modelType: 'image',
   temporalFrames: 5,
-  useDirectML: false,
+  backend: 'tensorrt',
   displayTag: '',
   useStaticShape: false,
   useCustomTrtexecParams: true, // Always true in refactored UI - the textbox is the main interface
@@ -66,7 +66,7 @@ const DEFAULT_IMPORT_FORM: ImportForm = {
 };
 
 export const useModelImport = (
-  useDirectML: boolean,
+  defaultBackend: BackendId,
   onImportComplete: (enginePath?: string) => void,
   addConsoleLog: (message: string) => void
 ) => {
@@ -88,10 +88,10 @@ export const useModelImport = (
   // Guard to ensure completion handlers run only once per import/build
   const completionGuardRef = useRef(false);
 
-  // Update import form when DirectML setting changes
+  // Update import form when the default backend changes
   useEffect(() => {
-    setImportForm(prev => ({ ...prev, useDirectML }));
-  }, [useDirectML]);
+    setImportForm(prev => ({ ...prev, backend: defaultBackend }));
+  }, [defaultBackend]);
 
   const handleSelectOnnxFile = useCallback(async (): Promise<void> => {
     try {
@@ -340,7 +340,7 @@ export const useModelImport = (
           useBf16: importForm.useBf16,
           modelType: importForm.modelType,
           temporalFrames: importForm.modelType === 'vsr' ? importForm.temporalFrames : undefined,
-          useDirectML: importForm.useDirectML,
+          backend: importForm.backend,
           displayTag: importForm.displayTag || undefined,
           useStaticShape: importForm.useStaticShape,
           useCustomTrtexecParams: importForm.useCustomTrtexecParams,
@@ -367,8 +367,8 @@ export const useModelImport = (
   }, [addConsoleLog]);
 
   const resetImportForm = useCallback((): void => {
-    setImportForm({ ...DEFAULT_IMPORT_FORM, useDirectML });
-  }, [useDirectML]);
+    setImportForm({ ...DEFAULT_IMPORT_FORM, backend: defaultBackend });
+  }, [defaultBackend]);
 
   const handleAutoBuildModel = useCallback(async (model: { onnxPath: string; name: string; modelType?: string; displayTag?: string }): Promise<void> => {
     // Use existing metadata from ONNX model if available

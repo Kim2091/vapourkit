@@ -1,8 +1,9 @@
 // src/hooks/useWorkflow.ts
 import { useState, useCallback } from 'react';
-import type { Filter, FilterTemplate, WorkflowData, SegmentSelection, ColorimetrySettings } from '../electron.d';
+import type { BackendId, Filter, FilterTemplate, WorkflowData, SegmentSelection, ColorimetrySettings } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
+import { isBackendId } from '../utils/backends';
 import { notify } from '../utils/notifications';
 
 interface ImportWorkflowModalState {
@@ -46,7 +47,7 @@ interface UseWorkflowProps {
   processingFormat?: string;
   outputFormat?: string;
   videoCompareArgs?: string;
-  useDirectML?: boolean;
+  defaultBackend?: BackendId;
   numStreams?: number;
   segment?: SegmentSelection;
   colorimetry?: ColorimetrySettings;
@@ -54,7 +55,7 @@ interface UseWorkflowProps {
   setProcessingFormat?: (format: string) => void;
   setOutputFormat?: (format: string) => void;
   setVideoCompareArgs?: (args: string) => void;
-  toggleDirectML?: (value: boolean) => void;
+  setDefaultBackend?: (backend: BackendId) => void;
   updateNumStreams?: (streams: number) => void;
   setSegment?: (segment: SegmentSelection) => void;
   handleColorimetryChange?: (settings: ColorimetrySettings) => void;
@@ -87,6 +88,7 @@ export function useWorkflow({
   processingFormat,
   outputFormat,
   videoCompareArgs,
+  defaultBackend,
   numStreams,
   segment,
   colorimetry,
@@ -94,6 +96,7 @@ export function useWorkflow({
   setProcessingFormat,
   setOutputFormat,
   setVideoCompareArgs,
+  setDefaultBackend,
   updateNumStreams,
   setSegment,
   handleColorimetryChange,
@@ -201,6 +204,7 @@ export function useWorkflow({
           modelPath: resolvedModelPath,
           modelType: wf.modelType,
           category: wf.category,
+          backend: wf.backend,
         };
       });
       setFilters(workflowFilters);
@@ -235,6 +239,10 @@ export function useWorkflow({
           handleColorimetryChange(workflow.encodingSettings.colorimetry);
           addConsoleLog(`Applied colorimetry settings from workflow`);
         }
+        if (workflow.encodingSettings.defaultBackend && isBackendId(workflow.encodingSettings.defaultBackend) && setDefaultBackend) {
+          setDefaultBackend(workflow.encodingSettings.defaultBackend);
+          addConsoleLog(`Applied default backend: ${workflow.encodingSettings.defaultBackend}`);
+        }
       }
 
       addConsoleLog(`Loaded workflow "${workflow.name}" with ${workflow.filters.length} filter(s)`);
@@ -261,6 +269,7 @@ export function useWorkflow({
     updateNumStreams,
     setSegment,
     handleColorimetryChange,
+    setDefaultBackend,
   ]);
 
   /**
@@ -355,10 +364,11 @@ export function useWorkflow({
             modelPath: portableModelName,
             modelType: filter.filterType === 'aiModel' ? (filter.modelType || 'image') : undefined,
             category,
+            backend: filter.backend,
           };
         }),
         createdAt: new Date().toISOString(),
-        encodingSettings: ffmpegArgs !== undefined && processingFormat !== undefined && 
+        encodingSettings: ffmpegArgs !== undefined && processingFormat !== undefined &&
           outputFormat !== undefined && videoCompareArgs !== undefined &&
           numStreams !== undefined && segment !== undefined && colorimetry !== undefined
           ? {
@@ -366,6 +376,7 @@ export function useWorkflow({
               processingFormat,
               outputFormat,
               videoCompareArgs,
+              defaultBackend,
               numStreams,
               segment,
               colorimetry,
@@ -384,8 +395,8 @@ export function useWorkflow({
       addConsoleLog(`Error exporting workflow: ${getErrorMessage(error)}`);
       notify.error('Export Error', getErrorMessage(error));
     }
-  }, [filters, deepCopyFilters, addConsoleLog, filterTemplates, ffmpegArgs, processingFormat, outputFormat, 
-      videoCompareArgs, numStreams, segment, colorimetry]);
+  }, [filters, deepCopyFilters, addConsoleLog, filterTemplates, ffmpegArgs, processingFormat, outputFormat,
+      videoCompareArgs, defaultBackend, numStreams, segment, colorimetry]);
 
   /**
    * Import filters from a workflow file permanently

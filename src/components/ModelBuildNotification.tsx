@@ -1,10 +1,11 @@
 import { memo } from 'react';
 import { AlertCircle, Sparkles } from 'lucide-react';
-import type { ModelFile, UninitializedModel, Filter } from '../electron.d';
-import { shouldShowBuildNotification, getEnabledAIModelPaths } from '../utils/modelUtils';
+import type { BackendId, ModelFile, UninitializedModel, Filter } from '../electron.d';
+import { shouldShowBuildNotification } from '../utils/modelUtils';
+import { resolveFilterBackend } from '../utils/backends';
 
 interface ModelBuildNotificationProps {
-  useDirectML: boolean;
+  defaultBackend: BackendId;
   availableModels: ModelFile[];
   uninitializedModels: UninitializedModel[];
   filters: Filter[];
@@ -12,28 +13,29 @@ interface ModelBuildNotificationProps {
 }
 
 export const ModelBuildNotification = memo<ModelBuildNotificationProps>(({
-  useDirectML,
+  defaultBackend,
   availableModels,
   uninitializedModels,
   filters,
   onBuildModel
 }: ModelBuildNotificationProps) => {
-  // Collect all model paths that are being used from filter selections
-  const modelsInUse = getEnabledAIModelPaths(filters);
-  
+  // Enabled AI-model filters, each judged against its own effective backend
+  const aiFilters = filters.filter(f => f.enabled && f.filterType === 'aiModel' && f.modelPath);
+
   // If no models are in use, no notification needed
-  if (modelsInUse.length === 0) return null;
-  
+  if (aiFilters.length === 0) return null;
+
   // Find the first unbuilt model that's being used
   let unbuiltModelPath: string | null = null;
-  for (const modelPath of modelsInUse) {
-    const modelObj = availableModels.find(m => m.path === modelPath);
-    if (shouldShowBuildNotification(modelObj ?? null, useDirectML)) {
-      unbuiltModelPath = modelPath;
+  for (const filter of aiFilters) {
+    const modelObj = availableModels.find(m => m.path === filter.modelPath);
+    const effectiveBackend = resolveFilterBackend(filter.backend, defaultBackend);
+    if (shouldShowBuildNotification(modelObj ?? null, effectiveBackend)) {
+      unbuiltModelPath = filter.modelPath!;
       break;
     }
   }
-  
+
   // If no unbuilt models found, no notification needed
   if (!unbuiltModelPath) return null;
   

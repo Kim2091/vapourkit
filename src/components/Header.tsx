@@ -1,17 +1,19 @@
-import { memo, useMemo } from 'react';
-import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu, FileCheck2, Undo, Redo, Lock, LockOpen } from 'lucide-react';
+import { memo, useMemo, useState, useRef, useEffect } from 'react';
+import { Info, Settings, RefreshCw, Download, Upload, FolderOpen, X, Plug, Cpu, FileCheck2, Undo, Redo, Lock, LockOpen, Check, ChevronDown } from 'lucide-react';
 import { Logo } from './Logo';
+import type { BackendId } from '../electron.d';
+import { BACKENDS, getBackendDescriptor } from '../utils/backends';
 
 interface HeaderProps {
   isProcessing: boolean;
-  useDirectML: boolean;
+  defaultBackend: BackendId;
   privacyMode: boolean;
   onTogglePrivacyMode: () => void;
   onSettingsClick: () => void;
   onPluginsClick: () => void;
   onReloadBackend: () => void;
   onAboutClick: () => void;
-  onToggleDirectML: (value: boolean) => void;
+  onChangeBackend: (backend: BackendId) => void;
   onLoadWorkflow?: () => void;
   onImportWorkflow?: () => void;
   onExportWorkflow?: () => void;
@@ -27,14 +29,14 @@ interface HeaderProps {
 
 export const Header = memo<HeaderProps>(({
   isProcessing,
-  useDirectML,
+  defaultBackend,
   privacyMode,
   onTogglePrivacyMode,
   onSettingsClick,
   onPluginsClick,
   onReloadBackend,
   onAboutClick,
-  onToggleDirectML,
+  onChangeBackend,
   onLoadWorkflow,
   onImportWorkflow,
   onExportWorkflow,
@@ -63,6 +65,22 @@ export const Header = memo<HeaderProps>(({
   const vramColor = vramPercent != null ? colorForPercent(vramPercent) : null;
   const loadColor = gpuStats?.gpuUtilization != null ? colorForPercent(gpuStats.gpuUtilization) : null;
 
+  // Backend dropdown state (options come from the shared backend registry)
+  const [showBackendMenu, setShowBackendMenu] = useState(false);
+  const backendMenuRef = useRef<HTMLDivElement>(null);
+  const activeBackend = getBackendDescriptor(defaultBackend);
+
+  useEffect(() => {
+    if (!showBackendMenu) return;
+    const onClickOutside = (event: MouseEvent) => {
+      if (backendMenuRef.current && !backendMenuRef.current.contains(event.target as Node)) {
+        setShowBackendMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [showBackendMenu]);
+
   return (
   <div className="flex-shrink-0">
     <div className="py-3 px-6 border-b border-gray-800/50">
@@ -85,18 +103,55 @@ export const Header = memo<HeaderProps>(({
             <Plug className="w-5 h-5" />
             <span className="text-xs">Plugins</span>
           </button>
-          <button
-            onClick={() => onToggleDirectML(!useDirectML)}
-            className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg flex flex-col items-center gap-0.5 min-w-[70px]"
-            title={useDirectML ? "Currently using DirectML - Click to switch to TensorRT" : "Currently using TensorRT - Click to switch to DirectML"}
-          >
-            <Cpu className="w-5 h-5" />
-            <div className="flex items-center gap-1 text-xs">
-              <span className={useDirectML ? 'text-accent-cyan font-semibold' : 'text-gray-500'}>DML</span>
-              <span className="text-gray-600">|</span>
-              <span className={!useDirectML ? 'text-primary-blue font-semibold' : 'text-gray-500'}>TRT</span>
-            </div>
-          </button>
+          {/* Default inference backend selector (options from the backend registry) */}
+          <div className="relative" ref={backendMenuRef}>
+            <button
+              onClick={() => setShowBackendMenu(v => !v)}
+              className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg flex flex-col items-center gap-0.5 min-w-[70px]"
+              title={`Default backend: ${activeBackend.label} — ${activeBackend.description}`}
+              aria-haspopup="menu"
+              aria-expanded={showBackendMenu}
+            >
+              <Cpu className="w-5 h-5" />
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-primary-blue font-semibold">{activeBackend.shortLabel}</span>
+                <ChevronDown className={`w-3 h-3 text-gray-500 transition-transform ${showBackendMenu ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+            {showBackendMenu && (
+              <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-dark-surface border border-gray-700/70 rounded-lg shadow-xl shadow-black/40 overflow-hidden">
+                <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-gray-500 border-b border-gray-700/50">
+                  Default inference backend
+                </div>
+                {BACKENDS.map(backend => (
+                  <button
+                    key={backend.id}
+                    onClick={() => {
+                      setShowBackendMenu(false);
+                      if (backend.id !== defaultBackend) {
+                        onChangeBackend(backend.id);
+                      }
+                    }}
+                    className={`w-full text-left px-3 py-2 flex items-start gap-2 transition-colors hover:bg-dark-bg/60 ${
+                      backend.id === defaultBackend ? 'bg-dark-bg/40' : ''
+                    }`}
+                    role="menuitemradio"
+                    aria-checked={backend.id === defaultBackend}
+                  >
+                    <div className="w-4 pt-0.5 flex-shrink-0">
+                      {backend.id === defaultBackend && <Check className="w-4 h-4 text-primary-blue" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className={`text-sm font-medium ${backend.id === defaultBackend ? 'text-white' : 'text-gray-300'}`}>
+                        {backend.label}
+                      </div>
+                      <div className="text-xs text-gray-500 leading-snug">{backend.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={onReloadBackend}
             disabled={isProcessing || isReloading}

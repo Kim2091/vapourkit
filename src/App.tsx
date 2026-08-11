@@ -8,7 +8,8 @@ import { QueuePanel } from './components/QueuePanel';
 import { AppModals } from './components/AppModals';
 import { ProgressPanel } from './components/ProgressPanel';
 import { ActionButtons } from './components/ActionButtons';
-import type { UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
+import type { BackendId, UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
+import { getBackendDescriptor, resolveFilterBackend } from './utils/backends';
 import { Header } from './components/Header';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
 import { useModels } from './hooks/useModels';
@@ -65,7 +66,7 @@ function App() {
   // Setup and initialization hooks
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup, pluginInstallError, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
-  const { useDirectML, toggleDirectML, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
+  const { defaultBackend, setDefaultBackend, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
   const { 
     ffmpegArgs, 
@@ -143,7 +144,7 @@ function App() {
     selectedModel: string | null;
     filters: any[];
     outputFormat: string;
-    useDirectML: boolean;
+    defaultBackend: BackendId;
     numStreams: number;
     segment: SegmentSelection;
   } | null>(null);
@@ -214,7 +215,7 @@ function App() {
     videoCompareArgs,
     selectedModel,
     filters,
-    useDirectML,
+    defaultBackend,
     numStreams,
     segment,
     colorimetry: colorimetrySettings,
@@ -247,7 +248,7 @@ function App() {
     processingFormat,
     outputFormat,
     videoCompareArgs,
-    useDirectML,
+    defaultBackend,
     numStreams,
     segment,
     colorimetry: colorimetrySettings,
@@ -260,7 +261,7 @@ function App() {
     setSelectedModel,
     setFilters: handleSetFilters,
     setOutputFormat: handleUpdateOutputFormat,
-    toggleDirectML,
+    setDefaultBackend,
     updateNumStreams,
     setSegment,
     updateQueueItem,
@@ -317,7 +318,7 @@ function App() {
     processingFormat,
     outputFormat,
     videoCompareArgs,
-    useDirectML,
+    defaultBackend,
     numStreams,
     segment,
     colorimetry: colorimetrySettings,
@@ -325,7 +326,7 @@ function App() {
     setProcessingFormat: handleUpdateProcessingFormat,
     setOutputFormat: handleUpdateOutputFormat,
     setVideoCompareArgs: handleUpdateVideoCompareArgs,
-    toggleDirectML,
+    setDefaultBackend,
     updateNumStreams,
     setSegment,
     handleColorimetryChange,
@@ -355,7 +356,7 @@ function App() {
     autoBuildModelType,
     autoBuildIsStatic,
     autoBuildStaticShape,
-  } = useModelImport(useDirectML, async (enginePath?: string) => {
+  } = useModelImport(defaultBackend, async (enginePath?: string) => {
     await loadModels();
     await loadUninitializedModels();
     // Auto-select the imported/built model
@@ -395,7 +396,7 @@ function App() {
     setModalMode,
     setShowImportModal,
     handleAutoBuildModel,
-    useDirectML,
+    defaultBackend,
     setIsReloading,
   });
 
@@ -424,7 +425,7 @@ function App() {
         selectedModel,
         filters: structuredClone(filters), // Deep copy
         outputFormat,
-        useDirectML,
+        defaultBackend,
         numStreams,
         segment: { ...segment },
       });
@@ -446,8 +447,8 @@ function App() {
         if (preQueueWorkflow.outputFormat !== outputFormat) {
           handleUpdateOutputFormat(preQueueWorkflow.outputFormat);
         }
-        if (preQueueWorkflow.useDirectML !== useDirectML) {
-          toggleDirectML(preQueueWorkflow.useDirectML);
+        if (preQueueWorkflow.defaultBackend !== defaultBackend) {
+          setDefaultBackend(preQueueWorkflow.defaultBackend);
         }
         if (preQueueWorkflow.numStreams !== numStreams) {
           updateNumStreams(preQueueWorkflow.numStreams);
@@ -479,7 +480,7 @@ function App() {
   const { isValidating, validationStatus, validationError, validateWorkflow, cancelValidation, clearValidationStatus } = useOutputResolution({
     videoInfo,
     selectedModel: selectedModel || '',
-    useDirectML,
+    defaultBackend,
     filters,
     numStreams,
     onLog: addConsoleLog,
@@ -491,7 +492,7 @@ function App() {
   useEffect(() => {
     clearValidationStatus();
     setPreviewerStatus('idle');
-  }, [filters, selectedModel, useDirectML, numStreams, videoInfo?.path, clearValidationStatus]);
+  }, [filters, selectedModel, defaultBackend, numStreams, videoInfo?.path, clearValidationStatus]);
 
   // Reset segment selection when video changes (but not when loading a queue item)
   useEffect(() => {
@@ -518,9 +519,9 @@ function App() {
     setShowVsMlrtModal,
   });
 
-  const handleToggleDirectML = (value: boolean): void => {
-    toggleDirectML(value);
-    addConsoleLog(`Inference backend changed to: ${value ? 'DirectML (ONNX Runtime)' : 'TensorRT'}`);
+  const handleChangeBackend = (backend: BackendId): void => {
+    setDefaultBackend(backend);
+    addConsoleLog(`Default inference backend changed to: ${getBackendDescriptor(backend).label}`);
   };
 
   // Segment selection handlers
@@ -540,7 +541,7 @@ function App() {
       const result = await window.electronAPI.previewSegment(
         videoInfo.path,
         selectedModel,
-        useDirectML,
+        defaultBackend,
         true,
         filters,
         numStreams,
@@ -559,7 +560,7 @@ function App() {
     } catch (error) {
       addConsoleLog(`Preview error: ${getErrorMessage(error)}`);
     }
-  }, [videoInfo, selectedModel, useDirectML, filters, numStreams, addConsoleLog, loadCompletedVideo, setCompletedVideoPath]);
+  }, [videoInfo, selectedModel, defaultBackend, filters, numStreams, addConsoleLog, loadCompletedVideo, setCompletedVideoPath]);
 
   // Launch vs-view with current workflow
   const handleLaunchPreviewer = useCallback(async () => {
@@ -573,7 +574,7 @@ function App() {
       const result = await window.electronAPI.launchVsePreviewer(
         videoInfo.path,
         selectedModel,
-        useDirectML,
+        defaultBackend,
         true,
         filters,
         numStreams,
@@ -598,7 +599,7 @@ function App() {
     } finally {
       setIsLaunchingPreviewer(false);
     }
-  }, [videoInfo, selectedModel, useDirectML, filters, numStreams, segment, addConsoleLog, isLaunchingPreviewer]);
+  }, [videoInfo, selectedModel, defaultBackend, filters, numStreams, segment, addConsoleLog, isLaunchingPreviewer]);
 
   // Seek to a specific frame in the video preview (used by segment selector)
   const handleSeekFrame = useCallback(async (frameNumber: number) => {
@@ -629,17 +630,16 @@ function App() {
     if (!videoInfo) return true;
     if (!benchmarkMode && !outputPath) return true;
     
-    // Prevent processing if using TensorRT mode with ONNX models
-    if (!useDirectML) {
-      // Check AI model filters for unbuilt ONNX models
-      const hasOnnxModel = filters.some(f => 
-        f.enabled && 
-        f.filterType === 'aiModel' && 
-        f.modelPath && 
-        f.modelPath.toLowerCase().endsWith('.onnx')
-      );
-      if (hasOnnxModel) return true;
-    }
+    // Prevent processing when a filter's effective backend needs a built
+    // engine but the filter still points at a raw ONNX model
+    const hasUnbuiltModel = filters.some(f =>
+      f.enabled &&
+      f.filterType === 'aiModel' &&
+      f.modelPath &&
+      f.modelPath.toLowerCase().endsWith('.onnx') &&
+      getBackendDescriptor(resolveFilterBackend(f.backend, defaultBackend)).requiresEngineBuild
+    );
+    if (hasUnbuiltModel) return true;
     
     // Allow processing without AI model as long as there's at least one enabled filter or no filters at all
     // Allow if there are no filters (pure processing)
@@ -674,14 +674,14 @@ function App() {
       {/* Header */}
       <Header
         isProcessing={isProcessing}
-        useDirectML={useDirectML}
+        defaultBackend={defaultBackend}
         privacyMode={privacyMode}
         onTogglePrivacyMode={togglePrivacyMode}
         onSettingsClick={() => setShowSettings(true)}
         onPluginsClick={() => setShowPlugins(true)}
         onReloadBackend={handleReloadBackend}
         onAboutClick={() => setShowAbout(true)}
-        onToggleDirectML={handleToggleDirectML}
+        onChangeBackend={handleChangeBackend}
         onLoadWorkflow={handleLoadWorkflow}
         onImportWorkflow={handleImportWorkflow}
         onExportWorkflow={handleExportWorkflow}
@@ -697,7 +697,7 @@ function App() {
 
       {/* Notification Bar for Uninitialized Models */}
       <ModelBuildNotification
-        useDirectML={useDirectML}
+        defaultBackend={defaultBackend}
         availableModels={availableModels}
         uninitializedModels={uninitializedModels}
         filters={filters}
@@ -763,7 +763,7 @@ function App() {
                   <ModelSelectionPanel
                     availableModels={availableModels}
                     isProcessing={isProcessing}
-                    useDirectML={useDirectML}
+                    defaultBackend={defaultBackend}
                     colorimetrySettings={colorimetrySettings}
                     videoInfo={videoInfo}
                     filterTemplates={filterTemplates}
@@ -855,7 +855,7 @@ function App() {
                     previewerStatus={previewerStatus}
                     videoInfo={videoInfo}
                     selectedModel={selectedModel}
-                    useDirectML={useDirectML}
+                    defaultBackend={defaultBackend}
                     filters={filters}
                     numStreams={numStreams}
                     segment={segment}
@@ -922,7 +922,7 @@ function App() {
         handleTemporalFramesChange={handleTemporalFramesChange}
         importProgress={importProgress}
         modalMode={modalMode}
-        useDirectML={useDirectML}
+        defaultBackend={defaultBackend}
         showAutoBuildModal={showAutoBuildModal}
         autoBuildModelName={autoBuildModelName}
         autoBuildModelType={autoBuildModelType}
@@ -932,7 +932,7 @@ function App() {
         onCloseSettings={() => closeModalWithFocusRestore(() => setShowSettings(false))}
         numStreams={numStreams}
         onUpdateNumStreams={updateNumStreams}
-        onToggleDirectML={handleToggleDirectML}
+        onChangeBackend={handleChangeBackend}
         videoCompareArgs={videoCompareArgs}
         onUpdateVideoCompareArgs={handleUpdateVideoCompareArgs}
         onResetVideoCompareArgs={handleResetVideoCompareArgs}

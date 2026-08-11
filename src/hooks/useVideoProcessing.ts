@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { VideoInfo, UpscaleProgress, Filter, SegmentSelection } from '../electron.d';
+import type { BackendId, VideoInfo, UpscaleProgress, Filter, SegmentSelection } from '../electron.d';
+import { getBackendDescriptor } from '../utils/backends';
 import { getErrorMessage } from '../types/errors';
 import { notify } from '../utils/notifications';
 import { generateOutputSuffix } from '../utils/generateOutputSuffix';
@@ -311,7 +312,7 @@ export function useVideoProcessing({
 
   const handleUpscale = async (
     selectedModel: string,
-    useDirectML: boolean,
+    defaultBackend: BackendId,
     filters: Filter[],
     numStreams: number = 2,
     segment?: SegmentSelection,
@@ -348,10 +349,9 @@ export function useVideoProcessing({
     setCompletedVideoBlobUrl(null);
     setVideoLoadError(false);
     onLog(benchmarkMode ? '=== Starting benchmark ===' : '=== Starting upscale process ===');
-    onLog(`Using backend: ${useDirectML ? 'DirectML (ONNX Runtime)' : 'TensorRT'}`);
-    if (!useDirectML) {
-      onLog(`TensorRT num_streams: ${numStreams}`);
-    }
+    const backend = getBackendDescriptor(defaultBackend);
+    onLog(`Default backend: ${backend.label}`);
+    onLog(`num_streams: ${numStreams}`);
     if (benchmarkMode) {
       onLog('Benchmark mode: output will be discarded');
     }
@@ -364,7 +364,7 @@ export function useVideoProcessing({
         videoInfo.path,
         selectedModel,
         outputPath || 'benchmark',
-        useDirectML,
+        defaultBackend,
         true,
         filters,
         0,

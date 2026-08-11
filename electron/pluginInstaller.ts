@@ -5,10 +5,11 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as https from 'https';
 import { logger } from './logger';
-import { PATHS, VS_MLRT_VERSION, VSVIEW_MIN_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
+import { PATHS, VSVIEW_MIN_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
+import { listProviders } from './providers/registry';
 import * as _7z from '7zip-min';
 
 export interface PluginDependencyProgress {
@@ -309,9 +310,10 @@ export class PluginInstaller {
         // Only a .dev release exists on PyPI so far; a bare name would not match it
         'vs_tiletools>=1.0.0.dev0',
         'vs_colorfix[tensorrt]',
-        // Pin vs-mlrt so the stored-version engine rebuild check stays truthful
-        `vapoursynth-mlrt-ort==${VS_MLRT_VERSION}`,
-        `vapoursynth-mlrt-trt==${VS_MLRT_VERSION}`,
+        // Inference backend plugin wheels (vs-mlrt, pinned so the
+        // stored-version engine rebuild check stays truthful) — each backend
+        // declares its own packages in electron/providers/
+        ...listProviders().flatMap(provider => provider.pipPackages()),
         // API4 rebuilds of plugins whose bundled copies were API3-only —
         // VapourSynth R79 aborts on API3 plugins, so these come from PyPI now
         'vapoursynth-mvtools',

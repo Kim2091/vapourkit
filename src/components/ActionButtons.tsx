@@ -2,7 +2,7 @@
 
 import { memo } from 'react';
 import { Sparkles, XCircle, Loader2, CheckCircle, AlertCircle, Play, Gauge, AlertTriangle } from 'lucide-react';
-import type { QueueItem, SegmentSelection, Filter, UpscaleProgress } from '../electron.d';
+import type { BackendId, QueueItem, SegmentSelection, Filter, UpscaleProgress } from '../electron.d';
 import type { ValidationStatus } from '../hooks/useOutputResolution';
 
 interface ActionButtonsProps {
@@ -26,7 +26,7 @@ interface ActionButtonsProps {
   // Video/model state
   videoInfo: any;
   selectedModel: string | null;
-  useDirectML: boolean;
+  defaultBackend: BackendId;
   filters: Filter[];
   numStreams: number;
   segment: SegmentSelection;
@@ -41,7 +41,7 @@ interface ActionButtonsProps {
   // Handlers
   handleForceStop: () => void;
   handleLaunchPreviewer: () => void;
-  handleUpscale: (model: string, useDirectML: boolean, filters: Filter[], numStreams: number, segment: SegmentSelection, benchmarkMode: boolean) => void;
+  handleUpscale: (model: string, defaultBackend: BackendId, filters: Filter[], numStreams: number, segment: SegmentSelection, benchmarkMode: boolean) => void;
   handleCancelUpscale: () => void;
   handleStartQueue: () => void;
   handleStopQueue: () => void;
@@ -61,7 +61,7 @@ export const ActionButtons = memo(function ActionButtons({
   previewerStatus,
   videoInfo,
   selectedModel,
-  useDirectML,
+  defaultBackend,
   filters,
   numStreams,
   segment,
@@ -213,7 +213,7 @@ export const ActionButtons = memo(function ActionButtons({
           </button>
         ) : (
           <button
-            onClick={isProcessing ? handleCancelUpscale : () => handleUpscale(selectedModel || '', useDirectML, filters, numStreams, segment, benchmarkMode)}
+            onClick={isProcessing ? handleCancelUpscale : () => handleUpscale(selectedModel || '', defaultBackend, filters, numStreams, segment, benchmarkMode)}
             disabled={isStartDisabled}
             className={`flex-1 font-semibold py-4 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 ${
               isStopping

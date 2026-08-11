@@ -6,20 +6,21 @@ import { PATHS } from './constants';
 import { configManager } from './configManager';
 import { withLogSeparator } from './utils';
 import { sendModelImportProgress } from './ipcUtilities';
-import { ModelExtractor } from './modelExtractor';
 import { handleValidated } from './ipcValidation';
 import { z } from 'zod';
+import { resolveProvider } from './providers/registry';
+import type { ModelBuildJob } from './providers/types';
 
-// Module-level ModelExtractor instance for cancellation support
-let activeModelExtractor: ModelExtractor | null = null;
+// Module-level build job reference for cancellation support
+let activeBuildJob: ModelBuildJob | null = null;
 
 /**
- * Cancels any active model conversion/import operation
+ * Cancels any active model build/import operation
  */
 export function cancelActiveModelOperation(): void {
-  if (activeModelExtractor) {
-    activeModelExtractor.cancelConversion();
-    activeModelExtractor = null;
+  if (activeBuildJob) {
+    activeBuildJob.cancel();
+    activeBuildJob = null;
   }
 }
 
@@ -157,9 +158,17 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
       logger.model(`Model type: ${params.modelType || 'image'}`);
       
       try {
-        // Use module-level extractor for cancellation support
-        activeModelExtractor = new ModelExtractor();
-        
+        // Model initialization is an engine build — only backends that
+        // pre-build models offer it (TensorRT today). resolveProvider maps an
+        // unset backend to the TensorRT default.
+        const provider = resolveProvider(undefined);
+        if (!provider.createBuildJob) {
+          throw new Error(`Backend ${provider.descriptor.label} does not build model engines`);
+        }
+
+        // Use module-level build job for cancellation support
+        activeBuildJob = provider.createBuildJob();
+
         // Send progress updates
         const sendProgress = (type: 'converting' | 'complete' | 'error', progress: number, message: string, enginePath?: string) => {
           mainWindow?.webContents.send('model-init-progress', {
@@ -169,30 +178,32 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
             enginePath
           });
         };
-        
+
         sendProgress('converting', 0, 'Starting TensorRT engine conversion...');
-        
+
         // Add precision suffix to model name
         const precisionSuffix = params.useFp32 ? '_fp32' : params.useBf16 ? '_bf16' : '_fp16';
         const modelNameWithPrecision = `${params.modelName}${precisionSuffix}`;
         const enginePath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.engine`);
-        
+
         try {
-          await activeModelExtractor.convertToEngineWithProgress(
-            params.onnxPath,
-            enginePath,
-            params.minShapes,
-            params.optShapes,
-            params.maxShapes,
-            params.useFp32,
-            params.useStaticShape || false,
+          await activeBuildJob.buildWithProgress(
+            {
+              onnxPath: params.onnxPath,
+              enginePath,
+              minShapes: params.minShapes,
+              optShapes: params.optShapes,
+              maxShapes: params.maxShapes,
+              useFp32: params.useFp32,
+              useBf16: params.useBf16,
+              useStaticShape: params.useStaticShape || false,
+              customBuildParams: params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
+            },
             0,
             99,
             (message: string, progress: number) => {
               sendProgress('converting', progress, message);
-            },
-            params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
-            params.useBf16
+            }
           );
         } catch (conversionError: any) {
           // Check if this is a fallback notification
@@ -227,15 +238,15 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
 
         // Complete
         sendProgress('complete', 100, 'Model initialized successfully!', enginePath);
-        activeModelExtractor = null;
-        
+        activeBuildJob = null;
+
         return {
           success: true,
           enginePath
         };
-        
+
       } catch (error) {
-        activeModelExtractor = null;
+        activeBuildJob = null;
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         logger.error('Model initialization failed:', errorMsg);
         
@@ -263,7 +274,7 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     useBf16?: boolean;
     modelType?: string;
     temporalFrames?: number;
-    useDirectML?: boolean;
+    backend?: string;
     displayTag?: string;
     useStaticShape?: boolean;
     useCustomTrtexecParams?: boolean;
@@ -271,18 +282,17 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
     skipValidation?: boolean;
   }) => {
     return await withLogSeparator(async () => {
+      const provider = resolveProvider(params.backend);
       logger.model('Starting custom model import');
       logger.model(`ONNX path: ${params.onnxPath}`);
       logger.model(`Model name: ${params.modelName}`);
       logger.model(`Precision: ${params.useFp32 ? 'FP32' : params.useBf16 ? 'BF16' : 'FP16'}`);
       logger.model(`Model type: ${params.modelType || 'image'}`);
-      logger.model(`DirectML mode: ${params.useDirectML ? 'enabled' : 'disabled'}`);
+      logger.model(`Target backend: ${provider.descriptor.label}`);
       logger.model(`Skip validation: ${params.skipValidation ? 'yes' : 'no'}`);
-      
+
       try {
-        // Use module-level extractor for cancellation support
-        activeModelExtractor = new ModelExtractor();
-        
+
         // Validate ONNX model unless skipValidation is set
         if (!params.skipValidation) {
           const { ModelValidator } = await import('./modelValidator');
@@ -338,40 +348,44 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
           params.modelType === 'vsr' ? params.temporalFrames : undefined
         );
 
-        // If DirectML mode is enabled, skip TensorRT conversion
-        if (params.useDirectML) {
-          logger.model('DirectML mode enabled - skipping TensorRT conversion');
-          sendModelImportProgress(mainWindow, 'complete', 100, 'Model imported successfully for DirectML use!', targetOnnxPath);
-          activeModelExtractor = null;
-          
+        // Backends that run ONNX directly (DirectML, and later NCNN/OpenVINO)
+        // are done after the copy — no engine build step.
+        if (!provider.descriptor.requiresEngineBuild || !provider.createBuildJob) {
+          logger.model(`${provider.descriptor.label} runs ONNX directly - skipping engine build`);
+          sendModelImportProgress(mainWindow, 'complete', 100, `Model imported successfully for ${provider.descriptor.label} use!`, targetOnnxPath);
           return {
             success: true,
             onnxPath: targetOnnxPath
           };
         }
-        
-        // Convert to engine (TensorRT mode only)
+
+        // Build the backend-specific engine (TensorRT)
         sendModelImportProgress(mainWindow, 'converting', 30, `Converting to TensorRT engine (${params.useFp32 ? 'FP32' : params.useBf16 ? 'BF16' : 'FP16'})...`);
-        
+
         const enginePath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.engine`);
-        
+
+        // Use module-level build job for cancellation support
+        activeBuildJob = provider.createBuildJob();
+
         try {
-          await activeModelExtractor!.convertToEngineWithProgress(
-            targetOnnxPath,
-            enginePath,
-            params.minShapes,
-            params.optShapes,
-            params.maxShapes,
-            params.useFp32,
-            params.useStaticShape || false,
+          await activeBuildJob.buildWithProgress(
+            {
+              onnxPath: targetOnnxPath,
+              enginePath,
+              minShapes: params.minShapes,
+              optShapes: params.optShapes,
+              maxShapes: params.maxShapes,
+              useFp32: params.useFp32,
+              useBf16: params.useBf16,
+              useStaticShape: params.useStaticShape || false,
+              customBuildParams: params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
+            },
             30,
             69,
             (message: string, progress: number) => {
               const cleanMessage = message.replace(/\.\.\.\s\d+%$/, '...');
               sendModelImportProgress(mainWindow, 'converting', progress, cleanMessage);
-            },
-            params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
-            params.useBf16
+            }
           );
         } catch (conversionError: any) {
           // Check if this is a fallback notification
@@ -395,15 +409,15 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         
         // Complete
         sendModelImportProgress(mainWindow, 'complete', 100, 'Model imported successfully!', enginePath);
-        activeModelExtractor = null;
-        
+        activeBuildJob = null;
+
         return {
           success: true,
           enginePath
         };
-        
+
       } catch (error) {
-        activeModelExtractor = null;
+        activeBuildJob = null;
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         logger.error('Model import failed:', errorMsg);
         sendModelImportProgress(mainWindow, 'error', 0, `Import failed: ${errorMsg}`);
@@ -530,9 +544,9 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
 
   ipcMain.handle('force-stop-model-import', async () => {
     logger.info('Force stopping model import/initialization');
-    if (activeModelExtractor) {
-      activeModelExtractor.forceStopConversion();
-      activeModelExtractor = null;
+    if (activeBuildJob) {
+      activeBuildJob.forceStop();
+      activeBuildJob = null;
     }
     return { success: true };
   });

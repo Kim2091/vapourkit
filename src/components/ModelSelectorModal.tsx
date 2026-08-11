@@ -1,13 +1,14 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, Star, Clock, Cpu, ChevronRight, Trash2, Edit3, Download } from 'lucide-react';
-import type { ModelFile } from '../electron.d';
+import type { BackendId, ModelFile } from '../electron.d';
 import { getModelDisplayName, filterModels, getPortableModelName } from '../utils/modelUtils';
+import { getBackendDescriptor } from '../utils/backends';
 
 interface ModelSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableModels: ModelFile[];
-  useDirectML: boolean;
+  backendId: BackendId;
   onSelectModel: (modelPath: string) => void;
   onEditModel?: (model: ModelFile) => void;
   onImportModel?: () => void;
@@ -66,7 +67,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   isOpen,
   onClose,
   availableModels,
-  useDirectML,
+  backendId,
   onSelectModel,
   onEditModel,
   onImportModel,
@@ -111,7 +112,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   const isEngineFile = (modelPath: string): boolean => /\.engine$/i.test(modelPath);
 
   // Filter models based on backend setting (ONNX mode hides TensorRT engines, etc.)
-  const globalFilteredModels = useMemo(() => filterModels(availableModels, useDirectML), [availableModels, useDirectML]);
+  const globalFilteredModels = useMemo(() => filterModels(availableModels, backendId), [availableModels, backendId]);
   const backendFilteredModels = useMemo(() => {
     // Apply the user's local backend filter within the modal
     if (selectedBackend === 'all') return globalFilteredModels;
@@ -829,8 +830,8 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             {/* Category Sidebar */}
             <div className="w-56 border-r border-gray-800 overflow-y-auto bg-dark-surface">
               <div className="p-3">
-                {/* Backend Filter - only show when multiple backends are available */}
-                {!useDirectML && backendCounts.tensorrt > 0 && backendCounts.onnx > 0 && (
+                {/* File-kind filter - only for engine-building backends with both kinds present */}
+                {getBackendDescriptor(backendId).requiresEngineBuild && backendCounts.tensorrt > 0 && backendCounts.onnx > 0 && (
                   <>
                     <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
                       Backend
@@ -964,7 +965,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         key={model.path}
                         model={model}
                         matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
-                        useDirectML={useDirectML}
+                        backendId={backendId}
                         isFavorite={true}
                         onToggleFavorite={toggleFavorite}
                         onSelect={handleSelectModel}
@@ -991,7 +992,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         key={model.path}
                         model={model}
                         matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
-                        useDirectML={useDirectML}
+                        backendId={backendId}
                         isFavorite={favorites.has(model.path)}
                         onToggleFavorite={toggleFavorite}
                         onSelect={handleSelectModel}
@@ -1040,7 +1041,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
                         key={model.path}
                         model={model}
                         matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
-                        useDirectML={useDirectML}
+                        backendId={backendId}
                         isFavorite={favorites.has(model.path)}
                         onToggleFavorite={toggleFavorite}
                         onSelect={handleSelectModel}
@@ -1081,7 +1082,7 @@ ModelSelectorModal.displayName = 'ModelSelectorModal';
 interface ModelItemProps {
   model: ModelFile;
   matchingEngineModels: ModelFile[];
-  useDirectML: boolean;
+  backendId: BackendId;
   isFavorite: boolean;
   isSelected: boolean;
   onToggleFavorite: (path: string) => void;
@@ -1093,7 +1094,7 @@ interface ModelItemProps {
 const ModelItem = memo<ModelItemProps>(({
   model,
   matchingEngineModels,
-  useDirectML,
+  backendId,
   isFavorite,
   isSelected,
   onToggleFavorite,
@@ -1103,7 +1104,7 @@ const ModelItem = memo<ModelItemProps>(({
 }) => {
   const [showMatchingEngines, setShowMatchingEngines] = useState(false);
   const hasMatchingEngines = matchingEngineModels.length > 0;
-  const displayName = getModelDisplayName(model, useDirectML);
+  const displayName = getModelDisplayName(model, backendId);
   const isUnbuilt = displayName.startsWith('[Unbuilt] ') && !hasMatchingEngines;
   const cleanDisplayName = displayName.startsWith('[Unbuilt] ') ? displayName.replace(/^\[Unbuilt\]\s+/, '') : displayName;
   const userCategoryBadges = filterCategoryBadges(model.category);

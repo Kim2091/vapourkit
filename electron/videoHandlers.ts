@@ -12,6 +12,7 @@ import { formatBytes } from './ipcUtilities';
 import { handleValidated } from './ipcValidation';
 import { z } from 'zod';
 import { VapourSynthScriptGenerator } from './scriptGenerator';
+import { resolveProvider, resolveBackendId } from './providers/registry';
 import { UpscaleExecutor } from './upscaleExecutor';
 import { DependencyManager } from './dependencyManager';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
@@ -128,7 +129,7 @@ export function registerVideoHandlers(
     event,
     videoPath: string,
     modelPath: string | null,
-    useDirectML?: boolean,
+    defaultBackend?: string,
     upscalingEnabled?: boolean,
     filters?: any[],
     upscalePosition?: number,
@@ -142,12 +143,12 @@ export function registerVideoHandlers(
         infoExecutor.cancelInfoExtraction();
         infoExecutor = null;
       }
-      
+
       const config = createScriptConfig(
         videoPath,
         modelPath,
         dependencyManager,
-        useDirectML,
+        defaultBackend,
         upscalingEnabled,
         filters,
         numStreams,
@@ -222,7 +223,7 @@ export function registerVideoHandlers(
     videoPath: string,
     modelPath: string | null,
     outputPath: string,
-    useDirectML?: boolean,
+    defaultBackend?: string,
     upscalingEnabled?: boolean,
     filters?: any[],
     upscalePosition?: number,
@@ -279,7 +280,7 @@ export function registerVideoHandlers(
       qlog(`Upscaling: ${isUpscaling ? 'enabled' : 'disabled'}`);
       if (isUpscaling && modelPath) {
         qlog(`Model: ${modelPath}`);
-        qlog(`Backend: ${useDirectML ? 'DirectML (ONNX Runtime)' : 'TensorRT'}`);
+        qlog(`Default backend: ${resolveProvider(defaultBackend).descriptor.label}`);
       }
       qlog(`Output: ${benchmarkMode ? '(benchmark - null output)' : outputPath}`);
       if (benchmarkMode) qlog('BENCHMARK MODE: Output will be discarded');
@@ -307,7 +308,7 @@ export function registerVideoHandlers(
           videoPath,
           modelPath,
           dependencyManager,
-          useDirectML,
+          defaultBackend,
           upscalingEnabled,
           filters,
           numStreams,
@@ -471,7 +472,7 @@ export function registerVideoHandlers(
     event,
     videoPath: string,
     modelPath: string | null,
-    useDirectML?: boolean,
+    defaultBackend?: string,
     upscalingEnabled?: boolean,
     filters?: any[],
     numStreams?: number,
@@ -481,12 +482,12 @@ export function registerVideoHandlers(
     try {
       // Generate VapourSynth script with the current workflow
       const metadata = await extractVideoMetadata(videoPath);
-      
+
       const scriptConfig = {
         inputVideo: videoPath,
         enginePath: modelPath || '',
         pluginsPath: PATHS.PLUGINS,
-        useDirectML: useDirectML || false,
+        defaultBackend: resolveBackendId(defaultBackend),
         useFp32: modelPath ? configManager.isModelFp32(modelPath) : false,
         modelType: modelPath ? configManager.getModelType(modelPath) : 'image' as const,
         upscalingEnabled: upscalingEnabled || false,
@@ -524,7 +525,7 @@ export function registerVideoHandlers(
     event,
     videoPath: string,
     modelPath: string | null,
-    useDirectML?: boolean,
+    defaultBackend?: string,
     upscalingEnabled?: boolean,
     filters?: any[],
     numStreams?: number,
@@ -564,7 +565,7 @@ export function registerVideoHandlers(
           videoPath,
           modelPath,
           dependencyManager,
-          useDirectML,
+          defaultBackend,
           upscalingEnabled,
           filters,
           numStreams,
@@ -818,7 +819,7 @@ function createScriptConfig(
   videoPath: string,
   modelPath: string | null,
   dependencyManager: DependencyManager,
-  useDirectML?: boolean,
+  defaultBackend?: string,
   upscalingEnabled?: boolean,
   filters?: any[],
   numStreams?: number,
@@ -827,10 +828,10 @@ function createScriptConfig(
   sourceFps?: number
 ) {
   const isUpscaling = upscalingEnabled !== false;
-  
+
   let modelType: 'vsr' | 'image' = 'image';
   let useFp32 = false;
-  
+
   if (isUpscaling && modelPath) {
     modelType = configManager.getModelType(modelPath);
     useFp32 = configManager.isModelFp32(modelPath);
@@ -839,12 +840,12 @@ function createScriptConfig(
   const colorimetrySettings = configManager.getColorimetrySettings();
   const processingFormat = configManager.getProcessingFormat();
   const outputFormat = processingFormat === 'match_input' ? 'original_clip.format.id' : processingFormat;
-  
+
   return {
     inputVideo: videoPath,
     enginePath: modelPath || '',
     pluginsPath: dependencyManager.getPluginsPath(),
-    useDirectML: useDirectML || false,
+    defaultBackend: resolveBackendId(defaultBackend),
     useFp32: useFp32,
     modelType: modelType,
     upscalingEnabled: isUpscaling,

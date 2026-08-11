@@ -1,8 +1,14 @@
 // src/hooks/useQueueOperations.ts - Queue user operations (merged from useQueueHandlers + useQueueEditing)
 
 import { useEffect } from 'react';
-import type { QueueItem, SegmentSelection } from '../electron.d';
+import type { BackendId, QueueItem, SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
+import { resolveBackendId } from '../utils/backends';
+
+/** Reads a queue item's backend, migrating the legacy useDirectML field on the fly. */
+function workflowBackend(workflow: QueueItem['workflow']): BackendId {
+  return resolveBackendId(workflow.defaultBackend ?? workflow.useDirectML);
+}
 
 interface UseQueueOperationsOptions {
   queue: QueueItem[];
@@ -14,7 +20,7 @@ interface UseQueueOperationsOptions {
   processingFormat: string;
   outputFormat: string;
   videoCompareArgs: string;
-  useDirectML: boolean;
+  defaultBackend: BackendId;
   numStreams: number;
   segment: SegmentSelection;
   colorimetry: any;
@@ -27,7 +33,7 @@ interface UseQueueOperationsOptions {
   setSelectedModel: (model: string) => void;
   setFilters: (filters: any[]) => void;
   setOutputFormat: (format: string) => void;
-  toggleDirectML: (value: boolean) => void;
+  setDefaultBackend: (backend: BackendId) => void;
   updateNumStreams: (streams: number) => void;
   setSegment: (segment: SegmentSelection) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
@@ -49,7 +55,7 @@ function snapshotWorkflow(options: {
   processingFormat: string;
   outputFormat: string;
   videoCompareArgs: string;
-  useDirectML: boolean;
+  defaultBackend: BackendId;
   numStreams: number;
   segment: SegmentSelection;
   colorimetry: any;
@@ -61,7 +67,7 @@ function snapshotWorkflow(options: {
     processingFormat: options.processingFormat,
     outputFormat: options.outputFormat,
     videoCompareArgs: options.videoCompareArgs,
-    useDirectML: options.useDirectML,
+    defaultBackend: options.defaultBackend,
     numStreams: options.numStreams,
     segment: options.segment.enabled ? { ...options.segment } : undefined,
     colorimetry: options.colorimetry,
@@ -79,7 +85,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     processingFormat,
     outputFormat,
     videoCompareArgs,
-    useDirectML,
+    defaultBackend,
     numStreams,
     segment,
     colorimetry,
@@ -92,7 +98,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     setSelectedModel,
     setFilters,
     setOutputFormat,
-    toggleDirectML,
+    setDefaultBackend,
     updateNumStreams,
     setSegment,
     updateQueueItem,
@@ -112,7 +118,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
 
     const currentWorkflowSnapshot = snapshotWorkflow({
       selectedModel, filters, ffmpegArgs, processingFormat,
-      outputFormat, videoCompareArgs, useDirectML, numStreams,
+      outputFormat, videoCompareArgs, defaultBackend, numStreams,
       segment, colorimetry,
     });
 
@@ -121,7 +127,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [editingQueueItemId, selectedModel, filters, ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, useDirectML, numStreams, segment, colorimetry, updateItemWorkflow]);
+  }, [editingQueueItemId, selectedModel, filters, ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, defaultBackend, numStreams, segment, colorimetry, updateItemWorkflow]);
 
   // Close editing mode when queue panel closes
   useEffect(() => {
@@ -149,7 +155,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
           setSelectedModel(item.workflow.selectedModel || '');
           setFilters(item.workflow.filters);
           setOutputFormat(item.workflow.outputFormat);
-          toggleDirectML(item.workflow.useDirectML);
+          setDefaultBackend(workflowBackend(item.workflow));
           updateNumStreams(item.workflow.numStreams);
 
           if (item.workflow.segment?.enabled) {
@@ -173,7 +179,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     if (editingQueueItemId) {
       updateItemWorkflow(editingQueueItemId, snapshotWorkflow({
         selectedModel, filters, ffmpegArgs, processingFormat,
-        outputFormat, videoCompareArgs, useDirectML, numStreams,
+        outputFormat, videoCompareArgs, defaultBackend, numStreams,
         segment, colorimetry,
       }));
       onLog(`Auto-saved changes to queue item`);
@@ -184,7 +190,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     setSelectedModel(item.workflow.selectedModel || '');
     setFilters(item.workflow.filters);
     setOutputFormat(item.workflow.outputFormat);
-    toggleDirectML(item.workflow.useDirectML);
+    setDefaultBackend(workflowBackend(item.workflow));
     updateNumStreams(item.workflow.numStreams);
 
     try {

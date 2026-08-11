@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
-import type { SegmentSelection } from '../electron.d';
+import type { BackendId, SegmentSelection } from '../electron.d';
+import { getBackendDescriptor } from '../utils/backends';
 
 export interface BatchVideoConfig {
   videoPath: string;
@@ -10,7 +11,7 @@ export interface BatchVideoConfig {
     selectedModel: string | null;
     filters: any[];
     outputFormat: string;
-    useDirectML: boolean;
+    defaultBackend: BackendId;
     numStreams: number;
     segment?: SegmentSelection;
   };
@@ -124,10 +125,8 @@ export const BatchConfigModal = memo<BatchConfigModalProps>(({
                     <h3 className="text-xs font-medium mb-2 text-gray-400">Current Workflow</h3>
                     <div className="space-y-1 text-xs text-gray-500">
                       <p>Format: {config.workflow.outputFormat.toUpperCase()}</p>
-                      <p>Backend: {config.workflow.useDirectML ? 'DirectML' : 'TensorRT'}</p>
-                      {!config.workflow.useDirectML && (
-                        <p>Num Streams: {config.workflow.numStreams}</p>
-                      )}
+                      <p>Backend: {getBackendDescriptor(config.workflow.defaultBackend).label}</p>
+                      <p>Num Streams: {config.workflow.numStreams}</p>
                       <p>Filters: {config.workflow.filters.filter(f => f.enabled).length} enabled</p>
                     </div>
                   </div>

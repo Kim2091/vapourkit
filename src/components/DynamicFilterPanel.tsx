@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
-import type { Filter, FilterTemplate, ModelFile } from '../electron.d';
+import type { BackendId, FilterBackend, Filter, FilterTemplate, ModelFile } from '../electron.d';
+import { BACKENDS, getBackendDescriptor, resolveFilterBackend } from '../utils/backends';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import { FilterSelectorModal } from './FilterSelectorModal';
 import { ModelSelectorModal } from './ModelSelectorModal';
@@ -12,7 +13,7 @@ interface DynamicFilterPanelProps {
   filterTemplates: FilterTemplate[];
   isProcessing: boolean;
   availableModels?: ModelFile[];
-  useDirectML?: boolean;
+  defaultBackend?: BackendId;
   onFiltersChange: (filters: Filter[]) => void;
   onSaveTemplate?: (template: FilterTemplate) => Promise<boolean>;
   onDeleteTemplate?: (name: string) => Promise<boolean>;
@@ -30,7 +31,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   filterTemplates,
   isProcessing,
   availableModels = [],
-  useDirectML = false,
+  defaultBackend = 'tensorrt',
   onFiltersChange,
   onSaveTemplate,
   onDeleteTemplate,
@@ -226,11 +227,19 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     onFiltersChange(updatedFilters);
   };
 
+  const handleFilterBackendChange = (id: string, backend: FilterBackend) => {
+    const updatedFilters = pendingFilters.map(f =>
+      f.id === id ? { ...f, backend: backend === 'auto' ? undefined : backend } : f
+    );
+    setPendingFilters(updatedFilters);
+    onFiltersChange(updatedFilters);
+  };
+
   const handleModelChange = (id: string, modelPath: string) => {
     const selectedModel = availableModels.find(m => m.path === modelPath);
     const updatedFilters = pendingFilters.map(f =>
-      f.id === id ? { 
-        ...f, 
+      f.id === id ? {
+        ...f,
         modelPath,
         // Use the actual modelType from the model's metadata
         modelType: selectedModel?.modelType || 'image'
@@ -631,11 +640,20 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                     className="flex-1 flex items-center gap-2 text-left hover:opacity-80 transition-opacity disabled:opacity-50 min-w-0"
                   >
                     <span className="text-sm font-medium truncate text-gray-200">
-                      {isAIModel 
+                      {isAIModel
                         ? (availableModels.find(m => m.path === filter.modelPath)?.name || 'Select AI Model')
                         : (filter.preset || 'Custom Filter')
                       }
                     </span>
+                    {/* Backend override badge - only when this filter deviates from the app default */}
+                    {isAIModel && filter.backend && filter.backend !== 'auto' && (
+                      <span
+                        className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300"
+                        title={`Backend override: ${getBackendDescriptor(filter.backend).label}`}
+                      >
+                        {getBackendDescriptor(filter.backend).shortLabel}
+                      </span>
+                    )}
                     {filter.enabled && (
                       isExpanded 
                         ? <ChevronUp className="w-4 h-4 ml-auto flex-shrink-0 text-gray-400" /> 
@@ -702,8 +720,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             onClick={() => !isProcessing && setShowModelSelector(filter.id)}
                             disabled={isProcessing}
                             className={`w-full bg-gray-900/90 border rounded-md px-2.5 py-1.5 text-base text-left focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                              filter.modelPath 
-                                ? 'border-purple-500/50 text-gray-200 hover:border-purple-500' 
+                              filter.modelPath
+                                ? 'border-purple-500/50 text-gray-200 hover:border-purple-500'
                                 : 'border-gray-600 text-gray-400 hover:border-gray-500'
                             }`}
                           >
@@ -712,6 +730,21 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               : 'Select a model...'
                             }
                           </button>
+                          {/* Backend override - 'auto' inherits the app default */}
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-gray-400 flex-shrink-0">Backend</label>
+                            <select
+                              value={filter.backend && filter.backend !== 'auto' ? filter.backend : 'auto'}
+                              onChange={(e) => handleFilterBackendChange(filter.id, e.target.value as FilterBackend)}
+                              disabled={isProcessing}
+                              className="flex-1 bg-gray-900/90 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <option value="auto">Auto ({getBackendDescriptor(defaultBackend).label})</option>
+                              {BACKENDS.map(backend => (
+                                <option key={backend.id} value={backend.id}>{backend.label}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                       </>
                     ) : (
@@ -956,13 +989,13 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
         />
       )}
 
-      {/* Model Selector Modal */}
+      {/* Model Selector Modal - lists models for the edited filter's effective backend */}
       {showModelSelector && (
         <ModelSelectorModal
           isOpen={true}
           onClose={() => setShowModelSelector(null)}
           availableModels={availableModels}
-          useDirectML={useDirectML}
+          backendId={resolveFilterBackend(pendingFilters.find(f => f.id === showModelSelector)?.backend, defaultBackend)}
           currentSelection={pendingFilters.find(f => f.id === showModelSelector)?.modelPath || ''}
           onSelectModel={(modelPath) => {
             if (showModelSelector) {

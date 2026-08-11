@@ -1,6 +1,12 @@
 # Changelog
 
 ## 0.17.0
+- Rework inference backends into self-contained provider modules (`electron/providers/`)
+  - Each backend (TensorRT, DirectML) owns its script codegen, model-file resolution, pip packages, plugin health checks, and engine building in one place; adding a backend (NCNN, OpenVINO) no longer touches the rest of the codebase
+  - The DML/TRT header toggle is now a backend dropdown driven by the provider registry, with the same selection available in Settings
+  - Backend choice is now per AI-model filter: every filter defaults to "Auto" (follows the app default) and can override it in the expanded filter card; overridden filters show a badge on the collapsed card
+  - Generated scripts now include a `vk_backend()` helper so custom filters follow the app-selected backend; the bundled RIFE and DPIR templates use it (RIFE previously forced DirectML on every GPU, DPIR needed a hand-edited `nvidia_gpu` flag). On the TensorRT selection, script filters map to ONNX Runtime CUDA since vsmlrt's script-side TRT path needs `trtexec`, which pip TensorRT doesn't ship
+  - Settings, queue items, and workflow files store a backend id (`tensorrt`/`directml`) instead of the `useDirectML` boolean; existing values migrate automatically on load
 - Migrate the entire install path from manual zip downloads to PyPI
   - VapourSynth (R79), vs-mlrt (16.1), BestSource, and all of pifroggi's plugins (`vs_temporalfix`, `vs_undistort`, `vs_colorfix`, `vs_grain`, `vs_tiletools`) now install via pip
   - Native VapourSynth plugins (akarin, vszip, zsmooth, bestsource, ...) arrive automatically as dependencies of `vsjetpack[full,nvidia]` and the pifroggi packages, using the NVIDIA and JET vs-wheels package indexes

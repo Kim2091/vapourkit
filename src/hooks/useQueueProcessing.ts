@@ -86,7 +86,7 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
           nextItem.videoPath,
           nextItem.workflow.selectedModel || '',
           nextItem.outputPath,
-          nextItem.workflow.useDirectML,
+          nextItem.workflow.defaultBackend,
           true,
           nextItem.workflow.filters,
           0,

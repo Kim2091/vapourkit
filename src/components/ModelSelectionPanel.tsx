@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { ModelFile, ColorimetrySettings, FilterTemplate, VideoInfo, Filter } from '../electron.d';
+import type { BackendId, ModelFile, ColorimetrySettings, FilterTemplate, VideoInfo, Filter } from '../electron.d';
 import { DynamicFilterPanel } from './DynamicFilterPanel';
 import { ColorimetryPanel } from './ColorimetryPanel';
 import { SegmentSelector, type SegmentSelection } from './SegmentSelector';
@@ -7,7 +7,7 @@ import { SegmentSelector, type SegmentSelection } from './SegmentSelector';
 interface ModelSelectionPanelProps {
   availableModels: ModelFile[];
   isProcessing: boolean;
-  useDirectML: boolean;
+  defaultBackend: BackendId;
   colorimetrySettings: ColorimetrySettings;
   videoInfo: VideoInfo | null;
   filterTemplates: FilterTemplate[];
@@ -27,7 +27,7 @@ interface ModelSelectionPanelProps {
 export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
   availableModels,
   isProcessing,
-  useDirectML,
+  defaultBackend,
   colorimetrySettings,
   videoInfo,
   filterTemplates,
@@ -72,7 +72,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         filterTemplates={filterTemplates}
         isProcessing={isProcessing}
         availableModels={availableModels}
-        useDirectML={useDirectML}
+        defaultBackend={defaultBackend}
         onFiltersChange={onFiltersChange}
         onSaveTemplate={onSaveTemplate}
         onDeleteTemplate={onDeleteTemplate}

@@ -5,6 +5,7 @@ import { BrowserWindow } from 'electron';
 import { PATHS, VS_MLRT_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { logger } from './logger';
 import { applyPluginCompatibilityFixes } from './legacyCleanup';
+import { getProvider, type BackendId } from './providers/registry';
 
 export type VsMlrtComponent = 'onnx-runtime' | 'tensorrt';
 
@@ -15,6 +16,13 @@ export interface VsMlrtDownloadProgress {
 
 export type VsMlrtProgressCallback = (progress: VsMlrtDownloadProgress) => void;
 
+// Historical IPC component names → inference backend ids. Package specs and
+// plugin check paths come from the backend's provider module.
+const COMPONENT_BACKEND: Record<VsMlrtComponent, BackendId> = {
+  'onnx-runtime': 'directml',
+  'tensorrt': 'tensorrt',
+};
+
 /**
  * Installs the vs-mlrt inference plugins from PyPI.
  *
@@ -24,15 +32,10 @@ export type VsMlrtProgressCallback = (progress: VsMlrtDownloadProgress) => void;
  */
 export class VsMlrtManager {
   /**
-   * Get the PyPI requirement for a specific vs-mlrt component
+   * Get the PyPI requirements for a specific vs-mlrt component
    */
-  static getPipRequirement(component: VsMlrtComponent): string {
-    switch (component) {
-      case 'onnx-runtime':
-        return `vapoursynth-mlrt-ort==${VS_MLRT_VERSION}`;
-      case 'tensorrt':
-        return `vapoursynth-mlrt-trt==${VS_MLRT_VERSION}`;
-    }
+  static getPipRequirements(component: VsMlrtComponent): string[] {
+    return getProvider(COMPONENT_BACKEND[component]).pipPackages();
   }
 
   /**
@@ -51,13 +54,7 @@ export class VsMlrtManager {
    * Get the check paths that indicate a component is installed (any match counts)
    */
   static getCheckPaths(component: VsMlrtComponent): string[] {
-    switch (component) {
-      case 'onnx-runtime':
-        // The CPU-only "ort" folder is removed when the CUDA build is present
-        return [PATHS.ORT_CUDA_PLUGIN_DLL, PATHS.ORT_PLUGIN_DLL];
-      case 'tensorrt':
-        return [PATHS.TRT_PLUGIN_DLL];
-    }
+    return getProvider(COMPONENT_BACKEND[component]).pluginHealthPaths().flat();
   }
 
   /**
@@ -80,7 +77,7 @@ export class VsMlrtManager {
     progressCallback?: VsMlrtProgressCallback
   ): Promise<void> {
     const componentName = VsMlrtManager.getComponentName(component);
-    const requirement = VsMlrtManager.getPipRequirement(component);
+    const requirements = VsMlrtManager.getPipRequirements(component);
 
     logger.info(`=== Installing ${componentName} from PyPI ===`);
     progressCallback?.({ progress: 5, message: `Preparing to install ${componentName}...` });
@@ -90,7 +87,7 @@ export class VsMlrtManager {
       '--upgrade',
       '--no-warn-script-location',
       '--cache-dir', PATHS.PIP_CACHE,
-      requirement,
+      ...requirements,
       ...PYPI_EXTRA_INDEX_ARGS,
     ];
 

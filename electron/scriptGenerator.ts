@@ -5,6 +5,9 @@ import * as os from 'os';
 import { PATHS } from './constants';
 import { configManager } from './configManager';
 import { logger } from './logger';
+import { BACKENDS, resolveBackendId, resolveFilterBackend, type BackendId, type FilterBackend } from './providers/descriptors';
+import { getProvider } from './providers/registry';
+import type { InferenceProvider } from './providers/types';
 
 export type ModelType = 'vsr' | 'image';
 
@@ -17,6 +20,8 @@ export interface Filter {
   order: number;
   modelPath?: string;
   modelType?: 'vsr' | 'image';
+  /** Inference backend override for this filter; 'auto' or unset inherits the app default. */
+  backend?: FilterBackend;
 }
 
 export interface SegmentSelection {
@@ -30,7 +35,8 @@ export interface ScriptConfig {
   enginePath: string;
   pluginsPath: string;
   outputPath?: string;
-  useDirectML?: boolean;
+  /** App-level default inference backend; per-filter overrides resolve against it. */
+  defaultBackend?: string;
   useFp32?: boolean;
   modelType?: ModelType;
   upscalingEnabled?: boolean;
@@ -57,9 +63,33 @@ export class VapourSynthScriptGenerator {
     return templatePath;
   }
 
+  /**
+   * Python helper injected ahead of the filter chain. Custom .vkfilter code
+   * calls vk_backend(...) to get a vsmlrt Backend instance matching the
+   * app-selected backend, so filters follow the backend dropdown without
+   * hardcoding one (they can still construct a specific vsmlrt Backend to
+   * override). The id → vsmlrt attribute map is generated from the backend
+   * registry, so new backends are available here automatically.
+   */
+  private generateBackendHelper(defaultBackend: BackendId): string {
+    const mapEntries = BACKENDS
+      .map(d => `"${d.id}": Backend.${d.vsmlrtBackendAttr}`)
+      .join(', ');
+
+    let code = '# Inference backend selected in the app; vk_backend() resolves it to a\n';
+    code += '# vsmlrt Backend for custom filters (kwargs pass through, e.g. fp16=True)\n';
+    code += `VK_BACKEND = "${defaultBackend}"\n`;
+    code += 'def vk_backend(**kwargs):\n';
+    code += '    from vsmlrt import Backend\n';
+    code += `    return {${mapEntries}}[VK_BACKEND](**kwargs)\n\n`;
+    return code;
+  }
+
   async generateScript(config: ScriptConfig): Promise<string> {
     const templatePath = this.getTemplatePath();
     let template = await fs.readFile(templatePath, 'utf-8');
+
+    const defaultBackend = resolveBackendId(config.defaultBackend);
 
     // Apply colorimetry settings
     const overwriteMatrix = config.colorimetry?.overwriteMatrix ? 'True' : 'False';
@@ -72,9 +102,9 @@ export class VapourSynthScriptGenerator {
     // Process filters sequentially
     const filters = config.filters || [];
     const enabledFilters = filters.filter(f => f.enabled).sort((a, b) => a.order - b.order);
-    
-    let filterCode = '';
-    
+
+    let filterCode = this.generateBackendHelper(defaultBackend);
+
     // Add validation mode trimming (first 5 seconds only)
     if (config.validationMode) {
       // Calculate frames for 5 seconds based on source FPS (default to 30 if unknown)
@@ -88,7 +118,7 @@ export class VapourSynthScriptGenerator {
     else if (config.segment?.enabled) {
       const startFrame = config.segment.startFrame;
       const endFrame = config.segment.endFrame;
-      
+
       filterCode += '# Segment Selection (Trim)\n';
       if (endFrame === -1) {
         // Trim from start to end
@@ -100,7 +130,7 @@ export class VapourSynthScriptGenerator {
         filterCode += `original_clip = core.std.Trim(original_clip, first=${startFrame}, last=${endFrame - 1})\n\n`;
       }
     }
-    
+
     // For vs-view previews, name output tabs via vsview's set_output API and
     // always register the unprocessed (but trimmed) input as output 0, so a
     // single-stage workflow still has a "before" clip to compare against.
@@ -122,12 +152,13 @@ export class VapourSynthScriptGenerator {
       let stageLabel: string | null = null;
 
       if (filter.filterType === 'aiModel' && filter.modelPath) {
-        // Generate AI model upscaling code
+        // Generate AI model upscaling code with this filter's effective backend
         // Check precision and model type for THIS specific model from config, not filter state
+        const provider = getProvider(resolveFilterBackend(filter.backend, defaultBackend));
         const filterUseFp32 = configManager.isModelFp32(filter.modelPath);
         const filterModelType = configManager.getModelType(filter.modelPath);
         const filterTemporalFrames = configManager.getTemporalFrames(filter.modelPath);
-        filterCode += this.generateAIModelCode(filter, config.useDirectML || false, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams, filterTemporalFrames);
+        filterCode += this.generateAIModelCode(filter, provider, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, config.numStreams, filterTemporalFrames);
         stageLabel = path.basename(filter.modelPath).replace(/\.(onnx|engine)$/i, '');
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code
@@ -142,7 +173,7 @@ export class VapourSynthScriptGenerator {
         filterCode += `_vk_set_output(clip, ${previewOutputIndex}, ${pyStr(`${previewOutputIndex}. ${stageLabel}`)})\n\n`;
       }
     }
-    
+
     // Replace all placeholders
     template = template
       .replace(/{{INPUT_VIDEO}}/g, config.inputVideo.replace(/\\/g, '/'))
@@ -165,55 +196,26 @@ export class VapourSynthScriptGenerator {
     const randomId = Math.random().toString(36).substring(2, 9);
     const tempScriptPath = path.join(os.tmpdir(), `VSR_upscale_${timestamp}_${randomId}.vpy`);
     await fs.writeFile(tempScriptPath, template, 'utf-8');
-    
+
     logger.info(`Generated script: ${tempScriptPath}`);
     return tempScriptPath;
   }
 
   /**
-   * Maps a model path to the ONNX file DirectML should load.
-   *
-   * Engine files exist under two naming conventions: the same base name as the
-   * ONNX (model_fp16.engine) and a doubled precision suffix from custom builds
-   * (model_fp16_fp16.engine, where the second suffix is the build precision).
-   * A plain .engine → .onnx rename breaks the doubled form, so try both
-   * candidates and pick the one that exists on disk.
+   * Generate VapourSynth code for an AI model filter. The clip preparation
+   * (RGB conversion, temporal frame shifting, YUV restore) is backend-agnostic;
+   * the model invocation itself comes from the filter's inference provider.
    */
-  private resolveOnnxPath(modelPath: string): string {
-    if (!/\.engine$/i.test(modelPath)) {
-      return modelPath;
-    }
-
-    const candidates = [
-      modelPath.replace(/\.engine$/i, '.onnx'),
-      modelPath.replace(/_fp(16|32)\.engine$/i, '.onnx'),
-    ];
-
-    for (const candidate of candidates) {
-      if (candidate !== modelPath && fs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
-
-    logger.warn(`No ONNX counterpart found on disk for ${modelPath}; using ${candidates[0]}`);
-    return candidates[0];
-  }
-
-  /**
-   * Generate VapourSynth code for an AI model filter
-   */
-  private generateAIModelCode(filter: Filter, useDirectML: boolean, useFp32: boolean, modelType: ModelType, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number, temporalFrames?: number): string {
+  private generateAIModelCode(filter: Filter, provider: InferenceProvider, useFp32: boolean, modelType: ModelType, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number, temporalFrames?: number): string {
     if (!filter.modelPath) return '';
-    
-    // Constants for VapourSynth variable names
+
+    // Constant for the VapourSynth clip variable name
     const CLIP = 'clip';
-    const M2 = 'm2';
-    const M1 = 'm1';
-    const P1 = 'p1';
-    const P2 = 'p2';
-    
+
+    const modelFile = provider.resolveModelFile(filter.modelPath);
+
     let code = '# AI Model\n';
-    
+
     // Add RGB conversion before model processing and clamp to 0-1 range
     // Use RGBS (float32) for fp32 models, RGBH (float16) for fp16 models
     const rgbFormat = useFp32 ? 'vs.RGBS' : 'vs.RGBH';
@@ -221,37 +223,18 @@ export class VapourSynthScriptGenerator {
     code += `if ${CLIP}.format.id != ${rgbFormat}:\n`;
     code += `    ${CLIP} = core.resize.Bilinear(${CLIP}, format=${rgbFormat}, matrix_in_s="${defaultMatrix}", primaries_in_s="${defaultPrimaries}", transfer_in_s="${defaultTransfer}")\n`;
     code += `${CLIP} = core.std.Expr(${CLIP}, expr=['x 0 max 1 min'])\n`;
-    
-    // Set up model plugin and parameters
-    let modelPlugin: string;
-    let modelPathParam: string;
-    let modelPath: string;
-    let fp16Param: string;
-    
-    if (useDirectML) {
-      modelPlugin = 'ort';
-      modelPathParam = 'network_path';
-      modelPath = this.resolveOnnxPath(filter.modelPath);
-      const useFp16 = !useFp32;
-      fp16Param = `, provider="DML", device_id=0, fp16=${useFp16 ? 'True' : 'False'}, verbosity=4`;
-    } else {
-      modelPlugin = 'trt';
-      modelPathParam = 'engine_path';
-      modelPath = filter.modelPath;
-      fp16Param = '';
-    }
-    
+
     // Determine num_streams value (default to 2 if not specified)
-    const streams = numStreams ?? 2;
-    
+    const callOptions = { numStreams: numStreams ?? 2, useFp32 };
+
     // Generate model inference code based on model type
     if (modelType === 'vsr') {
       // Use temporalFrames parameter or default to 5 for backward compatibility
       const frames = temporalFrames ?? 5;
       const halfFrames = Math.floor(frames / 2);
-      
+
       code += `# Temporal upscaling (${frames}-frame VSR architecture)\n`;
-      
+
       // Generate frame shift variables dynamically based on frame count
       const frameVars: string[] = [];
       for (let i = -halfFrames; i <= halfFrames; i++) {
@@ -268,17 +251,19 @@ export class VapourSynthScriptGenerator {
           frameVars.push(varName);
         }
       }
-      
-      code += `${CLIP} = core.${modelPlugin}.Model([${frameVars.join(', ')}], ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;
+
+      code += provider.modelCallCode(`[${frameVars.join(', ')}]`, modelFile, callOptions);
+      code += '\n';
     } else {
       code += '# Single-frame upscaling (non-temporal architecture)\n';
-      code += `${CLIP} = core.${modelPlugin}.Model(${CLIP}, ${modelPathParam}="${modelPath.replace(/\\/g, '/')}", num_streams=${streams}${fp16Param})\n\n`;
+      code += provider.modelCallCode(CLIP, modelFile, callOptions);
+      code += '\n';
     }
-    
+
     // Convert to YUV for filter compatibility
     code += '# Convert to YUV for filter compatibility\n';
     code += `${CLIP} = core.resize.Point(${CLIP}, format=vs.YUV444P16, matrix_s="709", primaries_s="709", transfer_s="709")\n\n`;
-    
+
     return code;
   }
 

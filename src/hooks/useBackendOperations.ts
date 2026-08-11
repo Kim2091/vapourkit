@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { UninitializedModel } from '../electron.d';
+import type { BackendId, UninitializedModel } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { generateTrtexecCommand } from './useModelImport';
 
@@ -12,7 +12,7 @@ interface UseBackendOperationsProps {
   setModalMode: (mode: 'import' | 'build') => void;
   setShowImportModal: (show: boolean) => void;
   handleAutoBuildModel: (params: any) => Promise<void>;
-  useDirectML: boolean;
+  defaultBackend: BackendId;
   setIsReloading: (reloading: boolean) => void;
 }
 
@@ -25,7 +25,7 @@ export function useBackendOperations({
   setModalMode,
   setShowImportModal,
   handleAutoBuildModel,
-  useDirectML,
+  defaultBackend,
   setIsReloading,
 }: UseBackendOperationsProps) {
   
@@ -140,7 +140,7 @@ export function useBackendOperations({
       useBf16: useBf16,
       modelType,
       temporalFrames,
-      useDirectML: useDirectML,
+      backend: defaultBackend,
       displayTag,
       useStaticShape,
       useCustomTrtexecParams: true,
@@ -151,7 +151,7 @@ export function useBackendOperations({
     setShowImportModal(true);
 
     onLog(`Opening build modal for ${model.name} (${modelType}${modelType === 'vsr' ? `, ${temporalFrames} frames` : ''}, ${useFp32 ? 'FP32' : useBf16 ? 'BF16' : 'FP16'})`);
-  }, [setImportForm, setModalMode, setShowImportModal, useDirectML, onLog]);
+  }, [setImportForm, setModalMode, setShowImportModal, defaultBackend, onLog]);
 
   const handleAutoBuild = useCallback(async (model: UninitializedModel): Promise<void> => {
     onLog(`Auto-building model: ${model.name}`);

@@ -34,7 +34,7 @@ vi.mock('./logger', () => ({
 
 import { VapourSynthScriptGenerator, Filter } from './scriptGenerator';
 
-const aiFilter = (order: number, modelPath: string): Filter => ({
+const aiFilter = (order: number, modelPath: string, backend?: Filter['backend']): Filter => ({
   id: `ai-${order}`,
   enabled: true,
   filterType: 'aiModel',
@@ -42,6 +42,7 @@ const aiFilter = (order: number, modelPath: string): Filter => ({
   code: '',
   order,
   modelPath,
+  backend,
 });
 
 const customFilter = (order: number, preset: string, code = 'clip = core.std.BoxBlur(clip)'): Filter => ({
@@ -53,7 +54,7 @@ const customFilter = (order: number, preset: string, code = 'clip = core.std.Box
   order,
 });
 
-async function generate(filters: Filter[], generatePreviewOutputs = true): Promise<string> {
+async function generate(filters: Filter[], generatePreviewOutputs = true, defaultBackend?: string): Promise<string> {
   const generator = new VapourSynthScriptGenerator();
   const scriptPath = await generator.generateScript({
     inputVideo: 'C:\\videos\\input.mkv',
@@ -61,6 +62,7 @@ async function generate(filters: Filter[], generatePreviewOutputs = true): Promi
     pluginsPath: 'C:\\plugins',
     filters,
     generatePreviewOutputs,
+    defaultBackend,
   });
   const content = await fs.readFile(scriptPath, 'utf-8');
   await fs.remove(scriptPath);
@@ -135,5 +137,62 @@ describe('generateScript preview outputs (vs-view)', () => {
     const script = await generate([customFilter(0, 'My "Special" Filter')]);
 
     expect(script).toContain('_vk_set_output(clip, 1, "1. My \\"Special\\" Filter")');
+  });
+});
+
+describe('inference backend selection', () => {
+  it('emits TensorRT code for the default backend', async () => {
+    const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.engine')], false);
+
+    expect(script).toContain('core.trt.Model(clip, engine_path="C:/models/m_fp16.engine"');
+    expect(script).not.toContain('core.ort.Model');
+  });
+
+  it('emits DirectML code when the default backend is directml', async () => {
+    const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.onnx')], false, 'directml');
+
+    expect(script).toContain('core.ort.Model(clip, network_path="C:/models/m_fp16.onnx"');
+    expect(script).toContain('provider="DML"');
+    expect(script).not.toContain('core.trt.Model');
+  });
+
+  it('honors a per-filter backend override against the default', async () => {
+    const script = await generate([
+      aiFilter(0, 'C:\\models\\a_fp16.engine'),
+      aiFilter(1, 'C:\\models\\b_fp16.onnx', 'directml'),
+    ], false);
+
+    expect(script).toContain('core.trt.Model(clip, engine_path="C:/models/a_fp16.engine"');
+    expect(script).toContain('core.ort.Model(clip, network_path="C:/models/b_fp16.onnx"');
+  });
+
+  it('treats an auto per-filter backend as the default backend', async () => {
+    const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.onnx', 'auto')], false, 'directml');
+
+    expect(script).toContain('core.ort.Model');
+  });
+
+  it('maps legacy useDirectML booleans to backend ids', async () => {
+    const generator = new VapourSynthScriptGenerator();
+    const scriptPath = await generator.generateScript({
+      inputVideo: 'C:\\videos\\input.mkv',
+      enginePath: '',
+      pluginsPath: 'C:\\plugins',
+      filters: [aiFilter(0, 'C:\\models\\m_fp16.onnx')],
+      defaultBackend: true as any,
+    });
+    const script = await fs.readFile(scriptPath, 'utf-8');
+    await fs.remove(scriptPath);
+
+    expect(script).toContain('core.ort.Model');
+  });
+
+  it('injects the vk_backend helper with the selected default', async () => {
+    const script = await generate([customFilter(0, 'CAS Sharpen')], false, 'directml');
+
+    expect(script).toContain('VK_BACKEND = "directml"');
+    expect(script).toContain('def vk_backend(');
+    expect(script).toContain('"tensorrt": Backend.ORT_CUDA');
+    expect(script).toContain('"directml": Backend.ORT_DML');
   });
 });

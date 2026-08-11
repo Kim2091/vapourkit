@@ -1,8 +1,9 @@
 // src/hooks/useQueueStore.ts - Consolidated queue data layer (merged from useQueueState + useQueueManagement)
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { QueueItem, Filter, SegmentSelection } from '../electron.d';
+import type { BackendId, QueueItem, Filter, SegmentSelection } from '../electron.d';
 import { generateOutputSuffix } from '../utils/generateOutputSuffix';
+import { resolveBackendId } from '../utils/backends';
 
 interface UseQueueStoreProps {
   onLog: (message: string) => void;
@@ -48,12 +49,23 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
     try {
       const savedQueue = await window.electronAPI.getQueue();
 
-      // Reset any items that were processing when app was closed
+      // Reset any items that were processing when app was closed, and migrate
+      // legacy workflows (useDirectML boolean) to backend ids
       const resetQueue = savedQueue.map((item: QueueItem) => {
-        if (item.status === 'processing') {
-          return { ...item, status: 'pending' as const, progress: 0 };
+        const migrated: QueueItem = item.workflow.defaultBackend
+          ? item
+          : {
+              ...item,
+              workflow: {
+                ...item.workflow,
+                defaultBackend: resolveBackendId(item.workflow.useDirectML),
+                useDirectML: undefined,
+              },
+            };
+        if (migrated.status === 'processing') {
+          return { ...migrated, status: 'pending' as const, progress: 0 };
         }
-        return item;
+        return migrated;
       });
 
       const resetCount = resetQueue.filter((item: QueueItem, idx: number) =>
@@ -124,7 +136,7 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
       processingFormat: string;
       outputFormat: string;
       videoCompareArgs: string;
-      useDirectML: boolean;
+      defaultBackend: BackendId;
       numStreams: number;
       segment?: SegmentSelection;
       colorimetry?: any;
@@ -178,7 +190,7 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
             processingFormat: currentWorkflow.processingFormat,
             outputFormat: currentWorkflow.outputFormat,
             videoCompareArgs: currentWorkflow.videoCompareArgs,
-            useDirectML: currentWorkflow.useDirectML,
+            defaultBackend: currentWorkflow.defaultBackend,
             numStreams: currentWorkflow.numStreams,
             segment: currentWorkflow.segment ? { ...currentWorkflow.segment } : undefined,
             colorimetry: currentWorkflow.colorimetry,

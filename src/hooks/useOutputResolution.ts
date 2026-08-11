@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
-import type { VideoInfo, Filter } from '../electron.d';
+import type { VideoInfo, Filter, BackendId } from '../electron.d';
 
 interface UseOutputResolutionProps {
   videoInfo: VideoInfo | null;
   selectedModel: string;
-  useDirectML: boolean;
+  defaultBackend: BackendId;
   filters: Filter[];
   numStreams: number;
   onLog: (message: string) => void;
@@ -26,7 +26,7 @@ interface UseOutputResolutionReturn {
 export function useOutputResolution({
   videoInfo,
   selectedModel,
-  useDirectML,
+  defaultBackend,
   filters,
   numStreams,
   onLog,
@@ -92,7 +92,7 @@ export function useOutputResolution({
       const info = await window.electronAPI.getOutputResolution(
         videoInfo.path,
         selectedModel,
-        useDirectML,
+        defaultBackend,
         true,
         filters,
         0,
@@ -156,7 +156,7 @@ export function useOutputResolution({
       isValidatingRef.current = false;
       setIsValidating(false);
     }
-  }, [videoInfo, selectedModel, useDirectML, filters, numStreams, onLog, onUpdateVideoInfo, onError]);
+  }, [videoInfo, selectedModel, defaultBackend, filters, numStreams, onLog, onUpdateVideoInfo, onError]);
 
   return {
     isValidating,

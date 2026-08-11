@@ -24,84 +24,84 @@ describe('filterModels', () => {
     makeModel({ path: 'c.onnx', name: 'ModelC', backend: 'onnx' }),
   ];
 
-  it('shows only ONNX models in DirectML mode', () => {
-    const result = filterModels(models, true);
+  it('shows only ONNX models for ONNX-direct backends (DirectML)', () => {
+    const result = filterModels(models, 'directml');
     expect(result.every(m => m.backend === 'onnx')).toBe(true);
     expect(result).toHaveLength(2);
   });
 
-  it('shows all models in TensorRT mode', () => {
-    const result = filterModels(models, false);
+  it('shows all models for engine-building backends (TensorRT)', () => {
+    const result = filterModels(models, 'tensorrt');
     expect(result).toHaveLength(3);
   });
 
   it('sorts TensorRT engines to the top', () => {
-    const result = filterModels(models, false);
+    const result = filterModels(models, 'tensorrt');
     expect(result[0].backend).toBe('tensorrt');
   });
 
   it('returns empty array when no models match', () => {
     const engineOnly = [makeModel({ path: 'a.engine', name: 'A', backend: 'tensorrt', hasEngine: true })];
-    expect(filterModels(engineOnly, true)).toHaveLength(0);
+    expect(filterModels(engineOnly, 'directml')).toHaveLength(0);
   });
 });
 
 describe('getModelDisplayName', () => {
   it('returns the model name when no display tag', () => {
     const model = makeModel({ path: 'a.onnx', name: 'MyModel', backend: 'onnx' });
-    expect(getModelDisplayName(model, true)).toBe('MyModel');
+    expect(getModelDisplayName(model, 'directml')).toBe('MyModel');
   });
 
   it('appends display tag in brackets', () => {
     const model = makeModel({ path: 'a.onnx', name: 'MyModel', backend: 'onnx', displayTag: '2x' } as any);
-    expect(getModelDisplayName(model, true)).toBe('MyModel [2x]');
+    expect(getModelDisplayName(model, 'directml')).toBe('MyModel [2x]');
   });
 
-  it('adds [Unbuilt] prefix for ONNX without engine in TensorRT mode', () => {
+  it('adds [Unbuilt] prefix for ONNX without engine on TensorRT', () => {
     const model = makeModel({ path: 'a.onnx', name: 'MyModel', backend: 'onnx', hasEngine: false });
-    expect(getModelDisplayName(model, false)).toBe('[Unbuilt] MyModel');
+    expect(getModelDisplayName(model, 'tensorrt')).toBe('[Unbuilt] MyModel');
   });
 
-  it('does not add [Unbuilt] in DirectML mode', () => {
+  it('does not add [Unbuilt] on DirectML', () => {
     const model = makeModel({ path: 'a.onnx', name: 'MyModel', backend: 'onnx', hasEngine: false });
-    expect(getModelDisplayName(model, true)).toBe('MyModel');
+    expect(getModelDisplayName(model, 'directml')).toBe('MyModel');
   });
 });
 
 describe('modelNeedsBuild', () => {
   it('returns false for null model', () => {
-    expect(modelNeedsBuild(null, false)).toBe(false);
+    expect(modelNeedsBuild(null, 'tensorrt')).toBe(false);
   });
 
-  it('returns false in DirectML mode', () => {
+  it('returns false on DirectML', () => {
     const model = makeModel({ path: 'a.onnx', name: 'M', backend: 'onnx' });
-    expect(modelNeedsBuild(model, true)).toBe(false);
+    expect(modelNeedsBuild(model, 'directml')).toBe(false);
   });
 
-  it('returns true for ONNX without engine in TensorRT mode', () => {
+  it('returns true for ONNX without engine on TensorRT', () => {
     const model = makeModel({ path: 'a.onnx', name: 'M', backend: 'onnx', hasEngine: false });
-    expect(modelNeedsBuild(model, false)).toBe(true);
+    expect(modelNeedsBuild(model, 'tensorrt')).toBe(true);
   });
 
-  it('returns false for ONNX with engine in TensorRT mode', () => {
+  it('returns false for ONNX with engine on TensorRT', () => {
     const model = makeModel({ path: 'a.onnx', name: 'M', backend: 'onnx', hasEngine: true });
-    expect(modelNeedsBuild(model, false)).toBe(false);
+    expect(modelNeedsBuild(model, 'tensorrt')).toBe(false);
   });
 });
 
 describe('shouldShowBuildNotification', () => {
   it('returns false for null model', () => {
-    expect(shouldShowBuildNotification(null, false)).toBe(false);
+    expect(shouldShowBuildNotification(null, 'tensorrt')).toBe(false);
   });
 
-  it('returns false in DirectML mode', () => {
+  it('returns false on DirectML', () => {
     const model = makeModel({ path: 'a.onnx', name: 'M', backend: 'onnx' });
-    expect(shouldShowBuildNotification(model, true)).toBe(false);
+    expect(shouldShowBuildNotification(model, 'directml')).toBe(false);
   });
 
-  it('returns true for any ONNX in TensorRT mode (allows rebuilding)', () => {
+  it('returns true for any ONNX on TensorRT (allows rebuilding)', () => {
     const model = makeModel({ path: 'a.onnx', name: 'M', backend: 'onnx', hasEngine: true });
-    expect(shouldShowBuildNotification(model, false)).toBe(true);
+    expect(shouldShowBuildNotification(model, 'tensorrt')).toBe(true);
   });
 });
 

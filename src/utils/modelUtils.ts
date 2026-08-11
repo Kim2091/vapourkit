@@ -1,34 +1,40 @@
-import type { ModelFile } from '../electron.d';
+import type { BackendId, ModelFile } from '../electron.d';
+import { getBackendDescriptor } from './backends';
+
+// NOTE: ModelFile.backend describes the model FILE kind ('tensorrt' = built
+// .engine file, 'onnx' = portable .onnx file), not the inference backend the
+// user selected — that's the BackendId parameter below.
 
 /**
- * Filters and sorts models based on the current backend.
- * 
+ * Filters and sorts models based on an inference backend.
+ *
  * Rules:
- * - DirectML mode: Show only ONNX models
- * - TensorRT mode: Show ALL models (engines + all ONNX for rebuilding)
- * - TensorRT mode: Engines are always sorted to the top
+ * - Backends that run ONNX directly (DirectML, NCNN, OpenVINO): only ONNX models
+ * - Engine-building backends (TensorRT): ALL models (engines + all ONNX for
+ *   rebuilding), with engines sorted to the top
  */
 export function filterModels(
   models: ModelFile[],
-  useDirectML: boolean
+  backendId: BackendId
 ): ModelFile[] {
+  const backend = getBackendDescriptor(backendId);
+
   const filtered = models.filter(model => {
-    if (useDirectML) {
-      // DirectML: Only show ONNX models
-      return model.backend === 'onnx';
-    } else {
-      // TensorRT mode: Show engines + all ONNX (allows rebuilding)
+    if (backend.requiresEngineBuild) {
+      // Show engines + all ONNX (allows rebuilding)
       return model.backend === 'tensorrt' || model.backend === 'onnx';
     }
+    // ONNX-direct backends: only show ONNX models
+    return model.backend === 'onnx';
   });
 
-  // In TensorRT mode, sort engines to the top
-  if (!useDirectML) {
+  // For engine-building backends, sort engines to the top
+  if (backend.requiresEngineBuild) {
     return filtered.sort((a, b) => {
-      // TensorRT engines first
+      // Engines first
       if (a.backend === 'tensorrt' && b.backend !== 'tensorrt') return -1;
       if (a.backend !== 'tensorrt' && b.backend === 'tensorrt') return 1;
-      // Maintain original order for same backend type
+      // Maintain original order for same file kind
       return 0;
     });
   }
@@ -38,43 +44,41 @@ export function filterModels(
 
 /**
  * Gets the display name for a model with appropriate labels.
- * 
- * Rules:
- * - DirectML mode: Show name with display tag if available
- * - TensorRT mode: Add [Unbuilt] prefix for ONNX without engines
+ * Engine-building backends add an [Unbuilt] prefix for ONNX without engines.
  */
 export function getModelDisplayName(
   model: ModelFile,
-  useDirectML: boolean
+  backendId: BackendId
 ): string {
   // Build display name: base name + optional display tag
   let displayName = model.name;
-  
+
   // Add display tag if available
   if (model.displayTag) {
     displayName = `${displayName} [${model.displayTag}]`;
   }
-  
-  // Add [Unbuilt] label in TensorRT mode for ONNX without engines
-  if (!useDirectML && model.backend === 'onnx' && !model.hasEngine) {
+
+  // Add [Unbuilt] label for ONNX without engines when the backend builds engines
+  if (getBackendDescriptor(backendId).requiresEngineBuild && model.backend === 'onnx' && !model.hasEngine) {
     displayName = '[Unbuilt] ' + displayName;
   }
-  
+
   return displayName;
 }
 
 /**
- * Checks if a model needs to be built before use.
- * Returns true if the model is an ONNX model without a built engine in TensorRT mode.
+ * Checks if a model needs to be built before use with the given backend.
+ * Returns true for an ONNX model without a built engine when the backend
+ * requires engines.
  */
 export function modelNeedsBuild(
   model: ModelFile | null,
-  useDirectML: boolean
+  backendId: BackendId
 ): boolean {
-  if (!model || useDirectML) {
+  if (!model || !getBackendDescriptor(backendId).requiresEngineBuild) {
     return false;
   }
-  
+
   return model.backend === 'onnx' && !model.hasEngine;
 }
 
@@ -84,12 +88,12 @@ export function modelNeedsBuild(
  */
 export function shouldShowBuildNotification(
   model: ModelFile | null,
-  useDirectML: boolean
+  backendId: BackendId
 ): boolean {
-  if (!model || useDirectML) {
+  if (!model || !getBackendDescriptor(backendId).requiresEngineBuild) {
     return false;
   }
-  
+
   // Show notification for ANY ONNX model (allows rebuilding)
   return model.backend === 'onnx';
 }

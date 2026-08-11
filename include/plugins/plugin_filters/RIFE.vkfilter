@@ -12,8 +12,9 @@ fp16  = True             # FP16 precision
 use_sc_detect = True     # Enable scene change detection for better quality
 sc_threshold = 0.1       # Scene change detection threshold (higher = less sensitive)
 
-# Backend (DirectML for AMD/Intel GPUs)
-backend = Backend.ORT_DML(fp16=fp16)
+# Backend follows the app's backend dropdown (vk_backend is provided by
+# vapourkit). To hardcode one instead, use e.g. Backend.ORT_DML(fp16=fp16)
+backend = vk_backend(fp16=fp16)
 
 # Scene detection (improves RIFE quality by preventing interpolation across scene changes)
 if use_sc_detect:

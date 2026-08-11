@@ -1,17 +1,40 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { BackendId } from '../electron.d';
+import { isBackendId, resolveBackendId } from '../utils/backends';
+
+/**
+ * Reads the persisted default backend, migrating the legacy `useDirectML`
+ * boolean key in place the first time it's seen.
+ */
+function readStoredBackend(): BackendId | null {
+  const saved = localStorage.getItem('defaultBackend');
+  if (saved !== null && isBackendId(saved)) {
+    return saved;
+  }
+
+  const legacy = localStorage.getItem('useDirectML');
+  if (legacy !== null) {
+    try {
+      const migrated = resolveBackendId(JSON.parse(legacy));
+      localStorage.setItem('defaultBackend', migrated);
+      localStorage.removeItem('useDirectML');
+      return migrated;
+    } catch {
+      // Corrupt legacy value — fall through to first-run detection
+    }
+  }
+
+  return null;
+}
 
 export const useSettings = (hasCudaSupport: boolean | null) => {
-  const [useDirectML, setUseDirectML] = useState(() => {
-    const saved = localStorage.getItem('useDirectML');
-    if (saved !== null) {
-      return JSON.parse(saved);
-    }
+  const [defaultBackend, setDefaultBackendState] = useState<BackendId>(() => {
     // No saved preference yet — assume TensorRT until CUDA detection resolves.
     // The mount-time value of hasCudaSupport is always null (detection is an
     // async IPC), so it must not influence the initial value, and nothing may
     // persist a guess to localStorage before detection completes (a persisted
     // guess would block the detection-based initialization below forever).
-    return false;
+    return readStoredBackend() ?? 'tensorrt';
   });
 
   const [numStreams, setNumStreams] = useState(() => {
@@ -26,11 +49,10 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
   // First-time initialization once CUDA detection has resolved
   useEffect(() => {
     if (hasCudaSupport !== null) {
-      const saved = localStorage.getItem('useDirectML');
-      if (saved === null) {
-        const shouldUseDirectML = !hasCudaSupport;
-        setUseDirectML(shouldUseDirectML);
-        localStorage.setItem('useDirectML', JSON.stringify(shouldUseDirectML));
+      if (readStoredBackend() === null) {
+        const detected: BackendId = hasCudaSupport ? 'tensorrt' : 'directml';
+        setDefaultBackendState(detected);
+        localStorage.setItem('defaultBackend', detected);
       }
     }
   }, [hasCudaSupport]);
@@ -40,9 +62,9 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
     localStorage.setItem('numStreams', numStreams.toString());
   }, [numStreams]);
 
-  const toggleDirectML = useCallback((value: boolean): void => {
-    setUseDirectML(value);
-    localStorage.setItem('useDirectML', JSON.stringify(value));
+  const setDefaultBackend = useCallback((value: BackendId): void => {
+    setDefaultBackendState(value);
+    localStorage.setItem('defaultBackend', value);
   }, []);
 
   const updateNumStreams = useCallback((value: number): void => {
@@ -50,8 +72,8 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
   }, []);
 
   return {
-    useDirectML,
-    toggleDirectML,
+    defaultBackend,
+    setDefaultBackend,
     numStreams,
     updateNumStreams,
   };

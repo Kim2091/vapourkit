@@ -9,7 +9,7 @@ import { PluginsModal } from './PluginsModal';
 import { UpdateNotificationModal } from './UpdateNotificationModal';
 import { VsMlrtUpdateModal } from './VsMlrtUpdateModal';
 import { FilterImportModal } from './FilterImportModal';
-import type { UpdateInfo, VsMlrtVersionInfo } from '../electron';
+import type { BackendId, UpdateInfo, VsMlrtVersionInfo } from '../electron';
 
 interface AppModalsProps {
   // Import Model
@@ -28,7 +28,7 @@ interface AppModalsProps {
   handleTemporalFramesChange: (frames: number) => void;
   importProgress: any;
   modalMode: 'import' | 'build';
-  useDirectML: boolean;
+  defaultBackend: BackendId;
 
   // Auto Build
   showAutoBuildModal: boolean;
@@ -42,7 +42,7 @@ interface AppModalsProps {
   onCloseSettings: () => void;
   numStreams: number;
   onUpdateNumStreams: (streams: number) => void;
-  onToggleDirectML: (value: boolean) => void;
+  onChangeBackend: (backend: BackendId) => void;
   videoCompareArgs: string;
   onUpdateVideoCompareArgs: (args: string) => void;
   onResetVideoCompareArgs: () => void;
@@ -97,7 +97,6 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
         handleTemporalFramesChange={props.handleTemporalFramesChange}
         importProgress={props.importProgress}
         mode={props.modalMode}
-        useDirectML={props.useDirectML}
       />
 
       <AutoBuildModal
@@ -112,8 +111,8 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
       <SettingsModal
         show={props.showSettings}
         onClose={props.onCloseSettings}
-        useDirectML={props.useDirectML}
-        onToggleDirectML={props.onToggleDirectML}
+        defaultBackend={props.defaultBackend}
+        onChangeBackend={props.onChangeBackend}
         numStreams={props.numStreams}
         onUpdateNumStreams={props.onUpdateNumStreams}
         videoCompareArgs={props.videoCompareArgs}

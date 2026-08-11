@@ -1,11 +1,13 @@
 import { memo, useState, useEffect } from 'react';
 import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive } from 'lucide-react';
+import type { BackendId } from '../electron.d';
+import { BACKENDS } from '../utils/backends';
 
 interface SettingsModalProps {
   show: boolean;
   onClose: () => void;
-  useDirectML: boolean;
-  onToggleDirectML: (value: boolean) => void;
+  defaultBackend: BackendId;
+  onChangeBackend: (backend: BackendId) => void;
   numStreams: number;
   onUpdateNumStreams: (value: number) => void;
   videoCompareArgs: string;
@@ -20,11 +22,11 @@ interface SettingsModalProps {
 
 type Tab = 'general' | 'processing';
 
-export const SettingsModal = memo<SettingsModalProps>(({ 
-  show, 
-  onClose, 
-  useDirectML, 
-  onToggleDirectML,
+export const SettingsModal = memo<SettingsModalProps>(({
+  show,
+  onClose,
+  defaultBackend,
+  onChangeBackend,
   numStreams,
   onUpdateNumStreams,
   videoCompareArgs,
@@ -149,32 +151,31 @@ export const SettingsModal = memo<SettingsModalProps>(({
                   Inference Backend
                 </h3>
                 
-                {/* DirectML Toggle */}
-                <div className="bg-dark-surface rounded-lg p-4 border border-gray-700">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useDirectML}
-                      onChange={(e) => onToggleDirectML(e.target.checked)}
-                      className="w-5 h-5 rounded border-gray-600 bg-dark-bg text-primary-blue focus:ring-2 focus:ring-primary-blue mt-0.5"
-                    />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-white">Use DirectML (ONNX Runtime)</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Enable DirectML backend for broader GPU compatibility (AMD, Intel, NVIDIA). Uses ONNX models directly without requiring TensorRT engine conversion.
-                      </p>
-                      {!useDirectML && (
-                        <p className="text-xs text-blue-400 mt-2 flex items-center gap-1">
-                          <Info className="w-3 h-3" />
-                          Currently using TensorRT (NVIDIA only, requires engine conversion)
-                        </p>
-                      )}
-                    </div>
-                  </label>
+                {/* Default backend selection (options from the backend registry) */}
+                <div className="bg-dark-surface rounded-lg p-4 border border-gray-700 space-y-2">
+                  <p className="text-sm font-medium text-white mb-1">Default Backend</p>
+                  {BACKENDS.map(backend => (
+                    <label key={backend.id} className="flex items-start gap-3 cursor-pointer p-2 rounded-lg hover:bg-dark-bg/50 transition-colors">
+                      <input
+                        type="radio"
+                        name="default-backend"
+                        checked={defaultBackend === backend.id}
+                        onChange={() => onChangeBackend(backend.id)}
+                        className="w-4 h-4 border-gray-600 bg-dark-bg text-primary-blue focus:ring-2 focus:ring-primary-blue mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white">{backend.label}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{backend.description}</p>
+                      </div>
+                    </label>
+                  ))}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Individual AI model filters can override this backend in the filter panel.
+                  </p>
                 </div>
 
-                {/* TensorRT num_streams setting - only show when DirectML is disabled */}
-                {!useDirectML && (
+                {/* num_streams setting */}
+                {(
                   <div className="bg-dark-surface rounded-lg p-4 border border-gray-700 mt-4">
                     <label className="block">
                       <div className="flex items-center justify-between mb-2">
@@ -193,7 +194,7 @@ export const SettingsModal = memo<SettingsModalProps>(({
                         }}
                       />
                       <p className="text-xs text-gray-400 mt-2">
-                        Controls the number of concurrent inference streams in TensorRT. Higher values may improve performance on powerful GPUs but increase VRAM usage. Default is 2.
+                        Controls the number of concurrent inference streams. Higher values may improve performance on powerful GPUs but increase VRAM usage. Default is 2.
                       </p>
                     </label>
                   </div>
@@ -206,8 +207,9 @@ export const SettingsModal = memo<SettingsModalProps>(({
                     <div className="text-xs text-gray-300">
                       <p className="font-medium mb-2">Backend Comparison:</p>
                       <ul className="space-y-1.5 text-[11px] text-gray-400">
-                        <li><strong className="text-white">TensorRT:</strong> Fastest performance on NVIDIA GPUs, requires engine conversion</li>
-                        <li><strong className="text-white">DirectML:</strong> Works on AMD/Intel/NVIDIA GPUs, uses ONNX directly, but is much slower. Prefer TensorRT for NVIDIA GPUs.</li>
+                        {BACKENDS.map(backend => (
+                          <li key={backend.id}><strong className="text-white">{backend.label}:</strong> {backend.description}</li>
+                        ))}
                       </ul>
                     </div>
                   </div>

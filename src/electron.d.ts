@@ -1,4 +1,8 @@
 // src/electron.d.ts
+import type { BackendId, FilterBackend } from '../electron/providers/descriptors';
+
+export type { BackendId, FilterBackend };
+
 export interface ElectronAPI {
   // Dependency management
   checkDependencies: () => Promise<boolean>;
@@ -19,7 +23,7 @@ export interface ElectronAPI {
   getOutputResolution: (
     videoPath: string,
     modelPath: string | null,
-    useDirectML?: boolean,
+    defaultBackend?: BackendId,
     upscalingEnabled?: boolean,
     filters?: Filter[],
     upscalePosition?: number,
@@ -58,7 +62,7 @@ export interface ElectronAPI {
     videoPath: string,
     modelPath: string | null,
     outputPath: string,
-    useDirectML?: boolean,
+    defaultBackend?: BackendId,
     upscalingEnabled?: boolean,
     filters?: Filter[],
     upscalePosition?: number,
@@ -69,7 +73,7 @@ export interface ElectronAPI {
   previewSegment: (
     videoPath: string,
     modelPath: string | null,
-    useDirectML?: boolean,
+    defaultBackend?: BackendId,
     upscalingEnabled?: boolean,
     filters?: Filter[],
     numStreams?: number,
@@ -84,7 +88,7 @@ export interface ElectronAPI {
   launchVsePreviewer: (
     videoPath: string,
     modelPath: string | null,
-    useDirectML?: boolean,
+    defaultBackend?: BackendId,
     upscalingEnabled?: boolean,
     filters?: Filter[],
     numStreams?: number,
@@ -329,7 +333,7 @@ export interface ImportModelParams {
   useBf16?: boolean;
   modelType?: 'vsr' | 'image';
   temporalFrames?: number;
-  useDirectML?: boolean;
+  backend?: BackendId;
   displayTag?: string;
   useStaticShape?: boolean;
   useCustomTrtexecParams?: boolean;
@@ -383,6 +387,8 @@ export interface Filter {
   modelPath?: string;
   modelType?: 'vsr' | 'image';
   category?: string | string[];
+  /** Inference backend override; 'auto' or unset inherits the app default. */
+  backend?: FilterBackend;
 }
 
 export interface SegmentSelection {
@@ -425,6 +431,7 @@ export interface WorkflowData {
     modelPath?: string;
     modelType?: 'vsr' | 'image';
     category?: string | string[];
+    backend?: FilterBackend;
   }[];
   createdAt?: string;
   description?: string;
@@ -434,6 +441,7 @@ export interface WorkflowData {
     processingFormat?: string;
     outputFormat?: string;
     videoCompareArgs?: string;
+    defaultBackend?: BackendId;
     numStreams?: number;
     segment?: SegmentSelection;
     colorimetry?: ColorimetrySettings;
@@ -474,7 +482,9 @@ export interface QueueItem {
     processingFormat: string;
     outputFormat: string;
     videoCompareArgs: string;
-    useDirectML: boolean;
+    defaultBackend: BackendId;
+    /** Legacy field from pre-backend-registry queue files; migrated on load. */
+    useDirectML?: boolean;
     numStreams: number;
     segment?: SegmentSelection;
     colorimetry?: ColorimetrySettings;
