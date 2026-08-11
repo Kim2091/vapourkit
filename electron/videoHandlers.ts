@@ -161,8 +161,10 @@ export function registerVideoHandlers(
       
       const vspipePath = dependencyManager.getVSPipePath();
       const pythonPath = dependencyManager.getPythonExecutablePath();
-      infoExecutor = new UpscaleExecutor(vspipePath, pythonPath, null);
-      
+      // mainWindow is passed so a cold-cache validation run (which can spend
+      // minutes building a TensorRT engine) surfaces the build banner
+      infoExecutor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
+
       const info = await infoExecutor.getOutputInfo(scriptPath);
       infoExecutor = null;
       
@@ -344,6 +346,19 @@ export function registerVideoHandlers(
         const executor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
         upscaleExecutor = executor;
 
+        // Record runtime engine builds per item — they can add minutes to a run,
+        // so the item log should show why. The banner covers the live view.
+        let buildLabel: string | null = null;
+        executor.onEngineBuildStatus = (status) => {
+          if (status.status === 'building' && status.label && status.label !== buildLabel) {
+            buildLabel = status.label;
+            qlog(`Engine build started: ${status.label}`);
+          } else if (status.status === 'idle' && buildLabel) {
+            qlog(`Engine build finished: ${buildLabel}`);
+            buildLabel = null;
+          }
+        };
+
         // Get frame count and execute. Stream BestSource indexing progress so a
         // cold cache doesn't look like a hang, and re-check the module slot after
         // the await — cancel-upscale, kill-upscale, and the new-run cleanup at the
@@ -503,9 +518,33 @@ export function registerVideoHandlers(
       const scriptPath = await scriptGenerator.generateScript(scriptConfig);
       logger.info(`Generated preview script: ${scriptPath}`);
 
+      // Evaluate the graph before handing it to vs-view. Any runtime engine
+      // build then happens here, under the app's build banner and with the
+      // launch spinner still up, instead of freezing vs-view's own window — and
+      // script errors surface with our error handling rather than vs-view's.
+      const vspipePath = dependencyManager.getVSPipePath();
+      const pythonPath = dependencyManager.getPythonExecutablePath();
+      if (infoExecutor) {
+        infoExecutor.cancelInfoExtraction();
+      }
+      const preflightExecutor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
+      infoExecutor = preflightExecutor;
+      const preflight = await preflightExecutor.getOutputInfo(scriptPath);
+      // Only release the slot if it's still ours — cancel-validation and a
+      // second launch both replace it mid-flight
+      if (infoExecutor === preflightExecutor) {
+        infoExecutor = null;
+      }
+
+      if (preflight.error) {
+        logger.error('vs-view preflight failed:', preflight.error);
+        await scriptGenerator.cleanupScript(scriptPath);
+        return { success: false, error: preflight.error };
+      }
+
       // Launch vs-view with the generated script
       const result = await VsViewManager.launch(scriptPath);
-      
+
       if (result.success) {
         logger.info('vs-view launched successfully');
       } else {

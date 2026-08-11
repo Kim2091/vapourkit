@@ -60,11 +60,14 @@ export const BACKENDS: readonly BackendDescriptor[] = [
     importPrecisions: ['fp16', 'bf16', 'fp32'],
     supportsShapes: true,
     supportsCustomBuildParams: true,
-    // NOT Backend.TRT: vsmlrt's script-side TRT backend builds engines at
-    // runtime via trtexec, which the TensorRT pip wheels don't ship. The main
-    // upscale step uses pre-built engines through core.trt.Model directly;
-    // script filters get the NVIDIA-native ONNX Runtime CUDA backend instead.
-    vsmlrtBackendAttr: 'ORT_CUDA',
+    // vsmlrt's script-side TRT backend builds engines at runtime via trtexec,
+    // which the TensorRT pip wheels don't ship — the app writes a trtexec shim
+    // that routes those builds through its own Python API builder instead (see
+    // electron/trtexecShim.ts), and the [vk-build] banner makes the first build
+    // at each resolution visible rather than looking like a freeze. Switching
+    // this back to 'ORT_CUDA' is the one-line revert if TRT-for-script-filters
+    // ever proves painful.
+    vsmlrtBackendAttr: 'TRT',
   },
   {
     id: 'directml',

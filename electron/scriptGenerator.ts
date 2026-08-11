@@ -2,7 +2,8 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as os from 'os';
-import { PATHS } from './constants';
+import { IS_WINDOWS, PATHS } from './constants';
+import { getSystemRoot } from './trtexecShim';
 import { configManager } from './configManager';
 import { logger } from './logger';
 import { BACKENDS, resolveBackendId, resolveFilterBackend, type BackendId, type FilterBackend } from './providers/descriptors';
@@ -10,6 +11,11 @@ import { getProvider } from './providers/registry';
 import type { InferenceProvider } from './providers/types';
 
 export type ModelType = 'vsr' | 'image';
+
+/** Renders a JS string as a Python string literal. */
+function pyString(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
 
 export interface Filter {
   id: string;
@@ -75,21 +81,50 @@ export class VapourSynthScriptGenerator {
     const mapEntries = BACKENDS
       .map(d => `"${d.id}": Backend.${d.vsmlrtBackendAttr}`)
       .join(', ');
+    const buildEnvEntries = Object.entries(this.getEngineBuildEnv())
+      .map(([key, value]) => `${pyString(key)}: ${pyString(value)}`)
+      .join(', ');
 
     let code = '# Inference backend selected in the app; vk_backend() resolves it to a\n';
     code += '# vsmlrt Backend for custom filters (kwargs pass through, e.g. fp16=True)\n';
     code += `VK_BACKEND = "${defaultBackend}"\n`;
+    code += '# vsmlrt builds TensorRT engines at runtime by spawning trtexec with a nearly\n';
+    code += '# empty environment; these are what the app\'s trtexec shim needs to start.\n';
+    code += `VK_BUILD_ENV = {${buildEnvEntries}}\n`;
     code += 'def vk_backend(**kwargs):\n';
     code += '    from vsmlrt import Backend\n';
-    code += `    return {${mapEntries}}[VK_BACKEND](**kwargs)\n`;
+    code += `    backend = {${mapEntries}}[VK_BACKEND](**kwargs)\n`;
+    code += '    if hasattr(backend, "custom_env"):\n';
+    code += '        for _key, _value in VK_BUILD_ENV.items():\n';
+    code += '            backend.custom_env.setdefault(_key, _value)\n';
+    code += '    return backend\n';
     code += '# vsmlrt model zoo location (downloaded by the app; the pip vs-mlrt wheels\n';
     code += "# don't ship a models folder, so vsmlrt's default path doesn't exist)\n";
     code += 'try:\n';
     code += '    import vsmlrt as _vk_vsmlrt\n';
     code += `    _vk_vsmlrt.models_path = "${PATHS.VSMLRT_MODELS.replace(/\\/g, '/')}"\n`;
+    code += '    # pip TensorRT ships no trtexec binary; the app writes a shim that runs\n';
+    code += "    # its own Python API engine builder (see electron/trtexecShim.ts)\n";
+    code += `    _vk_vsmlrt.trtexec_path = "${PATHS.TRTEXEC_SHIM.replace(/\\/g, '/')}"\n`;
     code += 'except Exception:\n';
     code += '    pass\n\n';
     return code;
+  }
+
+  /**
+   * Environment seeded into vsmlrt's TensorRT backend (`custom_env`). vsmlrt
+   * spawns the engine builder with `{"CUDA_MODULE_LOADING": "LAZY"}` and nothing
+   * else, which on Windows is not enough for cmd.exe to launch the .cmd shim.
+   */
+  private getEngineBuildEnv(): Record<string, string> {
+    if (!IS_WINDOWS) {
+      return {};
+    }
+    const systemRoot = getSystemRoot();
+    return {
+      SystemRoot: systemRoot,
+      COMSPEC: path.join(systemRoot, 'System32', 'cmd.exe'),
+    };
   }
 
   async generateScript(config: ScriptConfig): Promise<string> {
@@ -151,7 +186,6 @@ export class VapourSynthScriptGenerator {
       filterCode += '_vk_set_output(original_clip, 0, "Source")\n\n';
     }
 
-    const pyStr = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
     let previewOutputIndex = 0;
 
     for (let i = 0; i < enabledFilters.length; i++) {
@@ -177,7 +211,7 @@ export class VapourSynthScriptGenerator {
       // Register an output after each stage that actually emitted code
       if (config.generatePreviewOutputs && stageLabel !== null) {
         previewOutputIndex++;
-        filterCode += `_vk_set_output(clip, ${previewOutputIndex}, ${pyStr(`${previewOutputIndex}. ${stageLabel}`)})\n\n`;
+        filterCode += `_vk_set_output(clip, ${previewOutputIndex}, ${pyString(`${previewOutputIndex}. ${stageLabel}`)})\n\n`;
       }
     }
 

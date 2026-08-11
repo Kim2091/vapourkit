@@ -12,6 +12,7 @@ import { VideoMetadataExtractor, VideoMetadata } from './videoMetadataExtractor'
 import { VapourSynthInfoExtractor, OutputInfo } from './vapourSynthInfoExtractor';
 import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
 import { configManager } from './configManager';
+import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
 
 /**
  * Force kills a process and its children on Windows using taskkill
@@ -69,13 +70,23 @@ export class UpscaleExecutor {
   private gpuPollInterval: ReturnType<typeof setInterval> | null = null;
   private latestGpuStats: GpuStats | null = null;
 
+  /**
+   * Optional extra sink for engine-build status (queue item logs). The renderer
+   * banner is fed unconditionally over IPC; this is for callers that also want
+   * builds recorded per queue item.
+   */
+  onEngineBuildStatus?: (status: EngineBuildStatus) => void;
+
   constructor(vspipePath: string, pythonPath: string, mainWindow: BrowserWindow | null = null) {
     this.vspipePath = vspipePath;
     this.pythonPath = pythonPath;
     this.mainWindow = mainWindow;
     this.vsPath = path.dirname(vspipePath);
     this.vsInfoExtractor = new VapourSynthInfoExtractor(vspipePath, pythonPath, this.vsPath);
-    
+    // Graph evaluation (vspipe -i) is where runtime engine builds happen, so the
+    // info extractor's stderr feeds the same banner the main run does
+    this.vsInfoExtractor.onBuildStatus = status => this.sendEngineBuildStatus(status);
+
     logger.upscale(`Initialized UpscaleExecutor`);
     logger.upscale(`VSPipe: ${this.vspipePath}`);
     logger.upscale(`Python: ${this.pythonPath}`);
@@ -94,6 +105,17 @@ export class UpscaleExecutor {
         this.mainWindow.setProgressBar(-1);
       }
     }
+  }
+
+  /**
+   * Forwards a `[vk-build]` status to the renderer's build banner. Sent on every
+   * process close/error/cancel path with `idle` so a banner can never stick.
+   */
+  private sendEngineBuildStatus(status: EngineBuildStatus) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('engine-build-progress', status);
+    }
+    this.onEngineBuildStatus?.(status);
   }
 
   private isRawVideoFormat(pixelFormat: string | null | undefined): boolean {
@@ -464,6 +486,9 @@ export class UpscaleExecutor {
     const ETA_WARMUP_FRAMES = 30; // Don't report ETA until this many frames processed
     let vspipeStderrBuffer = '';
     let ffmpegStderrBuffer = '';
+    // Engine builds normally happen during the earlier graph evaluation, but a
+    // filter can defer one to the first frame — track this stderr stream too
+    const buildTracker = createEngineBuildTracker(status => this.sendEngineBuildStatus(status));
     const MAX_STDERR_BUFFER_SIZE = 1024 * 1024; // 1MB max per stderr buffer
     let previewFrameBuffer = Buffer.alloc(0);
     const MAX_PREVIEW_BUFFER_SIZE = 5 * 1024 * 1024; // 5MB max buffer
@@ -542,6 +567,7 @@ export class UpscaleExecutor {
         } else if (vspipeStderrBuffer.length === MAX_STDERR_BUFFER_SIZE) {
           vspipeStderrBuffer += '\n... (stderr buffer limit reached, truncating further output) ...';
         }
+        buildTracker.push(output);
         logger.error(`[vspipe stderr] ${output.trim()}`);
       });
     }
@@ -605,6 +631,7 @@ export class UpscaleExecutor {
 
     // Handle errors
     vspipe.on('error', (error) => {
+      buildTracker.reset();
       logger.error('vspipe process error:', error);
       logger.errorWithDialog('VapourSynth Process Error', `VapourSynth process failed to start or crashed: ${error.message}`);
       
@@ -636,6 +663,7 @@ export class UpscaleExecutor {
 
     // Handle vspipe exit
     vspipe.on('close', (code) => {
+      buildTracker.reset();
       logger.upscale(`vspipe exited with code ${code}`);
       this.process = null; // Clear reference on exit
       
@@ -667,6 +695,7 @@ export class UpscaleExecutor {
 
     // Handle completion
     ffmpeg.on('close', (code) => {
+      buildTracker.reset();
       logger.upscale(`ffmpeg exited with code ${code}`);
       this.ffmpegProcess = null; // Clear reference on exit
       this.stopGpuPolling();
@@ -716,6 +745,7 @@ export class UpscaleExecutor {
     logger.upscale('Canceling upscale process gracefully');
     this.isCanceling = true;
     this.stopGpuPolling();
+    this.sendEngineBuildStatus({ status: 'idle' });
 
     // Clear taskbar progress
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -801,6 +831,7 @@ export class UpscaleExecutor {
     logger.upscale('Force killing upscale process');
     this.isCanceling = true;
     this.stopGpuPolling();
+    this.sendEngineBuildStatus({ status: 'idle' });
 
     // Clear taskbar progress
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {

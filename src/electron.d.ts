@@ -83,6 +83,7 @@ export interface ElectronAPI {
   cancelUpscale: () => Promise<{ success: boolean }>;
   killUpscale: () => Promise<{ success: boolean }>;
   onUpscaleProgress: (callback: (progress: UpscaleProgress) => void) => () => void;
+  onEngineBuildProgress: (callback: (status: EngineBuildStatus) => void) => () => void;
   openOutputFolder: (filePath: string) => Promise<void>;
   compareVideos: (inputPath: string, outputPath: string) => Promise<{ success: boolean; error?: string }>;
   launchVsePreviewer: (
@@ -354,6 +355,17 @@ export interface ModelImportProgress {
   enginePath?: string;
   detectedShape?: string;
   detectedStatic?: boolean;
+}
+
+/**
+ * Status of a TensorRT engine being built at runtime inside vspipe, parsed from
+ * the `[vk-build]` stderr protocol (see electron/engineBuildProtocol.ts).
+ * `percent` is absent when the emitting tool reports no progress.
+ */
+export interface EngineBuildStatus {
+  status: 'building' | 'idle';
+  label?: string;
+  percent?: number;
 }
 
 export interface UpscaleProgress {

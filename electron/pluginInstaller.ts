@@ -10,6 +10,7 @@ import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
+import { ensureTrtexecShim } from './trtexecShim';
 import { detectGpuVendor } from './gpuDetection';
 import {
   computeVendorPurge,
@@ -511,6 +512,15 @@ export class PluginInstaller {
         } catch (error) {
           logger.warn('vs-mlrt model zoo download failed (continuing; retried at next startup):', error);
         }
+      }
+
+      // Step 4.6: trtexec shim so vsmlrt's script-side TensorRT backend can
+      // build engines at runtime (pip TensorRT ships no trtexec binary).
+      // Non-fatal, and re-attempted at every startup by checkDependencies.
+      try {
+        await ensureTrtexecShim();
+      } catch (error) {
+        logger.warn('Failed to write the trtexec shim (continuing; retried at next startup):', error);
       }
 
       if (this.isCancelled) {

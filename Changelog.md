@@ -1,6 +1,16 @@
 # Changelog
 
 ## 0.17.0
+- Filters that build TensorRT engines at runtime no longer look like a frozen app
+  - A banner names the engine being built, shows progress when the builder reports it, and explains that this is the first run at that resolution; it clears when the build ends, and on every cancel/crash path
+  - Engine builds are kill-safe: the engine is written to a temp file and renamed into place, so force-closing mid-build can no longer leave a truncated engine that gets reused as a cache hit and permanently breaks the filter
+  - Builds are recorded in the per-item queue log, and the vs-view launch now evaluates the script first so builds happen under Vapourkit's UI instead of freezing vs-view's window
+  - Covers `vs_temporalfix`'s TemporalFix (AI) engine builds too — it builds engines its own way, so its existing build log lines are recognized directly (no progress percentage available, so the banner spins)
+  - Third-party filters can opt into the same banner by printing `[vk-build] begin/progress/end` lines to stderr — see "Runtime engine builds" in the Development docs
+- The RIFE and DPIR filter templates now use real TensorRT when the TensorRT backend is selected, instead of ONNX Runtime CUDA
+  - vs-mlrt builds those engines by shelling out to `trtexec`, which the TensorRT pip wheels don't ship; Vapourkit now installs a `trtexec` shim that routes the build through its own TensorRT Python API builder (the same one the model importer uses)
+  - The first run at each resolution builds an engine (a few minutes, with the banner above); later runs at that resolution start instantly from the cached engine in `data/vsmlrt-models`
+  - The RIFE model packs now also install the `rife_v2` model folder, so templates can select the v2 representation with `_implementation=2`; existing installs fetch it in the background at startup
 - Python packages are now installed to match your GPU vendor, detected automatically at startup
   - NVIDIA: unchanged — CUDA PyTorch, `vsjetpack[full,nvidia]`, and both vs-mlrt backends (TensorRT + ONNX Runtime)
   - AMD: `vsjetpack[full,amd]` (HIP/OpenCL/Vulkan plugins) with the DirectML backend, and no multi-GB TensorRT/CUDA stack
@@ -18,7 +28,7 @@
   - Each backend (TensorRT, DirectML) owns its script codegen, model-file resolution, pip packages, plugin health checks, and engine building in one place; adding a backend (NCNN, OpenVINO) no longer touches the rest of the codebase
   - The DML/TRT header toggle is now a backend dropdown driven by the provider registry, with the same selection available in Settings
   - Backend choice is now per AI-model filter: every filter defaults to "Auto" (follows the app default) and can override it in the expanded filter card; overridden filters show a badge on the collapsed card
-  - Generated scripts now include a `vk_backend()` helper so custom filters follow the app-selected backend; the bundled RIFE and DPIR templates use it (RIFE previously forced DirectML on every GPU, DPIR needed a hand-edited `nvidia_gpu` flag). On the TensorRT selection, script filters map to ONNX Runtime CUDA since vsmlrt's script-side TRT path needs `trtexec`, which pip TensorRT doesn't ship
+  - Generated scripts now include a `vk_backend()` helper so custom filters follow the app-selected backend; the bundled RIFE and DPIR templates use it (RIFE previously forced DirectML on every GPU, DPIR needed a hand-edited `nvidia_gpu` flag). On the TensorRT selection, script filters get real TensorRT through the `trtexec` shim described above
   - Settings, queue items, and workflow files store a backend id (`tensorrt`/`directml`) instead of the `useDirectML` boolean; existing values migrate automatically on load
 - Migrate the entire install path from manual zip downloads to PyPI
   - VapourSynth (R79), vs-mlrt (16.1), BestSource, and all of pifroggi's plugins (`vs_temporalfix`, `vs_undistort`, `vs_colorfix`, `vs_grain`, `vs_tiletools`) now install via pip
@@ -31,7 +41,6 @@
 - Portable installs that reuse an existing `data` folder are migrated in place: the old portable runtime, `vs-plugins` folder, and bundled script modules that PyPI now provides are cleaned up during setup, and the Python environment is upgraded in place
   - Existing TensorRT engines were built with an older TensorRT and need rebuilding — the existing vs-mlrt version-change prompt handles clearing them
 - NOTE: upgrading a **setup install** from 0.16.x or older starts fresh (the old installer's upgrade flow removes the `data` folder) — export your workflows and filters before upgrading, then re-import them
-- DPIR filter template now defaults to the ONNX Runtime CUDA backend on NVIDIA (the TRT backend relied on runtime `trtexec` engine builds)
 - Bundled `vs_deepdeinterlace` (not yet on PyPI) and the Hybrid scripts continue to install as before
 - Groundwork for Linux support: all platform-specific filenames and the site-packages layout are centralized in `electron/constants.ts`; the pip install phases are platform-neutral, leaving only the Python bootstrap (and FFmpeg/video-compare downloads) Windows-specific
 - Fix update checker falsely prompting nightly builds to "update" to the stable release they were cut from

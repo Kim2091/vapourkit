@@ -15,43 +15,62 @@ import * as _7z from '7zip-min';
 import { logger } from './logger';
 import { PATHS } from './constants';
 
-interface ModelPack {
+interface ModelFamily {
   /** Family folder name vsmlrt.py expects under models_path. */
   family: string;
-  /** Release asset to download. */
-  url: string;
-  /** File (relative to VSMLRT_MODELS) whose presence marks the pack installed. */
+  /** File (relative to VSMLRT_MODELS) whose presence marks the family installed. */
   marker: string;
 }
 
-// Per-family archives from the vs-mlrt model releases — deliberately the small
+interface ModelPack {
+  /** Release asset to download. */
+  url: string;
+  /** Family folders to pull out of this one archive. */
+  families: ModelFamily[];
+}
+
+// Per-model archives from the vs-mlrt model releases — deliberately the small
 // per-model packs (~20MB RIFE v4.10, ~54MB DPIR), not the ~200MB+ bundles.
 // The bundled RIFE template defaults to v4_10; other versions can be dropped
 // into the same folder manually.
+//
+// One archive can carry several families: the RIFE packs ship both the v1
+// representation (one concatenated input tensor, what vsmlrt uses by default
+// and what the TensorRT backend builds cleanly) and the v2 representation
+// (separate inputs), which a template can select with _implementation=2.
 const MODEL_PACKS: ModelPack[] = [
   {
-    family: 'rife',
     url: 'https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/rife_v4.10.7z',
-    marker: path.join('rife', 'rife_v4.10.onnx'),
+    families: [
+      { family: 'rife', marker: path.join('rife', 'rife_v4.10.onnx') },
+      { family: 'rife_v2', marker: path.join('rife_v2', 'rife_v4.10.onnx') },
+    ],
   },
   {
-    family: 'dpir',
     url: 'https://github.com/AmusementClub/vs-mlrt/releases/download/model-20211209/dpir_v3.7z',
-    marker: path.join('dpir', 'drunet_color.onnx'),
+    families: [
+      { family: 'dpir', marker: path.join('dpir', 'drunet_color.onnx') },
+    ],
   },
 ];
 
 export class VsMlrtModelsManager {
   private static downloadInFlight: Promise<void> | null = null;
 
-  /** True when any bundled-template model pack is missing. */
+  /** True when any bundled-template model family is missing. */
   static async needsDownload(): Promise<boolean> {
     for (const pack of MODEL_PACKS) {
-      if (!await fs.pathExists(path.join(PATHS.VSMLRT_MODELS, pack.marker))) {
-        return true;
+      for (const family of pack.families) {
+        if (!await VsMlrtModelsManager.isFamilyInstalled(family)) {
+          return true;
+        }
       }
     }
     return false;
+  }
+
+  private static isFamilyInstalled(family: ModelFamily): Promise<boolean> {
+    return fs.pathExists(path.join(PATHS.VSMLRT_MODELS, family.marker));
   }
 
   /**
@@ -68,43 +87,52 @@ export class VsMlrtModelsManager {
 
   private static async downloadMissing(progressCallback?: (message: string) => void): Promise<void> {
     for (const pack of MODEL_PACKS) {
-      const markerPath = path.join(PATHS.VSMLRT_MODELS, pack.marker);
-      if (await fs.pathExists(markerPath)) {
+      const missing: ModelFamily[] = [];
+      for (const family of pack.families) {
+        if (!await VsMlrtModelsManager.isFamilyInstalled(family)) {
+          missing.push(family);
+        }
+      }
+      if (missing.length === 0) {
         continue;
       }
 
       const archiveName = path.basename(new URL(pack.url).pathname);
-      logger.info(`vs-mlrt model pack '${pack.family}' missing — downloading ${archiveName}`);
-      progressCallback?.(`Downloading ${pack.family} models...`);
+      const label = missing.map(f => f.family).join(', ');
+      logger.info(`vs-mlrt model families '${label}' missing — downloading ${archiveName}`);
+      progressCallback?.(`Downloading ${label} models...`);
 
       const tempDir = path.join(PATHS.APP_DATA, 'temp');
       const archivePath = path.join(tempDir, archiveName);
-      const extractPath = path.join(tempDir, `${pack.family}-models-extracted`);
+      const extractPath = path.join(tempDir, `${path.parse(archiveName).name}-extracted`);
 
       try {
         await fs.ensureDir(tempDir);
         await VsMlrtModelsManager.downloadFile(pack.url, archivePath);
 
-        progressCallback?.(`Extracting ${pack.family} models...`);
+        progressCallback?.(`Extracting ${label} models...`);
         await fs.remove(extractPath);
         await fs.ensureDir(extractPath);
         await _7z.unpack(archivePath, extractPath);
 
-        // Archives may root at models/<family>/ or <family>/ — find the family
-        // folder and move its contents under VSMLRT_MODELS/<family>/
-        const familyDir = await VsMlrtModelsManager.findFamilyDir(extractPath, pack.family);
-        if (!familyDir) {
-          throw new Error(`Extracted archive contains no '${pack.family}' folder`);
-        }
+        // One archive can hold several family folders; install each missing one
+        for (const family of missing) {
+          // Archives may root at models/<family>/ or <family>/ — find the family
+          // folder and copy its contents to VSMLRT_MODELS/<family>/
+          const familyDir = await VsMlrtModelsManager.findFamilyDir(extractPath, family.family);
+          if (!familyDir) {
+            throw new Error(`Extracted archive contains no '${family.family}' folder`);
+          }
 
-        const targetDir = path.join(PATHS.VSMLRT_MODELS, pack.family);
-        await fs.ensureDir(targetDir);
-        await fs.copy(familyDir, targetDir, { overwrite: true });
+          const targetDir = path.join(PATHS.VSMLRT_MODELS, family.family);
+          await fs.ensureDir(targetDir);
+          await fs.copy(familyDir, targetDir, { overwrite: true });
 
-        if (!await fs.pathExists(markerPath)) {
-          throw new Error(`Extraction finished but ${pack.marker} is still missing`);
+          if (!await VsMlrtModelsManager.isFamilyInstalled(family)) {
+            throw new Error(`Extraction finished but ${family.marker} is still missing`);
+          }
+          logger.info(`vs-mlrt model family '${family.family}' installed to ${targetDir}`);
         }
-        logger.info(`vs-mlrt model pack '${pack.family}' installed to ${targetDir}`);
       } finally {
         await fs.remove(archivePath).catch(() => {});
         await fs.remove(extractPath).catch(() => {});

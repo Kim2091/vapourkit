@@ -4,6 +4,7 @@ import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 import { ErrorMessageHandler } from './errorMessageHandler';
 import { parseBestSourceProgress } from './bestSourceProgressParser';
+import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
 
 export interface OutputInfo {
   resolution: string | null;
@@ -45,6 +46,13 @@ export class VapourSynthInfoExtractor {
   private vsPath: string;
   private activeProcesses: Set<ChildProcess> = new Set();
 
+  /**
+   * Receives `[vk-build]` build-status updates parsed from vspipe's stderr.
+   * Set by UpscaleExecutor, which owns the BrowserWindow these get sent to —
+   * this class deliberately stays free of electron imports.
+   */
+  onBuildStatus?: (status: EngineBuildStatus) => void;
+
   constructor(vspipePath: string, pythonPath: string, vsPath: string) {
     this.vspipePath = vspipePath;
     this.pythonPath = pythonPath;
@@ -60,6 +68,18 @@ export class VapourSynthInfoExtractor {
       forceKillProcess(proc);
     }
     this.activeProcesses.clear();
+    // Anti-stick: a build banner must never outlive the process that raised it
+    this.onBuildStatus?.({ status: 'idle' });
+  }
+
+  /**
+   * Tracker for one vspipe run's stderr. Filters (and the app's own engine
+   * builder, running inside vspipe through the trtexec shim) print `[vk-build]`
+   * lines while they build TensorRT engines, which can take minutes — without
+   * this the app just looks frozen.
+   */
+  private newBuildTracker() {
+    return createEngineBuildTracker(status => this.onBuildStatus?.(status));
   }
 
   /**
@@ -98,6 +118,7 @@ export class VapourSynthInfoExtractor {
 
       let output = '';
       let stderrOutput = '';
+      const buildTracker = this.newBuildTracker();
 
       if (vspipe.stdout) {
         vspipe.stdout.on('data', (data: Buffer) => {
@@ -110,6 +131,7 @@ export class VapourSynthInfoExtractor {
           const text = data.toString();
           output += text;
           stderrOutput += text;
+          buildTracker.push(text);
           if (onProgress) {
             for (const pct of parseBestSourceProgress(text)) {
               onProgress(pct);
@@ -119,6 +141,7 @@ export class VapourSynthInfoExtractor {
       }
 
       vspipe.on('close', (code) => {
+        buildTracker.reset();
         if (code === 0) {
           const match = output.match(/Frames:\s*(\d+)/i);
           if (match) {
@@ -140,6 +163,7 @@ export class VapourSynthInfoExtractor {
       });
 
       vspipe.on('error', (error) => {
+        buildTracker.reset();
         logger.error('vspipe info error:', error);
         resolve(0);
       });
@@ -167,22 +191,25 @@ export class VapourSynthInfoExtractor {
 
       let output = '';
       let stderrOutput = '';
-      
+      const buildTracker = this.newBuildTracker();
+
       if (vspipe.stdout) {
         vspipe.stdout.on('data', (data: Buffer) => {
           output += data.toString();
         });
       }
-      
+
       if (vspipe.stderr) {
         vspipe.stderr.on('data', (data: Buffer) => {
           const text = data.toString();
           output += text;
           stderrOutput += text;
+          buildTracker.push(text);
         });
       }
 
       vspipe.on('close', (code) => {
+        buildTracker.reset();
         if (code === 0) {
           // Always log the full vspipe output for debugging
           logger.upscale('=== vspipe -i output ===');
@@ -238,6 +265,7 @@ export class VapourSynthInfoExtractor {
       });
 
       vspipe.on('error', (error) => {
+        buildTracker.reset();
         logger.error('vspipe info error:', error);
         resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null, error: error.message });
       });

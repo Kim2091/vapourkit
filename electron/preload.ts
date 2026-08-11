@@ -72,6 +72,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('upscale-progress', listener);
     return () => ipcRenderer.removeListener('upscale-progress', listener);
   },
+  // Runtime TensorRT engine builds inside vspipe (see the [vk-build] protocol)
+  onEngineBuildProgress: (callback: (status: any) => void) => {
+    const listener = (event: any, status: any) => callback(status);
+    ipcRenderer.on('engine-build-progress', listener);
+    return () => ipcRenderer.removeListener('engine-build-progress', listener);
+  },
   openOutputFolder: (filePath: string) => ipcRenderer.invoke('open-output-folder', filePath),
   compareVideos: (inputPath: string, outputPath: string) => ipcRenderer.invoke('compare-videos', inputPath, outputPath),
   launchVsePreviewer: (

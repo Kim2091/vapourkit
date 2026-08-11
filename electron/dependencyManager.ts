@@ -4,6 +4,7 @@ import axios from 'axios';
 import { app, BrowserWindow} from 'electron';
 import { ModelExtractor } from './modelExtractor';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
+import { ensureTrtexecShim } from './trtexecShim';
 import { logger } from './logger';
 import { PATHS, PYTHON_VERSION, IS_WINDOWS } from './constants';
 import { runCommand, getBundledBasePath } from './utils';
@@ -221,6 +222,17 @@ export class DependencyManager {
       VsMlrtModelsManager.ensureModels()
         .then(() => logger.dependency('vs-mlrt model zoo download complete'))
         .catch((error) => logger.error('vs-mlrt model zoo download failed (will retry next launch):', error));
+    }
+
+    // Keep the trtexec shim (and the engine builder it runs) in step with the
+    // installed app — vsmlrt's runtime TensorRT engine builds go through it.
+    // Non-fatal: without it only script-side TRT filters are affected.
+    if (coreDepsPresent) {
+      try {
+        await ensureTrtexecShim();
+      } catch (shimError) {
+        logger.error('Failed to write the trtexec shim (runtime TensorRT engine builds may fail):', shimError);
+      }
     }
 
     // Detect app version change (upgrade-in-place) and update bundled files

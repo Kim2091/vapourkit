@@ -8,7 +8,7 @@ import { QueuePanel } from './components/QueuePanel';
 import { AppModals } from './components/AppModals';
 import { ProgressPanel } from './components/ProgressPanel';
 import { ActionButtons } from './components/ActionButtons';
-import type { BackendId, UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
+import type { BackendId, EngineBuildStatus, UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
 import { getBackendDescriptor, resolveFilterBackend } from './utils/backends';
 import { Header } from './components/Header';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
@@ -61,6 +61,16 @@ function App() {
     poll();
     const interval = setInterval(poll, 3000);
     return () => { active = false; clearInterval(interval); };
+  }, []);
+
+  // Runtime TensorRT engine builds happening inside vspipe. These take minutes
+  // and produce no other feedback, so the main process forwards the [vk-build]
+  // protocol it parses off stderr and the banner explains the wait.
+  const [engineBuild, setEngineBuild] = useState<EngineBuildStatus | null>(null);
+  useEffect(() => {
+    return window.electronAPI.onEngineBuildProgress((status) => {
+      setEngineBuild(status.status === 'building' ? status : null);
+    });
   }, []);
 
   // Setup and initialization hooks
@@ -729,6 +739,7 @@ function App() {
 
                   <ProgressPanel
                     upscaleProgress={upscaleProgress}
+                    engineBuild={engineBuild}
                     showConsole={showConsole}
                     setShowConsole={setShowConsole}
                     consoleOutput={consoleOutput}

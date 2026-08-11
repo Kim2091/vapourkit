@@ -1,11 +1,13 @@
 // src/components/ProgressPanel.tsx - Progress bar, speed/ETA, and console
 
 import { memo, useEffect, useRef } from 'react';
-import { Terminal, ChevronDown, ChevronUp } from 'lucide-react';
-import type { UpscaleProgress } from '../electron.d';
+import { Terminal, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import type { EngineBuildStatus, UpscaleProgress } from '../electron.d';
 
 interface ProgressPanelProps {
   upscaleProgress: UpscaleProgress | null;
+  /** Active runtime TensorRT engine build, or null when nothing is building. */
+  engineBuild: EngineBuildStatus | null;
   showConsole: boolean;
   setShowConsole: (show: boolean) => void;
   consoleOutput: string[];
@@ -15,6 +17,7 @@ interface ProgressPanelProps {
 
 export const ProgressPanel = memo(function ProgressPanel({
   upscaleProgress,
+  engineBuild,
   showConsole,
   setShowConsole,
   consoleOutput,
@@ -31,6 +34,34 @@ export const ProgressPanel = memo(function ProgressPanel({
 
   return (
     <>
+      {/* Runtime engine build — a filter is building a TensorRT engine inside
+          vspipe, which takes minutes and would otherwise look like a freeze */}
+      {engineBuild && (
+        <div className="flex-shrink-0 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-2xl px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-yellow-400 flex-shrink-0 animate-spin" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white truncate">
+                {engineBuild.label || 'Building TensorRT engine'}
+                {engineBuild.percent !== undefined && ` — ${engineBuild.percent}%`}
+              </p>
+              <p className="text-xs text-gray-300">
+                First run at this resolution; this can take several minutes. Don't close the app —
+                an interrupted build has to start over.
+              </p>
+            </div>
+          </div>
+          {engineBuild.percent !== undefined && (
+            <div className="w-full bg-dark-surface rounded-full h-1.5 mt-3">
+              <div
+                className="bg-yellow-400 h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${engineBuild.percent}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Progress & Controls */}
       <div className="flex-shrink-0 bg-dark-elevated rounded-2xl border border-gray-800 p-4">
         <div className="flex items-center justify-between mb-2">

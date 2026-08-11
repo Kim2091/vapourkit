@@ -192,16 +192,28 @@ describe('inference backend selection', () => {
 
     expect(script).toContain('VK_BACKEND = "directml"');
     expect(script).toContain('def vk_backend(');
-    expect(script).toContain('"tensorrt": Backend.ORT_CUDA');
+    expect(script).toContain('"tensorrt": Backend.TRT');
     expect(script).toContain('"directml": Backend.ORT_DML');
   });
 
-  it('points vsmlrt at the app-managed model zoo', async () => {
+  it('points vsmlrt at the app-managed model zoo and the trtexec shim', async () => {
     const script = await generate([customFilter(0, 'CAS Sharpen')], false);
 
     expect(script).toContain('import vsmlrt as _vk_vsmlrt');
     expect(script).toMatch(/_vk_vsmlrt\.models_path = ".*vsmlrt-models"/);
+    // pip TensorRT ships no trtexec; vsmlrt's runtime engine builds go through
+    // the app's shim so Backend.TRT works for script filters
+    expect(script).toMatch(/_vk_vsmlrt\.trtexec_path = ".*trtexec(\.cmd)?"/);
     // Guarded so scripts still run when no vs-mlrt plugin is installed
     expect(script).toContain('except Exception:');
+  });
+
+  it('seeds the TensorRT backend env vsmlrt strips before spawning the shim', async () => {
+    const script = await generate([customFilter(0, 'CAS Sharpen')], false);
+
+    expect(script).toContain('backend.custom_env.setdefault(_key, _value)');
+    if (process.platform === 'win32') {
+      expect(script).toMatch(/VK_BUILD_ENV = \{.*"SystemRoot".*"COMSPEC".*\}/);
+    }
   });
 });

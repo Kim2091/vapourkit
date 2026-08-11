@@ -63,6 +63,11 @@ export const PATHS = {
   VIDEO_COMPARE: path.join(APP_DATA_PATH, 'video-compare'),
   FILTER_TEMPLATES: path.join(APP_DATA_PATH, 'config', 'filter-templates'),
   PIP_CACHE: path.join(APP_DATA_PATH, 'pip-cache'),
+  // trtexec shim written by trtexecShim.ts. vsmlrt.py builds TensorRT engines
+  // at runtime by spawning trtexec, which the TensorRT pip wheels don't ship;
+  // generated scripts point vsmlrt.trtexec_path here and the shim forwards the
+  // trtexec-style arguments to the app's own Python API engine builder.
+  TRTEXEC_SHIM: path.join(APP_DATA_PATH, IS_WINDOWS ? 'trtexec.cmd' : 'trtexec'),
 
   // Executables
   get VSPIPE() { return path.join(this.SITE_PACKAGES, 'vapoursynth', `vspipe${EXE}`); },
