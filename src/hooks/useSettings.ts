@@ -6,8 +6,12 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
     if (saved !== null) {
       return JSON.parse(saved);
     }
-    // Default to false (use TensorRT) when CUDA is available
-    return !hasCudaSupport;
+    // No saved preference yet — assume TensorRT until CUDA detection resolves.
+    // The mount-time value of hasCudaSupport is always null (detection is an
+    // async IPC), so it must not influence the initial value, and nothing may
+    // persist a guess to localStorage before detection completes (a persisted
+    // guess would block the detection-based initialization below forever).
+    return false;
   });
 
   const [numStreams, setNumStreams] = useState(() => {
@@ -19,23 +23,17 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
     return 2;
   });
 
-  // Update DirectML setting when CUDA support is detected
+  // First-time initialization once CUDA detection has resolved
   useEffect(() => {
     if (hasCudaSupport !== null) {
       const saved = localStorage.getItem('useDirectML');
       if (saved === null) {
-        // First time initialization - set based on CUDA support
         const shouldUseDirectML = !hasCudaSupport;
         setUseDirectML(shouldUseDirectML);
         localStorage.setItem('useDirectML', JSON.stringify(shouldUseDirectML));
       }
     }
   }, [hasCudaSupport]);
-
-  // Persist DirectML setting to localStorage
-  useEffect(() => {
-    localStorage.setItem('useDirectML', JSON.stringify(useDirectML));
-  }, [useDirectML]);
 
   // Persist num_streams setting to localStorage
   useEffect(() => {
@@ -44,6 +42,7 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
 
   const toggleDirectML = useCallback((value: boolean): void => {
     setUseDirectML(value);
+    localStorage.setItem('useDirectML', JSON.stringify(value));
   }, []);
 
   const updateNumStreams = useCallback((value: number): void => {

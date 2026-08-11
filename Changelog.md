@@ -22,6 +22,10 @@
 - Replace API3-only bundled plugins with API4 wheels from PyPI: mvtools, CAS, adaptivegrain, WNNM, KNLMeansCL (nlm-cuda), SCXvid, DCTFilter
 - Fix vs-mlrt ONNX Runtime CUDA support: both `vapoursynth-mlrt-ort` (CPU/DirectML) and `vapoursynth-mlrt-ort-cuda` ship a `vsort.dll` and the CPU-only copy always won the autoload race; the redundant CPU-only folder is now removed post-install (the CUDA build bundles DirectML too)
 - Bundled plugins now extract with skip-existing semantics so they can never overwrite pip-managed plugin files (several share identical filenames)
+- Fix fresh installs on NVIDIA GPUs silently starting in DirectML mode
+  - A race persisted `useDirectML=true` to localStorage before async CUDA detection resolved, permanently blocking the detection-based default
+- Fix DirectML failing with `open ..._fp16_fp16.onnx failed` when a TensorRT engine model is selected
+  - The engine→ONNX path mapping now understands the doubled precision suffix of custom-built engines and picks whichever ONNX candidate exists on disk
 
 ## 0.16.1
 - Fix `Cannot read properties of null (reading 'execute')` crash when canceling or restarting an upscale during the frame count probe

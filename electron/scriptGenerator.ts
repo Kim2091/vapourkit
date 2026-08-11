@@ -157,6 +157,35 @@ export class VapourSynthScriptGenerator {
   }
 
   /**
+   * Maps a model path to the ONNX file DirectML should load.
+   *
+   * Engine files exist under two naming conventions: the same base name as the
+   * ONNX (model_fp16.engine) and a doubled precision suffix from custom builds
+   * (model_fp16_fp16.engine, where the second suffix is the build precision).
+   * A plain .engine → .onnx rename breaks the doubled form, so try both
+   * candidates and pick the one that exists on disk.
+   */
+  private resolveOnnxPath(modelPath: string): string {
+    if (!/\.engine$/i.test(modelPath)) {
+      return modelPath;
+    }
+
+    const candidates = [
+      modelPath.replace(/\.engine$/i, '.onnx'),
+      modelPath.replace(/_fp(16|32)\.engine$/i, '.onnx'),
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate !== modelPath && fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    logger.warn(`No ONNX counterpart found on disk for ${modelPath}; using ${candidates[0]}`);
+    return candidates[0];
+  }
+
+  /**
    * Generate VapourSynth code for an AI model filter
    */
   private generateAIModelCode(filter: Filter, useDirectML: boolean, useFp32: boolean, modelType: ModelType, defaultMatrix: string, defaultPrimaries: string, defaultTransfer: string, numStreams?: number, temporalFrames?: number): string {
@@ -188,7 +217,7 @@ export class VapourSynthScriptGenerator {
     if (useDirectML) {
       modelPlugin = 'ort';
       modelPathParam = 'network_path';
-      modelPath = filter.modelPath.replace(/\.engine$/, '.onnx');
+      modelPath = this.resolveOnnxPath(filter.modelPath);
       const useFp16 = !useFp32;
       fp16Param = `, provider="DML", device_id=0, fp16=${useFp16 ? 'True' : 'False'}, verbosity=4`;
     } else {
