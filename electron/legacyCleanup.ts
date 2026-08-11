@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { logger } from './logger';
 import { PATHS } from './constants';
+import type { GpuVendor } from './gpuDetection';
 
 /**
  * Bundled plugin DLLs superseded by PyPI wheels that install under a DIFFERENT
@@ -150,25 +151,51 @@ const CRASHING_PLUGIN_FILES: string[] = [
  * Post-install plugin compatibility fixes:
  *
  * 1. Removes bundled plugin builds known to abort VapourSynth at autoload.
- * 2. Prefers the CUDA build of vs-mlrt's ONNX Runtime plugin: both
- *    vapoursynth-mlrt-ort (CPU/DirectML) and vapoursynth-mlrt-ort-cuda ship a
- *    vsort.dll, and autoload walks alphabetically, so the CPU-only "ort" copy
- *    would always win and the CUDA-capable one gets skipped as a duplicate.
- *    The ort-cuda build bundles DirectML too (strict superset), so dropping the
- *    plain "ort" folder is safe on every GPU. pip reinstalls restore the folder,
- *    which is fine — this runs after every install.
+ * 2. Resolves the vs-mlrt ONNX Runtime duplicate for the machine's GPU vendor.
+ *    Both vapoursynth-mlrt-ort (CPU/DirectML) and vapoursynth-mlrt-ort-cuda
+ *    ship a vsort.dll, and autoload walks alphabetically, so whichever folder
+ *    sorts first wins and the other is skipped as a duplicate:
+ *      - nvidia: keep ort-cuda (a strict superset — it bundles DirectML too)
+ *        and drop the plain "ort" folder that would otherwise win the race.
+ *      - everything else: drop an orphaned ort-cuda folder left over from a
+ *        previous CUDA-flavored install so the plain "ort" build — the only
+ *        DirectML build actually installed on these vendors — survives.
+ *    pip reinstalls restore the folders, which is fine: this runs after every
+ *    install.
+ *
+ * Callers MUST pass the real vendor. The 'nvidia' default only exists so
+ * pre-existing behavior is preserved for configs that predate vendor tracking;
+ * calling it without a vendor on an AMD machine would delete the ort folder
+ * that machine needs.
  */
-export async function applyPluginCompatibilityFixes(pluginsDir: string = PATHS.PLUGINS): Promise<void> {
+export async function applyPluginCompatibilityFixes(
+  vendor: GpuVendor = 'nvidia',
+  pluginsDir: string = PATHS.PLUGINS
+): Promise<void> {
   await removeEntries(pluginsDir, CRASHING_PLUGIN_FILES, 'crashing plugin');
 
   const ortCudaPlugin = path.join(pluginsDir, 'ort-cuda', 'vsort.dll');
+  const ortCudaDir = path.join(pluginsDir, 'ort-cuda');
   const ortDir = path.join(pluginsDir, 'ort');
-  if (await fs.pathExists(ortCudaPlugin) && await fs.pathExists(ortDir)) {
+
+  if (vendor === 'nvidia') {
+    if (await fs.pathExists(ortCudaPlugin) && await fs.pathExists(ortDir)) {
+      try {
+        await fs.remove(ortDir);
+        logger.info('Removed duplicate CPU-only ort plugin folder (ort-cuda build takes precedence)');
+      } catch (error) {
+        logger.warn('Failed to remove duplicate ort plugin folder:', error);
+      }
+    }
+    return;
+  }
+
+  if (await fs.pathExists(ortCudaDir)) {
     try {
-      await fs.remove(ortDir);
-      logger.info('Removed duplicate CPU-only ort plugin folder (ort-cuda build takes precedence)');
+      await fs.remove(ortCudaDir);
+      logger.info(`Removed leftover CUDA ort plugin folder (GPU vendor: ${vendor}; the DirectML "ort" build takes precedence)`);
     } catch (error) {
-      logger.warn('Failed to remove duplicate ort plugin folder:', error);
+      logger.warn('Failed to remove leftover ort-cuda plugin folder:', error);
     }
   }
 }

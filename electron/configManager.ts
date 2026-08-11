@@ -5,6 +5,7 @@ import { PATHS } from './constants';
 import { logger } from './logger';
 import { getBundledBasePath } from './utils';
 import type { ModelType } from './scriptGenerator';
+import type { GpuVendor } from './gpuDetection';
 
 // Single source of truth for FFmpeg default arguments
 export const DEFAULT_FFMPEG_ARGS = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1';
@@ -44,6 +45,14 @@ interface AppConfig {
   descriptiveNamingEnabled?: boolean;
   encodingSettingsExpanded?: boolean;
   vsMlrtVersion?: string;
+  /** GPU vendor detected on this machine, refreshed at every app mount. */
+  gpuVendor?: GpuVendor;
+  /**
+   * GPU vendor the currently installed Python package set targets, written only
+   * after a fully successful install. A difference from gpuVendor is exactly
+   * the "needs reinstall" signal (GPU swap, driver install, ...).
+   */
+  pluginsGpuVendor?: GpuVendor;
   appVersion?: string;
   models: {
     [modelName: string]: {
@@ -85,6 +94,8 @@ const DEFAULT_CONFIG: AppConfig = {
   descriptiveNamingEnabled: true,
   encodingSettingsExpanded: false,
   vsMlrtVersion: undefined,
+  gpuVendor: undefined,
+  pluginsGpuVendor: undefined,
   models: {}
 };
 
@@ -458,6 +469,24 @@ export class ConfigManager {
 
   async setVsMlrtVersion(version: string): Promise<void> {
     this.config.vsMlrtVersion = version;
+    await this.save();
+  }
+
+  getGpuVendor(): GpuVendor | undefined {
+    return this.config.gpuVendor;
+  }
+
+  async setGpuVendor(vendor: GpuVendor): Promise<void> {
+    this.config.gpuVendor = vendor;
+    await this.save();
+  }
+
+  getPluginsGpuVendor(): GpuVendor | undefined {
+    return this.config.pluginsGpuVendor;
+  }
+
+  async setPluginsGpuVendor(vendor: GpuVendor): Promise<void> {
+    this.config.pluginsGpuVendor = vendor;
     await this.save();
   }
 

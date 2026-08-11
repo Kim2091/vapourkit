@@ -149,10 +149,13 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
                   Install plugins and dependencies to get a lot of filters to enhance your workflows!
                 </p>
                 <p>
-                  This will install PyTorch with CUDA, vsjetpack, vs-mlrt, and pifroggi's plugins from PyPI — native VapourSynth plugins are pulled in automatically as dependencies. Bundled extras and Hybrid scripts are also set up.
+                  This will install PyTorch, vsjetpack, vs-mlrt, and pifroggi's plugins from PyPI — native VapourSynth plugins are pulled in automatically as dependencies. Bundled extras and Hybrid scripts are also set up.
                 </p>
                 <p>
-                  NOTE: PyTorch-based filters do not work on AMD or Intel GPUs due to reliance on CUDA.
+                  Packages are selected automatically for your detected GPU: NVIDIA gets the TensorRT and CUDA stack, AMD and Intel get DirectML.
+                </p>
+                <p>
+                  NOTE: on non-NVIDIA GPUs, PyTorch-based filters run on the CPU (much slower), since they rely on CUDA.
                 </p>
               </div>
             </div>

@@ -1,6 +1,15 @@
 # Changelog
 
 ## 0.17.0
+- Python packages are now installed to match your GPU vendor, detected automatically at startup
+  - NVIDIA: unchanged — CUDA PyTorch, `vsjetpack[full,nvidia]`, and both vs-mlrt backends (TensorRT + ONNX Runtime)
+  - AMD: `vsjetpack[full,amd]` (HIP/OpenCL/Vulkan plugins) with the DirectML backend, and no multi-GB TensorRT/CUDA stack
+  - Intel and unrecognized GPUs: `vsjetpack[full,cl,vulkan]` with the DirectML backend
+  - PyTorch-based filters (vs_deepdeinterlace) get CPU PyTorch on non-NVIDIA GPUs instead of being broken — slower, but they run
+- Installs now clean up packages left over from a different GPU configuration before installing (e.g. TensorRT/cuDNN and CUDA PyTorch when moving to an AMD GPU), including the duplicate ONNX Runtime plugin folder that could otherwise win the autoload race
+- The Plugins modal reports "not installed" when the installed package set targets a different GPU than the one detected, so reinstalling repairs it
+  - Existing NVIDIA installs are recognized as-is and are not forced through a reinstall; AMD/Intel users who installed the old CUDA-only package set are prompted to reinstall to get the correct packages
+- Set `VAPOURKIT_FORCE_GPU_VENDOR=nvidia|amd|intel|unknown` to override GPU detection
 - Rework inference backends into self-contained provider modules (`electron/providers/`)
   - Each backend (TensorRT, DirectML) owns its script codegen, model-file resolution, pip packages, plugin health checks, and engine building in one place; adding a backend (NCNN, OpenVINO) no longer touches the rest of the codebase
   - The DML/TRT header toggle is now a backend dropdown driven by the provider registry, with the same selection available in Settings

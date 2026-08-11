@@ -5,11 +5,22 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as https from 'https';
 import { logger } from './logger';
-import { PATHS, VSVIEW_MIN_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
+import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
-import { listProviders } from './providers/registry';
+import { detectGpuVendor } from './gpuDetection';
+import {
+  computeVendorPurge,
+  evaluateInstallState,
+  getBackendPipPackages,
+  getCheckPackageNames,
+  getPypiPackages,
+  getTorchInstall,
+  normalizePackageName,
+  UNINSTALL_PACKAGE_NAMES,
+  type InstalledPackage,
+} from './vendorPackages';
 import * as _7z from '7zip-min';
 
 export interface PluginDependencyProgress {
@@ -225,15 +236,133 @@ export class PluginInstaller {
     });
   }
 
+  /**
+   * Reads the installed distributions from `pip list`, with names normalized
+   * (PEP 503) once. Shared by the vendor purge and checkInstalled; an
+   * unreadable environment resolves to an empty list, which reads as
+   * "nothing installed" (matching the previous checkInstalled failure path).
+   */
+  private async listInstalledPackages(): Promise<InstalledPackage[]> {
+    const args = ['-m', 'pip', 'list', '--format=json'];
+
+    logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
+    logger.info(`Working directory: ${PATHS.VS}`);
+
+    return new Promise((resolve) => {
+      const checkProcess = spawn(PATHS.PYTHON, args, {
+        cwd: PATHS.VS,
+        windowsHide: true
+      });
+
+      let outputBuffer = '';
+      let errorBuffer = '';
+
+      checkProcess.stdout?.on('data', (data: Buffer) => {
+        outputBuffer += data.toString();
+      });
+
+      checkProcess.stderr?.on('data', (data: Buffer) => {
+        errorBuffer += data.toString();
+      });
+
+      checkProcess.on('close', (code: number | null) => {
+        if (code === 0) {
+          try {
+            const parsed = JSON.parse(outputBuffer) as Array<{ name: string; version?: string }>;
+            resolve(parsed.map(pkg => ({
+              name: normalizePackageName(pkg.name),
+              version: pkg.version ?? ''
+            })));
+          } catch (error) {
+            logger.error('Error parsing pip list output:', error);
+            logger.error('Output buffer:', outputBuffer);
+            resolve([]);
+          }
+        } else {
+          logger.error(`Failed to check installed packages (exit code: ${code})`);
+          if (errorBuffer.trim()) {
+            logger.error('Error output:', errorBuffer);
+          }
+          if (outputBuffer.trim()) {
+            logger.error('Standard output:', outputBuffer);
+          }
+          resolve([]);
+        }
+      });
+
+      checkProcess.on('error', (error: Error) => {
+        logger.error('Failed to run pip list:', error);
+        logger.error('Python path:', PATHS.PYTHON);
+        logger.error('VS path:', PATHS.VS);
+        resolve([]);
+      });
+    });
+  }
+
+  /**
+   * Plain `pip uninstall -y` runner without progress reporting, used by the
+   * vendor purge step (uninstallDependencies keeps its own progress-emitting
+   * spawn).
+   */
+  private async runPipUninstall(packages: string[]): Promise<{ success: boolean; error?: string }> {
+    const args = ['-m', 'pip', 'uninstall', '-y', ...packages];
+    logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
+
+    return new Promise((resolve) => {
+      this.installProcess = spawn(PATHS.PYTHON, args, {
+        cwd: PATHS.VS,
+        windowsHide: true
+      });
+
+      let errorBuffer = '';
+
+      const processLine = (line: string) => {
+        const trimmed = line.trim();
+        if (trimmed) logger.info(`[pip] ${trimmed}`);
+      };
+
+      this.installProcess.stdout?.on('data', (data: Buffer) => {
+        data.toString().split('\n').forEach(processLine);
+      });
+
+      this.installProcess.stderr?.on('data', (data: Buffer) => {
+        const output = data.toString();
+        errorBuffer += output;
+        output.split('\n').forEach(processLine);
+      });
+
+      this.installProcess.on('close', (code: number | null) => {
+        this.installProcess = null;
+        if (code === 0) {
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: `pip uninstall failed with exit code ${code}: ${errorBuffer.trim()}` });
+        }
+      });
+
+      this.installProcess.on('error', (error: Error) => {
+        this.installProcess = null;
+        resolve({ success: false, error: error.message });
+      });
+    });
+  }
+
   async installDependencies(): Promise<{ success: boolean; error?: string }> {
     logger.info('Starting plugin dependency installation');
     this.isCancelled = false;
 
     try {
+      // The vendor decides the torch flavor, the vsjetpack extras and which
+      // inference backends get installed. Persist the detection immediately;
+      // pluginsGpuVendor is only written once the install actually succeeds.
+      const vendor = await detectGpuVendor();
+      await configManager.setGpuVendor(vendor);
+      logger.info(`Installing for GPU vendor: ${vendor}`);
+
       this.sendProgress({
         type: 'installing',
         progress: 0,
-        message: 'Preparing to install Python packages from PyPI...'
+        message: `Preparing to install Python packages from PyPI (GPU vendor: ${vendor})...`
       });
 
       logger.info('Starting plugin dependency installation...');
@@ -260,14 +389,39 @@ export class PluginInstaller {
         return { success: false, error: 'Installation cancelled by user' };
       }
 
+      // Step 0.5: remove packages belonging to a different GPU vendor, computed
+      // fresh from pip list. Runs BEFORE the --upgrade install so pip re-resolves
+      // anything that is actually still required. Non-fatal: a failure only costs
+      // the torch flavor switch and some disk space.
+      const purge = computeVendorPurge(vendor, await this.listInstalledPackages());
+      if (purge.length > 0) {
+        logger.info('=== Step 0.5: Removing packages from a different GPU configuration ===');
+        logger.info(`Packages to remove: ${purge.join(', ')}`);
+        this.sendProgress({
+          type: 'installing',
+          progress: 3,
+          message: 'Removing packages from a different GPU configuration...'
+        });
+        const purgeResult = await this.runPipUninstall(purge);
+        if (!purgeResult.success) {
+          logger.warn(`Failed to remove mismatched packages (continuing anyway): ${purgeResult.error}`);
+        }
+      }
+
+      if (this.isCancelled) {
+        return { success: false, error: 'Installation cancelled by user' };
+      }
+
       // Step 1: PyTorch (3-35% progress) — needed by the bundled (non-PyPI)
       // vs_deepdeinterlace scripts; everything else runs on TensorRT/ONNX Runtime.
+      // CUDA wheels on NVIDIA, CPU wheels from the default PyPI index elsewhere.
       logger.info('=== Step 1: Installing PyTorch and torchvision ===');
+      const torchInstall = getTorchInstall(vendor);
       const pytorchResult = await this.runPipInstall(
-        ['torch', 'torchvision'],
+        torchInstall.packages,
         3,
         32,
-        ['--index-url', 'https://download.pytorch.org/whl/cu130']
+        torchInstall.extraArgs
       );
 
       if (!pytorchResult.success) {
@@ -298,35 +452,19 @@ export class PluginInstaller {
 
       // Step 3: VapourSynth ecosystem from PyPI (40-80% progress).
       // vsjetpack and the pifroggi packages pull all native plugins (akarin,
-      // vszip, bestsource, vs-mlrt, zsmooth, ...) and TensorRT as dependencies.
+      // vszip, bestsource, vs-mlrt, zsmooth, ...) as dependencies — and on
+      // NVIDIA, TensorRT itself through the vs-mlrt TRT wheel.
       logger.info('=== Step 3: Installing VapourSynth ecosystem from PyPI ===');
       const pypiPackages = [
-        'vapoursynth',
-        'vsjetpack[full,nvidia]',
-        `vsview[full]>=${VSVIEW_MIN_VERSION}`,
-        'vs_temporalfix',
-        'vs_undistort',
-        'vs_grain',
-        // Only a .dev release exists on PyPI so far; a bare name would not match it
-        'vs_tiletools>=1.0.0.dev0',
-        'vs_colorfix[tensorrt]',
+        // Vendor-selected ecosystem (vsjetpack extras, torch-adjacent extras,
+        // CUDA-only plugins) — see electron/vendorPackages.ts
+        ...getPypiPackages(vendor),
         // Inference backend plugin wheels (vs-mlrt, pinned so the
-        // stored-version engine rebuild check stays truthful) — each backend
-        // declares its own packages in electron/providers/
-        ...listProviders().flatMap(provider => provider.pipPackages()),
-        // API4 rebuilds of plugins whose bundled copies were API3-only —
-        // VapourSynth R79 aborts on API3 plugins, so these come from PyPI now
-        'vapoursynth-mvtools',
-        'vapoursynth-cas',
-        'vapoursynth-adaptivegrain',
-        'vapoursynth-wnnm',
-        'vapoursynth-nlm-cuda',
-        'vapoursynth-scxvid',
-        'vapoursynth-dctfilter',
-        // Needed by the bundled (non-PyPI) vs_deepdeinterlace scripts
-        'positional-encodings',
-        'einops',
-        'timm',
+        // stored-version engine rebuild check stays truthful). This is where
+        // "which backends does this machine get" is decided at install time:
+        // the vendor selects the backends, each backend declares its own
+        // packages in electron/providers/
+        ...getBackendPipPackages(vendor),
       ];
       const pypiResult = await this.runPipInstall(
         pypiPackages,
@@ -345,8 +483,8 @@ export class PluginInstaller {
       }
 
       // Remove plugin builds that crash VapourSynth autoload and resolve the
-      // ort/ort-cuda duplicate in favor of the CUDA-capable build
-      await applyPluginCompatibilityFixes();
+      // ort/ort-cuda duplicate in favor of the build this vendor can use
+      await applyPluginCompatibilityFixes(vendor);
 
       if (this.isCancelled) {
         return { success: false, error: 'Installation cancelled by user' };
@@ -388,6 +526,10 @@ export class PluginInstaller {
         logger.error('Failed to reload backend:', error);
         // Don't fail the entire installation if backend reload fails
       }
+
+      // Record the vendor the installed set targets only after a fully
+      // successful install, so a failed AMD run can't mask a working NVIDIA one.
+      await configManager.setPluginsGpuVendor(vendor);
 
       // All installations complete
       logger.info('All plugin dependencies and plugins installed successfully');
@@ -440,72 +582,36 @@ export class PluginInstaller {
   async checkInstalled(): Promise<{ installed: boolean; packages: string[] }> {
     logger.info('Checking if plugin dependencies are installed');
 
+    // The persisted vendor is refreshed at every app mount by the
+    // detect-cuda-support handler, so the probe is a cold-start fallback only.
+    const vendor = configManager.getGpuVendor() ?? await detectGpuVendor();
+
     // Normalized (PEP 503) names — compared against pip list output with
     // underscores mapped to dashes.
-    const packagesToCheck = [
-      'vapoursynth', 'torch', 'vsjetpack', 'vsview',
-      'vs-temporalfix', 'vs-undistort', 'vs-colorfix', 'vs-grain', 'vs-tiletools'
-    ];
-    const args = ['-m', 'pip', 'list', '--format=json'];
-    
-    logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
-    logger.info(`Working directory: ${PATHS.VS}`);
-    
-    return new Promise((resolve) => {
-      const checkProcess = spawn(PATHS.PYTHON, args, {
-        cwd: PATHS.VS,
-        windowsHide: true
-      });
+    const packagesToCheck = getCheckPackageNames(vendor);
+    const installedNames = new Set((await this.listInstalledPackages()).map(pkg => pkg.name));
 
-      let outputBuffer = '';
-      let errorBuffer = '';
+    const foundPackages = packagesToCheck.filter(name => installedNames.has(name));
+    const missingNames = packagesToCheck.filter(name => !installedNames.has(name));
 
-      checkProcess.stdout?.on('data', (data: Buffer) => {
-        outputBuffer += data.toString();
-      });
+    const state = evaluateInstallState(vendor, configManager.getPluginsGpuVendor(), missingNames);
 
-      checkProcess.stderr?.on('data', (data: Buffer) => {
-        errorBuffer += data.toString();
-      });
+    if (state.backfillVendor) {
+      // Pre-vendor-tracking install on NVIDIA: every 0.17.0 install was
+      // CUDA-flavored, so grandfather it in instead of forcing a reinstall.
+      await configManager.setPluginsGpuVendor(state.backfillVendor);
+      logger.info(`Recorded existing plugin install as GPU vendor '${state.backfillVendor}'`);
+    }
 
-      checkProcess.on('close', (code: number | null) => {
-        if (code === 0) {
-          try {
-            const installedPackages = JSON.parse(outputBuffer);
-            const installedNames = installedPackages.map((pkg: any) => pkg.name.toLowerCase().replace(/_/g, '-'));
+    logger.info(
+      `Dependencies check (GPU vendor: ${vendor}): ${state.installed ? 'installed' : 'not installed'} ` +
+      `[${state.reason}] (${foundPackages.length}/${packagesToCheck.length} packages present)`
+    );
+    if (missingNames.length > 0) {
+      logger.info(`Missing packages: ${missingNames.join(', ')}`);
+    }
 
-            const foundPackages = packagesToCheck.filter(pkg =>
-              installedNames.includes(pkg.toLowerCase().replace(/_/g, '-'))
-            );
-            
-            const allInstalled = foundPackages.length === packagesToCheck.length;
-            logger.info(`Dependencies check: ${allInstalled ? 'all installed' : 'missing some'} (${foundPackages.length}/${packagesToCheck.length})`);
-            
-            resolve({ installed: allInstalled, packages: foundPackages });
-          } catch (error) {
-            logger.error('Error parsing pip list output:', error);
-            logger.error('Output buffer:', outputBuffer);
-            resolve({ installed: false, packages: [] });
-          }
-        } else {
-          logger.error(`Failed to check installed packages (exit code: ${code})`);
-          if (errorBuffer.trim()) {
-            logger.error('Error output:', errorBuffer);
-          }
-          if (outputBuffer.trim()) {
-            logger.error('Standard output:', outputBuffer);
-          }
-          resolve({ installed: false, packages: [] });
-        }
-      });
-
-      checkProcess.on('error', (error: Error) => {
-        logger.error('Failed to run pip list:', error);
-        logger.error('Python path:', PATHS.PYTHON);
-        logger.error('VS path:', PATHS.VS);
-        resolve({ installed: false, packages: [] });
-      });
-    });
+    return { installed: state.installed, packages: foundPackages };
   }
 
   async uninstallDependencies(): Promise<{ success: boolean; error?: string }> {
@@ -519,13 +625,10 @@ export class PluginInstaller {
         message: 'Preparing to uninstall dependencies...'
       });
 
-      // The core runtime (vapoursynth, vapoursynth-bestsource, vs-mlrt) is
-      // intentionally left installed so the app itself keeps working.
-      const packagesToUninstall = [
-        'torch', 'torchvision', 'positional-encodings', 'einops', 'timm',
-        'vsjetpack', 'vsview',
-        'vs-temporalfix', 'vs-undistort', 'vs-colorfix', 'vs-grain', 'vs-tiletools'
-      ];
+      // Shared, deliberately vendor-neutral list — see the comment on
+      // UNINSTALL_PACKAGE_NAMES in vendorPackages.ts for why this must NOT
+      // branch on the GPU vendor.
+      const packagesToUninstall = UNINSTALL_PACKAGE_NAMES;
       const args = ['-m', 'pip', 'uninstall', '-y', ...packagesToUninstall];
       
       const commandStr = `${PATHS.PYTHON} ${args.join(' ')}`;

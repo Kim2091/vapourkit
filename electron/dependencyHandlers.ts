@@ -1,7 +1,8 @@
 import { ipcMain } from 'electron';
 import { logger } from './logger';
 import { configManager } from './configManager';
-import { detectCudaSupport, pollGpuStats } from './utils';
+import { pollGpuStats } from './utils';
+import { detectGpuVendor } from './gpuDetection';
 import { createIpcHandler } from './ipcUtilities';
 import { DependencyManager } from './dependencyManager';
 import { PluginInstaller } from './pluginInstaller';
@@ -25,9 +26,14 @@ export function registerDependencyHandlers(
     createIpcHandler(
       'detect-cuda-support',
       async () => {
-        const hasCuda = await detectCudaSupport();
-        logger.info(`CUDA detection result: ${hasCuda}`);
-        return hasCuda;
+        // Runs the full vendor probe and persists it (this handler fires at
+        // every app mount, so it keeps gpuVendor fresh across GPU/driver
+        // changes). The renderer contract stays a boolean: nvidia-smi success
+        // implied `true` before and still does.
+        const vendor = await detectGpuVendor();
+        await configManager.setGpuVendor(vendor);
+        logger.info(`GPU vendor: ${vendor}`);
+        return vendor === 'nvidia';
       },
       { logResult: true }
     )

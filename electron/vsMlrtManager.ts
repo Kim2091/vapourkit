@@ -5,6 +5,7 @@ import { BrowserWindow } from 'electron';
 import { PATHS, VS_MLRT_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { logger } from './logger';
 import { applyPluginCompatibilityFixes } from './legacyCleanup';
+import { configManager } from './configManager';
 import { getProvider, type BackendId } from './providers/registry';
 
 export type VsMlrtComponent = 'onnx-runtime' | 'tensorrt';
@@ -147,8 +148,12 @@ export class VsMlrtManager {
 
       proc.on('close', async (code: number | null) => {
         if (code === 0) {
-          // Re-resolve the ort/ort-cuda duplicate a reinstall may have recreated
-          await applyPluginCompatibilityFixes();
+          // Re-resolve the ort/ort-cuda duplicate a reinstall may have recreated.
+          // Prefer the vendor the installed set targets; the 'nvidia' fallback
+          // preserves behavior for configs predating vendor tracking.
+          await applyPluginCompatibilityFixes(
+            configManager.getPluginsGpuVendor() ?? configManager.getGpuVendor() ?? 'nvidia'
+          );
           progressCallback?.({ progress: 100, message: `${componentName} installed successfully!` });
           logger.info(`=== ${componentName} installation completed ===`);
           resolve();

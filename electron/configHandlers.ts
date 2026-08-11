@@ -323,11 +323,11 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     try {
       logger.info('=== Starting automatic vs-mlrt plugin update ===');
       
-      // Import utils to check CUDA support
-      const { detectCudaSupport } = await import('./utils');
-      const hasCuda = await detectCudaSupport();
-      
-      if (!hasCuda) {
+      // TensorRT is NVIDIA-only; the vendor probe is the single detection
+      // authority (persisted at app mount, probed here only on a cold start).
+      const vendor = configManager.getGpuVendor() ?? await (await import('./gpuDetection')).detectGpuVendor();
+
+      if (vendor !== 'nvidia') {
         logger.info('No CUDA detected, skipping vs-mlrt TensorRT plugin update');
         return { success: false, error: 'CUDA not detected. TensorRT plugin requires NVIDIA GPU.' };
       }
