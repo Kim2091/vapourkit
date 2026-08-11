@@ -8,6 +8,8 @@ interface SettingsModalProps {
   onClose: () => void;
   defaultBackend: BackendId;
   onChangeBackend: (backend: BackendId) => void;
+  showBackendOverrides: boolean;
+  onToggleBackendOverrides: (value: boolean) => void;
   numStreams: number;
   onUpdateNumStreams: (value: number) => void;
   videoCompareArgs: string;
@@ -27,6 +29,8 @@ export const SettingsModal = memo<SettingsModalProps>(({
   onClose,
   defaultBackend,
   onChangeBackend,
+  showBackendOverrides,
+  onToggleBackendOverrides,
   numStreams,
   onUpdateNumStreams,
   videoCompareArgs,
@@ -169,9 +173,20 @@ export const SettingsModal = memo<SettingsModalProps>(({
                       </div>
                     </label>
                   ))}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Individual AI model filters can override this backend in the filter panel.
-                  </p>
+                  <label className="flex items-start gap-3 cursor-pointer p-2 mt-1 rounded-lg border-t border-gray-700/60 pt-3">
+                    <input
+                      type="checkbox"
+                      checked={showBackendOverrides}
+                      onChange={(e) => onToggleBackendOverrides(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-primary-blue focus:ring-2 focus:ring-primary-blue mt-0.5"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">Per-filter backend overrides</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Adds a backend selector to each AI model filter so individual filters can deviate from the default. Filters that already have an override keep working (and show a badge) even when this is off.
+                      </p>
+                    </div>
+                  </label>
                 </div>
 
                 {/* num_streams setting */}

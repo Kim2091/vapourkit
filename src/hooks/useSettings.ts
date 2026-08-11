@@ -46,6 +46,12 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
     return 2;
   });
 
+  // Whether the per-filter backend override control is shown in filter cards.
+  // Off by default — most users only ever need the app-wide default backend.
+  const [showBackendOverrides, setShowBackendOverridesState] = useState<boolean>(() => {
+    return localStorage.getItem('showBackendOverrides') === 'true';
+  });
+
   // First-time initialization once CUDA detection has resolved
   useEffect(() => {
     if (hasCudaSupport !== null) {
@@ -71,10 +77,17 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
     setNumStreams(value);
   }, []);
 
+  const setShowBackendOverrides = useCallback((value: boolean): void => {
+    setShowBackendOverridesState(value);
+    localStorage.setItem('showBackendOverrides', String(value));
+  }, []);
+
   return {
     defaultBackend,
     setDefaultBackend,
     numStreams,
     updateNumStreams,
+    showBackendOverrides,
+    setShowBackendOverrides,
   };
 };

@@ -66,7 +66,7 @@ function App() {
   // Setup and initialization hooks
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, setupProgress, isSettingUp, handleSetup, pluginInstallError, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
-  const { defaultBackend, setDefaultBackend, numStreams, updateNumStreams } = useSettings(hasCudaSupport);
+  const { defaultBackend, setDefaultBackend, numStreams, updateNumStreams, showBackendOverrides, setShowBackendOverrides } = useSettings(hasCudaSupport);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
   const { 
     ffmpegArgs, 
@@ -764,6 +764,7 @@ function App() {
                     availableModels={availableModels}
                     isProcessing={isProcessing}
                     defaultBackend={defaultBackend}
+                    showBackendOverrides={showBackendOverrides}
                     colorimetrySettings={colorimetrySettings}
                     videoInfo={videoInfo}
                     filterTemplates={filterTemplates}
@@ -933,6 +934,8 @@ function App() {
         numStreams={numStreams}
         onUpdateNumStreams={updateNumStreams}
         onChangeBackend={handleChangeBackend}
+        showBackendOverrides={showBackendOverrides}
+        onToggleBackendOverrides={setShowBackendOverrides}
         videoCompareArgs={videoCompareArgs}
         onUpdateVideoCompareArgs={handleUpdateVideoCompareArgs}
         onResetVideoCompareArgs={handleResetVideoCompareArgs}

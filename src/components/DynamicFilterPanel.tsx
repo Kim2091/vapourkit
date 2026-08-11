@@ -14,6 +14,8 @@ interface DynamicFilterPanelProps {
   isProcessing: boolean;
   availableModels?: ModelFile[];
   defaultBackend?: BackendId;
+  /** Shows the per-filter backend selector (Settings toggle, off by default). */
+  showBackendOverrides?: boolean;
   onFiltersChange: (filters: Filter[]) => void;
   onSaveTemplate?: (template: FilterTemplate) => Promise<boolean>;
   onDeleteTemplate?: (name: string) => Promise<boolean>;
@@ -32,6 +34,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   isProcessing,
   availableModels = [],
   defaultBackend = 'tensorrt',
+  showBackendOverrides = false,
   onFiltersChange,
   onSaveTemplate,
   onDeleteTemplate,
@@ -730,7 +733,10 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               : 'Select a model...'
                             }
                           </button>
-                          {/* Backend override - 'auto' inherits the app default */}
+                          {/* Backend override - 'auto' inherits the app default.
+                              Hidden unless enabled in Settings, but always shown
+                              when an override is active so it stays clearable. */}
+                          {(showBackendOverrides || (filter.backend && filter.backend !== 'auto')) && (
                           <div className="flex items-center gap-2">
                             <label className="text-xs text-gray-400 flex-shrink-0">Backend</label>
                             <select
@@ -745,6 +751,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               ))}
                             </select>
                           </div>
+                          )}
                         </div>
                       </>
                     ) : (
