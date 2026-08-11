@@ -28,6 +28,8 @@
   - The engine→ONNX path mapping now understands the doubled precision suffix of custom-built engines and picks whichever ONNX candidate exists on disk
 - Pre-included models now get the same ONNX auto-detection as custom imports when opening the build modal
   - Temporal frame count, precision, and static shapes were previously hardcoded (15 channels for any VSR model, precision from filename only), and the frame count was missing from the form entirely
+- Setup installer no longer wipes the `data` folder (Python env, models, engines, config) when upgrading
+  - The default upgrade flow runs the old uninstaller, which deleted the whole install directory; `data` is now moved aside before the old uninstaller runs and restored afterwards, and the new uninstaller preserves it natively on future updates (a real uninstall still removes everything)
 
 ## 0.16.1
 - Fix `Cannot read properties of null (reading 'execute')` crash when canceling or restarting an upscale during the frame count probe
