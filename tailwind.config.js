@@ -35,16 +35,16 @@ const ink = {
 };
 
 const accent = {
-  200: '#bbe7e1',
-  300: '#95dad0',
-  400: '#67cbbc',
-  500: '#3fb9a6', // DEFAULT
-  600: '#319b8b',
-  700: '#267e70',
-  800: '#1c5f55',
-  900: '#123f39',
-  DEFAULT: '#3fb9a6',
-  ink: '#04120f', // text that sits on a solid accent fill
+  200: 'rgb(var(--accent-200) / <alpha-value>)',
+  300: 'rgb(var(--accent-300) / <alpha-value>)',
+  400: 'rgb(var(--accent-400) / <alpha-value>)',
+  500: 'rgb(var(--accent-500) / <alpha-value>)', // DEFAULT
+  600: 'rgb(var(--accent-600) / <alpha-value>)',
+  700: 'rgb(var(--accent-700) / <alpha-value>)',
+  800: 'rgb(var(--accent-800) / <alpha-value>)',
+  900: 'rgb(var(--accent-900) / <alpha-value>)',
+  DEFAULT: 'rgb(var(--accent-500) / <alpha-value>)',
+  ink: 'rgb(var(--accent-ink) / <alpha-value>)', // text that sits on a solid accent fill
 };
 
 export default {

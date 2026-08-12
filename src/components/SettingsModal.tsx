@@ -1,7 +1,8 @@
 import { memo, useState, useEffect } from 'react';
-import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive } from 'lucide-react';
+import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive, Palette } from 'lucide-react';
 import type { BackendId } from '../electron.d';
 import { BACKENDS } from '../utils/backends';
+import { DEFAULT_ACCENT_COLOR } from '../hooks/useAccentColor';
 
 interface SettingsModalProps {
   show: boolean;
@@ -20,6 +21,9 @@ interface SettingsModalProps {
   onResetDefaultOutputFolder: () => void;
   descriptiveNamingEnabled: boolean;
   onUpdateDescriptiveNamingEnabled: (enabled: boolean) => void;
+  accentColor: string;
+  onChangeAccentColor: (color: string) => void;
+  onResetAccentColor: () => void;
 }
 
 type Tab = 'general' | 'processing';
@@ -41,6 +45,9 @@ export const SettingsModal = memo<SettingsModalProps>(({
   onResetDefaultOutputFolder,
   descriptiveNamingEnabled,
   onUpdateDescriptiveNamingEnabled,
+  accentColor,
+  onChangeAccentColor,
+  onResetAccentColor,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [showVideoCompareOptions, setShowVideoCompareOptions] = useState(false);
@@ -226,6 +233,41 @@ export const SettingsModal = memo<SettingsModalProps>(({
                       ))}
                     </ul>
                   </div>
+                </div>
+              </section>
+
+              {/* Accent Color Section */}
+              <section className="mt-2 border-t border-ink-700">
+                <div className="h-9 flex items-stretch gap-2.5 bg-ink-850 border-b border-ink-800">
+                  <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Palette className="w-3.5 h-3.5 text-ink-500" />
+                    <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Appearance</h3>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 px-4 py-2.5 border-b border-ink-900">
+                  <label htmlFor="accent-color" className="flex-1 min-w-0 cursor-pointer">
+                    <p className="text-[12.5px] text-ink-200">Accent Color</p>
+                    <p className="text-[11px] text-ink-500 mt-0.5">Customize highlights, controls, and active states throughout Vapourkit.</p>
+                  </label>
+                  <input
+                    id="accent-color"
+                    type="color"
+                    value={accentColor}
+                    onChange={(event) => onChangeAccentColor(event.target.value)}
+                    aria-label="Choose accent color"
+                    className="w-9 h-7 p-0.5 rounded bg-ink-850 border border-ink-750 cursor-pointer"
+                  />
+                  <code className="w-[68px] text-[11px] font-mono text-ink-400 uppercase">{accentColor}</code>
+                  <button
+                    type="button"
+                    onClick={onResetAccentColor}
+                    disabled={accentColor === DEFAULT_ACCENT_COLOR}
+                    className="text-[11px] text-accent-400 hover:text-accent-300 transition-colors disabled:text-ink-600 disabled:cursor-not-allowed"
+                  >
+                    Reset
+                  </button>
                 </div>
               </section>
 

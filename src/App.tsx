@@ -43,6 +43,7 @@ import { VideoInfoPanel } from './components/VideoPanel';
 import { OutputSettingsPanel } from './components/OutputSettingsPanel';
 import { ModelSelectionPanel } from './components/ModelSelectionPanel';
 import { getPortableModelName } from './utils/modelUtils';
+import { useAccentColor } from './hooks/useAccentColor';
 
 // Settings column drag bounds, in pixels.
 const SETTINGS_MIN_W = 320;
@@ -82,6 +83,7 @@ function App() {
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, recommendedBackend, setupProgress, isSettingUp, handleSetup, pluginInstallError, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
   const { defaultBackend, setDefaultBackend, numStreams, updateNumStreams, showBackendOverrides, setShowBackendOverrides } = useSettings(recommendedBackend);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
+  const { accentColor, setAccentColor, resetAccentColor } = useAccentColor();
   const { 
     ffmpegArgs, 
     processingFormat,
@@ -1004,6 +1006,9 @@ function App() {
         onResetDefaultOutputFolder={handleResetDefaultOutputFolder}
         descriptiveNamingEnabled={descriptiveNamingEnabled}
         onUpdateDescriptiveNamingEnabled={handleUpdateDescriptiveNamingEnabled}
+        accentColor={accentColor}
+        onChangeAccentColor={setAccentColor}
+        onResetAccentColor={resetAccentColor}
         showAbout={showAbout}
         onCloseAbout={() => closeModalWithFocusRestore(() => setShowAbout(false))}
         showPlugins={showPlugins}
