@@ -1,0 +1,52 @@
+import * as fs from 'fs-extra';
+import { spawn } from 'child_process';
+import { isCommandAvailable } from './utils';
+
+/**
+ * Checks whether the video-compare executable can be launched. Windows uses
+ * the app-managed binary while Linux resolves the optional host command using
+ * PATH instead of treating its command name as a filesystem path.
+ */
+export async function isVideoCompareAvailable(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+): Promise<boolean> {
+  return platform === 'win32'
+    ? fs.existsSync(command)
+    : isCommandAvailable(command);
+}
+
+export function getVideoCompareUnavailableMessage(
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return platform === 'win32'
+    ? 'Video comparison tool not found. Please run setup again.'
+    : 'Video comparison is optional on Linux. Install the video-compare command with your distribution package manager, then restart Vapourkit.';
+}
+
+/**
+ * Starts video-compare detached and waits for process creation. Waiting for
+ * the spawn event means a missing PATH command (ENOENT) is returned to the
+ * renderer rather than incorrectly reporting a successful launch.
+ */
+export function launchVideoCompare(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn(command, args, {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+}

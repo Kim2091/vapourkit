@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { Loader2, Download, XCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, Download, XCircle, CheckCircle2, Terminal } from 'lucide-react';
 import type { SetupProgress } from '../electron.d';
 import { Logo } from './Logo';
 
@@ -26,15 +26,31 @@ export const SetupScreen = memo<SetupScreenProps>(({
   onRetryPlugins,
   onContinueWithoutPlugins,
 }: SetupScreenProps) => {
+  const isLinux = window.electronAPI.platform === 'linux';
+
   // Define the setup steps with their expected component names, in the order the
   // backend emits them. Component names use startsWith matching because the
   // backend may send versioned names.
   const setupSteps = useMemo(() => {
     const steps = [
-      { id: 'video-compare', name: 'Video Compare Tool', description: 'Side-by-side comparison viewer', component: 'Video Compare Tool' },
-      { id: 'python', name: 'Python & VapourSynth', description: 'Managed Python runtime with VapourSynth from PyPI', component: 'Python Embedded' },
+      ...(isLinux ? [] : [{ id: 'video-compare', name: 'Video Compare Tool', description: 'Side-by-side comparison viewer', component: 'Video Compare Tool' }]),
+      {
+        id: 'python',
+        name: isLinux ? 'Python virtual environment' : 'Python & VapourSynth',
+        description: isLinux
+          ? 'VapourSynth installed in a Python virtual environment'
+          : 'Managed Python runtime with VapourSynth from PyPI',
+        component: 'Python Embedded'
+      },
       { id: 'models', name: 'ONNX Models', description: 'Bundled AI upscaling models', component: 'ONNX Models' },
-      { id: 'ffmpeg', name: 'FFmpeg', description: 'Video encoding/decoding', component: 'FFmpeg' },
+      {
+        id: 'ffmpeg',
+        name: isLinux ? 'FFmpeg & FFprobe' : 'FFmpeg',
+        description: isLinux
+          ? 'Host prerequisite — install with your distribution package manager'
+          : 'Video encoding/decoding',
+        component: 'FFmpeg'
+      },
       {
         id: 'plugins',
         name: 'Plugins & Filters',
@@ -46,7 +62,7 @@ export const SetupScreen = memo<SetupScreenProps>(({
     ];
 
     return steps;
-  }, [hasCudaSupport]);
+  }, [hasCudaSupport, isLinux]);
 
   // Track which steps are completed, in progress, or pending
   const stepStatuses = useMemo(() => {
@@ -131,9 +147,13 @@ export const SetupScreen = memo<SetupScreenProps>(({
 
           {/* Main Card */}
           <div className="bg-ink-850 rounded-xl p-6 border border-ink-800">
-            <h2 className="text-lg font-semibold mb-2">Download Required Components</h2>
+            <h2 className="text-lg font-semibold mb-2">
+              {isLinux ? 'Set Up Required Components' : 'Download Required Components'}
+            </h2>
             <p className="text-ink-400 text-sm mb-4">
-              The following components will be downloaded and installed to the application's data folder:
+              {isLinux
+                ? 'Vapourkit will create a Python virtual environment and install the components below. FFmpeg and FFprobe must already be installed by your distribution.'
+                : "The following components will be downloaded and installed to the application's data folder:"}
             </p>
 
             {/* Component List */}
@@ -156,6 +176,8 @@ export const SetupScreen = memo<SetupScreenProps>(({
                       <CheckCircle2 className="w-5 h-5 text-ok-400 flex-shrink-0" />
                     ) : status === 'in-progress' ? (
                       <Loader2 className="w-5 h-5 text-accent-500 animate-spin flex-shrink-0" />
+                    ) : isLinux && step.id === 'ffmpeg' ? (
+                      <Terminal className="w-5 h-5 text-accent-400 flex-shrink-0" />
                     ) : (
                       <Download className={`w-5 h-5 flex-shrink-0 ${
                         step.id === 'video-compare' ? 'text-warn-400' :
@@ -204,6 +226,12 @@ export const SetupScreen = memo<SetupScreenProps>(({
                 );
               })}
             </div>
+
+            {isLinux && (
+              <p className="mb-4 text-xs text-ink-500">
+                Optional: install <code className="font-mono text-ink-300">video-compare</code> with your distribution package manager to enable side-by-side comparison.
+              </p>
+            )}
 
             {/* Error Message */}
             {setupProgress?.type === 'error' && !pluginInstallError && (

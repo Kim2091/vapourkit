@@ -19,6 +19,11 @@ import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 import { FFmpegManager } from './ffmpegManager';
 import { VsViewManager } from './vsViewManager';
 import { QueueItemLogger } from './queueItemLogger';
+import {
+  getVideoCompareUnavailableMessage,
+  isVideoCompareAvailable,
+  launchVideoCompare,
+} from './videoCompare';
 
 let upscaleExecutor: UpscaleExecutor | null = null;
 let previewExecutor: UpscaleExecutor | null = null;
@@ -439,11 +444,11 @@ export function registerVideoHandlers(
     logger.info(`Input: ${inputPath}`);
     logger.info(`Output: ${outputPath}`);
     try {
-      const { spawn } = require('child_process');
-      
-      // Check if video-compare exists
-      if (!fs.existsSync(PATHS.VIDEO_COMPARE_EXE)) {
-        throw new Error('Video comparison tool not found. Please run setup again.');
+      // Windows ships an app-managed binary. Linux uses an optional host
+      // command, so resolve it through PATH rather than fs.existsSync on the
+      // literal string "video-compare".
+      if (!(await isVideoCompareAvailable(PATHS.VIDEO_COMPARE_EXE))) {
+        throw new Error(getVideoCompareUnavailableMessage());
       }
       
       // Check if both video files exist
@@ -465,13 +470,7 @@ export function registerVideoHandlers(
       const allArgs = [...customArgs, inputPath, outputPath];
       logger.info(`Video compare args: ${allArgs.join(' ')}`);
       
-      const child = spawn(PATHS.VIDEO_COMPARE_EXE, allArgs, {
-        detached: true,
-        stdio: 'ignore'
-      });
-      
-      // Detach the child process so it runs independently
-      child.unref();
+      await launchVideoCompare(PATHS.VIDEO_COMPARE_EXE, allArgs);
       
       logger.info('Video comparison tool launched successfully');
       return { success: true };
