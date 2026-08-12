@@ -15,6 +15,27 @@ import { isUpdateAvailable } from './updateChecker';
  */
 export class VsViewManager {
   /**
+   * vsview is a separate PySide6/Qt GUI. An AppImage exports Electron's Qt
+   * and shared-library paths to all child processes; if inherited, Qt can load
+   * Electron's incompatible plugins instead of the PySide6 wheel's plugins
+   * and exit without ever showing a window. Keep the VapourSynth environment,
+   * but remove AppImage/Electron loader overrides for this external GUI.
+   */
+  static createGuiEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    const guiEnvironment = { ...environment };
+    for (const variable of [
+      'LD_LIBRARY_PATH',
+      'LD_PRELOAD',
+      'QT_PLUGIN_PATH',
+      'QT_QPA_PLATFORM_PLUGIN_PATH',
+      'ELECTRON_RUN_AS_NODE',
+    ]) {
+      delete guiEnvironment[variable];
+    }
+    return guiEnvironment;
+  }
+
+  /**
    * Check if vs-view is installed and at least VSVIEW_MIN_VERSION.
    * An older install reports false so the launch path upgrades it.
    */
@@ -227,47 +248,66 @@ export class VsViewManager {
 
       logger.info(`Launching: ${vsviewExe} ${scriptPath}`);
 
+      const guiEnv = this.createGuiEnvironment(env);
+      logger.info(`Launching vs-view with isolated GUI environment (AppImage: ${Boolean(process.env.APPIMAGE)})`);
       const child = spawn(vsviewExe, [scriptPath], {
         detached: true,
-        stdio: 'pipe', // Capture output to detect launch errors
+        stdio: 'pipe',
         cwd: PATHS.VS,
-        env
+        env: guiEnv,
       });
       
-      // Create a promise to wait briefly and check if the process crashes immediately
+      // Wait briefly for an immediate GUI startup failure. `child.killed` only
+      // means kill() was called; it remains false after a clean early exit, so
+      // using it here falsely reported a successfully launched window.
       return new Promise((resolve) => {
         let errorOutput = '';
+        let output = '';
+        let exited = false;
+        let settled = false;
+
+        const finish = (result: { success: boolean; error?: string }) => {
+          if (settled) return;
+          settled = true;
+          resolve(result);
+        };
         
-        // Collect stderr output
+        child.stdout?.on('data', (data) => {
+          const text = data.toString();
+          output += text;
+          logger.info(`[vs-view] ${text.trimEnd()}`);
+        });
+
         child.stderr?.on('data', (data) => {
-          errorOutput += data.toString();
+          const text = data.toString();
+          errorOutput += text;
+          logger.error(`[vs-view] ${text.trimEnd()}`);
         });
         
-        // Check if the process exits immediately (indicates a launch failure)
         child.on('exit', (code, signal) => {
-          if (code !== null && code !== 0) {
-            const errorMsg = errorOutput 
-              ? `vs-view failed to start: ${errorOutput.trim()}`
-              : `vs-view exited with code ${code}. This may indicate a missing dependency or configuration issue.`;
-            logger.error(errorMsg);
-            resolve({ success: false, error: errorMsg });
-          }
+          exited = true;
+          const details = (errorOutput || output).trim();
+          const status = signal ? `signal ${signal}` : `code ${code}`;
+          const errorMsg = details
+            ? `vs-view exited before opening its window (${status}): ${details}`
+            : `vs-view exited before opening its window (${status}). Check that a graphical desktop session is available.`;
+          logger.error(errorMsg);
+          finish({ success: false, error: errorMsg });
         });
         
         child.on('error', (err) => {
           const errorMsg = `Failed to launch vs-view: ${err.message}`;
           logger.error(errorMsg);
-          resolve({ success: false, error: errorMsg });
+          finish({ success: false, error: errorMsg });
         });
         
-        // If process is still running after 2 seconds, assume success
         setTimeout(() => {
-          if (!child.killed) {
+          if (!exited) {
             logger.info('vs-view process started successfully');
-            child.unref(); // Allow parent process to exit independently
-            resolve({ success: true });
+            child.unref();
+            finish({ success: true });
           }
-        }, 2000);
+        }, 3000);
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
