@@ -38,6 +38,7 @@ if clip.format.id != filter_format.id:
 # reference to original unprocessed clip
 original_clip = clip
 
+{{BACKEND_HELPER}}
 
 {{FILTERS}}
 

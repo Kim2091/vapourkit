@@ -147,7 +147,8 @@ export class VapourSynthScriptGenerator {
     const filters = config.filters || [];
     const enabledFilters = filters.filter(f => f.enabled).sort((a, b) => a.order - b.order);
 
-    let filterCode = this.generateBackendHelper(defaultBackend);
+    const backendHelper = this.generateBackendHelper(defaultBackend);
+    let filterCode = '';
 
     // Add validation mode trimming (first 5 seconds only)
     if (config.validationMode) {
@@ -226,6 +227,7 @@ export class VapourSynthScriptGenerator {
       .replace(/{{DEFAULT_PRIMARIES}}/g, defaultPrimaries)
       .replace(/{{DEFAULT_TRANSFER}}/g, defaultTransfer)
       .replace(/{{OUTPUT_FORMAT}}/g, outputFormat)
+      .replace(/{{BACKEND_HELPER}}/g, backendHelper)
       .replace(/{{FILTERS}}/g, filterCode);
 
     // Remove the final clip.set_output() call if we're generating preview outputs
