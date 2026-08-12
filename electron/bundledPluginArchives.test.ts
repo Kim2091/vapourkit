@@ -18,8 +18,9 @@ describe('shouldExtractBundledPluginArchives', () => {
 });
 
 describe('shouldCopyBundledPluginFilterTemplates', () => {
-  it('only copies the Windows plugin-filter catalog on Windows', () => {
+  it('copies the platform-neutral plugin-filter catalog on supported desktops', () => {
     expect(shouldCopyBundledPluginFilterTemplates('win32')).toBe(true);
-    expect(shouldCopyBundledPluginFilterTemplates('linux')).toBe(false);
+    expect(shouldCopyBundledPluginFilterTemplates('linux')).toBe(true);
+    expect(shouldCopyBundledPluginFilterTemplates('darwin')).toBe(false);
   });
 });

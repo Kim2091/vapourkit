@@ -9,10 +9,8 @@ import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
-import {
-  shouldCopyBundledPluginFilterTemplates,
-  shouldExtractBundledPluginArchives,
-} from './bundledPluginArchives';
+import { shouldExtractBundledPluginArchives } from './bundledPluginArchives';
+import { hasPluginFilterTemplates, selectPluginFilterTemplates } from './pluginFilterCatalog';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
@@ -1093,11 +1091,8 @@ export class PluginInstaller {
   }
 
   private async copyFilterTemplates(): Promise<void> {
-    if (!shouldCopyBundledPluginFilterTemplates()) {
-      // The plugin_filters catalog contains templates for DLL/CUDA dependencies
-      // bundled only on Windows. Linux starts with the shared catalog and can
-      // later add explicitly Linux-compatible templates.
-      logger.info('Bundled plugin filter templates are Windows-only; skipping copy');
+    if (!hasPluginFilterTemplates()) {
+      logger.info('Bundled plugin filter templates are unavailable on this platform; skipping copy');
       return;
     }
 
@@ -1122,14 +1117,16 @@ export class PluginInstaller {
     await fs.ensureDir(PATHS.FILTER_TEMPLATES);
 
     // Get all files in the plugin_filters folder
-    const files = await fs.readdir(pluginFiltersFolder);
+    const sourceFiles = (await fs.readdir(pluginFiltersFolder))
+      .filter(file => file.endsWith('.vkfilter'));
+    const files = selectPluginFilterTemplates(sourceFiles);
     
     if (files.length === 0) {
       logger.info('No filter templates found in plugin_filters folder');
       return;
     }
 
-    logger.info(`Found ${files.length} filter template(s) to copy`);
+    logger.info(`Found ${files.length} supported filter template(s) to copy`);
     
     for (const file of files) {
       const sourcePath = path.join(pluginFiltersFolder, file);
@@ -1139,7 +1136,10 @@ export class PluginInstaller {
       const stats = await fs.stat(sourcePath);
       if (stats.isFile()) {
         try {
-          await fs.copy(sourcePath, destPath, { overwrite: true });
+          // Windows historically refreshes the complete bundled catalog on
+          // installation. Linux only adds its verified subset and preserves a
+          // user-modified template from an earlier setup.
+          await fs.copy(sourcePath, destPath, { overwrite: process.platform === 'win32' });
           logger.info(`Copied filter template: ${file}`);
         } catch (error) {
           logger.error(`Failed to copy filter template ${file}:`, error);

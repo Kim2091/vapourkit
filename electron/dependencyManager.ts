@@ -11,6 +11,7 @@ import { runCommand, getBundledBasePath, isSupportedPython } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
 import { migrateLegacyPortableLayout } from './legacyCleanup';
+import { hasPluginFilterTemplates, selectPluginFilterTemplates, selectUnsupportedLinuxPluginFilterTemplates } from './pluginFilterCatalog';
 import * as _7z from '7zip-min';
 
 export interface DownloadProgress {
@@ -560,31 +561,57 @@ export class DependencyManager {
     // Ensure filter templates directory exists
     await fs.ensureDir(PATHS.FILTER_TEMPLATES);
     
-    // Path to bundled filter templates
-    const bundledTemplatesPath = path.join(bundledBasePath, 'include', 'filter_templates');
-    
-    // Check if bundled templates directory exists
-    if (!await fs.pathExists(bundledTemplatesPath)) {
-      logger.warn(`Bundled filter templates not found at: ${bundledTemplatesPath}`);
-      return;
-    }
-    
-    // Get all vkfilter files from bundled templates
-    const files = await fs.readdir(bundledTemplatesPath);
-    const vkfilterFiles = files.filter(f => f.endsWith('.vkfilter'));
-    
-    logger.dependency(`Found ${vkfilterFiles.length} bundled filter template(s)`);
-    
-    // Copy each template if it doesn't exist in user directory
-    for (const file of vkfilterFiles) {
-      const sourcePath = path.join(bundledTemplatesPath, file);
-      const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
-      
-      if (!await fs.pathExists(destPath)) {
-        await fs.copy(sourcePath, destPath);
-        logger.dependency(`Copied filter template: ${file}`);
-      } else {
-        logger.dependency(`Filter template already exists: ${file}`);
+    const templateDirectories = [
+      path.join(bundledBasePath, 'include', 'filter_templates'),
+      ...(hasPluginFilterTemplates()
+        ? [path.join(bundledBasePath, 'include', 'plugins', 'plugin_filters')]
+        : []),
+    ];
+
+    for (const templateDirectory of templateDirectories) {
+      if (!await fs.pathExists(templateDirectory)) {
+        logger.warn(`Bundled filter templates not found at: ${templateDirectory}`);
+        continue;
+      }
+
+      const files = await fs.readdir(templateDirectory);
+      const sourceFiles = files.filter(f => f.endsWith('.vkfilter'));
+      const isPluginCatalog = templateDirectory.endsWith(path.join('plugins', 'plugin_filters'));
+      const vkfilterFiles = isPluginCatalog
+        ? selectPluginFilterTemplates(sourceFiles)
+        : sourceFiles;
+      logger.dependency(`Found ${vkfilterFiles.length} supported bundled filter template(s) in ${templateDirectory}`);
+
+      for (const file of vkfilterFiles) {
+        const sourcePath = path.join(templateDirectory, file);
+        const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
+
+        if (!await fs.pathExists(destPath)) {
+          await fs.copy(sourcePath, destPath);
+          logger.dependency(`Copied filter template: ${file}`);
+        } else {
+          logger.dependency(`Filter template already exists: ${file}`);
+        }
+      }
+
+      // Version 2.0.0 briefly copied every Windows-authored plugin template to
+      // Linux. Remove only unchanged bundled files from that release; a user
+      // edit is deliberately kept as a custom template.
+      if (isPluginCatalog && process.platform === 'linux') {
+        for (const file of selectUnsupportedLinuxPluginFilterTemplates(sourceFiles)) {
+          const sourcePath = path.join(templateDirectory, file);
+          const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
+          if (!await fs.pathExists(destPath)) continue;
+
+          const [source, destination] = await Promise.all([
+            fs.readFile(sourcePath),
+            fs.readFile(destPath),
+          ]);
+          if (source.equals(destination)) {
+            await fs.remove(destPath);
+            logger.dependency(`Removed unsupported Linux bundled filter template: ${file}`);
+          }
+        }
       }
     }
     
