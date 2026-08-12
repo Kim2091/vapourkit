@@ -2,11 +2,11 @@
 
 ![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FKim2091%2Fvapourkit%2Fmain%2Fpackage.json&query=%24.version&label=version&color=blue)
 ![License](https://img.shields.io/badge/license-GPL%203.0-green)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![Discord](https://img.shields.io/discord/1470824551456706580)
 
 
-**Vapourkit** is a free, open source program for video upscaling and enhancement using VapourSynth and AI models. It provides a user-friendly interface for video processing with support for both NVIDIA TensorRT and DirectML (AMD/Intel/NVIDIA) backends.
+**Vapourkit** is a free, open source program for video upscaling and enhancement using VapourSynth and AI models. It supports NVIDIA TensorRT, DirectML on Windows, and NCNN Vulkan on Windows and Linux.
 
 <img width="2033" height="1248" alt="image" src="https://github.com/user-attachments/assets/8a821fae-1060-4178-9134-e398048534bc" />
 
@@ -14,8 +14,23 @@
 
 ### Installation
 [**Free download here**](https://ko-fi.com/s/2e5ebd456d)
+
+Linux testing builds are published on the [nightly releases page](https://github.com/Kim2091/vapourkit-nightly/releases).
+
+#### Windows
+
 1. Download and extract/install to your desired location
 2. On first launch, click "Start Setup" when prompted to install dependencies
+
+#### Linux (x86_64 AppImage)
+
+1. Install the host prerequisites listed below.
+2. Make the downloaded AppImage executable: `chmod +x Vapourkit-*.AppImage`.
+3. Run it with `./Vapourkit-*.AppImage`, then click **Start Setup** when prompted.
+
+The AppImage contains Vapourkit itself; it deliberately uses your distribution's Python, FFmpeg, and Vulkan driver. If FUSE is unavailable, run it with `APPIMAGE_EXTRACT_AND_RUN=1 ./Vapourkit-*.AppImage`.
+
+First-run setup creates a private virtual environment and installs VapourSynth, plugins, and models under `~/.config/vapourkit-gui/data/`. It never installs Python packages globally or requires `sudo`. Replacing the AppImage with a newer build preserves this data, your settings, queue, models, and custom templates; Vapourkit refreshes bundled files when needed.
 
 ### Quick Start
 1. Select or drag-and-drop a video file
@@ -30,7 +45,7 @@ For advanced features like custom filters and workflows, see [Advanced Mode](htt
 
 ### Core Capabilities
 - **AI Video Upscaling**: Process videos with high quality AI upscaling models
-- **Dual Backend Support**: TensorRT (NVIDIA) or DirectML (AMD/Intel/NVIDIA)
+- **Inference Backends**: TensorRT (NVIDIA), DirectML (Windows; preferred for AMD/Intel), and NCNN Vulkan (Windows/Linux)
 - **Real-time Preview**: See results while processing
 - **Video Comparison**: Built-in side-by-side viewer
 - **Batch Processing**: Upscale multiple videos sequentially
@@ -49,13 +64,29 @@ See [Model Support](docs/Models.md) for included models, custom model requiremen
 ## 📋 System Requirements
 
 ### Minimum Requirements
-- **OS**: Windows 10/11 (x64)
+- **OS**: Windows 10/11 (x64), or an x86_64 glibc-based Linux distribution running the AppImage
 - **RAM**: 8GB+ recommended
 - **Storage**: 5 GB Minimum, 10 GB recommended free space for application and dependencies
-- **GPU**: 
-  - Minimum 6 GB VRAM
-  - NVIDIA 16xx series or newer (for TensorRT) AND at least driver version 580.x!
-  - AMD/Intel GPU with DirectX 12 support (for DirectML)
+- **GPU**:
+  - Minimum 6 GB VRAM recommended
+  - Windows: NVIDIA 16xx series or newer for TensorRT (driver 580.x or newer), or an AMD/Intel/NVIDIA GPU with DirectX 12 support for DirectML
+  - Linux: a working Vulkan loader and GPU driver for NCNN Vulkan inference. TensorRT on Linux requires a separately installed, compatible NVIDIA CUDA/TensorRT stack.
+
+### Linux prerequisites
+
+Before first launch, install these through your distribution package manager:
+
+- Python **3.12 or 3.13**, including its `venv`/`ensurepip` package;
+- `ffmpeg` and `ffprobe` on `PATH`;
+- the Vulkan loader and a working GPU driver/ICD (for example Mesa's Vulkan driver on supported AMD/Intel hardware, or NVIDIA's proprietary driver).
+
+The application checks for Python and FFmpeg before setup. `video-compare` is optional on Linux. Linux package names vary, so use the package names supplied by your distribution instead of copying a command intended for another release. Linuxbrew installations of `video-compare` are also supported.
+
+### Linux filter availability
+
+Windows ships the full bundled filter catalog. Linux shows a curated set of verified filters whose dependencies are installed by Vapourkit's Linux setup: VapourSynth core filters, compatible `vsjetpack` filters, and supported PyPI-backed filters such as `vs_undistort`, `vs_temporalfix`, `vs_grain`, `vs_tiletools`, `vs_colorfix`, NCNN, and Deep Deinterlace.
+
+Templates that depend on Windows-native binaries, CUDA-only plugins, Hybrid scripts, or other unverified native dependencies remain hidden on Linux rather than appearing and failing at render time. Undistort and Deep Deinterlace automatically use their CPU fallback on Linux NCNN systems; NVIDIA TensorRT systems use CUDA when selected.
 
 ## 🔧 Development
 
