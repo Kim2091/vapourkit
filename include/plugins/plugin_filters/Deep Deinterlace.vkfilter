@@ -7,8 +7,11 @@ code = """
 # dependency, 5 input fields, and benefits from mocomp on fast camera movement.
 
 import vs_deepdeinterlace
-clip = vs_deepdeinterlace.YUV(clip, tff=True, deinterlacer=[1, 1], tta=[False, False], mocomp=[False, False], matrix_in_s="709", range_in_s="limited", device="cuda", fp16=True)"""
-description = "Three AI Deinterlacers. Input must be interlaced. This will double the frame rate, for example from 30i to 60p."
+# CUDA and fp16 are used only for an NVIDIA TensorRT configuration. Linux NCNN
+# and Windows DirectML installations include CPU PyTorch instead.
+use_cuda = VK_BACKEND == "tensorrt"
+clip = vs_deepdeinterlace.YUV(clip, tff=True, deinterlacer=[1, 1], tta=[False, False], mocomp=[False, False], matrix_in_s="709", range_in_s="limited", device="cuda" if use_cuda else "cpu", fp16=use_cuda)"""
+description = "Three AI deinterlacers. Uses CUDA with TensorRT or CPU with NCNN/DirectML; input must be interlaced and output frame rate is doubled."
 
 [metadata]
 createdAt = "2025-11-03T22:46:37.034Z"

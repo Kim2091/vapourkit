@@ -7,14 +7,16 @@ temp_window   = 10
 tiles         = 1
 overlap       = 8
 interpolation = "bilinear"
-backend       = "cuda"  # Change to "cpu" when CUDA PyTorch is unavailable.
+# Vapourkit's TensorRT backend is NVIDIA/CUDA-only. NCNN (the Linux default)
+# and DirectML do not provide CUDA PyTorch, so use the installed CPU wheel.
+backend       = "cuda" if VK_BACKEND == "tensorrt" else "cpu"
 
 
 from vs_undistort import vs_undistort
 clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s=709)
 clip = vs_undistort(clip, temp_window=temp_window, tiles=tiles, overlap=overlap, interpolation=interpolation, backend=backend)
 clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s=709)"""
-description = "Removes distortions, turbulance, heat haze, or similar. PyTorch is slower, but has extra controls."
+description = "Removes distortions, turbulence, heat haze, or similar. Uses CUDA with TensorRT or CPU with NCNN/DirectML."
 
 [metadata]
 createdAt = "2025-12-09T17:51:56.208Z"

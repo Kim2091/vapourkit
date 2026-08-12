@@ -118,8 +118,17 @@ export const LINUX_PLUGIN_FILTERS = {
     'TemporalFix _AI_.vkfilter',        // vs_temporalfix (CPU fallback on Linux)
     'TemporalFix _Classic_.vkfilter',   // vs_temporalfix
     'Tile.vkfilter',                    // vs_tiletools
+    'Undistort _Pytorch_.vkfilter',     // vs_undistort + CPU/CUDA PyTorch fallback
+    'Undistort _TensorRT_.vkfilter',    // vs_undistort + existing CPU/TensorRT fallback
     'Untile.vkfilter',                  // vs_tiletools
     'Wavelet Color Fix.vkfilter',       // vs_colorfix + NCNN
+  ],
+
+  // The app extracts these Python scripts from extra_scripts.7z and installs
+  // their CPU PyTorch dependencies on Linux. Keep this group separate from
+  // PyPI so its archive dependency stays visible during future reviews.
+  bundledScripts: [
+    'Deep Deinterlace.vkfilter',        // vs_deepdeinterlace + torch
   ],
 } as const;
 
@@ -128,7 +137,7 @@ export const LINUX_PLUGIN_FILTERS = {
  * Nightly builds can share an Electron app version, so appVersion alone cannot
  * tell an existing installation that its bundled catalog needs reconciliation.
  */
-export const LINUX_PLUGIN_FILTER_CATALOG_REVISION = 1;
+export const LINUX_PLUGIN_FILTER_CATALOG_REVISION = 2;
 
 const LINUX_PLUGIN_FILTER_SET = new Set<string>(Object.values(LINUX_PLUGIN_FILTERS).flat());
 
