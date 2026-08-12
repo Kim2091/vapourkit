@@ -166,7 +166,7 @@ export async function pollGpuStats(): Promise<GpuStats | null> {
       '--query-gpu=memory.used,memory.total,utilization.gpu',
       '--format=csv,noheader,nounits'
     ], {
-      shell: true,
+      shell: false,
       windowsHide: true
     });
 
@@ -213,7 +213,7 @@ export async function detectCudaSupport(): Promise<boolean> {
   try {
     // Try to run nvidia-smi to detect NVIDIA GPU
     const proc = spawn('nvidia-smi', ['--query-gpu=name', '--format=csv,noheader'], {
-      shell: true,
+      shell: false,
       windowsHide: true
     });
 
