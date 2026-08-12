@@ -9,16 +9,20 @@ import * as fsSync from 'fs';
  * Centralized logging utility for the application
  * Logs are stored in portable mode:
  * - Development: <project>/data/logs/main.log
- * - Production: <exe-directory>/data/logs/main.log
+ * - Windows production: <exe-directory>/data/logs/main.log
+ * - Linux production: <Electron userData>/data/logs/main.log
  * 
  * Log rotation:
  * - On startup, if main.log exceeds 15,000 lines, it's rotated to main_YYYY-MM-DDTHH-MM-SS.log
  * - A fresh main.log is then created for the new session
  */
 
-// Configure log file location (portable)
-const appDataPath = app.isPackaged 
-  ? path.join(path.dirname(app.getPath('exe')), 'data')
+// Windows keeps portable logs beside the executable. AppImages are mounted
+// read-only, so packaged Linux builds must use Electron's XDG-backed data path.
+const appDataPath = app.isPackaged
+  ? process.platform === 'win32'
+    ? path.join(path.dirname(app.getPath('exe')), 'data')
+    : path.join(app.getPath('userData'), 'data')
   : path.join(app.getAppPath(), 'data');
 const logPath = path.join(appDataPath, 'logs', 'main.log');
 

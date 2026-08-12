@@ -48,6 +48,11 @@ describe('getBackendsForVendor', () => {
       expect(getBackendsForVendor(vendor, 'linux')).toEqual(['ncnn']);
     }
   });
+
+  it('does not treat unsupported platforms as Linux', () => {
+    expect(getBackendsForVendor('nvidia', 'darwin')).toEqual([]);
+    expect(getBackendsForVendor('amd', 'darwin')).toEqual([]);
+  });
 });
 
 describe('getBackendPipPackages', () => {

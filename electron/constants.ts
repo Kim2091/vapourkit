@@ -1,5 +1,5 @@
 import * as path from 'path';
-import * as fs from 'fs';
+import { spawnSync } from 'child_process';
 import { app } from 'electron';
 
 // Current vapoursynth-mlrt-trt / vapoursynth-mlrt-ort PyPI version.
@@ -30,8 +30,9 @@ export const IS_WINDOWS = process.platform === 'win32';
 const EXE = IS_WINDOWS ? '.exe' : '';
 const DLL = IS_WINDOWS ? '.dll' : '.so';
 
-// Embedded Python version installed by the Windows bootstrap. The site-packages
-// location depends on it on Linux (lib/pythonX.Y/site-packages).
+// Embedded Python version installed by the Windows bootstrap. This is also the
+// first supported Linux ABI; the actual Linux site-packages path is queried
+// from its venv interpreter below.
 export const PYTHON_VERSION = '3.13.0';
 const PYTHON_XY = PYTHON_VERSION.split('.').slice(0, 2).join('.');
 
@@ -48,23 +49,23 @@ const VS_PATH = path.join(APP_DATA_PATH, 'vapoursynth-portable');
 
 /**
  * A Linux venv follows the host interpreter's Python X.Y, which may differ
- * from the Windows embedded runtime. Resolve its actual site-packages folder
- * after the venv exists; use a stable fallback during first-run bootstrap.
+ * from the Windows embedded runtime. Ask the venv interpreter for its exact
+ * site-packages directory rather than inferring it from the filesystem.
  */
 export function resolveLinuxSitePackages(vsPath: string = VS_PATH): string {
-  const libDir = path.join(vsPath, 'lib');
-  try {
-    const pythonDirs = fs.readdirSync(libDir, { withFileTypes: true })
-      .filter(entry => entry.isDirectory() && /^python\d+\.\d+$/.test(entry.name))
-      .map(entry => entry.name)
-      .sort();
-    const pythonDir = pythonDirs[pythonDirs.length - 1];
-    if (pythonDir) {
-      return path.join(libDir, pythonDir, 'site-packages');
-    }
-  } catch {
-    // The venv has not been created yet.
+  const pythonPath = path.join(vsPath, 'bin', 'python3');
+  const result = spawnSync(
+    pythonPath,
+    ['-c', 'import site; print(site.getsitepackages()[0])'],
+    { encoding: 'utf8', windowsHide: true },
+  );
+  const sitePackages = result.status === 0 ? result.stdout.trim() : '';
+  if (sitePackages) {
+    return sitePackages;
   }
+  // The venv has not been created yet. This fallback is only used during its
+  // bootstrap; the next PATHS.SITE_PACKAGES access queries the interpreter.
+  const libDir = path.join(vsPath, 'lib');
   return path.join(libDir, `python${PYTHON_XY}`, 'site-packages');
 }
 

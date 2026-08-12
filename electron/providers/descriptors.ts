@@ -13,12 +13,15 @@
 // driven by this metadata and the provider module. No other files need edits.
 
 export type BackendId = 'tensorrt' | 'directml' | 'ncnn'; // future: | 'openvino'
+export type BackendPlatform = 'win32' | 'linux';
 
 /** Sentinel for per-filter backend selection: inherit the app-level default. */
 export type FilterBackend = BackendId | 'auto';
 
 export interface BackendDescriptor {
   id: BackendId;
+  /** Operating systems on which this provider is supported by Vapourkit. */
+  supportedPlatforms: readonly BackendPlatform[];
   /** Full name shown in dropdowns, e.g. "TensorRT". */
   label: string;
   /** Compact badge label, e.g. "TRT". */
@@ -52,6 +55,7 @@ export interface BackendDescriptor {
 export const BACKENDS: readonly BackendDescriptor[] = [
   {
     id: 'tensorrt',
+    supportedPlatforms: ['win32', 'linux'],
     label: 'TensorRT',
     shortLabel: 'TRT',
     description: 'NVIDIA TensorRT — fastest on NVIDIA RTX GPUs, models are pre-built into engines',
@@ -71,6 +75,7 @@ export const BACKENDS: readonly BackendDescriptor[] = [
   },
   {
     id: 'directml',
+    supportedPlatforms: ['win32'],
     label: 'DirectML',
     shortLabel: 'DML',
     description: 'ONNX Runtime with DirectML — works on any Windows GPU (AMD/Intel/NVIDIA)',
@@ -83,6 +88,7 @@ export const BACKENDS: readonly BackendDescriptor[] = [
   },
   {
     id: 'ncnn',
+    supportedPlatforms: ['win32', 'linux'],
     label: 'NCNN Vulkan',
     shortLabel: 'NCNN',
     description: 'NCNN with Vulkan — cross-vendor GPU inference for Linux',
@@ -107,6 +113,31 @@ export function isBackendId(value: unknown): value is BackendId {
   return typeof value === 'string' && BACKENDS.some(b => b.id === value);
 }
 
+/** Whether a backend is supported by the current Vapourkit platform policy. */
+export function isBackendSupportedOnPlatform(id: BackendId, platform: string): boolean {
+  return getBackendDescriptor(id).supportedPlatforms.includes(platform as BackendPlatform);
+}
+
+/** Backends available on a supported platform. Unsupported platforms get none. */
+export function getBackendsForPlatform(platform: string): readonly BackendDescriptor[] {
+  return BACKENDS.filter(backend => backend.supportedPlatforms.includes(platform as BackendPlatform));
+}
+
+/**
+ * The safe fallback for persisted or imported backend selections. Linux uses
+ * NCNN rather than silently preserving a Windows-only DirectML setting.
+ */
+export function getDefaultBackendForPlatform(platform: string): BackendId {
+  switch (platform) {
+    case 'win32':
+      return 'tensorrt';
+    case 'linux':
+      return 'ncnn';
+    default:
+      throw new Error(`Unsupported platform for inference backends: ${platform}`);
+  }
+}
+
 /**
  * Normalizes any stored/transported backend value to a valid BackendId.
  * Accepts legacy `useDirectML` booleans from old settings, queue items and
@@ -121,6 +152,18 @@ export function resolveBackendId(value: unknown): BackendId {
     return value ? 'directml' : 'tensorrt';
   }
   return 'tensorrt';
+}
+
+/**
+ * Normalizes persisted/imported backend values against the platform policy.
+ * This is deliberately separate from resolveBackendId so renderer code can
+ * migrate legacy values without requiring access to Node's process.platform.
+ */
+export function normalizeBackendForPlatform(value: unknown, platform: string): BackendId {
+  const backend = resolveBackendId(value);
+  return isBackendSupportedOnPlatform(backend, platform)
+    ? backend
+    : getDefaultBackendForPlatform(platform);
 }
 
 /**

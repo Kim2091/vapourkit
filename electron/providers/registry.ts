@@ -4,7 +4,7 @@
 // descriptors.ts for the steps to add a new backend.
 
 import type { BackendId } from './descriptors';
-import { BACKENDS, resolveBackendId } from './descriptors';
+import { BACKENDS, normalizeBackendForPlatform, resolveBackendId } from './descriptors';
 import type { InferenceProvider } from './types';
 import { tensorrtProvider } from './tensorrt';
 import { directmlProvider } from './directml';
@@ -29,9 +29,21 @@ export function resolveProvider(value: unknown): InferenceProvider {
   return getProvider(resolveBackendId(value));
 }
 
+/** Returns a provider after enforcing the main-process platform policy. */
+export function resolveProviderForPlatform(value: unknown, platform: string = process.platform): InferenceProvider {
+  return getProvider(normalizeBackendForPlatform(value, platform));
+}
+
 export function listProviders(): InferenceProvider[] {
   return BACKENDS.map(d => getProvider(d.id));
 }
 
-export { BACKENDS, resolveBackendId } from './descriptors';
-export type { BackendId } from './descriptors';
+export {
+  BACKENDS,
+  getBackendsForPlatform,
+  getDefaultBackendForPlatform,
+  isBackendSupportedOnPlatform,
+  normalizeBackendForPlatform,
+  resolveBackendId,
+} from './descriptors';
+export type { BackendId, BackendPlatform } from './descriptors';

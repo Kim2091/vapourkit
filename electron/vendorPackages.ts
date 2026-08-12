@@ -30,15 +30,19 @@ function distNameOf(spec: string): string {
  * one-array edit here.
  */
 export function getBackendsForVendor(vendor: GpuVendor, platform: NodeJS.Platform = process.platform): BackendId[] {
-  if (platform !== 'win32') {
+  if (platform === 'linux') {
     // DirectML is Windows-only. NCNN/Vulkan is the Linux default for every
     // GPU vendor; NVIDIA users additionally receive TensorRT as an option.
     return vendor === 'nvidia' ? ['ncnn', 'tensorrt'] : ['ncnn'];
   }
-  // NCNN is also available on Windows, giving every Windows GPU vendor a
-  // Vulkan option alongside DirectML. NVIDIA retains TensorRT as its fastest
-  // backend.
-  return vendor === 'nvidia' ? ['tensorrt', 'directml', 'ncnn'] : ['directml', 'ncnn'];
+  if (platform === 'win32') {
+    // NCNN is also available on Windows, giving every Windows GPU vendor a
+    // Vulkan option alongside DirectML. NVIDIA retains TensorRT as its fastest
+    // backend.
+    return vendor === 'nvidia' ? ['tensorrt', 'directml', 'ncnn'] : ['directml', 'ncnn'];
+  }
+  // macOS and other platforms are not supported yet; never treat them as Linux.
+  return [];
 }
 
 /** pip specs for every backend this vendor gets (composed from the providers). */

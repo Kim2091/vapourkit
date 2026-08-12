@@ -52,18 +52,15 @@ export async function runCommand(
   env?: NodeJS.ProcessEnv
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Quote command if it contains spaces (Windows compatibility)
-    const quotedCommand = command.includes(' ') ? `"${command}"` : command;
-    
-    // Quote args that contain spaces (Windows compatibility)
-    const quotedArgs = args.map(arg => arg.includes(' ') ? `"${arg}"` : arg);
-    
-    logger.debug(`Running command: ${quotedCommand} ${quotedArgs.join(' ')}`);
+    // Keep the executable and arguments separate. Using a shell here required
+    // hand-quoting paths and allowed shell metacharacters in an argument to be
+    // interpreted instead of passed to the child process.
+    logger.debug(`Running command: ${JSON.stringify([command, ...args])}`);
     logger.debug(`Working directory: ${cwd || process.cwd()}`);
     
-    const proc = spawn(quotedCommand, quotedArgs, {
+    const proc = spawn(command, args, {
       cwd: cwd || process.cwd(),
-      shell: true,
+      shell: false,
       env: env || process.env
     });
 
@@ -274,11 +271,10 @@ export async function isCommandAvailable(command: string): Promise<boolean> {
   });
 }
 
-/** True when `command` is Python 3.12 or newer, the minimum supported by the
- * VapourSynth and vs-jetpack wheels used by Vapourkit. */
+/** True when `command` is within Vapourkit's tested Python ABI range. */
 export async function isSupportedPython(command: string): Promise<boolean> {
   return new Promise(resolve => {
-    const proc = spawn(command, ['-c', 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)'], {
+    const proc = spawn(command, ['-c', 'import sys; raise SystemExit(0 if (3, 12) <= sys.version_info[:2] < (3, 14) else 1)'], {
       stdio: 'ignore',
       shell: false,
       windowsHide: true,

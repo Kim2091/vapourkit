@@ -6,7 +6,7 @@ import { IS_WINDOWS, PATHS } from './constants';
 import { getSystemRoot } from './trtexecShim';
 import { configManager } from './configManager';
 import { logger } from './logger';
-import { BACKENDS, resolveBackendId, resolveFilterBackend, type BackendId, type FilterBackend } from './providers/descriptors';
+import { BACKENDS, normalizeBackendForPlatform, resolveFilterBackend, type BackendId, type FilterBackend } from './providers/descriptors';
 import { getProvider } from './providers/registry';
 import type { InferenceProvider } from './providers/types';
 
@@ -133,7 +133,9 @@ export class VapourSynthScriptGenerator {
     const templatePath = this.getTemplatePath();
     let template = await fs.readFile(templatePath, 'utf-8');
 
-    const defaultBackend = resolveBackendId(config.defaultBackend);
+    // This main-process boundary protects against imported settings, workflows,
+    // and queue items containing a backend unsupported by the current OS.
+    const defaultBackend = normalizeBackendForPlatform(config.defaultBackend, process.platform);
 
     // Apply colorimetry settings
     const overwriteMatrix = config.colorimetry?.overwriteMatrix ? 'True' : 'False';
@@ -198,7 +200,11 @@ export class VapourSynthScriptGenerator {
       if (filter.filterType === 'aiModel' && filter.modelPath) {
         // Generate AI model upscaling code with this filter's effective backend
         // Check precision and model type for THIS specific model from config, not filter state
-        const provider = getProvider(resolveFilterBackend(filter.backend, defaultBackend));
+        const filterBackend = normalizeBackendForPlatform(
+          resolveFilterBackend(filter.backend, defaultBackend),
+          process.platform,
+        );
+        const provider = getProvider(filterBackend);
         const filterUseFp32 = configManager.isModelFp32(filter.modelPath);
         const filterModelType = configManager.getModelType(filter.modelPath);
         const filterTemporalFrames = configManager.getTemporalFrames(filter.modelPath);

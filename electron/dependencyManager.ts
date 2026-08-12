@@ -66,7 +66,7 @@ export class DependencyManager {
           message: 'Creating a Python 3 virtual environment...'
         });
         if (!await isSupportedPython('python3')) {
-          throw new Error('Python 3.12+ with venv support is required on Linux. Install python3 and python3-venv with your distribution package manager, then restart Vapourkit.');
+          throw new Error('Python 3.12 or 3.13 with venv support is required on Linux. Install a supported python3 and python3-venv with your distribution package manager, then restart Vapourkit.');
         }
         await runCommand('python3', ['-m', 'venv', PATHS.VS], PATHS.APP_DATA);
         logger.dependency(`Python virtual environment created at: ${PATHS.VS}`);
@@ -423,6 +423,13 @@ export class DependencyManager {
     logger.dependency('Starting dependency setup process');
     
     try {
+      // Linux intentionally uses the distribution-provided FFmpeg. Check this
+      // before creating or mutating the app-managed venv so users receive an
+      // actionable prerequisite error instead of an impossible install step.
+      if (!IS_WINDOWS && !(await FFmpegManager.isInstalled())) {
+        throw new Error(FFmpegManager.getHostPrerequisiteMessage());
+      }
+
       // Component configurations (everything else comes from PyPI)
       const components: ComponentConfig[] = IS_WINDOWS ? [
         {
@@ -462,7 +469,8 @@ export class DependencyManager {
         logger.dependency('ONNX models already extracted');
       }
 
-      // Install FFmpeg if not present
+      // Windows downloads FFmpeg; Linux was preflighted above and must retain
+      // its host-managed copy.
       if (!(await FFmpegManager.isInstalled())) {
         logger.dependency('Installing standalone FFmpeg');
         await FFmpegManager.install((message, progress) => {

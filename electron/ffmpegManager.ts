@@ -14,6 +14,10 @@ export class FFmpegManager {
   private static readonly FFMPEG_EXE = PATHS.FFMPEG;
   private static readonly FFPROBE_EXE = PATHS.FFPROBE;
 
+  static getHostPrerequisiteMessage(): string {
+    return 'FFmpeg and ffprobe are required on Linux. Install them with your distribution package manager (for example: apt install ffmpeg, dnf install ffmpeg, or pacman -S ffmpeg), then restart Vapourkit.';
+  }
+
   /**
    * Gets the path to the ffmpeg executable
    * @returns A runnable ffmpeg command, or null when the bundled Windows copy
@@ -64,7 +68,7 @@ export class FFmpegManager {
    */
   static async install(onProgress?: (message: string, progress: number) => void): Promise<void> {
     if (!IS_WINDOWS) {
-      throw new Error('FFmpeg and ffprobe are required on Linux. Install them with your distribution package manager, then restart Vapourkit.');
+      throw new Error(FFmpegManager.getHostPrerequisiteMessage());
     }
 
     logger.dependency('Installing standalone ffmpeg from gyan.dev');

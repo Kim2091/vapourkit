@@ -14,8 +14,9 @@ import { cancelAllVideoProcessing } from './videoHandlers';
 
 const windowManager = new WindowManager();
 
-// Set portable userData path (makes localStorage local to installation)
-if (app.isPackaged) {
+// Keep Windows' portable install behaviour. AppImages are mounted read-only,
+// so Linux must retain Electron's XDG-backed userData location.
+if (app.isPackaged && process.platform === 'win32') {
   const portableUserDataPath = path.join(path.dirname(app.getPath('exe')), 'data', 'user-data');
   app.setPath('userData', portableUserDataPath);
   logger.info(`Using portable userData path: ${portableUserDataPath}`);

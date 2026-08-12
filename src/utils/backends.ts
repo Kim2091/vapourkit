@@ -7,29 +7,34 @@
 import {
   BACKENDS as ALL_BACKENDS,
   getBackendDescriptor,
+  getBackendsForPlatform,
   isBackendId,
+  isBackendSupportedOnPlatform,
+  normalizeBackendForPlatform,
   resolveBackendId,
   resolveFilterBackend,
 } from '../../electron/providers/descriptors';
 
 export {
   getBackendDescriptor,
+  getBackendsForPlatform,
   isBackendId,
+  isBackendSupportedOnPlatform,
+  normalizeBackendForPlatform,
   resolveBackendId,
   resolveFilterBackend,
 };
 
 // The shared descriptor registry intentionally contains every implementation
 // so the main process can generate compatible scripts. The renderer only offers
-// the backends that this build installs. DirectML is Windows-only; NCNN is
-// available on both Windows and Linux.
-const isLinux = typeof window !== 'undefined' && window.electronAPI?.platform === 'linux';
-export const BACKENDS = isLinux
-  ? ALL_BACKENDS.filter(backend => backend.id !== 'directml')
-  : ALL_BACKENDS;
+// the backends supported by the current build. In browser-only test contexts
+// without Electron's platform bridge, retain the complete list.
+const platform = typeof window !== 'undefined' ? window.electronAPI?.platform : undefined;
+export const BACKENDS = platform ? getBackendsForPlatform(platform) : ALL_BACKENDS;
 
 export type {
   BackendId,
+  BackendPlatform,
   BackendDescriptor,
   FilterBackend,
 } from '../../electron/providers/descriptors';

@@ -8,6 +8,7 @@ import { logger } from './logger';
 import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
+import { shouldExtractBundledPluginArchives } from './bundledPluginArchives';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
@@ -801,6 +802,13 @@ export class PluginInstaller {
   }
 
   private async extractAllPlugins(): Promise<void> {
+    if (!shouldExtractBundledPluginArchives()) {
+      // include/plugins/*.7z is a legacy Windows bundle of native DLLs. Linux
+      // must use the platform-specific wheels installed in the PyPI phase.
+      logger.info('Bundled native plugin archives are Windows-only; skipping plugin extraction');
+      return;
+    }
+
     logger.info('Extracting all plugins from plugins folder');
     
     // Get bundled plugins path
