@@ -35,6 +35,16 @@ The AppImage contains Vapourkit itself, but relies on your distribution's Python
 
 First-run setup creates a private virtual environment and installs VapourSynth, plugins, and models under `~/.config/vapourkit-gui/data/`. It does not install Python packages globally or require `sudo`. Replacing the AppImage with a newer build preserves this data, your settings, queue, models, and custom templates. Vapourkit refreshes bundled files when needed.
 
+#### Linux (x86_64 AppImage)
+
+1. Install the host prerequisites listed below.
+2. Make the downloaded AppImage executable: `chmod +x Vapourkit-*.AppImage`.
+3. Run it with `./Vapourkit-*.AppImage`, then click **Start Setup** when prompted.
+
+The AppImage contains Vapourkit itself; it deliberately uses your distribution's Python, FFmpeg, and Vulkan driver. If FUSE is unavailable, run it with `APPIMAGE_EXTRACT_AND_RUN=1 ./Vapourkit-*.AppImage`.
+
+First-run setup creates a private virtual environment and installs VapourSynth, plugins, and models under `~/.config/vapourkit-gui/data/`. It never installs Python packages globally or requires `sudo`. Replacing the AppImage with a newer build preserves this data, your settings, queue, models, and custom templates; Vapourkit refreshes bundled files when needed.
+
 ### Quick Start
 
 1. Select or drag-and-drop a video file
