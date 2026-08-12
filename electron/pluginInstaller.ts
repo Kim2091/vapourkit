@@ -8,6 +8,7 @@ import { logger } from './logger';
 import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
+import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
 import {
   shouldCopyBundledPluginFilterTemplates,
   shouldExtractBundledPluginArchives,
@@ -79,10 +80,10 @@ export class PluginInstaller {
     logger.info(`Running command: ${commandStr}`);
 
     return new Promise((resolve) => {
-      this.installProcess = spawn(PATHS.PYTHON, args, {
+      this.installProcess = spawn(PATHS.PYTHON, args, createWorkloadSpawnOptions({
         cwd: PATHS.VS,
         windowsHide: true
-      });
+      }));
 
       let errorBuffer = '';
       let lastProgress = 0;
@@ -315,10 +316,10 @@ export class PluginInstaller {
     logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
 
     return new Promise((resolve) => {
-      this.installProcess = spawn(PATHS.PYTHON, args, {
+      this.installProcess = spawn(PATHS.PYTHON, args, createWorkloadSpawnOptions({
         cwd: PATHS.VS,
         windowsHide: true
-      });
+      }));
 
       let errorBuffer = '';
 
@@ -668,10 +669,10 @@ export class PluginInstaller {
       logger.info(`Running command: ${commandStr}`);
 
       return new Promise((resolve) => {
-        this.installProcess = spawn(PATHS.PYTHON, args, {
+        this.installProcess = spawn(PATHS.PYTHON, args, createWorkloadSpawnOptions({
           cwd: PATHS.VS,
           windowsHide: true
-        });
+        }));
 
         let errorBuffer = '';
         let progress = 0;
@@ -799,7 +800,7 @@ export class PluginInstaller {
     if (this.installProcess) {
       logger.info('Cancelling plugin dependency operation');
       this.isCancelled = true;
-      this.installProcess.kill();
+      terminateProcessTree(this.installProcess, 'SIGTERM');
       this.installProcess = null;
     }
   }
