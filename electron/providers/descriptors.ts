@@ -91,7 +91,7 @@ export const BACKENDS: readonly BackendDescriptor[] = [
     supportedPlatforms: ['win32', 'linux'],
     label: 'NCNN Vulkan',
     shortLabel: 'NCNN',
-    description: 'NCNN with Vulkan — cross-vendor GPU inference for Linux',
+    description: 'NCNN with Vulkan provides cross-platform GPU inference. On Windows, DirectML is preferred for AMD and Intel GPUs.',
     requiresEngineBuild: false,
     runsOnnxDirectly: true,
     importPrecisions: ['fp16', 'fp32'],
