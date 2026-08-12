@@ -11,6 +11,7 @@ import * as fs from 'fs-extra';
 import { logger } from '../../logger';
 import { PATHS } from '../../constants';
 import { getBundledBasePath, setupVSEnvironment } from '../../utils';
+import { createWorkloadSpawnOptions, terminateProcessTree } from '../../processLifecycle';
 import type { EngineBuildParams, ModelBuildJob } from '../types';
 
 export class TrtEngineBuildJob implements ModelBuildJob {
@@ -68,20 +69,7 @@ export class TrtEngineBuildJob implements ModelBuildJob {
   private killCurrentProcess(): void {
     if (this.currentProcess) {
       try {
-        // On Windows, we need to kill the entire process tree immediately
-        if (process.platform === 'win32') {
-          const { exec } = require('child_process');
-          exec(`taskkill /F /T /PID ${this.currentProcess.pid}`, (error: any) => {
-            if (error && !error.message.includes('not found')) {
-              logger.debug('taskkill error (may already be dead):', error.message);
-            } else {
-              logger.model('Engine build process tree terminated');
-            }
-          });
-        } else {
-          // On Unix-like systems, SIGKILL for immediate termination
-          this.currentProcess.kill('SIGKILL');
-        }
+        terminateProcessTree(this.currentProcess);
         this.currentProcess = null;
       } catch (error) {
         logger.error('Error killing engine build process:', error);
@@ -248,11 +236,11 @@ export class TrtEngineBuildJob implements ModelBuildJob {
       const { spawn } = require('child_process');
 
       // -u keeps Python's stdout unbuffered so progress lines arrive live
-      const proc = spawn(PATHS.PYTHON, ['-u', builderScript, ...args], {
+      const proc = spawn(PATHS.PYTHON, ['-u', builderScript, ...args], createWorkloadSpawnOptions({
         cwd,
         shell: false,
         env: setupVSEnvironment(PATHS.PYTHON)
-      });
+      }));
 
       // Store the process reference for cancellation
       this.currentProcess = proc;

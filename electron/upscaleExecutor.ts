@@ -1,5 +1,5 @@
 // electron/upscaleExecutor.ts
-import { spawn, ChildProcess, exec } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { BrowserWindow } from 'electron';
@@ -13,29 +13,7 @@ import { VapourSynthInfoExtractor, OutputInfo } from './vapourSynthInfoExtractor
 import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
 import { configManager } from './configManager';
 import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
-
-/**
- * Force kills a process and its children on Windows using taskkill
- */
-function forceKillProcess(proc: ChildProcess): void {
-  if (!proc.pid) return;
-  
-  if (process.platform === 'win32') {
-    // On Windows, use taskkill to force kill the process tree immediately
-    exec(`taskkill /F /T /PID ${proc.pid}`, (error) => {
-      if (error && !error.message.includes('not found')) {
-        logger.debug(`taskkill error (may already be dead): ${error.message}`);
-      }
-    });
-  } else {
-    // On Unix, SIGKILL should work
-    try {
-      proc.kill('SIGKILL');
-    } catch (e) {
-      // Process may already be dead
-    }
-  }
-}
+import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
 
 export interface SegmentSelection {
   enabled: boolean;
@@ -295,11 +273,11 @@ export class UpscaleExecutor {
     logger.upscale('Spawning vspipe process');
     const args = isRawVideo ? [scriptPath, '-'] : ['-c', 'y4m', scriptPath, '-'];
     
-    return spawn(this.vspipePath, args, {
+    return spawn(this.vspipePath, args, createWorkloadSpawnOptions({
       stdio: ['ignore', 'pipe', 'pipe'],
       env: env,
       cwd: this.vsPath
-    });
+    }));
   }
 
   private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, previewMode: boolean = false, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<string[]> {
@@ -439,9 +417,9 @@ export class UpscaleExecutor {
 
     // Single FFmpeg process for both encoding and preview
     logger.upscale('Spawning single ffmpeg process for encoding and preview');
-    return spawn(ffmpegPath, ffmpegArgs, {
+    return spawn(ffmpegPath, ffmpegArgs, createWorkloadSpawnOptions({
       stdio: ['pipe', 'pipe', 'pipe']
-    });
+    }));
   }
 
   private setupProcessPiping(vspipe: ChildProcess, ffmpeg: ChildProcess) {
@@ -779,13 +757,13 @@ export class UpscaleExecutor {
     // Step 2: Kill vspipe to stop new frames from being generated
     if (vspipeProcess) {
       logger.upscale('Stopping vspipe process (no new frames)');
-      vspipeProcess.kill('SIGTERM');
+      terminateProcessTree(vspipeProcess, 'SIGTERM');
       
       // Force kill vspipe if it doesn't exit quickly
       setTimeout(() => {
         if (vspipeProcess && !vspipeProcess.killed) {
           logger.upscale('vspipe process did not exit gracefully, forcing termination');
-          forceKillProcess(vspipeProcess);
+          terminateProcessTree(vspipeProcess);
         }
       }, 3000);
       
@@ -807,7 +785,7 @@ export class UpscaleExecutor {
       const ffmpegTimeout = setTimeout(() => {
         if (ffmpegProcess && !ffmpegProcess.killed) {
           logger.upscale('FFmpeg did not finish in time, force killing');
-          forceKillProcess(ffmpegProcess);
+          terminateProcessTree(ffmpegProcess);
         }
       }, 10000); // 10 second grace period for encoding
       
@@ -843,13 +821,13 @@ export class UpscaleExecutor {
 
     if (this.process) {
       logger.upscale('Force killing vspipe');
-      forceKillProcess(this.process);
+      terminateProcessTree(this.process);
       this.process = null;
     }
 
     if (this.ffmpegProcess) {
       logger.upscale('Force killing ffmpeg');
-      forceKillProcess(this.ffmpegProcess);
+      terminateProcessTree(this.ffmpegProcess);
       this.ffmpegProcess = null;
     }
     

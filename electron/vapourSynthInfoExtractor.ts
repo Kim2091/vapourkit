@@ -1,11 +1,12 @@
 // electron/vapourSynthInfoExtractor.ts
-import { spawn, ChildProcess, exec } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 import { ErrorMessageHandler } from './errorMessageHandler';
 import { parseBestSourceProgress } from './bestSourceProgressParser';
 import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
 import { formatVapourSynthValidationError } from './vapourSynthErrorFormatter';
+import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
 
 export interface OutputInfo {
   resolution: string | null;
@@ -13,29 +14,6 @@ export interface OutputInfo {
   fpsString: string | null;
   pixelFormat?: string | null;
   error?: string | null;
-}
-
-/**
- * Force kills a process and its children on Windows using taskkill
- */
-function forceKillProcess(proc: ChildProcess): void {
-  if (!proc.pid) return;
-  
-  if (process.platform === 'win32') {
-    // On Windows, use taskkill to force kill the process tree immediately
-    exec(`taskkill /F /T /PID ${proc.pid}`, (error) => {
-      if (error && !error.message.includes('not found')) {
-        logger.debug(`taskkill error (may already be dead): ${error.message}`);
-      }
-    });
-  } else {
-    // On Unix, SIGKILL should work
-    try {
-      proc.kill('SIGKILL');
-    } catch (e) {
-      // Process may already be dead
-    }
-  }
 }
 
 /**
@@ -66,7 +44,7 @@ export class VapourSynthInfoExtractor {
   cancelAll(): void {
     logger.upscale(`Force killing ${this.activeProcesses.size} active vspipe info process(es)`);
     for (const proc of this.activeProcesses) {
-      forceKillProcess(proc);
+      terminateProcessTree(proc);
     }
     this.activeProcesses.clear();
     // Anti-stick: a build banner must never outlive the process that raised it
@@ -108,11 +86,11 @@ export class VapourSynthInfoExtractor {
       const env = setupVSEnvironment(this.pythonPath);
 
       // Use vspipe -i to get info
-      const vspipe = spawn(this.vspipePath, ['-i', scriptPath, '-'], {
+      const vspipe = spawn(this.vspipePath, ['-i', scriptPath, '-'], createWorkloadSpawnOptions({
         stdio: ['ignore', 'pipe', 'pipe'],
         env: env,
         cwd: this.vsPath
-      });
+      }));
 
       // Track the process for cleanup
       this.trackProcess(vspipe);
@@ -181,11 +159,11 @@ export class VapourSynthInfoExtractor {
       const env = setupVSEnvironment(this.pythonPath);
 
       // Use vspipe -i to get info
-      const vspipe = spawn(this.vspipePath, ['-i', scriptPath, '-'], {
+      const vspipe = spawn(this.vspipePath, ['-i', scriptPath, '-'], createWorkloadSpawnOptions({
         stdio: ['ignore', 'pipe', 'pipe'],
         env: env,
         cwd: this.vsPath
-      });
+      }));
 
       // Track the process for cleanup
       this.trackProcess(vspipe);
