@@ -13,6 +13,7 @@
         "build:both": "npm run build && electron-builder --win nsis 7z --x64 && tsx scripts/renamePortable.ts",
         "build:setup": "npm run build && electron-builder --win nsis --x64",
         "build:7z": "npm run build && electron-builder --win 7z --x64 && tsx scripts/renamePortable.ts",
+        "build:linux": "npm run build && electron-builder --linux AppImage --x64",
         "preview": "vite preview",
         "test": "vitest run",
         "test:watch": "vitest",
@@ -121,6 +122,18 @@
             "createDesktopShortcut": true,
             "createStartMenuShortcut": true,
             "artifactName": "Vapourkit-${version}-SETUP.${ext}"
+        },
+        "linux": {
+            "target": [
+                {
+                    "target": "AppImage",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "category": "AudioVideo",
+            "artifactName": "Vapourkit-${version}-${arch}.${ext}"
         }
     }
 }

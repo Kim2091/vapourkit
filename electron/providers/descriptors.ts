@@ -12,7 +12,7 @@
 // filtering, import modal options, script generation, plugin install — is
 // driven by this metadata and the provider module. No other files need edits.
 
-export type BackendId = 'tensorrt' | 'directml'; // future: | 'ncnn' | 'openvino'
+export type BackendId = 'tensorrt' | 'directml' | 'ncnn'; // future: | 'openvino'
 
 /** Sentinel for per-filter backend selection: inherit the app-level default. */
 export type FilterBackend = BackendId | 'auto';
@@ -80,6 +80,18 @@ export const BACKENDS: readonly BackendDescriptor[] = [
     supportsShapes: false,
     supportsCustomBuildParams: false,
     vsmlrtBackendAttr: 'ORT_DML',
+  },
+  {
+    id: 'ncnn',
+    label: 'NCNN Vulkan',
+    shortLabel: 'NCNN',
+    description: 'NCNN with Vulkan — cross-vendor GPU inference for Linux',
+    requiresEngineBuild: false,
+    runsOnnxDirectly: true,
+    importPrecisions: ['fp16', 'fp32'],
+    supportsShapes: false,
+    supportsCustomBuildParams: false,
+    vsmlrtBackendAttr: 'NCNN_VK',
   },
 ] as const;
 

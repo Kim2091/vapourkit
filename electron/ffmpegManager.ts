@@ -1,23 +1,28 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
-import { PATHS } from './constants';
+import { IS_WINDOWS, PATHS } from './constants';
 import { logger } from './logger';
+import { isCommandAvailable } from './utils';
 
 /**
- * Manages the standalone ffmpeg binary
- * Downloads and extracts ffmpeg from gyan.dev if not present
+ * Manages FFmpeg. Windows uses the bundled standalone build; Linux uses the
+ * distribution-provided ffmpeg/ffprobe commands on PATH.
  */
 export class FFmpegManager {
   private static readonly FFMPEG_URL = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z';
   private static readonly FFMPEG_DIR = path.join(PATHS.APP_DATA, 'ffmpeg');
-  private static readonly FFMPEG_EXE = path.join(FFmpegManager.FFMPEG_DIR, 'bin', 'ffmpeg.exe');
-  private static readonly FFPROBE_EXE = path.join(FFmpegManager.FFMPEG_DIR, 'bin', 'ffprobe.exe');
+  private static readonly FFMPEG_EXE = PATHS.FFMPEG;
+  private static readonly FFPROBE_EXE = PATHS.FFPROBE;
 
   /**
    * Gets the path to the ffmpeg executable
-   * @returns Path to ffmpeg.exe or null if not available
+   * @returns A runnable ffmpeg command, or null when the bundled Windows copy
+   * is absent. Linux availability is checked during setup.
    */
   static getFFmpegPath(): string | null {
+    if (!IS_WINDOWS) {
+      return 'ffmpeg';
+    }
     if (fs.existsSync(FFmpegManager.FFMPEG_EXE)) {
       return FFmpegManager.FFMPEG_EXE;
     }
@@ -26,9 +31,13 @@ export class FFmpegManager {
 
   /**
    * Gets the path to the ffprobe executable
-   * @returns Path to ffprobe.exe or null if not available
+   * @returns A runnable ffprobe command, or null when the bundled Windows copy
+   * is absent. Linux availability is checked during setup.
    */
   static getFFprobePath(): string | null {
+    if (!IS_WINDOWS) {
+      return 'ffprobe';
+    }
     if (fs.existsSync(FFmpegManager.FFPROBE_EXE)) {
       return FFmpegManager.FFPROBE_EXE;
     }
@@ -39,6 +48,13 @@ export class FFmpegManager {
    * Checks if ffmpeg is installed
    */
   static async isInstalled(): Promise<boolean> {
+    if (!IS_WINDOWS) {
+      const [ffmpeg, ffprobe] = await Promise.all([
+        isCommandAvailable('ffmpeg'),
+        isCommandAvailable('ffprobe'),
+      ]);
+      return ffmpeg && ffprobe;
+    }
     return await fs.pathExists(FFmpegManager.FFMPEG_EXE);
   }
 
@@ -47,6 +63,10 @@ export class FFmpegManager {
    * @param onProgress Optional progress callback
    */
   static async install(onProgress?: (message: string, progress: number) => void): Promise<void> {
+    if (!IS_WINDOWS) {
+      throw new Error('FFmpeg and ffprobe are required on Linux. Install them with your distribution package manager, then restart Vapourkit.');
+    }
+
     logger.dependency('Installing standalone ffmpeg from gyan.dev');
     
     if (await FFmpegManager.isInstalled()) {
@@ -173,6 +193,10 @@ export class FFmpegManager {
    * Removes the installed ffmpeg
    */
   static async uninstall(): Promise<void> {
+    if (!IS_WINDOWS) {
+      logger.dependency('FFmpeg is managed by the Linux distribution package manager');
+      return;
+    }
     logger.dependency('Uninstalling ffmpeg');
     if (await fs.pathExists(FFmpegManager.FFMPEG_DIR)) {
       await fs.remove(FFmpegManager.FFMPEG_DIR);

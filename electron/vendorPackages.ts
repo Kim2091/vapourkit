@@ -26,16 +26,21 @@ function distNameOf(spec: string): string {
 
 /**
  * The bridge to the provider registry: which inference backends this vendor
- * gets installed. When the NCNN/OpenVINO providers land, extending vendor
- * support is a one-array edit here.
+ * gets installed. When another provider lands, extending vendor support is a
+ * one-array edit here.
  */
-export function getBackendsForVendor(vendor: GpuVendor): BackendId[] {
+export function getBackendsForVendor(vendor: GpuVendor, platform: NodeJS.Platform = process.platform): BackendId[] {
+  if (platform !== 'win32') {
+    // DirectML is Windows-only. NCNN/Vulkan is the Linux default for every
+    // GPU vendor; NVIDIA users additionally receive TensorRT as an option.
+    return vendor === 'nvidia' ? ['ncnn', 'tensorrt'] : ['ncnn'];
+  }
   return vendor === 'nvidia' ? ['tensorrt', 'directml'] : ['directml'];
 }
 
 /** pip specs for every backend this vendor gets (composed from the providers). */
-export function getBackendPipPackages(vendor: GpuVendor): string[] {
-  return getBackendsForVendor(vendor).flatMap(id => getProvider(id).pipPackages());
+export function getBackendPipPackages(vendor: GpuVendor, platform: NodeJS.Platform = process.platform): string[] {
+  return getBackendsForVendor(vendor, platform).flatMap(id => getProvider(id).pipPackages());
 }
 
 export interface TorchInstall {
@@ -127,10 +132,10 @@ const BASE_CHECK_PACKAGE_NAMES: string[] = [
  * hardcoded, so moving an AMD install to an NVIDIA machine reads as
  * not-installed (the TRT wheel is missing) and offers a reinstall.
  */
-export function getCheckPackageNames(vendor: GpuVendor): string[] {
+export function getCheckPackageNames(vendor: GpuVendor, platform: NodeJS.Platform = process.platform): string[] {
   return [
     ...BASE_CHECK_PACKAGE_NAMES.map(normalizePackageName),
-    ...getBackendPipPackages(vendor).map(distNameOf),
+    ...getBackendPipPackages(vendor, platform).map(distNameOf),
   ];
 }
 

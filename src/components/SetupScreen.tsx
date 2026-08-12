@@ -32,7 +32,7 @@ export const SetupScreen = memo<SetupScreenProps>(({
   const setupSteps = useMemo(() => {
     const steps = [
       { id: 'video-compare', name: 'Video Compare Tool', description: 'Side-by-side comparison viewer', component: 'Video Compare Tool' },
-      { id: 'python', name: 'Python & VapourSynth', description: 'Embedded Python with the VapourSynth runtime from PyPI', component: 'Python Embedded' },
+      { id: 'python', name: 'Python & VapourSynth', description: 'Managed Python runtime with VapourSynth from PyPI', component: 'Python Embedded' },
       { id: 'models', name: 'ONNX Models', description: 'Bundled AI upscaling models', component: 'ONNX Models' },
       { id: 'ffmpeg', name: 'FFmpeg', description: 'Video encoding/decoding', component: 'FFmpeg' },
       {

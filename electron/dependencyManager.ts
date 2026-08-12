@@ -7,7 +7,7 @@ import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
 import { logger } from './logger';
 import { PATHS, PYTHON_VERSION, IS_WINDOWS } from './constants';
-import { runCommand, getBundledBasePath } from './utils';
+import { runCommand, getBundledBasePath, isSupportedPython } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
 import { migrateLegacyPortableLayout } from './legacyCleanup';
@@ -48,51 +48,58 @@ export class DependencyManager {
   }
 
   private async setupEmbeddedPython(): Promise<void> {
-    logger.dependency('Setting up embedded Python');
+    logger.dependency(`Setting up ${IS_WINDOWS ? 'embedded Python' : 'a Python virtual environment'}`);
 
     this.sendProgress({
       type: 'python-setup',
       component: 'Python Embedded',
       progress: 0,
-      message: 'Setting up embedded Python for VapourSynth...'
+      message: `Setting up ${IS_WINDOWS ? 'embedded Python' : 'a Python virtual environment'} for VapourSynth...`
     });
 
     if (!await fs.pathExists(PATHS.PYTHON)) {
-      // The embedded-Python bootstrap is Windows-specific; a Linux build would
-      // create a venv from the system Python here instead. Everything after
-      // this point (pip installs) is platform-neutral.
       if (!IS_WINDOWS) {
-        throw new Error('Automatic Python setup is only implemented for Windows so far');
+        this.sendProgress({
+          type: 'python-setup',
+          component: 'Python Embedded',
+          progress: 10,
+          message: 'Creating a Python 3 virtual environment...'
+        });
+        if (!await isSupportedPython('python3')) {
+          throw new Error('Python 3.12+ with venv support is required on Linux. Install python3 and python3-venv with your distribution package manager, then restart Vapourkit.');
+        }
+        await runCommand('python3', ['-m', 'venv', PATHS.VS], PATHS.APP_DATA);
+        logger.dependency(`Python virtual environment created at: ${PATHS.VS}`);
+      } else {
+        this.sendProgress({
+          type: 'python-setup',
+          component: 'Python Embedded',
+          progress: 10,
+          message: `Downloading Python ${PYTHON_VERSION} embedded...`
+        });
+
+        const pythonZipPath = path.join(PATHS.APP_DATA, `python-${PYTHON_VERSION}-embed-amd64.zip`);
+        logger.dependency(`Downloading Python ${PYTHON_VERSION}`);
+
+        await this.downloadFile(
+          `https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-embed-amd64.zip`,
+          pythonZipPath,
+          'Python Embedded'
+        );
+
+        this.sendProgress({
+          type: 'python-setup',
+          component: 'Python Embedded',
+          progress: 40,
+          message: 'Extracting Python...'
+        });
+
+        await this.extractArchive(pythonZipPath, PATHS.VS, 'Python Embedded');
+        await fs.remove(pythonZipPath);
+        logger.dependency('Python extracted successfully');
       }
-
-      this.sendProgress({
-        type: 'python-setup',
-        component: 'Python Embedded',
-        progress: 10,
-        message: `Downloading Python ${PYTHON_VERSION} embedded...`
-      });
-
-      const pythonZipPath = path.join(PATHS.APP_DATA, `python-${PYTHON_VERSION}-embed-amd64.zip`);
-      logger.dependency(`Downloading Python ${PYTHON_VERSION}`);
-
-      await this.downloadFile(
-        `https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-embed-amd64.zip`,
-        pythonZipPath,
-        'Python Embedded'
-      );
-
-      this.sendProgress({
-        type: 'python-setup',
-        component: 'Python Embedded',
-        progress: 40,
-        message: 'Extracting Python...'
-      });
-
-      await this.extractArchive(pythonZipPath, PATHS.VS, 'Python Embedded');
-      await fs.remove(pythonZipPath);
-      logger.dependency('Python extracted successfully');
     } else {
-      logger.dependency(`Embedded Python already exists at: ${PATHS.PYTHON}`);
+      logger.dependency(`Python runtime already exists at: ${PATHS.PYTHON}`);
     }
 
     this.sendProgress({
@@ -112,6 +119,12 @@ export class DependencyManager {
       const pthFilePath = path.join(PATHS.VS, `python${pythonXY}._pth`);
       await fs.writeFile(pthFilePath, `python${pythonXY}.zip\n.\nLib\\site-packages\nvs-scripts\n`, 'utf8');
       logger.dependency('Python paths configured');
+    } else {
+      // A venv reads .pth files from site-packages. This makes bundled scripts
+      // importable without mutating the host Python or relying on PYTHONPATH.
+      await fs.ensureDir(PATHS.SITE_PACKAGES);
+      await fs.writeFile(path.join(PATHS.SITE_PACKAGES, 'vapourkit-vs-scripts.pth'), `${PATHS.SCRIPTS}\n`, 'utf8');
+      logger.dependency('Python virtual environment paths configured');
     }
 
     await fs.ensureDir(PATHS.SCRIPTS);
@@ -169,10 +182,10 @@ export class DependencyManager {
       type: 'python-setup',
       component: 'Python Embedded',
       progress: 100,
-      message: 'Embedded Python configured successfully'
+      message: 'Python runtime configured successfully'
     });
 
-    logger.dependency('Embedded Python setup completed');
+    logger.dependency('Python runtime setup completed');
   }
 
   async checkDependencies(): Promise<boolean> {
@@ -184,7 +197,9 @@ export class DependencyManager {
     const vsExists = await fs.pathExists(PATHS.VSPIPE);
     const bsExists = await fs.pathExists(PATHS.BESTSOURCE_DLL);
     const pythonExists = await fs.pathExists(PATHS.PYTHON);
-    const videoCompareExists = await fs.pathExists(PATHS.VIDEO_COMPARE_EXE);
+    // video-compare has an official bundled Windows binary only. On Linux it
+    // remains optional and is launched from PATH when the user installs it.
+    const videoCompareExists = IS_WINDOWS ? await fs.pathExists(PATHS.VIDEO_COMPARE_EXE) : true;
     const ffmpegExists = await FFmpegManager.isInstalled();
     // NOTE: vs-mlrt (ort/trt) is installed by the plugin phase and intentionally
     // not part of the core health check, so "continue without plugins" installs
@@ -409,7 +424,7 @@ export class DependencyManager {
     
     try {
       // Component configurations (everything else comes from PyPI)
-      const components: ComponentConfig[] = [
+      const components: ComponentConfig[] = IS_WINDOWS ? [
         {
           name: 'Video Compare Tool',
           url: 'https://github.com/pixop/video-compare/releases/download/20250928/video-compare-20250928-win10-x86_64.zip',
@@ -417,14 +432,14 @@ export class DependencyManager {
           checkPath: PATHS.VIDEO_COMPARE_EXE,
           extractTo: PATHS.VIDEO_COMPARE
         }
-      ];
+      ] : [];
 
       // Install standard components
       for (const component of components) {
         await this.downloadAndInstallComponent(component);
       }
 
-      // Setup embedded Python + the pip-installed VapourSynth runtime.
+      // Setup the Windows embedded Python or Linux venv + VapourSynth runtime.
       // vs-mlrt (ort/trt) now comes from PyPI during the plugin install phase.
       // Note: We intentionally do NOT update the stored vs-mlrt version here.
       // The version check in the frontend (App.tsx) will detect a mismatch and

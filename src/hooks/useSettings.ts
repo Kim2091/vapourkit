@@ -27,10 +27,10 @@ function readStoredBackend(): BackendId | null {
   return null;
 }
 
-export const useSettings = (hasCudaSupport: boolean | null) => {
+export const useSettings = (recommendedBackend: BackendId | null) => {
   const [defaultBackend, setDefaultBackendState] = useState<BackendId>(() => {
-    // No saved preference yet — assume TensorRT until CUDA detection resolves.
-    // The mount-time value of hasCudaSupport is always null (detection is an
+    // No saved preference yet — assume TensorRT until backend detection resolves.
+    // The mount-time value of recommendedBackend is always null (detection is an
     // async IPC), so it must not influence the initial value, and nothing may
     // persist a guess to localStorage before detection completes (a persisted
     // guess would block the detection-based initialization below forever).
@@ -52,16 +52,15 @@ export const useSettings = (hasCudaSupport: boolean | null) => {
     return localStorage.getItem('showBackendOverrides') === 'true';
   });
 
-  // First-time initialization once CUDA detection has resolved
+  // First-time initialization once platform and GPU detection have resolved.
   useEffect(() => {
-    if (hasCudaSupport !== null) {
+    if (recommendedBackend !== null) {
       if (readStoredBackend() === null) {
-        const detected: BackendId = hasCudaSupport ? 'tensorrt' : 'directml';
-        setDefaultBackendState(detected);
-        localStorage.setItem('defaultBackend', detected);
+        setDefaultBackendState(recommendedBackend);
+        localStorage.setItem('defaultBackend', recommendedBackend);
       }
     }
-  }, [hasCudaSupport]);
+  }, [recommendedBackend]);
 
   // Persist num_streams setting to localStorage
   useEffect(() => {

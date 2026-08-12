@@ -4,7 +4,7 @@ code = """
 # Full Docs: https://github.com/pifroggi/vs_colorfix?tab=readme-ov-file#wavelet-color-fix
 
 wavelets      = 4
-backend       = VK_BACKEND  # "ncnn", "directml", or "tensorrt"; follows the app setting.
+backend       = "tensorrt" if VK_BACKEND == "tensorrt" else "ncnn"  # DirectML is Windows-only; NCNN is Vapourkit's Linux backend.
 num_streams   = 1
 gpu_id        = 0
 engine_folder = None  # Optional TensorRT engine-cache folder.

@@ -8,10 +8,12 @@ import { BACKENDS, resolveBackendId } from './descriptors';
 import type { InferenceProvider } from './types';
 import { tensorrtProvider } from './tensorrt';
 import { directmlProvider } from './directml';
+import { ncnnProvider } from './ncnn';
 
 const providers: Record<BackendId, InferenceProvider> = {
   tensorrt: tensorrtProvider,
   directml: directmlProvider,
+  ncnn: ncnnProvider,
 };
 
 export function getProvider(id: BackendId): InferenceProvider {

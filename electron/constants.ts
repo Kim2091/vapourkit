@@ -1,9 +1,14 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import { app } from 'electron';
 
 // Current vapoursynth-mlrt-trt / vapoursynth-mlrt-ort PyPI version.
 // Update this when upgrading vs-mlrt; a change prompts users to rebuild engines.
 export const VS_MLRT_VERSION = '16.1';
+
+// NCNN is released independently of the ORT/TRT wheels. Pin it separately so
+// Linux installs stay reproducible without requesting a non-existent 16.1 wheel.
+export const VS_MLRT_NCNN_VERSION = '15.16';
 
 // Minimum vsview version the app requires (named preview outputs rely on its
 // set_output API). The vs-view launch path upgrades older installs to satisfy
@@ -30,17 +35,38 @@ const DLL = IS_WINDOWS ? '.dll' : '.so';
 export const PYTHON_VERSION = '3.13.0';
 const PYTHON_XY = PYTHON_VERSION.split('.').slice(0, 2).join('.');
 
-// Use portable path relative to the executable location
-// In development: uses the project directory
-// In production: uses the directory where the .exe is located
+// Windows keeps its portable data folder beside the executable. AppImages are
+// mounted read-only, so packaged Linux builds must use Electron's writable
+// per-user data directory instead.
 export const APP_DATA_PATH = app.isPackaged
-  ? path.join(path.dirname(app.getPath('exe')), 'data')
+  ? IS_WINDOWS
+    ? path.join(path.dirname(app.getPath('exe')), 'data')
+    : path.join(app.getPath('userData'), 'data')
   : path.join(app.getAppPath(), 'data');
 
 const VS_PATH = path.join(APP_DATA_PATH, 'vapoursynth-portable');
-const SITE_PACKAGES_PATH = IS_WINDOWS
-  ? path.join(VS_PATH, 'Lib', 'site-packages')
-  : path.join(VS_PATH, 'lib', `python${PYTHON_XY}`, 'site-packages');
+
+/**
+ * A Linux venv follows the host interpreter's Python X.Y, which may differ
+ * from the Windows embedded runtime. Resolve its actual site-packages folder
+ * after the venv exists; use a stable fallback during first-run bootstrap.
+ */
+export function resolveLinuxSitePackages(vsPath: string = VS_PATH): string {
+  const libDir = path.join(vsPath, 'lib');
+  try {
+    const pythonDirs = fs.readdirSync(libDir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && /^python\d+\.\d+$/.test(entry.name))
+      .map(entry => entry.name)
+      .sort();
+    const pythonDir = pythonDirs[pythonDirs.length - 1];
+    if (pythonDir) {
+      return path.join(libDir, pythonDir, 'site-packages');
+    }
+  } catch {
+    // The venv has not been created yet.
+  }
+  return path.join(libDir, `python${PYTHON_XY}`, 'site-packages');
+}
 
 // Centralized path constants
 //
@@ -51,8 +77,12 @@ const SITE_PACKAGES_PATH = IS_WINDOWS
 export const PATHS = {
   APP_DATA: APP_DATA_PATH,
   VS: VS_PATH,
-  SITE_PACKAGES: SITE_PACKAGES_PATH,
-  PLUGINS: path.join(SITE_PACKAGES_PATH, 'vapoursynth', 'plugins'),
+  get SITE_PACKAGES() {
+    return IS_WINDOWS
+      ? path.join(VS_PATH, 'Lib', 'site-packages')
+      : resolveLinuxSitePackages();
+  },
+  get PLUGINS() { return path.join(this.SITE_PACKAGES, 'vapoursynth', 'plugins'); },
   SCRIPTS: path.join(VS_PATH, 'vs-scripts'),
   MODELS: path.join(APP_DATA_PATH, 'models'),
   // vsmlrt.py model zoo (RIFE/DPIR for the bundled filter templates). App-owned
@@ -74,7 +104,9 @@ export const PATHS = {
   get PYTHON() {
     return IS_WINDOWS ? path.join(this.VS, 'python.exe') : path.join(this.VS, 'bin', 'python3');
   },
-  get VIDEO_COMPARE_EXE() { return path.join(this.VIDEO_COMPARE, `video-compare${EXE}`); },
+  // Video Compare only ships an official Windows binary. Linux uses a
+  // distribution-installed `video-compare` command when the user has it.
+  get VIDEO_COMPARE_EXE() { return IS_WINDOWS ? path.join(this.VIDEO_COMPARE, `video-compare${EXE}`) : 'video-compare'; },
   // pip console-script launcher (entry point `vsview = vsview.cli:main`)
   get VSVIEW_EXE() {
     return IS_WINDOWS ? path.join(this.VS, 'Scripts', 'vsview.exe') : path.join(this.VS, 'bin', 'vsview');
@@ -86,6 +118,7 @@ export const PATHS = {
   get BESTSOURCE_DLL() { return path.join(this.PLUGINS, `libbestsource${DLL}`); },
   get ORT_PLUGIN_DLL() { return path.join(this.PLUGINS, 'ort', IS_WINDOWS ? 'vsort.dll' : 'libvsort.so'); },
   get ORT_CUDA_PLUGIN_DLL() { return path.join(this.PLUGINS, 'ort-cuda', IS_WINDOWS ? 'vsort.dll' : 'libvsort.so'); },
+  get NCNN_PLUGIN_DLL() { return path.join(this.PLUGINS, IS_WINDOWS ? 'vsncnn.dll' : 'libvsncnn.so'); },
   get TRT_PLUGIN_DLL() { return path.join(this.PLUGINS, 'trt', IS_WINDOWS ? 'vstrt.dll' : 'libvstrt.so'); },
   get TENSORRT_PACKAGE() { return path.join(this.SITE_PACKAGES, 'tensorrt'); },
 

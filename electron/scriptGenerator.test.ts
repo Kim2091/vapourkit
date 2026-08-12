@@ -228,6 +228,7 @@ describe('inference backend selection', () => {
     expect(script).toContain('def vk_backend(');
     expect(script).toContain('"tensorrt": Backend.TRT');
     expect(script).toContain('"directml": Backend.ORT_DML');
+    expect(script).toContain('"ncnn": Backend.NCNN_VK');
   });
 
   it('points vsmlrt at the app-managed model zoo and the trtexec shim', async () => {

@@ -41,6 +41,13 @@ describe('getBackendsForVendor', () => {
   it.each(NON_NVIDIA)('gives %s DirectML only', (vendor) => {
     expect(getBackendsForVendor(vendor)).toEqual(['directml']);
   });
+
+  it('uses NCNN as the Linux default, retaining TensorRT as an NVIDIA option', () => {
+    expect(getBackendsForVendor('nvidia', 'linux')).toEqual(['ncnn', 'tensorrt']);
+    for (const vendor of NON_NVIDIA) {
+      expect(getBackendsForVendor(vendor, 'linux')).toEqual(['ncnn']);
+    }
+  });
 });
 
 describe('getBackendPipPackages', () => {
@@ -54,6 +61,12 @@ describe('getBackendPipPackages', () => {
     expect(getBackendPipPackages('nvidia').some(spec => spec.startsWith('vapoursynth-mlrt-trt=='))).toBe(true);
     for (const vendor of NON_NVIDIA) {
       expect(getBackendPipPackages(vendor).some(spec => spec.startsWith('vapoursynth-mlrt-trt'))).toBe(false);
+    }
+  });
+
+  it('includes the NCNN wheel for Linux', () => {
+    for (const vendor of ['nvidia', ...NON_NVIDIA] as GpuVendor[]) {
+      expect(getBackendPipPackages(vendor, 'linux')).toContain('vapoursynth-mlrt-ncnn==15.16');
     }
   });
 });

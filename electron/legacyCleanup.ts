@@ -2,7 +2,7 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { logger } from './logger';
-import { PATHS } from './constants';
+import { IS_WINDOWS, PATHS } from './constants';
 import type { GpuVendor } from './gpuDetection';
 
 /**
@@ -174,7 +174,7 @@ export async function applyPluginCompatibilityFixes(
 ): Promise<void> {
   await removeEntries(pluginsDir, CRASHING_PLUGIN_FILES, 'crashing plugin');
 
-  const ortCudaPlugin = path.join(pluginsDir, 'ort-cuda', 'vsort.dll');
+  const ortCudaPlugin = path.join(pluginsDir, 'ort-cuda', IS_WINDOWS ? 'vsort.dll' : 'libvsort.so');
   const ortCudaDir = path.join(pluginsDir, 'ort-cuda');
   const ortDir = path.join(pluginsDir, 'ort');
 

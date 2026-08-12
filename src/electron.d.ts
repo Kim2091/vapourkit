@@ -9,6 +9,7 @@ export interface ElectronAPI {
   setupDependencies: () => Promise<{ success: boolean; error?: string }>;
   onSetupProgress: (callback: (progress: SetupProgress) => void) => () => void;
   detectCudaSupport: () => Promise<boolean>;
+  getInferenceBackendInfo: () => Promise<{ hasCudaSupport: boolean; backend: BackendId }>;
   getGpuStats: () => Promise<{ gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null>;
   
   // Video operations

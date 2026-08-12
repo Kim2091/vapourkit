@@ -3,6 +3,7 @@ import { logger } from './logger';
 import { configManager } from './configManager';
 import { pollGpuStats } from './utils';
 import { detectGpuVendor } from './gpuDetection';
+import { getBackendsForVendor } from './vendorPackages';
 import { createIpcHandler } from './ipcUtilities';
 import { DependencyManager } from './dependencyManager';
 import { PluginInstaller } from './pluginInstaller';
@@ -34,6 +35,20 @@ export function registerDependencyHandlers(
         await configManager.setGpuVendor(vendor);
         logger.info(`GPU vendor: ${vendor}`);
         return vendor === 'nvidia';
+      },
+      { logResult: true }
+    )
+  );
+
+  ipcMain.handle('get-inference-backend-info',
+    createIpcHandler(
+      'get-inference-backend-info',
+      async () => {
+        const vendor = await detectGpuVendor();
+        await configManager.setGpuVendor(vendor);
+        const backend = getBackendsForVendor(vendor)[0];
+        logger.info(`GPU vendor: ${vendor}; recommended inference backend: ${backend}`);
+        return { hasCudaSupport: vendor === 'nvidia', backend };
       },
       { logResult: true }
     )

@@ -259,3 +259,32 @@ export async function detectCudaSupport(): Promise<boolean> {
     return false;
   }
 }
+
+/** Checks whether an executable is available on the host PATH. */
+export async function isCommandAvailable(command: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const proc = spawn(command, ['--version'], {
+      stdio: 'ignore',
+      shell: false,
+      windowsHide: true,
+    });
+
+    proc.once('error', () => resolve(false));
+    proc.once('close', code => resolve(code === 0));
+  });
+}
+
+/** True when `command` is Python 3.12 or newer, the minimum supported by the
+ * VapourSynth and vs-jetpack wheels used by Vapourkit. */
+export async function isSupportedPython(command: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const proc = spawn(command, ['-c', 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)'], {
+      stdio: 'ignore',
+      shell: false,
+      windowsHide: true,
+    });
+
+    proc.once('error', () => resolve(false));
+    proc.once('close', code => resolve(code === 0));
+  });
+}
