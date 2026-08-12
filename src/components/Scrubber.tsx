@@ -241,7 +241,7 @@ export const Scrubber = memo<ScrubberProps>(({
             <div className="flex gap-2">
               {(['in', 'out'] as const).map(which => (
                 <label key={which} className="flex-1 min-w-0">
-                  <span className="block text-[9px] uppercase tracking-[0.1em] text-ink-600 mb-1">{which}</span>
+                  <span className="block text-[9px] uppercase tracking-[0.1em] text-ink-500 mb-1">{which}</span>
                   <input
                     type="text"
                     defaultValue={String(which === 'in' ? inFrame : outFrame)}
@@ -268,7 +268,7 @@ export const Scrubber = memo<ScrubberProps>(({
               </button>
             )}
 
-            <div className="flex items-center gap-2 mt-2 text-[10px] font-mono tabular-nums text-ink-600">
+            <div className="flex items-center gap-2 mt-2 text-[10px] font-mono tabular-nums text-ink-400">
               <span>{selectedFrames.toLocaleString()} frames</span>
               <span>·</span>
               <span>{frameToTimecode(selectedFrames, fps)}</span>

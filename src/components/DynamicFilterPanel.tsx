@@ -30,6 +30,16 @@ interface DynamicFilterPanelProps {
   onModelsUpdated?: () => Promise<void>;
 }
 
+/**
+ * Icon button sized to sit inline with a 28px picker. Both filter branches put
+ * their actions on the picker row rather than in a labelled row of their own —
+ * that row cost ~28px per expanded filter to say what a tooltip already does.
+ */
+const PICKER_ACTION =
+  'h-7 w-7 grid place-items-center rounded border border-ink-750 bg-ink-850 flex-shrink-0 ' +
+  'transition-colors disabled:opacity-50 disabled:cursor-not-allowed ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
+
 export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   title = 'Filters',
   filters,
@@ -556,7 +566,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
         {/* Empty State with Drop Zone */}
         {pendingFilters.length === 0 && (
           <div 
-            className="border-b border-ink-900 px-3 py-6 text-center transition-colors hover:bg-ink-850/60"
+            className="m-1.5 rounded border border-dashed border-ink-700 bg-ink-900 px-3 py-6 text-center transition-colors hover:bg-ink-850 hover:border-ink-600"
             onDrop={handleEmptyDrop}
             onDragOver={handleEmptyDragOver}
           >
@@ -575,13 +585,38 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
           const isAIModel = filter.filterType === 'aiModel';
           const isNewlyDuplicated = newlyDuplicatedId === filter.id;
 
+          // Opens the save-as-template form, pre-filled from the selected
+          // template so "save" over an existing one keeps its name and category.
+          const toggleSaveDialog = () => {
+            if (showSaveDialog === filter.id) {
+              setShowSaveDialog(null);
+              setPresetName('');
+              setPresetDescription('');
+              setPresetCategories([]);
+              setNewCategoryInput('');
+              return;
+            }
+            setShowSaveDialog(filter.id);
+            const existing = filter.preset
+              ? filterTemplates.find(t => t.name === filter.preset)
+              : undefined;
+            setPresetName(existing?.name ?? '');
+            setPresetDescription(existing?.description ?? '');
+            setPresetCategories(
+              Array.isArray(existing?.category)
+                ? existing.category
+                : (existing?.category ? [existing.category] : [])
+            );
+            setNewCategoryInput('');
+          };
+
           return (
             <div
               key={filter.id}
               onDragOver={(e) => handleDragOver(e, filter.id)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, filter.id)}
-              className={`relative mb-1 ${
+              className={`relative m-1.5 rounded ${
                 isDragging ? 'opacity-40 scale-95' : 'opacity-100 scale-100'
               } ${
                 isHovered && !isDragging ? 'scale-[1.01] transition-transform duration-200' : ''
@@ -596,7 +631,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                 <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-accent-500 rounded-full shadow-lg shadow-accent-500/50 z-10" />
               )}
 
-              <div className={`bg-ink-900 border-l-2 transition-colors ${
+              <div className={`bg-ink-900 rounded border border-ink-800 border-l-2 transition-colors ${
                 filter.enabled
                   ? isAIModel
                     ? isExpanded ? 'border-l-accent-500' : 'border-l-accent-500/70'
@@ -610,10 +645,10 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                   draggable={!isProcessing}
                   onDragStart={(e) => handleDragStart(e, filter.id)}
                   onDragEnd={handleDragEnd}
-                  className={`flex items-center gap-2.5 px-3 py-1.5 transition-colors cursor-grab active:cursor-grabbing ${
+                  className={`flex items-center gap-2.5 px-3 py-1.5 transition-colors cursor-grab active:cursor-grabbing rounded-t-[3px] ${
                     isExpanded
                       ? 'bg-ink-850 sticky top-9 z-[5]'
-                      : 'hover:bg-ink-850/60'
+                      : 'rounded-b-[3px] hover:bg-ink-850/60'
                   }`}
                 >
                   {/* Filter Order Number */}
@@ -716,35 +751,34 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                       // AI Model Filter Content
                       <>
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">Model</label>
-                            <div className="flex items-center gap-3">
-                              {onImportClick && (
-                                <button
-                                  onClick={onImportClick}
-                                  className="text-[11px] text-accent-400 hover:text-accent-300 transition-colors flex items-center gap-1"
-                                  disabled={isProcessing}
-                                >
-                                  <Download className="w-3 h-3" />
-                                  Import Model
-                                </button>
-                              )}
-                            </div>
+                          {/* Model picker, with import riding the same row — the
+                              same shape as the custom branch's template row. */}
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => !isProcessing && setShowModelSelector(filter.id)}
+                              disabled={isProcessing}
+                              className={`flex-1 min-w-0 h-7 bg-ink-850 border rounded px-2 text-[12.5px] text-left truncate focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                filter.modelPath
+                                  ? 'border-accent-500/50 text-ink-200 hover:border-accent-500'
+                                  : 'border-ink-600 text-ink-400 hover:border-ink-500'
+                              }`}
+                            >
+                              {filter.modelPath
+                                ? (availableModels.find(m => m.path === filter.modelPath)?.name || 'Unknown Model')
+                                : 'Select a model...'
+                              }
+                            </button>
+                            {onImportClick && (
+                              <button
+                                onClick={onImportClick}
+                                disabled={isProcessing}
+                                title="Import a model from a file"
+                                className={`${PICKER_ACTION} text-ink-400 hover:text-accent-400 hover:border-ink-700`}
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
-                          <button
-                            onClick={() => !isProcessing && setShowModelSelector(filter.id)}
-                            disabled={isProcessing}
-                            className={`w-full h-7 bg-ink-850 border rounded px-2 text-[12.5px] text-left truncate focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                              filter.modelPath
-                                ? 'border-accent-500/50 text-ink-200 hover:border-accent-500'
-                                : 'border-ink-600 text-ink-400 hover:border-ink-500'
-                            }`}
-                          >
-                            {filter.modelPath
-                              ? (availableModels.find(m => m.path === filter.modelPath)?.name || 'Unknown Model')
-                              : 'Select a model...'
-                            }
-                          </button>
                           {/* Backend override - 'auto' inherits the app default.
                               Hidden unless enabled in Settings, but always shown
                               when an override is active so it stays clearable. */}
@@ -782,58 +816,56 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                     ) : (
                       // Custom Filter Content
                       <>
-                        {/* Save and Import Template Buttons */}
-                        {onSaveTemplate && (
-                          <div className="flex gap-3 pt-1">
+                        {/* Template picker, with save / import / delete riding the
+                            same row. Delete is last and separated by its colour, so
+                            it no longer reads as a second "delete this filter"
+                            beside the X in the row header. */}
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => setShowFilterSelector(filter.id)}
+                            disabled={isProcessing}
+                            className="flex-1 min-w-0 h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-ink-200 text-left flex items-center justify-between gap-2 hover:border-ink-700"
+                          >
+                            <span className={`truncate ${filter.preset ? 'text-ink-200' : 'text-ink-500'}`}>
+                              {filter.preset || 'Custom - Click to select template'}
+                            </span>
+                            <LucideFilter className="w-4 h-4 text-ink-400 flex-shrink-0" />
+                          </button>
+                          {onSaveTemplate && (
+                            <>
+                              <button
+                                onClick={toggleSaveDialog}
+                                disabled={isProcessing}
+                                title={filter.preset ? `Save changes to “${filter.preset}”, or as a new template` : 'Save this filter as a template'}
+                                className={`${PICKER_ACTION} ${
+                                  showSaveDialog === filter.id
+                                    ? 'text-accent-400 border-accent-500/50 bg-accent-500/15'
+                                    : 'text-ink-400 hover:text-accent-400 hover:border-ink-700'
+                                }`}
+                              >
+                                <Save className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={handleImportTemplate}
+                                disabled={isProcessing}
+                                title="Import a template from a file"
+                                className={`${PICKER_ACTION} text-ink-400 hover:text-accent-400 hover:border-ink-700`}
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          {filter.preset && onDeleteTemplate && (
                             <button
-                              onClick={() => {
-                                if (showSaveDialog === filter.id) {
-                                  setShowSaveDialog(null);
-                                  setPresetName('');
-                                  setPresetDescription('');
-                                  setPresetCategories([]);
-                                  setNewCategoryInput('');
-                                } else {
-                                  setShowSaveDialog(filter.id);
-                                  // Pre-fill with existing template data if one is selected
-                                  if (filter.preset) {
-                                    const existingTemplate = filterTemplates.find(t => t.name === filter.preset);
-                                    if (existingTemplate) {
-                                      setPresetName(existingTemplate.name);
-                                      setPresetDescription(existingTemplate.description || '');
-                                      const categories = Array.isArray(existingTemplate.category)
-                                        ? existingTemplate.category
-                                        : (existingTemplate.category ? [existingTemplate.category] : []);
-                                      setPresetCategories(categories);
-                                    } else {
-                                      setPresetName('');
-                                      setPresetDescription('');
-                                      setPresetCategories([]);
-                                    }
-                                  } else {
-                                    setPresetName('');
-                                    setPresetDescription('');
-                                    setPresetCategories([]);
-                                  }
-                                  setNewCategoryInput('');
-                                }
-                              }}
-                              className="text-[11px] text-accent-400 hover:text-accent-300 transition-colors flex items-center gap-1"
+                              onClick={() => handleDeleteTemplate(filter.preset!, filter.id)}
                               disabled={isProcessing}
+                              title={`Delete the “${filter.preset}” template`}
+                              className={`${PICKER_ACTION} text-bad-400 hover:bg-bad-900/30 hover:border-bad-600`}
                             >
-                              <Save className="w-3 h-3" />
-                              Save Template
+                              <Trash2 className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={handleImportTemplate}
-                              className="text-[11px] text-accent-400 hover:text-accent-300 transition-colors flex items-center gap-1"
-                              disabled={isProcessing}
-                            >
-                              <Download className="w-3 h-3" />
-                              Import Template
-                            </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
 
                         {/* Save Template Dialog */}
                         {showSaveDialog === filter.id && (
@@ -940,30 +972,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             </div>
                           </div>
                         )}
-
-                        {/* Template Selector Button with Delete */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setShowFilterSelector(filter.id)}
-                            disabled={isProcessing}
-                            className="flex-1 min-w-0 h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-ink-200 text-left flex items-center justify-between gap-2 hover:border-ink-700"
-                          >
-                            <span className={filter.preset ? 'text-ink-200' : 'text-ink-500'}>
-                              {filter.preset || 'Custom - Click to select template'}
-                            </span>
-                            <LucideFilter className="w-4 h-4 text-ink-400" />
-                          </button>
-                          {filter.preset && onDeleteTemplate && (
-                            <button
-                              onClick={() => handleDeleteTemplate(filter.preset, filter.id)}
-                              disabled={isProcessing}
-                              className="h-7 px-2 bg-ink-850 border border-ink-750 rounded hover:bg-bad-900/30 hover:border-bad-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Delete template"
-                            >
-                              <Trash2 className="w-4 h-4 text-bad-400" />
-                            </button>
-                          )}
-                        </div>
 
                         {/* Description */}
                         {selectedTemplate?.description && (

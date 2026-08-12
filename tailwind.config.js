@@ -26,7 +26,7 @@ const ink = {
   750: '#333538', // L21  border
   700: '#3f4146', // L26  strong border
   600: '#52555b', // L34  disabled
-  500: '#6d7178', // L45  dim text
+  500: '#878a92', // L55  dim text — 5.2:1 on 900, 4.7:1 on 850. L45 was 3.6:1.
   400: '#a1a4aa', // L65  muted text
   300: '#d4d6d8', // L84
   200: '#e7e8e9', // L91  primary text

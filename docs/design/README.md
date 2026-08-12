@@ -215,6 +215,24 @@ a percentage column stretched to ~970px and the dense controls looked lost in it
 pixel-based drag on the column’s left edge (320–720px clamp, persisted in localStorage), replacing
 the `react-resizable-panels` percentage split.
 
+**`ink-600` is disabled, `ink-500` is dim text — the ramp stops are not interchangeable.** The column
+read as illegible not because the type was small but because dim text sat at `ink-500` L45 = **3.6:1** on
+the `ink-900` panel, under the 4.5:1 minimum, across ~200 uses. `ink-500` moved to L55 (`#878a92`),
+which is 5.2:1 on `ink-900` and 4.7:1 on `ink-850`; it stays on the `hsl(220 5%)` ramp so nothing else
+about the system changes. Separately, `ink-600` (L34, **2.4:1** — correct for disabled, and exempt) had
+leaked onto real content: the ledger's row keys and `Input` column header, and the scrubber's in/out
+labels and duration readout, all at 9–10px. Those moved to `ink-500`/`ink-400`. `ink-600` is still right
+for disabled buttons, decorative icons and empty-state text.
+
+A useful tell: paired elements that disagree by 3× are a bug even when each looks defensible alone. The
+ledger's `Input` header was 2.4:1 beside an `Output` header at 7.4:1 — same size, same weight, same row.
+
+**The accent does not carry structure.** A proposal to fill the four section headers with accent bands
+was declined: it re-spends the accent on chrome, collapsing *section header*, *filter enabled* and
+*primary action* into one colour, and it brightens the element that was already the column's most
+legible (13px `ink-100`) while leaving the failing text untouched. The 3px accent edge in `Section.tsx`
+is the intended dose. See "Selection is a fill; headers are edges" above.
+
 **Verify colours in the built CSS as `rgb(R G B / …)`, not hex.** Tailwind emits the rgb form for any
 colour that supports opacity modifiers, so grepping the bundle for `#3b82f6` proves nothing — it only
 finds literals written directly in `index.css`. Two real bugs hid behind that mistake:

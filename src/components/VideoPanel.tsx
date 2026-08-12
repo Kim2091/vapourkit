@@ -35,7 +35,7 @@ const Row = memo(function Row({ row }: { row: LedgerRow }) {
 
   return (
     <div className="grid grid-cols-[74px_1fr_16px_1fr] items-center gap-x-2 h-[19px]">
-      <span className="text-[10px] text-ink-600 uppercase tracking-wide truncate">{row.key}</span>
+      <span className="text-[10px] text-ink-500 uppercase tracking-wide truncate">{row.key}</span>
       <span
         className={`text-[11px] font-mono tabular-nums truncate ${
           row.warn ? 'text-warn-400' : row.input ? 'text-ink-400' : 'text-ink-600 italic'
@@ -104,7 +104,7 @@ export const VideoInfoPanel = memo<VideoInfoPanelProps>(({
       <div className="px-3 py-2 border-b border-ink-900">
         <div className="grid grid-cols-[74px_1fr_16px_1fr] gap-x-2 pb-1 mb-1 border-b border-ink-800">
           <span />
-          <span className="text-[9px] font-display font-semibold uppercase tracking-[0.14em] text-ink-600">Input</span>
+          <span className="text-[9px] font-display font-semibold uppercase tracking-[0.14em] text-ink-400">Input</span>
           <span />
           <span className="text-[9px] font-display font-semibold uppercase tracking-[0.14em] text-accent-500">Output</span>
         </div>
