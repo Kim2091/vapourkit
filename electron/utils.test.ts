@@ -24,7 +24,7 @@ vi.mock('./logger', () => ({
 }));
 
 import { spawn } from 'child_process';
-import { runCommand } from './utils';
+import { isCommandAvailable, runCommand } from './utils';
 
 const mockSpawn = vi.mocked(spawn);
 
@@ -72,6 +72,27 @@ describe('runCommand', () => {
 
     await expect(completed).rejects.toThrow(
       'Command failed with code 1: installation failed',
+    );
+  });
+});
+
+describe('isCommandAvailable', () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+  });
+
+  it('uses the caller-provided probe arguments', async () => {
+    const proc = createProcess();
+    mockSpawn.mockReturnValue(proc as never);
+
+    const available = isCommandAvailable('ffmpeg', ['-version']);
+    proc.emit('close', 0);
+
+    await expect(available).resolves.toBe(true);
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'ffmpeg',
+      ['-version'],
+      expect.objectContaining({ shell: false, stdio: 'ignore' }),
     );
   });
 });

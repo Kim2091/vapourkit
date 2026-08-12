@@ -258,9 +258,9 @@ export async function detectCudaSupport(): Promise<boolean> {
 }
 
 /** Checks whether an executable is available on the host PATH. */
-export async function isCommandAvailable(command: string): Promise<boolean> {
+export async function isCommandAvailable(command: string, probeArgs: string[] = ['--version']): Promise<boolean> {
   return new Promise(resolve => {
-    const proc = spawn(command, ['--version'], {
+    const proc = spawn(command, probeArgs, {
       stdio: 'ignore',
       shell: false,
       windowsHide: true,

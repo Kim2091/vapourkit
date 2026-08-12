@@ -54,8 +54,8 @@ export class FFmpegManager {
   static async isInstalled(): Promise<boolean> {
     if (!IS_WINDOWS) {
       const [ffmpeg, ffprobe] = await Promise.all([
-        isCommandAvailable('ffmpeg'),
-        isCommandAvailable('ffprobe'),
+        isCommandAvailable('ffmpeg', ['-version']),
+        isCommandAvailable('ffprobe', ['-version']),
       ]);
       return ffmpeg && ffprobe;
     }
