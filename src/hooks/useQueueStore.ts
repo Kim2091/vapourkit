@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { BackendId, QueueItem, Filter, SegmentSelection } from '../electron.d';
 import { generateOutputSuffix } from '../utils/generateOutputSuffix';
-import { resolveBackendId } from '../utils/backends';
+import { normalizeBackendForCurrentPlatform } from '../utils/backends';
 
 interface UseQueueStoreProps {
   onLog: (message: string) => void;
@@ -52,13 +52,15 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
       // Reset any items that were processing when app was closed, and migrate
       // legacy workflows (useDirectML boolean) to backend ids
       const resetQueue = savedQueue.map((item: QueueItem) => {
-        const migrated: QueueItem = item.workflow.defaultBackend
+        const savedBackend = item.workflow.defaultBackend ?? item.workflow.useDirectML;
+        const normalizedBackend = normalizeBackendForCurrentPlatform(savedBackend);
+        const migrated: QueueItem = item.workflow.defaultBackend === normalizedBackend && item.workflow.useDirectML === undefined
           ? item
           : {
               ...item,
               workflow: {
                 ...item.workflow,
-                defaultBackend: resolveBackendId(item.workflow.useDirectML),
+                defaultBackend: normalizedBackend,
                 useDirectML: undefined,
               },
             };

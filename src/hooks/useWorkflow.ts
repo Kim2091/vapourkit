@@ -3,7 +3,7 @@ import { useState, useCallback } from 'react';
 import type { BackendId, Filter, FilterTemplate, WorkflowData, SegmentSelection, ColorimetrySettings } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
-import { isBackendId } from '../utils/backends';
+import { isBackendId, normalizeBackendForCurrentPlatform } from '../utils/backends';
 import { notify } from '../utils/notifications';
 
 interface ImportWorkflowModalState {
@@ -240,8 +240,9 @@ export function useWorkflow({
           addConsoleLog(`Applied colorimetry settings from workflow`);
         }
         if (workflow.encodingSettings.defaultBackend && isBackendId(workflow.encodingSettings.defaultBackend) && setDefaultBackend) {
-          setDefaultBackend(workflow.encodingSettings.defaultBackend);
-          addConsoleLog(`Applied default backend: ${workflow.encodingSettings.defaultBackend}`);
+          const backend = normalizeBackendForCurrentPlatform(workflow.encodingSettings.defaultBackend);
+          setDefaultBackend(backend);
+          addConsoleLog(`Applied default backend: ${backend}`);
         }
       }
 

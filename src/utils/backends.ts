@@ -32,6 +32,11 @@ export {
 const platform = typeof window !== 'undefined' ? window.electronAPI?.platform : undefined;
 export const BACKENDS = platform ? getBackendsForPlatform(platform) : ALL_BACKENDS;
 
+/** Normalizes saved/imported state against the active renderer platform. */
+export function normalizeBackendForCurrentPlatform(value: unknown) {
+  return platform ? normalizeBackendForPlatform(value, platform) : resolveBackendId(value);
+}
+
 export type {
   BackendId,
   BackendPlatform,

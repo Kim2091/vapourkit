@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { BackendId } from '../electron.d';
-import { isBackendId, resolveBackendId } from '../utils/backends';
+import { isBackendId, normalizeBackendForCurrentPlatform } from '../utils/backends';
 
 /**
  * Reads the persisted default backend, migrating the legacy `useDirectML`
@@ -9,13 +9,17 @@ import { isBackendId, resolveBackendId } from '../utils/backends';
 function readStoredBackend(): BackendId | null {
   const saved = localStorage.getItem('defaultBackend');
   if (saved !== null && isBackendId(saved)) {
-    return saved;
+    const normalized = normalizeBackendForCurrentPlatform(saved);
+    if (normalized !== saved) {
+      localStorage.setItem('defaultBackend', normalized);
+    }
+    return normalized;
   }
 
   const legacy = localStorage.getItem('useDirectML');
   if (legacy !== null) {
     try {
-      const migrated = resolveBackendId(JSON.parse(legacy));
+      const migrated = normalizeBackendForCurrentPlatform(JSON.parse(legacy));
       localStorage.setItem('defaultBackend', migrated);
       localStorage.removeItem('useDirectML');
       return migrated;
@@ -68,8 +72,9 @@ export const useSettings = (recommendedBackend: BackendId | null) => {
   }, [numStreams]);
 
   const setDefaultBackend = useCallback((value: BackendId): void => {
-    setDefaultBackendState(value);
-    localStorage.setItem('defaultBackend', value);
+    const normalized = normalizeBackendForCurrentPlatform(value);
+    setDefaultBackendState(normalized);
+    localStorage.setItem('defaultBackend', normalized);
   }, []);
 
   const updateNumStreams = useCallback((value: number): void => {

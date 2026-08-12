@@ -3,11 +3,11 @@
 import { useEffect } from 'react';
 import type { BackendId, QueueItem, SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
-import { resolveBackendId } from '../utils/backends';
+import { normalizeBackendForCurrentPlatform } from '../utils/backends';
 
 /** Reads a queue item's backend, migrating the legacy useDirectML field on the fly. */
 function workflowBackend(workflow: QueueItem['workflow']): BackendId {
-  return resolveBackendId(workflow.defaultBackend ?? workflow.useDirectML);
+  return normalizeBackendForCurrentPlatform(workflow.defaultBackend ?? workflow.useDirectML);
 }
 
 interface UseQueueOperationsOptions {
