@@ -262,8 +262,10 @@ export class UpscaleExecutor {
     
     // Check if ffmpeg exists
     const ffmpegPath = FFmpegManager.getFFmpegPath();
-    if (!ffmpegPath || !await fs.pathExists(ffmpegPath)) {
-      const error = `ffmpeg not found at: ${ffmpegPath || 'unknown'}`;
+    if (!ffmpegPath || !(await FFmpegManager.isInstalled())) {
+      const error = process.platform === 'linux'
+        ? FFmpegManager.getHostPrerequisiteMessage()
+        : `ffmpeg not found at: ${ffmpegPath || 'unknown'}`;
       logger.errorWithDialog('Upscale Error', error);
       throw new Error(error);
     }
