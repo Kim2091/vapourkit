@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   LINUX_PLUGIN_FILTERS,
   hasPluginFilterTemplates,
+  LINUX_PLUGIN_FILTER_CATALOG_REVISION,
+  needsLinuxPluginFilterCatalogSync,
   selectPluginFilterTemplates,
   selectUnsupportedLinuxPluginFilterTemplates,
 } from './pluginFilterCatalog';
@@ -45,5 +47,12 @@ describe('plugin filter catalog policy', () => {
   it('keeps the allowlist free of duplicate filenames', () => {
     const names = Object.values(LINUX_PLUGIN_FILTERS).flat();
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('synchronizes a changed Linux catalog even when the app version is unchanged', () => {
+    expect(needsLinuxPluginFilterCatalogSync(undefined, 'linux')).toBe(true);
+    expect(needsLinuxPluginFilterCatalogSync(LINUX_PLUGIN_FILTER_CATALOG_REVISION - 1, 'linux')).toBe(true);
+    expect(needsLinuxPluginFilterCatalogSync(LINUX_PLUGIN_FILTER_CATALOG_REVISION, 'linux')).toBe(false);
+    expect(needsLinuxPluginFilterCatalogSync(undefined, 'win32')).toBe(false);
   });
 });

@@ -54,6 +54,8 @@ interface AppConfig {
    */
   pluginsGpuVendor?: GpuVendor;
   appVersion?: string;
+  /** Revision of the Linux bundled filter policy last reconciled on this install. */
+  linuxPluginFilterCatalogRevision?: number;
   models: {
     [modelName: string]: {
       useFp32: boolean;
@@ -496,6 +498,15 @@ export class ConfigManager {
 
   async setAppVersion(version: string): Promise<void> {
     this.config.appVersion = version;
+    await this.save();
+  }
+
+  getLinuxPluginFilterCatalogRevision(): number | undefined {
+    return this.config.linuxPluginFilterCatalogRevision;
+  }
+
+  async setLinuxPluginFilterCatalogRevision(revision: number): Promise<void> {
+    this.config.linuxPluginFilterCatalogRevision = revision;
     await this.save();
   }
 }

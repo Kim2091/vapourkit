@@ -123,6 +123,13 @@ export const LINUX_PLUGIN_FILTERS = {
   ],
 } as const;
 
+/**
+ * Bump this when the Linux allowlist or its synchronization behavior changes.
+ * Nightly builds can share an Electron app version, so appVersion alone cannot
+ * tell an existing installation that its bundled catalog needs reconciliation.
+ */
+export const LINUX_PLUGIN_FILTER_CATALOG_REVISION = 1;
+
 const LINUX_PLUGIN_FILTER_SET = new Set<string>(Object.values(LINUX_PLUGIN_FILTERS).flat());
 
 /** Select source filenames suitable for the target platform. */
@@ -142,6 +149,14 @@ export function selectPluginFilterTemplates(
 /** Whether the native platform has any supported plugin-filter catalog. */
 export function hasPluginFilterTemplates(platform: NodeJS.Platform = process.platform): boolean {
   return platform === 'win32' || platform === 'linux';
+}
+
+/** Whether a Linux installation needs its bundled catalog reconciled. */
+export function needsLinuxPluginFilterCatalogSync(
+  storedRevision: number | undefined,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === 'linux' && storedRevision !== LINUX_PLUGIN_FILTER_CATALOG_REVISION;
 }
 
 /** The templates Linux must remove only when they still equal their bundled source. */

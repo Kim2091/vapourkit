@@ -11,7 +11,13 @@ import { runCommand, getBundledBasePath, isSupportedPython } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
 import { migrateLegacyPortableLayout } from './legacyCleanup';
-import { hasPluginFilterTemplates, selectPluginFilterTemplates, selectUnsupportedLinuxPluginFilterTemplates } from './pluginFilterCatalog';
+import {
+  hasPluginFilterTemplates,
+  LINUX_PLUGIN_FILTER_CATALOG_REVISION,
+  needsLinuxPluginFilterCatalogSync,
+  selectPluginFilterTemplates,
+  selectUnsupportedLinuxPluginFilterTemplates,
+} from './pluginFilterCatalog';
 import * as _7z from '7zip-min';
 
 export interface DownloadProgress {
@@ -251,15 +257,26 @@ export class DependencyManager {
       }
     }
 
-    // Detect app version change (upgrade-in-place) and update bundled files
+    // Reconcile bundled files after an app version or Linux catalog revision change.
     if (coreDepsPresent) {
       const currentVersion = app.getVersion();
       const storedVersion = configManager.getAppVersion();
-      if (storedVersion !== currentVersion) {
-        logger.dependency(`App version changed: ${storedVersion || 'none'} → ${currentVersion} — updating bundled files`);
+      const needsCatalogSync = needsLinuxPluginFilterCatalogSync(
+        configManager.getLinuxPluginFilterCatalogRevision(),
+      );
+      if (storedVersion !== currentVersion || needsCatalogSync) {
+        const reason = storedVersion !== currentVersion
+          ? `App version changed: ${storedVersion || 'none'} → ${currentVersion}`
+          : `Linux filter catalog revision changed to ${LINUX_PLUGIN_FILTER_CATALOG_REVISION}`;
+        logger.dependency(`${reason} — updating bundled files`);
         try {
           await this.updateBundledFiles();
-          await configManager.setAppVersion(currentVersion);
+          if (storedVersion !== currentVersion) {
+            await configManager.setAppVersion(currentVersion);
+          }
+          if (needsCatalogSync) {
+            await configManager.setLinuxPluginFilterCatalogRevision(LINUX_PLUGIN_FILTER_CATALOG_REVISION);
+          }
           logger.dependency('Bundled files updated for new version');
         } catch (updateError) {
           logger.error('Failed to update bundled files on version change:', updateError);
@@ -667,6 +684,9 @@ export class DependencyManager {
 
     // Store current app version so future upgrades can detect changes
     await configManager.setAppVersion(app.getVersion());
+    if (process.platform === 'linux') {
+      await configManager.setLinuxPluginFilterCatalogRevision(LINUX_PLUGIN_FILTER_CATALOG_REVISION);
+    }
   }
 
   getPythonExecutablePath(): string {
