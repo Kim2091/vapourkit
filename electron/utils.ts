@@ -1,5 +1,6 @@
 // electron/utils.ts
 import { spawn, ChildProcess } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './logger';
 import { PATHS, IS_WINDOWS } from './constants';
@@ -269,6 +270,37 @@ export async function isCommandAvailable(command: string, probeArgs: string[] = 
     proc.once('error', () => resolve(false));
     proc.once('close', code => resolve(code === 0));
   });
+}
+
+/**
+ * Resolves a command without executing it. GUI applications such as
+ * video-compare do not necessarily implement a harmless `--version` probe.
+ * Electron apps started from a desktop launcher also do not source a user's
+ * shell profile, so add the standard Linuxbrew locations explicitly.
+ */
+export function resolveHostCommand(command: string, environment: NodeJS.ProcessEnv = process.env): string | null {
+  if (path.isAbsolute(command)) {
+    return fs.existsSync(command) ? command : null;
+  }
+
+  const searchPaths = (environment.PATH || '').split(path.delimiter).filter(Boolean);
+  if (process.platform === 'linux') {
+    const homebrewPrefix = environment.HOMEBREW_PREFIX;
+    const homeDirectory = environment.HOME;
+    searchPaths.push(
+      ...(homebrewPrefix ? [path.join(homebrewPrefix, 'bin')] : []),
+      ...(homeDirectory ? [path.join(homeDirectory, '.linuxbrew', 'bin')] : []),
+      '/home/linuxbrew/.linuxbrew/bin',
+    );
+  }
+
+  for (const directory of new Set(searchPaths)) {
+    const candidate = path.join(directory, command);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 /** True when `command` is within Vapourkit's tested Python ABI range. */

@@ -1,19 +1,26 @@
 import * as fs from 'fs-extra';
 import { spawn } from 'child_process';
-import { isCommandAvailable } from './utils';
+import { resolveHostCommand } from './utils';
 
 /**
  * Checks whether the video-compare executable can be launched. Windows uses
  * the app-managed binary while Linux resolves the optional host command using
  * PATH instead of treating its command name as a filesystem path.
  */
+export function resolveVideoCompareCommand(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+): string | null {
+  return platform === 'win32'
+    ? (fs.existsSync(command) ? command : null)
+    : resolveHostCommand(command);
+}
+
 export async function isVideoCompareAvailable(
   command: string,
   platform: NodeJS.Platform = process.platform,
 ): Promise<boolean> {
-  return platform === 'win32'
-    ? fs.existsSync(command)
-    : isCommandAvailable(command);
+  return resolveVideoCompareCommand(command, platform) !== null;
 }
 
 export function getVideoCompareUnavailableMessage(

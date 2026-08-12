@@ -5,27 +5,29 @@ vi.mock('fs-extra', () => ({
 }));
 
 vi.mock('./utils', () => ({
-  isCommandAvailable: vi.fn(),
+  resolveHostCommand: vi.fn(),
 }));
 
 import * as fs from 'fs-extra';
-import { isCommandAvailable } from './utils';
+import { resolveHostCommand } from './utils';
 import {
   getVideoCompareUnavailableMessage,
   isVideoCompareAvailable,
+  resolveVideoCompareCommand,
 } from './videoCompare';
 
 describe('video-compare availability', () => {
   beforeEach(() => {
-    vi.mocked(isCommandAvailable).mockReset();
+    vi.mocked(resolveHostCommand).mockReset();
     vi.mocked(fs.existsSync).mockReset();
   });
 
-  it('resolves the optional Linux command through PATH', async () => {
-    vi.mocked(isCommandAvailable).mockResolvedValue(true);
+  it('resolves the optional Linux command through PATH without probing it', async () => {
+    vi.mocked(resolveHostCommand).mockReturnValue('/home/linuxbrew/.linuxbrew/bin/video-compare');
 
     await expect(isVideoCompareAvailable('video-compare', 'linux')).resolves.toBe(true);
-    expect(isCommandAvailable).toHaveBeenCalledWith('video-compare');
+    expect(resolveHostCommand).toHaveBeenCalledWith('video-compare');
+    expect(resolveVideoCompareCommand('video-compare', 'linux')).toBe('/home/linuxbrew/.linuxbrew/bin/video-compare');
   });
 
   it('keeps the app-managed Windows executable check', async () => {
@@ -33,7 +35,7 @@ describe('video-compare availability', () => {
 
     await expect(isVideoCompareAvailable('C:/data/video-compare.exe', 'win32')).resolves.toBe(true);
     expect(fs.existsSync).toHaveBeenCalledWith('C:/data/video-compare.exe');
-    expect(isCommandAvailable).not.toHaveBeenCalled();
+    expect(resolveHostCommand).not.toHaveBeenCalled();
   });
 
   it('explains that video comparison is optional on Linux', () => {

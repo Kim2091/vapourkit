@@ -21,8 +21,8 @@ import { VsViewManager } from './vsViewManager';
 import { QueueItemLogger } from './queueItemLogger';
 import {
   getVideoCompareUnavailableMessage,
-  isVideoCompareAvailable,
   launchVideoCompare,
+  resolveVideoCompareCommand,
 } from './videoCompare';
 
 let upscaleExecutor: UpscaleExecutor | null = null;
@@ -447,7 +447,8 @@ export function registerVideoHandlers(
       // Windows ships an app-managed binary. Linux uses an optional host
       // command, so resolve it through PATH rather than fs.existsSync on the
       // literal string "video-compare".
-      if (!(await isVideoCompareAvailable(PATHS.VIDEO_COMPARE_EXE))) {
+      const videoComparePath = resolveVideoCompareCommand(PATHS.VIDEO_COMPARE_EXE);
+      if (!videoComparePath) {
         throw new Error(getVideoCompareUnavailableMessage());
       }
       
@@ -460,7 +461,7 @@ export function registerVideoHandlers(
       }
       
       // Launch video-compare with both videos
-      logger.info(`Launching: ${PATHS.VIDEO_COMPARE_EXE}`);
+      logger.info(`Launching: ${videoComparePath}`);
       
       // Get custom args from config
       const videoCompareArgsString = configManager.getVideoCompareArgs();
@@ -470,7 +471,7 @@ export function registerVideoHandlers(
       const allArgs = [...customArgs, inputPath, outputPath];
       logger.info(`Video compare args: ${allArgs.join(' ')}`);
       
-      await launchVideoCompare(PATHS.VIDEO_COMPARE_EXE, allArgs);
+      await launchVideoCompare(videoComparePath, allArgs);
       
       logger.info('Video comparison tool launched successfully');
       return { success: true };
