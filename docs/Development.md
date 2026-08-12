@@ -2,6 +2,9 @@
 - Node.js 18+
 - npm or yarn
 
+For the provider architecture and the checklist for adding an inference
+runtime, see [Inference Backends](Inference%20Backends.md).
+
 ### Setup
 ```bash
 # Install dependencies
