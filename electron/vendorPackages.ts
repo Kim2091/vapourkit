@@ -35,7 +35,10 @@ export function getBackendsForVendor(vendor: GpuVendor, platform: NodeJS.Platfor
     // GPU vendor; NVIDIA users additionally receive TensorRT as an option.
     return vendor === 'nvidia' ? ['ncnn', 'tensorrt'] : ['ncnn'];
   }
-  return vendor === 'nvidia' ? ['tensorrt', 'directml'] : ['directml'];
+  // NCNN is also available on Windows, giving every Windows GPU vendor a
+  // Vulkan option alongside DirectML. NVIDIA retains TensorRT as its fastest
+  // backend.
+  return vendor === 'nvidia' ? ['tensorrt', 'directml', 'ncnn'] : ['directml', 'ncnn'];
 }
 
 /** pip specs for every backend this vendor gets (composed from the providers). */

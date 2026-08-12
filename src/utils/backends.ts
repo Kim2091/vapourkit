@@ -21,11 +21,12 @@ export {
 
 // The shared descriptor registry intentionally contains every implementation
 // so the main process can generate compatible scripts. The renderer only offers
-// the backends that this build installs: DirectML on Windows, NCNN on Linux.
+// the backends that this build installs. DirectML is Windows-only; NCNN is
+// available on both Windows and Linux.
 const isLinux = typeof window !== 'undefined' && window.electronAPI?.platform === 'linux';
 export const BACKENDS = isLinux
   ? ALL_BACKENDS.filter(backend => backend.id !== 'directml')
-  : ALL_BACKENDS.filter(backend => backend.id !== 'ncnn');
+  : ALL_BACKENDS;
 
 export type {
   BackendId,
