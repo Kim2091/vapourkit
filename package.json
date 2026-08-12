@@ -30,6 +30,7 @@
     ],
     "author": "Kim2091",
     "license": "GPL 3.0",
+    "desktopName": "vapourkit",
     "devDependencies": {
         "@types/fs-extra": "^11.0.4",
         "@types/iarna__toml": "^2.0.5",
@@ -132,7 +133,19 @@
                     ]
                 }
             ],
-            "category": "AudioVideo",
+            "category": "AudioVideo;Video",
+            "synopsis": "AI video upscaling and enhancement using VapourSynth",
+            "icon": "build/icon.svg",
+            "executableName": "vapourkit",
+            "syncDesktopName": true,
+            "desktop": {
+                "entry": {
+                    "Name": "Vapourkit",
+                    "Comment": "AI video upscaling and enhancement using VapourSynth",
+                    "Keywords": "video;upscaling;VapourSynth;AI;",
+                    "StartupWMClass": "vapourkit"
+                }
+            },
             "artifactName": "Vapourkit-${version}-${arch}.${ext}"
         }
     }

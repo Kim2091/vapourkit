@@ -1,14 +1,15 @@
 ### Prerequisites
-- Node.js 18+
-- npm or yarn
+- Node.js **20+**
+- npm
+- For Linux development: an x86_64 glibc-based distribution, Python 3.12 or 3.13 with `venv`/`ensurepip`, `ffmpeg`/`ffprobe` on `PATH`, and a working Vulkan loader and GPU driver
 
 For the provider architecture and the checklist for adding an inference
 runtime, see [Inference Backends](Inference%20Backends.md).
 
 ### Setup
 ```bash
-# Install dependencies
-npm install
+# Install dependencies reproducibly
+npm ci
 
 # Run in development mode
 npm run dev
@@ -22,9 +23,18 @@ npm run build:setup
 # Build portable 7z
 npm run build:7z
 
-# Build portable zip
-npm run build:zip
+# Build the Linux x86_64 AppImage (on Linux)
+npm run build:linux
 ```
+
+Linux builds should be made on a supported Linux host rather than cross-compiled from Windows. The AppImage bundles the Electron application, but first-run setup uses the host Python, FFmpeg, and Vulkan driver. To smoke-test an AppImage on a system without FUSE:
+
+```bash
+chmod +x release/Vapourkit-*.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./release/Vapourkit-*.AppImage --version
+```
+
+Run `npm run build`, `npm test`, and `npm run test:electron` before submitting a change. CI runs those checks on current Windows and Ubuntu runners using Node 20, then builds and smoke-tests the Linux AppImage.
 
 ### Runtime engine builds (the `[vk-build]` protocol)
 
