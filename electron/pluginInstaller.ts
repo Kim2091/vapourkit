@@ -8,7 +8,10 @@ import { logger } from './logger';
 import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
-import { shouldExtractBundledPluginArchives } from './bundledPluginArchives';
+import {
+  shouldCopyBundledPluginFilterTemplates,
+  shouldExtractBundledPluginArchives,
+} from './bundledPluginArchives';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
@@ -1089,6 +1092,14 @@ export class PluginInstaller {
   }
 
   private async copyFilterTemplates(): Promise<void> {
+    if (!shouldCopyBundledPluginFilterTemplates()) {
+      // The plugin_filters catalog contains templates for DLL/CUDA dependencies
+      // bundled only on Windows. Linux starts with the shared catalog and can
+      // later add explicitly Linux-compatible templates.
+      logger.info('Bundled plugin filter templates are Windows-only; skipping copy');
+      return;
+    }
+
     logger.info('Copying filter templates from plugin_filters folder');
     
     // Get bundled plugin_filters path
