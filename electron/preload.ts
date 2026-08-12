@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Dependency management
+  platform: process.platform,
   checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
   detectCudaSupport: () => ipcRenderer.invoke('detect-cuda-support'),
   getInferenceBackendInfo: () => ipcRenderer.invoke('get-inference-backend-info'),

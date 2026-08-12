@@ -5,6 +5,7 @@ export type { BackendId, FilterBackend };
 
 export interface ElectronAPI {
   // Dependency management
+  platform: NodeJS.Platform;
   checkDependencies: () => Promise<boolean>;
   setupDependencies: () => Promise<{ success: boolean; error?: string }>;
   onSetupProgress: (callback: (progress: SetupProgress) => void) => () => void;
