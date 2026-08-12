@@ -4,17 +4,19 @@ code = """
 # Full Docs: https://github.com/pifroggi/vs_undistort?tab=readme-ov-file#tensorrt-backend
 
 temp_window   = 10
-tile_width    = None
-tile_height   = None
-overlap       = None
+tiles         = 1
+overlap       = 8
+interpolation = "bicubic"
 num_streams   = 1
-activate      = False  # When True, a TensorRT engine will be build and the filter activated the next time the script is evaluated. This may take a few minutes.
+engine_folder = None  # Optional TensorRT engine-cache folder.
+# Undistort supports CPU, CUDA, and TensorRT. It has no DirectML backend, so
+# use CPU when Vapourkit's DirectML backend is selected.
+backend = "tensorrt" if VK_BACKEND == "tensorrt" else "cpu"
 
 
-import vs_undistort
+from vs_undistort import vs_undistort
 clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s=709)
-if activate:
-    clip = vs_undistort.tensorrt(clip, temp_window=temp_window, tile_width=tile_width, tile_height=tile_height, overlap=overlap, num_streams=num_streams)
+clip = vs_undistort(clip, temp_window=temp_window, tiles=tiles, overlap=overlap, interpolation=interpolation, backend=backend, num_streams=num_streams, engine_folder=engine_folder)
 clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s=709)"""
 description = "Removes distortions, turbulance, heat haze, or similar. TensorRT is faster, but has less controls."
 

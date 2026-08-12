@@ -3,14 +3,16 @@ category = "Color Modification"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_colorfix?tab=readme-ov-file#wavelet-color-fix
 
-wavelets = 5
-device   = "cuda"
-fp16     = True
+wavelets      = 4
+backend       = VK_BACKEND  # "ncnn", "directml", or "tensorrt"; follows the app setting.
+num_streams   = 1
+gpu_id        = 0
+engine_folder = None  # Optional TensorRT engine-cache folder.
 
 import vs_colorfix
-original_clip_converted = core.resize.Point(original_clip, format=vs.YUV444PH if fp16 else vs.YUV444PS)
-clip_converted = core.resize.Point(clip, format=vs.YUV444PH if fp16 else vs.YUV444PS)
-clip_converted = vs_colorfix.wavelet(clip_converted, original_clip_converted, wavelets=wavelets, device=device)
+original_clip_converted = core.resize.Point(original_clip, format=vs.YUV444PH)
+clip_converted = core.resize.Point(clip, format=vs.YUV444PH)
+clip_converted = vs_colorfix.wavelet(clip_converted, original_clip_converted, wavelets=wavelets, planes=[0, 1, 2], backend=backend, num_streams=num_streams, gpu_id=gpu_id, engine_folder=engine_folder)
 clip = core.resize.Point(clip_converted, format=clip.format.id)"""
 description = "Correct for color shift by matching the average color of the clip to that of the original input clip. Better results than Average Color Fix, but much slower."
 

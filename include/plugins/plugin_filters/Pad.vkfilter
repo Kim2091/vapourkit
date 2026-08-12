@@ -2,7 +2,7 @@ name = "Pad"
 category = "Padding/Cropping"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#pad
-# Modes can be mirror, repeat, fillmargins, black, or a custom color in 8-bit scale [128, 128, 128].
+# Modes can be mirror, wrap, repeat, fillmargins, telea, ns, fsr, black, or a custom color in 8-bit scale [128, 128, 128].
 
 import vs_tiletools
 clip = vs_tiletools.pad(clip, left=0, right=0, top=0, bottom=0, mode="mirror")"""

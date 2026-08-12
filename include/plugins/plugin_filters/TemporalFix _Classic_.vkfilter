@@ -8,10 +8,11 @@ strength = 500
 tr       = 6
 denoise  = False
 exclude  = None
+debug    = False
 
 
 import vs_temporalfix
-clip = vs_temporalfix.classic(clip, strength=strength, tr=tr, denoise=denoise, exclude=exclude)"""
+clip = vs_temporalfix.classic(clip, strength=strength, tr=tr, denoise=denoise, exclude=exclude, debug=debug)"""
 description = "Adds Temporal Coherence to Single Image AI Upscaling Models. This is the older cpu based version."
 
 [metadata]

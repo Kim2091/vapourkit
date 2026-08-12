@@ -5,6 +5,7 @@ import { setupVSEnvironment } from './utils';
 import { ErrorMessageHandler } from './errorMessageHandler';
 import { parseBestSourceProgress } from './bestSourceProgressParser';
 import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
+import { formatVapourSynthValidationError } from './vapourSynthErrorFormatter';
 
 export interface OutputInfo {
   resolution: string | null;
@@ -258,9 +259,11 @@ export class VapourSynthInfoExtractor {
         } else {
           logger.error(`vspipe info failed with code ${code}`);
           logger.error(`Full output: ${output}`);
-          // Return the full output for validation errors so user can see the complete traceback
+          // Keep the complete output in the log, but remove repeated non-fatal API3
+          // startup notices before it reaches the validation-error toast.
           const fullError = output.trim() || stderrOutput.trim() || 'Unknown error';
-          resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null, error: fullError });
+          const error = formatVapourSynthValidationError(fullError);
+          resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null, error });
         }
       });
 

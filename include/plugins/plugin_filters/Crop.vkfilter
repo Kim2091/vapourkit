@@ -5,7 +5,7 @@ code = """
 # If only "clip" is provided, this will automatically crop what was added via the Pad or the Modulus filter, even if the clip was since resized (after upscaling for example).
 
 import vs_tiletools
-clip = vs_tiletools.crop(clip, left=0, right=0, top=0, bottom=0)"""
+clip = vs_tiletools.crop(clip)"""
 description = "Crops a clip by the specified pixel amount."
 
 [metadata]

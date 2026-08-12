@@ -2,7 +2,8 @@ name = "Tile"
 category = "Tiling"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#tile
-# Padding can be mirror, repeat, fillmargins, black, a custom color in 8-bit scale [128, 128, 128], or discard to remove tiles that are too small.
+# Padding can be mirror, wrap, repeat, fillmargins, telea, ns, fsr, black,
+# a custom color in 8-bit scale [128, 128, 128], or discard to remove tiles that are too small.
 
 import vs_tiletools
 clip = vs_tiletools.tile(clip, width=256, height=256, overlap=16, padding="mirror")"""

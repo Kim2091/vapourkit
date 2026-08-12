@@ -4,16 +4,15 @@ code = """
 # Full Docs: https://github.com/pifroggi/vs_undistort?tab=readme-ov-file#pytorch-backend
 
 temp_window   = 10
-tile_width    = None
-tile_height   = None
-overlap       = None
+tiles         = 1
+overlap       = 8
 interpolation = "bilinear"
-scales        = [True, True, True]
+backend       = "cuda"  # Change to "cpu" when CUDA PyTorch is unavailable.
 
 
-import vs_undistort
+from vs_undistort import vs_undistort
 clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s=709)
-clip = vs_undistort.pytorch(clip, temp_window=temp_window, tile_width=tile_width, tile_height=tile_height, overlap=overlap, scales=scales, interpolation=interpolation, device="cuda")
+clip = vs_undistort(clip, temp_window=temp_window, tiles=tiles, overlap=overlap, interpolation=interpolation, backend=backend)
 clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s=709)"""
 description = "Removes distortions, turbulance, heat haze, or similar. PyTorch is slower, but has extra controls."
 

@@ -2,11 +2,12 @@ name = "Deep Deinterlace"
 category = "Deinterlacing"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_deepdeinterlace?tab=readme-ov-file#usage
-# Available deinterlacers are 1 (DDD) and 2 (DeF).
-# Deinterlacer 3 (DfConvEkSA) is not supported.
+# Available deinterlacers are 1 (DDD), 2 (DeF), and 3 (DfConvEkSA).
+# DfConvEkSA is the highest quality option, but requires its optional mmcv
+# dependency, 5 input fields, and benefits from mocomp on fast camera movement.
 
 import vs_deepdeinterlace
-clip = vs_deepdeinterlace.YUV(clip, tff=True, deinterlacer=[1, 1], tta=[False, False], matrix_in_s="709", range_in_s="limited", device="cuda", fp16=True)"""
+clip = vs_deepdeinterlace.YUV(clip, tff=True, deinterlacer=[1, 1], tta=[False, False], mocomp=[False, False], matrix_in_s="709", range_in_s="limited", device="cuda", fp16=True)"""
 description = "Three AI Deinterlacers. Input must be interlaced. This will double the frame rate, for example from 30i to 60p."
 
 [metadata]

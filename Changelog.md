@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.17.0
+## 2.0.0
 - Filters that build TensorRT engines at runtime no longer look like a frozen app
   - A banner names the engine being built, shows progress when the builder reports it, and explains that this is the first run at that resolution; it clears when the build ends, and on every cancel/crash path
   - Engine builds are kill-safe: the engine is written to a temp file and renamed into place, so force-closing mid-build can no longer leave a truncated engine that gets reused as a cache hit and permanently breaks the filter
