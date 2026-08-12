@@ -25,7 +25,27 @@ export const tensorrtProvider: InferenceProvider = {
   pipPackages(): string[] {
     // TensorRT itself (tensorrt-cu13* from pypi.nvidia.com) installs as a
     // dependency of the vs-mlrt TRT wheel.
-    return [`vapoursynth-mlrt-trt==${VS_MLRT_VERSION}`];
+    return [
+      `vapoursynth-mlrt-trt==${VS_MLRT_VERSION}`,
+      // ModelOpt AutoCast converts fp32 ONNX models to fp16/bf16 before the
+      // engine build (see include/build_trt_engine.py). The onnx-side packages
+      // are named individually rather than pulled via the nvidia-modelopt[onnx]
+      // extra, whose closure adds cupy-cuda12x (CUDA 12, against a CUDA 13
+      // stack) and onnxruntime-gpu, and pins onnx back to 1.21 — none of which
+      // AutoCast needs here. Plain CPU onnxruntime is enough: it runs the model
+      // once to measure activation ranges, and never during inference.
+      'nvidia-modelopt>=0.45',
+      'onnx_graphsurgeon',
+      'onnxscript',
+      'onnxslim',
+      'polygraphy',
+      'onnxruntime',
+      // Imported unconditionally by modelopt.onnx.trt_utils, which AutoCast
+      // pulls in through its graph sanitizer — so it is required despite
+      // nothing here touching TRT plugin binaries. Only the [onnx] extra
+      // declares it, and taking that extra costs cupy and an onnx downgrade.
+      'lief',
+    ];
   },
 
   pluginHealthPaths(): string[][] {

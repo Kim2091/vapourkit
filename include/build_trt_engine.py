@@ -15,11 +15,15 @@ stdout as "Building engine: N%" lines, which the Electron side's progress
 parser (modelExtractor) tracks.
 
 Precision handling: TensorRT 11 removed the FP16/BF16 builder flags — networks
-are strongly typed and precision comes from the model's own tensor types. When
---fp16 is requested for an fp32 model, the ONNX graph is converted to fp16
-in-memory (onnxconverter-common) before parsing, which also gives the engine
-fp16 I/O as --inputIOFormats/--outputIOFormats=fp16:chw used to. On older
-TensorRT versions that still have the builder flags, the legacy path is used.
+are strongly typed and precision comes from the model's own tensor types. A
+model that already carries fp16/bf16 weights therefore needs nothing from us and
+is parsed as exported. Only an all-fp32 model is converted, to whichever
+precision was asked for, using ModelOpt's AutoCast (nvidia-modelopt) — which
+measures per-node ranges by running the model and keeps unsafe nodes in fp32,
+rather than rewriting every dtype it recognizes and leaving the graph
+type-inconsistent. Converting also gives the engine low-precision I/O, as
+--inputIOFormats/--outputIOFormats=fp16:chw used to. On older TensorRT versions
+that still have the builder flags, the legacy path is used.
 """
 
 import os
@@ -147,6 +151,15 @@ def parse_args(argv):
     return opts
 
 
+def requested_shapes(opts):
+    """The shape set the engine is being built for.
+
+    Static mode passes a single set (via --shapes or --optShapes); dynamic mode
+    passes min/opt/max, of which opt is the one to optimize for.
+    """
+    return opts['static_shapes'] or opts['opt_shapes'] or opts['min_shapes'] or opts['max_shapes']
+
+
 def report_progress(percent):
     print(f'Building engine: {int(percent)}%', flush=True)
     # Machine-readable build status for the Vapourkit UI. When this builder runs
@@ -199,31 +212,140 @@ def make_progress_monitor(trt):
     return BuildProgressMonitor()
 
 
-def model_has_float32_inputs(onnx_path):
+def is_fp32_model(onnx_path):
+    """True when every floating-point weight in the model is fp32.
+
+    Weights are the right thing to look at here, not graph inputs: reduced-
+    precision exports routinely keep fp32 I/O — and often an fp32 head or tail
+    reached through explicit Cast nodes — while the body is fp16/bf16. Judging
+    such a model by its inputs calls it fp32 and converts it, and the converter
+    only rewrites the fp32 tensors, so the casts end up pointing at the wrong
+    type (e.g. an fp32 activation feeding a now-fp16 ConvTranspose). A weakly
+    typed network would paper over that; a strongly typed one rejects it at
+    parse time.
+    """
+    import onnx
+    model = onnx.load(onnx_path, load_external_data=False)
+    float_types = {
+        onnx.TensorProto.FLOAT,
+        onnx.TensorProto.FLOAT16,
+        onnx.TensorProto.BFLOAT16,
+        onnx.TensorProto.DOUBLE,
+    }
+    present = {init.data_type for init in model.graph.initializer if init.data_type in float_types}
+    return present == {onnx.TensorProto.FLOAT}
+
+
+# Upper bound on a dynamic dimension when generating AutoCast's reference input,
+# and the fallback when no build shape says otherwise.
+#
+# AutoCast measures per-node ranges by asking ONNX Runtime for every intermediate
+# tensor at once, so it holds an entire graph's activations at this size and peak
+# memory follows the tile's area. Measured on a ~4000-node upscaler: 64 peaks at
+# 1.7 GB where 256 peaks at 14 GB, which is enough to OOM a 16 GB machine partway
+# through an import. The full build shape is not an option at all — 1x15x720x1280
+# dies with "bad allocation" mid-graph.
+#
+# Small is safe here because these ranges follow content statistics rather than
+# frame size: the set of nodes AutoCast decided to keep in fp32 was identical at
+# 64 and at 256 on the models tested, and conversion time did not move either, so
+# the tile only ever cost memory. 64 also clears the window and reflect-pad sizes
+# vision models use, where a 1 fails to execute at all.
+CALIBRATION_DIM_CAP = 64
+
+
+def resolve_calibration_shapes(onnx_path, build_shapes):
+    """Picks a runnable input shape per graph input for AutoCast's reference run.
+
+    The model's own signature is authoritative for rank and for any dimension it
+    fixes — a request naming the wrong channel count is a mistake, not an
+    override, and AutoCast rejects the mismatch. Only genuinely dynamic
+    dimensions are filled from the build shapes, positionally and capped.
+    """
     import onnx
     model = onnx.load(onnx_path, load_external_data=False)
     initializer_names = {init.name for init in model.graph.initializer}
+
+    shapes = {}
     for graph_input in model.graph.input:
         if graph_input.name in initializer_names:
             continue
-        if graph_input.type.tensor_type.elem_type == onnx.TensorProto.FLOAT:
-            return True
-    return False
+        requested = build_shapes.get(graph_input.name, [])
+        dims = []
+        for axis, dim in enumerate(graph_input.type.tensor_type.shape.dim):
+            if dim.HasField('dim_value') and dim.dim_value > 0:
+                dims.append(dim.dim_value)
+            elif axis < len(requested) and requested[axis] > 0:
+                dims.append(min(requested[axis], CALIBRATION_DIM_CAP))
+            else:
+                dims.append(CALIBRATION_DIM_CAP)
+        shapes[graph_input.name] = dims
+    return shapes
 
 
-def convert_model_to_fp16(onnx_path):
-    """Converts an fp32 ONNX model to fp16 in-memory, returning serialized bytes."""
+def write_calibration_data(onnx_path, shapes, dest_path):
+    """Writes one batch of random inputs for AutoCast to measure activations with."""
+    import numpy as np
     import onnx
-    from onnxconverter_common import float16
 
-    print('Converting ONNX model to FP16...', flush=True)
-    model = onnx.load(onnx_path)
+    model = onnx.load(onnx_path, load_external_data=False)
+    elem_type = {i.name: i.type.tensor_type.elem_type for i in model.graph.input}
+    batch = {}
+    for name, dims in shapes.items():
+        dtype = onnx.helper.tensor_dtype_to_np_dtype(elem_type[name])
+        if np.issubdtype(dtype, np.floating):
+            batch[name] = np.random.rand(*dims).astype(dtype)
+        else:
+            batch[name] = np.zeros(dims, dtype=dtype)
+    np.savez(dest_path, **batch)
+    return dest_path
+
+
+def convert_model_precision(onnx_path, low_precision_type, build_shapes):
+    """Converts an fp32 ONNX model to fp16/bf16 in-memory, returning serialized bytes.
+
+    ModelOpt's AutoCast is used rather than a blanket dtype rewrite because it
+    runs the model to measure per-node ranges and leaves nodes that would
+    overflow — or that the opset cannot express in low precision — in fp32,
+    inserting the casts that keeps the graph type-consistent. A rewrite that
+    only converts what it recognizes leaves fp32 activations feeding converted
+    weights, which a strongly typed network rejects at parse time.
+    """
+    import onnx
+    import tempfile
+
     try:
-        converted = float16.convert_float_to_float16(model, keep_io_types=False)
-    except Exception as convert_error:
-        print(f'Note: fp16 conversion with shape inference failed ({convert_error}), retrying without', file=sys.stderr)
-        model = onnx.load(onnx_path)
-        converted = float16.convert_float_to_float16(model, keep_io_types=False, disable_shape_infer=True)
+        from modelopt.onnx.autocast import convert_to_mixed_precision
+    except ImportError as import_error:
+        raise RuntimeError(
+            f'nvidia-modelopt is required to build a {low_precision_type} engine from an fp32 model '
+            f'({import_error}). Reinstall plugins from the Plugins menu, or import this model as FP32.'
+        )
+
+    shapes = resolve_calibration_shapes(onnx_path, build_shapes)
+    shape_desc = ', '.join(f'{name}:{"x".join(str(d) for d in dims)}' for name, dims in shapes.items())
+    print(f'Converting ONNX model to {low_precision_type.upper()} (measuring at {shape_desc})...', flush=True)
+
+    kwargs = {'low_precision_type': low_precision_type, 'keep_io_types': False}
+    if low_precision_type == 'bf16':
+        # bf16 tensors need opset 22; AutoCast upgrades the graph when asked.
+        model = onnx.load(onnx_path, load_external_data=False)
+        opset = max((o.version for o in model.opset_import if o.domain in ('', 'ai.onnx')), default=0)
+        if opset < 22:
+            kwargs['opset'] = 22
+        # TensorRT 11.2 has no bf16 deconvolution kernel: a bf16 ConvTranspose
+        # parses, then fails tactic selection with "No matching rules found for
+        # input operand types" and sinks the whole build. Leaving it fp32 costs
+        # little (upscalers use a couple of these, at the very end) and is what
+        # hand-authored bf16 exports do for the same reason. fp16 deconv is
+        # fine, so this applies to bf16 only.
+        kwargs['op_types_to_exclude'] = ['ConvTranspose']
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        kwargs['calibration_data'] = write_calibration_data(
+            onnx_path, shapes, os.path.join(tmp_dir, 'calibration.npz')
+        )
+        converted = convert_to_mixed_precision(onnx_path, **kwargs)
     return converted.SerializeToString()
 
 
@@ -242,10 +364,6 @@ def build(opts):
     # typed networks, where precision is dictated by the model's tensor types.
     legacy_precision_flags = hasattr(trt.BuilderFlag, 'FP16')
 
-    want_fp16 = opts['fp16'] or opts['bf16']
-    if opts['bf16'] and not legacy_precision_flags:
-        print('Note: BF16 is not supported with this TensorRT version, building FP16 instead', file=sys.stderr)
-
     report_progress(0)
     builder = trt.Builder(logger)
 
@@ -257,10 +375,23 @@ def build(opts):
     parser = trt.OnnxParser(network, logger)
 
     print(f'Parsing ONNX model: {opts["onnx"]}', flush=True)
-    if not legacy_precision_flags and want_fp16 and model_has_float32_inputs(opts['onnx']):
-        # Strongly typed + fp16 requested for an fp32 model: convert the graph
-        # to fp16 first (this also makes the engine I/O fp16, as the app expects)
-        model_bytes = convert_model_to_fp16(opts['onnx'])
+
+    # Strongly typed networks take their precision from the model, so a model
+    # already carrying fp16/bf16 weights is parsed exactly as exported and needs
+    # nothing from us. Only an all-fp32 model is converted, to whichever
+    # precision was asked for.
+    convert_to = None
+    if not legacy_precision_flags and (opts['fp16'] or opts['bf16']) and is_fp32_model(opts['onnx']):
+        convert_to = 'bf16' if opts['bf16'] else 'fp16'
+
+    if convert_to:
+        # Converting the graph also gives the engine low-precision I/O, as the
+        # app expects. The build shapes double as the reference-run shapes.
+        try:
+            model_bytes = convert_model_precision(opts['onnx'], convert_to, requested_shapes(opts))
+        except Exception as convert_error:
+            print(f'Error: {convert_to} conversion failed: {convert_error}', file=sys.stderr)
+            return 1
         if not parser.parse(model_bytes):
             report_parse_errors(parser)
             return 1
@@ -316,9 +447,8 @@ def build(opts):
 
     if shapes_given and has_dynamic_inputs:
         profile = builder.create_optimization_profile()
-        # Static mode passes a single shape set (via --shapes or --optShapes);
-        # dynamic mode passes min/opt/max. Missing bounds fall back to opt.
-        opt_shapes = opts['static_shapes'] or opts['opt_shapes'] or opts['min_shapes'] or opts['max_shapes']
+        # Missing bounds fall back to opt.
+        opt_shapes = requested_shapes(opts)
         for name, opt_dims in opt_shapes.items():
             min_dims = opts['min_shapes'].get(name, opt_dims)
             max_dims = opts['max_shapes'].get(name, opt_dims)
