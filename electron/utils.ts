@@ -284,8 +284,10 @@ export function resolveHostCommand(
   environment: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string | null {
-  if (path.isAbsolute(command)) {
-    return fs.existsSync(command) ? command : null;
+  const pathApi = platform === 'linux' ? path.posix : path;
+
+  if (pathApi.isAbsolute(command)) {
+    return isRunnableCommand(command, platform) ? command : null;
   }
 
   if (platform === 'linux') {
@@ -295,40 +297,127 @@ export function resolveHostCommand(
       windowsHide: true,
     });
 
-    if (result.error || result.status !== 0) {
-      return null;
-    }
+    if (!result.error && result.status === 0) {
+      const output = result.stdout.trim();
+      const separator = output.indexOf(':');
+      const candidates = separator === -1
+        ? []
+        : output.slice(separator + 1).trim().split(/\s+/).filter(Boolean);
 
-    const output = result.stdout.trim();
-    const separator = output.indexOf(':');
-    if (separator === -1) {
-      return null;
+      for (const candidate of candidates) {
+        if (isRunnableCommand(candidate, platform)) {
+          return candidate;
+        }
+      }
     }
-
-    return output.slice(separator + 1).trim().split(/\s+/)[0] || null;
   }
 
-  const searchPaths = (environment.PATH || '').split(path.delimiter).filter(Boolean);
+  // `whereis` is not installed on every minimal Linux image. The PATH
+  // fallback is deliberately environment-driven; it does not reintroduce a
+  // distro-specific directory list and preserves PATH order.
+  const delimiter = platform === 'win32' ? ';' : ':';
+  const searchPaths = (environment.PATH || '').split(delimiter).filter(Boolean);
 
   for (const directory of new Set(searchPaths)) {
-    const candidate = path.join(directory, command);
-    if (fs.existsSync(candidate)) {
+    const candidate = pathApi.join(directory, command);
+    if (isRunnableCommand(candidate, platform)) {
       return candidate;
     }
   }
   return null;
 }
 
-/** True when `command` is within Vapourkit's tested Python ABI range. */
-export async function isSupportedPython(command: string): Promise<boolean> {
+function isRunnableCommand(command: string, platform: NodeJS.Platform): boolean {
+  try {
+    if (!fs.statSync(command).isFile()) {
+      return false;
+    }
+    if (platform === 'linux') {
+      fs.accessSync(command, fs.constants.X_OK);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface PythonCommandCandidate {
+  command: string;
+  version: string | null;
+}
+
+export interface SupportedPythonResolution {
+  command: string | null;
+  version: string | null;
+  candidates: PythonCommandCandidate[];
+}
+
+const PYTHON_VERSION_PROBE = 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")';
+
+/** Returns the host interpreter's major/minor Python version, if runnable. */
+export async function getPythonVersion(command: string): Promise<string | null> {
   return new Promise(resolve => {
-    const proc = spawn(command, ['-c', 'import sys; raise SystemExit(0 if (3, 12) <= sys.version_info[:2] < (3, 14) else 1)'], {
-      stdio: 'ignore',
+    let output = '';
+    const proc = spawn(command, ['-c', PYTHON_VERSION_PROBE], {
+      stdio: ['ignore', 'pipe', 'ignore'],
       shell: false,
       windowsHide: true,
     });
 
-    proc.once('error', () => resolve(false));
-    proc.once('close', code => resolve(code === 0));
+    proc.stdout?.on('data', chunk => {
+      output += chunk.toString();
+    });
+
+    proc.once('error', () => resolve(null));
+    proc.once('close', code => {
+      if (code !== 0) {
+        resolve(null);
+        return;
+      }
+      resolve(output.trim().split(/\r?\n/).pop() || null);
+    });
   });
+}
+
+/** True when `version` is within Vapourkit's supported Python ABI range. */
+export function isSupportedPythonVersion(version: string): boolean {
+  const match = /^(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) {
+    return false;
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major === 3 && minor >= 12 && minor <= 14;
+}
+
+/** Finds a supported host Python executable using the host environment. */
+export async function resolveSupportedPythonCommand(
+  candidates: string[] = ['python3', 'python'],
+  environment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): Promise<SupportedPythonResolution> {
+  const checked = new Set<string>();
+  const detected: PythonCommandCandidate[] = [];
+
+  for (const candidate of candidates) {
+    const command = resolveHostCommand(candidate, environment, platform);
+    if (!command || checked.has(command)) {
+      continue;
+    }
+    checked.add(command);
+
+    const version = await getPythonVersion(command);
+    detected.push({ command, version });
+    if (version && isSupportedPythonVersion(version)) {
+      return { command, version, candidates: detected };
+    }
+  }
+
+  return { command: null, version: null, candidates: detected };
+}
+
+/** True when `command` runs a supported Python version. */
+export async function isSupportedPython(command: string): Promise<boolean> {
+  const version = await getPythonVersion(command);
+  return version !== null && isSupportedPythonVersion(version);
 }

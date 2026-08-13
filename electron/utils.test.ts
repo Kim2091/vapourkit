@@ -19,15 +19,30 @@ vi.mock('child_process', () => ({
   spawnSync: vi.fn(),
 }));
 
+vi.mock('fs', async () => ({
+  ...(await vi.importActual<typeof import('fs')>('fs')),
+  statSync: vi.fn(),
+  accessSync: vi.fn(),
+}));
+
 vi.mock('./logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 import { spawn, spawnSync } from 'child_process';
-import { isCommandAvailable, resolveHostCommand, runCommand } from './utils';
+import { accessSync, statSync } from 'fs';
+import {
+  isCommandAvailable,
+  getPythonVersion,
+  resolveHostCommand,
+  resolveSupportedPythonCommand,
+  runCommand,
+} from './utils';
 
 const mockSpawn = vi.mocked(spawn);
 const mockSpawnSync = vi.mocked(spawnSync);
+const mockStatSync = vi.mocked(statSync);
+const mockAccessSync = vi.mocked(accessSync);
 
 function createProcess() {
   const proc = new EventEmitter() as EventEmitter & {
@@ -101,6 +116,8 @@ describe('isCommandAvailable', () => {
 describe('resolveHostCommand', () => {
   beforeEach(() => {
     mockSpawnSync.mockReset();
+    mockStatSync.mockImplementation(() => ({ isFile: () => true } as never));
+    mockAccessSync.mockImplementation(() => undefined);
   });
 
   it('uses whereis for Linux command discovery', () => {
@@ -126,5 +143,79 @@ describe('resolveHostCommand', () => {
     } as never);
 
     expect(resolveHostCommand('missing-command', {}, 'linux')).toBeNull();
+  });
+
+  it('falls back to the supplied PATH when whereis is unavailable', () => {
+    mockSpawnSync.mockReturnValue({
+      status: null,
+      stdout: '',
+      stderr: '',
+      error: new Error('whereis not found'),
+    } as never);
+
+    expect(resolveHostCommand('python3', { PATH: '/nix/profile/bin:/usr/bin' }, 'linux')).toBe('/nix/profile/bin/python3');
+  });
+});
+
+describe('Python host resolution', () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+    mockSpawnSync.mockReset();
+    mockStatSync.mockImplementation(() => ({ isFile: () => true } as never));
+    mockAccessSync.mockImplementation(() => undefined);
+  });
+
+  it('uses the resolved absolute interpreter for Python version detection', async () => {
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: 'python3: /usr/bin/python3\n',
+      stderr: '',
+    } as never);
+    const proc = createProcess();
+    mockSpawn.mockReturnValue(proc as never);
+
+    const resolution = resolveSupportedPythonCommand(['python3'], { PATH: '/usr/bin' }, 'linux');
+    proc.stdout.emit('data', Buffer.from('3.14\n'));
+    proc.emit('close', 0);
+
+    await expect(resolution).resolves.toMatchObject({
+      command: '/usr/bin/python3',
+      version: '3.14',
+    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      '/usr/bin/python3',
+      ['-c', expect.stringContaining('sys.version_info')],
+      expect.objectContaining({ shell: false }),
+    );
+  });
+
+  it('reports an installed but unsupported Python instead of treating it as missing', async () => {
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: 'python3: /usr/bin/python3\n',
+      stderr: '',
+    } as never);
+    const proc = createProcess();
+    mockSpawn.mockReturnValue(proc as never);
+
+    const resolution = resolveSupportedPythonCommand(['python3'], { PATH: '/usr/bin' }, 'linux');
+    proc.stdout.emit('data', Buffer.from('3.15\n'));
+    proc.emit('close', 0);
+
+    await expect(resolution).resolves.toMatchObject({
+      command: null,
+      candidates: [{ command: '/usr/bin/python3', version: '3.15' }],
+    });
+  });
+
+  it('returns the Python version from a successful probe', async () => {
+    const proc = createProcess();
+    mockSpawn.mockReturnValue(proc as never);
+
+    const version = getPythonVersion('/usr/bin/python3');
+    proc.stdout.emit('data', Buffer.from('3.14\n'));
+    proc.emit('close', 0);
+
+    await expect(version).resolves.toBe('3.14');
   });
 });

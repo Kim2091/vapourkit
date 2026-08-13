@@ -7,7 +7,7 @@ import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
 import { logger } from './logger';
 import { PATHS, PYTHON_VERSION, IS_WINDOWS } from './constants';
-import { runCommand, getBundledBasePath, isSupportedPython } from './utils';
+import { runCommand, getBundledBasePath, resolveSupportedPythonCommand } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
 import { migrateLegacyPortableLayout } from './legacyCleanup';
@@ -72,10 +72,18 @@ export class DependencyManager {
           progress: 10,
           message: 'Creating a Python 3 virtual environment...'
         });
-        if (!await isSupportedPython('python3')) {
-          throw new Error('Python 3.12 or 3.13 with venv support is required on Linux. Install a supported python3 and python3-venv with your distribution package manager, then restart Vapourkit.');
+        const pythonResolution = await resolveSupportedPythonCommand();
+        if (!pythonResolution.command) {
+          const detected = pythonResolution.candidates
+            .map(candidate => `${candidate.command}${candidate.version ? ` (Python ${candidate.version})` : ''}`)
+            .join(', ');
+          if (detected) {
+            throw new Error(`Python 3.12, 3.13, or 3.14 with venv support is required on Linux, but the detected interpreters are unsupported: ${detected}. Install a supported Python and python3-venv with your distribution package manager, then restart Vapourkit.`);
+          }
+          throw new Error('Python 3.12, 3.13, or 3.14 with venv support is required on Linux, but no python3 or python executable was found in the desktop session PATH. Install Python and python3-venv, ensure the interpreter is visible to the desktop session, then restart Vapourkit.');
         }
-        await runCommand('python3', ['-m', 'venv', PATHS.VS], PATHS.APP_DATA);
+        logger.dependency(`Using host Python ${pythonResolution.command} (${pythonResolution.version})`);
+        await runCommand(pythonResolution.command, ['-m', 'venv', PATHS.VS], PATHS.APP_DATA);
         logger.dependency(`Python virtual environment created at: ${PATHS.VS}`);
       } else {
         this.sendProgress({
