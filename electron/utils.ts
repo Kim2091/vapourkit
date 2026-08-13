@@ -1,5 +1,5 @@
 // electron/utils.ts
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, spawnSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './logger';
@@ -276,23 +276,39 @@ export async function isCommandAvailable(command: string, probeArgs: string[] = 
  * Resolves a command without executing it. GUI applications such as
  * video-compare do not necessarily implement a harmless `--version` probe.
  * Electron apps started from a desktop launcher also do not source a user's
- * shell profile, so add the standard Linuxbrew locations explicitly.
+ * shell profile. Linux discovery uses `whereis` so it follows the host's
+ * standard binary paths and PATH without a distribution-specific directory list.
  */
-export function resolveHostCommand(command: string, environment: NodeJS.ProcessEnv = process.env): string | null {
+export function resolveHostCommand(
+  command: string,
+  environment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string | null {
   if (path.isAbsolute(command)) {
     return fs.existsSync(command) ? command : null;
   }
 
-  const searchPaths = (environment.PATH || '').split(path.delimiter).filter(Boolean);
-  if (process.platform === 'linux') {
-    const homebrewPrefix = environment.HOMEBREW_PREFIX;
-    const homeDirectory = environment.HOME;
-    searchPaths.push(
-      ...(homebrewPrefix ? [path.join(homebrewPrefix, 'bin')] : []),
-      ...(homeDirectory ? [path.join(homeDirectory, '.linuxbrew', 'bin')] : []),
-      '/home/linuxbrew/.linuxbrew/bin',
-    );
+  if (platform === 'linux') {
+    const result = spawnSync('whereis', ['-b', command], {
+      encoding: 'utf8',
+      env: environment,
+      windowsHide: true,
+    });
+
+    if (result.error || result.status !== 0) {
+      return null;
+    }
+
+    const output = result.stdout.trim();
+    const separator = output.indexOf(':');
+    if (separator === -1) {
+      return null;
+    }
+
+    return output.slice(separator + 1).trim().split(/\s+/)[0] || null;
   }
+
+  const searchPaths = (environment.PATH || '').split(path.delimiter).filter(Boolean);
 
   for (const directory of new Set(searchPaths)) {
     const candidate = path.join(directory, command);

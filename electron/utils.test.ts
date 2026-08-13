@@ -23,10 +23,11 @@ vi.mock('./logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { spawn } from 'child_process';
-import { isCommandAvailable, runCommand } from './utils';
+import { spawn, spawnSync } from 'child_process';
+import { isCommandAvailable, resolveHostCommand, runCommand } from './utils';
 
 const mockSpawn = vi.mocked(spawn);
+const mockSpawnSync = vi.mocked(spawnSync);
 
 function createProcess() {
   const proc = new EventEmitter() as EventEmitter & {
@@ -94,5 +95,36 @@ describe('isCommandAvailable', () => {
       ['-version'],
       expect.objectContaining({ shell: false, stdio: 'ignore' }),
     );
+  });
+});
+
+describe('resolveHostCommand', () => {
+  beforeEach(() => {
+    mockSpawnSync.mockReset();
+  });
+
+  it('uses whereis for Linux command discovery', () => {
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: 'ffmpeg: /usr/bin/ffmpeg\n',
+      stderr: '',
+    } as never);
+
+    expect(resolveHostCommand('ffmpeg', { PATH: '/usr/bin' }, 'linux')).toBe('/usr/bin/ffmpeg');
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      'whereis',
+      ['-b', 'ffmpeg'],
+      expect.objectContaining({ env: { PATH: '/usr/bin' }, encoding: 'utf8' }),
+    );
+  });
+
+  it('returns null when whereis cannot find a Linux command', () => {
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: 'missing-command:\n',
+      stderr: '',
+    } as never);
+
+    expect(resolveHostCommand('missing-command', {}, 'linux')).toBeNull();
   });
 });
