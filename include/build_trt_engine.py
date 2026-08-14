@@ -311,6 +311,7 @@ def convert_model_precision(onnx_path, low_precision_type, build_shapes):
     only converts what it recognizes leaves fp32 activations feeding converted
     weights, which a strongly typed network rejects at parse time.
     """
+    import gc
     import onnx
     import tempfile
 
@@ -345,7 +346,36 @@ def convert_model_precision(onnx_path, low_precision_type, build_shapes):
         kwargs['calibration_data'] = write_calibration_data(
             onnx_path, shapes, os.path.join(tmp_dir, 'calibration.npz')
         )
-        converted = convert_to_mixed_precision(onnx_path, **kwargs)
+        try:
+            converted = convert_to_mixed_precision(onnx_path, **kwargs)
+        except Exception as conversion_error:
+            # AutoCast's reference runner asks ONNX Runtime to return every
+            # intermediate tensor. A large static model can exhaust host RAM
+            # even though TensorRT itself could build the engine. In that case
+            # retry without activation calibration. The converter still uses
+            # initializer range checks, unsupported-op checks, and the explicit
+            # ConvTranspose exclusion above; only the runtime activation-range
+            # rule is omitted.
+            error_text = str(conversion_error).lower()
+            is_memory_failure = (
+                isinstance(conversion_error, MemoryError)
+                or 'bad allocation' in error_text
+                or 'out of memory' in error_text
+                or 'memory allocation' in error_text
+            )
+            if not is_memory_failure:
+                raise
+
+            print(
+                f'Warning: {low_precision_type.upper()} activation calibration ran out of host memory; '
+                'retrying without runtime calibration.',
+                file=sys.stderr,
+                flush=True,
+            )
+            gc.collect()
+            kwargs.pop('calibration_data', None)
+            kwargs['data_max'] = float('inf')
+            converted = convert_to_mixed_precision(onnx_path, **kwargs)
     return converted.SerializeToString()
 
 

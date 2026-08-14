@@ -17,6 +17,7 @@ import type { EngineBuildParams, ModelBuildJob } from '../types';
 export class TrtEngineBuildJob implements ModelBuildJob {
   private currentProcess: any = null;
   private isForceStopping: boolean = false;
+  private cancelRequested: boolean = false;
 
   /**
    * Copies the bundled TensorRT engine builder script out of the app bundle so
@@ -39,15 +40,17 @@ export class TrtEngineBuildJob implements ModelBuildJob {
   ): Promise<void> {
     const onnxFile = path.basename(params.onnxPath);
 
-    await this.build(params, (subProgress) => {
+    await this.build(params, (subProgress, status) => {
       const totalProgress = baseProgress + Math.round((subProgress / 100) * progressRange);
-      progressCallback?.(`Converting ${onnxFile}... ${subProgress}%`, Math.min(totalProgress, 99));
+      const message = status || `Converting ${onnxFile}... ${subProgress}%`;
+      progressCallback?.(message, Math.min(totalProgress, 99));
     });
   }
 
   cancel(): void {
     if (this.currentProcess) {
       logger.model('Cancelling TensorRT engine build process');
+      this.cancelRequested = true;
       this.killCurrentProcess();
     }
   }
@@ -55,11 +58,13 @@ export class TrtEngineBuildJob implements ModelBuildJob {
   forceStop(): void {
     logger.model('Force stopping TensorRT engine build process');
     this.isForceStopping = true;
+    this.cancelRequested = true;
     this.killCurrentProcess();
   }
 
   private resetForceStop(): void {
     this.isForceStopping = false;
+    this.cancelRequested = false;
   }
 
   private isForceStopRequested(): boolean {
@@ -85,7 +90,7 @@ export class TrtEngineBuildJob implements ModelBuildJob {
    */
   async build(
     params: EngineBuildParams,
-    progressCallback?: (progress: number) => void
+    progressCallback?: (progress: number, status?: string) => void
   ): Promise<void> {
     const { onnxPath, enginePath, minShapes, optShapes, maxShapes, useFp32, useBf16, useStaticShape } = params;
     const customBuildParams = params.customBuildParams;
@@ -127,7 +132,12 @@ export class TrtEngineBuildJob implements ModelBuildJob {
     logger.model(`Engine build arguments: ${args.join(' ')}`);
 
     try {
-      await this.runEngineBuildWithProgress(args, PATHS.MODELS, progressCallback);
+      await this.runEngineBuildWithProgress(
+        args,
+        PATHS.MODELS,
+        (progress) => progressCallback?.(progress),
+        (status) => progressCallback?.(0, status),
+      );
       logger.model(`Successfully converted ${path.basename(onnxPath)} to ${path.basename(enginePath)}`);
     } catch (error) {
       // If we get a "Static model does not take explicit shapes" error, retry without shape parameters
@@ -149,7 +159,12 @@ export class TrtEngineBuildJob implements ModelBuildJob {
         const argsWithoutShapes = this.buildDefaultArgs(onnxPath, enginePath, null, null, null, useFp32, useBf16, false);
         logger.model(`Retrying with arguments: ${argsWithoutShapes.join(' ')}`);
 
-        await this.runEngineBuildWithProgress(argsWithoutShapes, PATHS.MODELS, progressCallback);
+        await this.runEngineBuildWithProgress(
+          argsWithoutShapes,
+          PATHS.MODELS,
+          (progress) => progressCallback?.(progress),
+          (status) => progressCallback?.(0, status),
+        );
         logger.model(`Successfully converted ${path.basename(onnxPath)} to ${path.basename(enginePath)}`);
 
         // Throw a special error to notify about the fallback
@@ -228,7 +243,8 @@ export class TrtEngineBuildJob implements ModelBuildJob {
   private async runEngineBuildWithProgress(
     args: string[],
     cwd: string,
-    progressCallback?: (progress: number) => void
+    progressCallback?: (progress: number) => void,
+    statusCallback?: (status: string) => void,
   ): Promise<void> {
     const builderScript = await this.ensureEngineBuilderScript();
 
@@ -281,6 +297,13 @@ export class TrtEngineBuildJob implements ModelBuildJob {
             }
           }
 
+          const conversionMatch = output.match(/Converting ONNX model to (FP16|BF16)/i);
+          if (conversionMatch) {
+            statusCallback?.(`${conversionMatch[1].toUpperCase()} precision conversion/calibration in progress...`);
+          } else if (output.includes('Parsing ONNX model')) {
+            statusCallback?.('Parsing ONNX model...');
+          }
+
           logger.debug(`[engine build stdout] ${output.trim()}`);
         });
       }
@@ -289,11 +312,18 @@ export class TrtEngineBuildJob implements ModelBuildJob {
         proc.stderr.on('data', (data: Buffer) => {
           const output = data.toString();
           stderr += output;
+          if (output.includes('The model version conversion is not supported by the onnxscript version converter')) {
+            statusCallback?.('ONNX opset conversion fallback reported; continuing...');
+          } else if (output.includes('activation calibration ran out of host memory')) {
+            statusCallback?.('Host memory limit reached during calibration; retrying safely...');
+          }
           logger.debug(`[engine build stderr] ${output.trim()}`);
         });
       }
 
       proc.on('close', (code: number) => {
+        const wasCancelled = this.cancelRequested || this.isForceStopping;
+
         // Clear the process reference
         this.currentProcess = null;
 
@@ -301,8 +331,16 @@ export class TrtEngineBuildJob implements ModelBuildJob {
           progressCallback?.(100);
           logger.debug(`Engine build completed successfully with code ${code}`);
           resolve();
+        } else if (wasCancelled) {
+          // taskkill commonly reports exit code 1 on Windows. Do not turn a
+          // user cancellation into a misleading engine-build failure.
+          reject(new Error('MODEL_BUILD_CANCELLED'));
         } else {
-          const errorMsg = `Engine build failed with code ${code}: ${stderr || stdout}`;
+          // Warnings from ONNX/onnxscript are written to stderr even when the
+          // build is healthy. A nonzero exit code is still fatal, but retain
+          // both streams so a warning cannot hide the actual exception.
+          const output = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n');
+          const errorMsg = `Engine build failed with code ${code}: ${output || 'No diagnostic output was produced'}`;
           logger.error(errorMsg);
           reject(new Error(errorMsg));
         }

@@ -218,6 +218,17 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
               detectedShape: conversionError.detectedShape,
               detectedStatic: true
             });
+          } else if (conversionError.message === 'MODEL_BUILD_CANCELLED') {
+            // Cancellation is expected control flow. The renderer already
+            // clears the progress UI when the user presses Cancel, so do not
+            // emit a second misleading "build failed" notification when the
+            // killed child process reports a nonzero exit code.
+            logger.model('Model import cancelled');
+            activeBuildJob = null;
+            return {
+              success: false,
+              error: 'Model build cancelled'
+            };
           } else {
             throw conversionError;
           }
@@ -400,6 +411,13 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
               detectedShape: conversionError.detectedShape,
               detectedStatic: true
             });
+          } else if (conversionError.message === 'MODEL_BUILD_CANCELLED') {
+            logger.model('Model import cancelled');
+            activeBuildJob = null;
+            return {
+              success: false,
+              error: 'Model build cancelled'
+            };
           } else {
             throw conversionError;
           }
