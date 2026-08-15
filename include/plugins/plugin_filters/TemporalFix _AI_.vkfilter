@@ -1,23 +1,22 @@
 name = "TemporalFix (AI)"
-category = ["Temporal Smoothing", "Restoration"]
 code = """
 # Full Docs: https://github.com/pifroggi/vs_temporalfix#temporalfix-ai-model
 
-strength    = 2.0         # Suppression strength, 0.0-3.0. Higher = more aggressive, may oversmooth small motion.
-tiles       = 1           # More tiles = less VRAM, slower. Only increase on low-end hardware.
-num_streams = 1           # Parallel TensorRT streams. Higher can be faster on high-end GPUs. TensorRT backend only.
-exclude     = None        # Optionally exclude scenes, e.g. "[10 20] [600 900]"
-engine_folder = None      # Optional TensorRT engine-cache folder.
-# TemporalFix supports CPU, CUDA, and TensorRT. It has no DirectML backend, so
-# use CPU when Vapourkit's DirectML backend is selected.
-backend = "tensorrt" if VK_BACKEND == "tensorrt" else "cpu"
+strength    = 2.0   # Suppression strength from 0.0-3.0. Higher is more aggressive, but may oversmooth.
+exclude     = None  # Optionally exclude frame ranges, e.g. "[10 20] [600 900]"
+backend     = "auto"  # "cpu", "cuda", "tensorrt", or "auto" to use Vapourkit's global setting.
+tiles       = 1     # More tiles reduces VRAM usage, but slower. Only useful on low-end hardware.
+num_streams = 1     # Parallel TensorRT streams.
 
 
 import vs_temporalfix
+backend = backend.lower()
+backend = ("tensorrt" if VK_BACKEND == "tensorrt" else "cpu") if backend == "auto" else backend
 clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s="709")
-clip = vs_temporalfix.model(clip, strength=strength, exclude=exclude, backend=backend, tiles=tiles, num_streams=num_streams, engine_folder=engine_folder)
+clip = vs_temporalfix.model(clip, strength=strength, exclude=exclude, backend=backend, tiles=tiles, num_streams=num_streams)
 clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s="709")"""
+category = [ "Temporal Smoothing", "Restoration" ]
 description = "Adds Temporal Coherence to Single Image AI Upscaling Models. More accurate and faster than the classic version."
 
 [metadata]
-createdAt = "2026-04-21T00:00:00.000Z"
+createdAt = "2026-08-15T01:28:47.842Z"

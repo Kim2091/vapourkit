@@ -1,0 +1,11 @@
+name = "Trim (Auto)"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_tiletools#trim
+
+import vs_tiletools
+clip = vs_tiletools.trim(clip)"""
+category = [ "Utility" ]
+description = "Automatically trims a clip that has been extended by the Temporal Pad filter."
+
+[metadata]
+createdAt = "2026-08-15T02:00:46.556Z"

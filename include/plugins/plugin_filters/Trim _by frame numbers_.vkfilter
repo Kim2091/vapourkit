@@ -1,0 +1,14 @@
+name = "Trim (by frame numbers)"
+code = """
+# Full Docs: https://www.vapoursynth.com/doc/functions/video/trim.html
+
+first = 0     # First frame to keep
+last  = 1000  # Last frame to keep
+
+
+clip = core.std.Trim(clip, first=first, last=last)"""
+category = [ "Utility" ]
+description = "Trims clip to keep only specified frame range."
+
+[metadata]
+createdAt = "2026-08-15T01:57:39.175Z"

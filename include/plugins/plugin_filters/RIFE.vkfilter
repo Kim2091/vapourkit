@@ -1,7 +1,7 @@
 name = "RIFE"
 category = "Frame Interpolation"
 code = """
-from vsmlrt import RIFE, RIFEModel, Backend
+from vsmlrt import RIFE, RIFEModel
 from vstools import sc_detect
 import vs_tiletools
 
@@ -11,10 +11,9 @@ multi = 2                # Frame multiplier (2=double FPS, 3=triple, etc.)
 fp16  = True             # FP16 precision
 use_sc_detect = True     # Enable scene change detection for better quality
 sc_threshold = 0.1       # Scene change detection threshold (higher = less sensitive)
+backend = "auto"         # "tensorrt", "directml", "ncnn", or "auto" to use Vapourkit's global setting.
 
-# Backend follows the app's backend dropdown (vk_backend is provided by
-# vapourkit). To hardcode one instead, use e.g. Backend.ORT_DML(fp16=fp16)
-backend = vk_backend(fp16=fp16)
+backend = vk_backend(backend, fp16=fp16)
 
 # Scene detection (improves RIFE quality by preventing interpolation across scene changes)
 if use_sc_detect:

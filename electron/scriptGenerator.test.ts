@@ -225,7 +225,9 @@ describe('inference backend selection', () => {
     const script = await generate([customFilter(0, 'CAS Sharpen')], false, 'directml');
 
     expect(script).toContain('VK_BACKEND = "directml"');
-    expect(script).toContain('def vk_backend(');
+    expect(script).toContain('def vk_backend(backend="auto", **kwargs):');
+    expect(script).toContain('backend = VK_BACKEND if backend == "auto" else backend.lower()');
+    expect(script).toContain('[backend](**kwargs)');
     expect(script).toContain('"tensorrt": Backend.TRT');
     expect(script).toContain('"directml": Backend.ORT_DML');
     expect(script).toContain('"ncnn": Backend.NCNN_VK');

@@ -1,0 +1,11 @@
+name = "Crop (Auto)"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#crop
+
+import vs_tiletools
+clip = vs_tiletools.crop(clip)"""
+category = [ "Padding/Cropping" ]
+description = "Automatically crops padding added by the Pad or Modulus filters."
+
+[metadata]
+createdAt = "2026-08-15T01:33:47.054Z"

@@ -1,12 +1,14 @@
 name = "Untile"
-category = "Tiling"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_tiletools?tab=readme-ov-file#untile
-# If fade is True, the overlap will be used to feather/blend between the tiles to remove visible seams. If False, it will simply be cropped.
+
+fade = True  # If fade is True, the overlap from the Tile filter will be used to feather/blend between the tiles to remove visible seams. If False, it will simply be cropped.
+
 
 import vs_tiletools
-clip = vs_tiletools.untile(clip, fade=True)"""
+clip = vs_tiletools.untile(clip, fade=fade)"""
+category = [ "Tiling" ]
 description = "Automatically reassembles a clip tiled with the Tile filter, even if tiles were since resized."
 
 [metadata]
-createdAt = "2025-11-04T19:02:26.340Z"
+createdAt = "2026-08-15T02:42:58.890Z"

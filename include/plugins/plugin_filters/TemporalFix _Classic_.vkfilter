@@ -1,19 +1,19 @@
 name = "TemporalFix (Classic)"
-category = ["Temporal Smoothing", "Restoration"]
 code = """
 # Full Docs: https://github.com/pifroggi/vs_temporalfix#temporalfix-classic
 # Increase strength if the effect is not strong enough. Check the docs for a full explanation.
 
-strength = 500
-tr       = 6
-denoise  = False
-exclude  = None
-debug    = False
+strength = 500    # Suppression strength. Higher is more aggressive, but may oversmooth or ghost.
+tr       = 6      # Number of frames to average over.
+denoise  = False  # Removes grain and low frequency noise/flicker left over by the main processing step. Only enable if these issues actually exist!
+exclude  = None   # Optionally exclude frame ranges, e.g. "[10 20] [600 900]"
+debug    = False  # Shows areas that will not be fixed in pink.
 
 
 import vs_temporalfix
 clip = vs_temporalfix.classic(clip, strength=strength, tr=tr, denoise=denoise, exclude=exclude, debug=debug)"""
+category = [ "Temporal Smoothing", "Restoration" ]
 description = "Adds Temporal Coherence to Single Image AI Upscaling Models. This is the older cpu based version."
 
 [metadata]
-createdAt = "2025-11-13T15:24:02.315Z"
+createdAt = "2026-08-15T01:29:22.508Z"

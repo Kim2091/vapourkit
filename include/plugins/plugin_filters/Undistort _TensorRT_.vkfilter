@@ -9,12 +9,12 @@ overlap       = 8
 interpolation = "bicubic"
 num_streams   = 1
 engine_folder = None  # Optional TensorRT engine-cache folder.
-# Undistort supports CPU, CUDA, and TensorRT. It has no DirectML backend, so
-# use CPU when Vapourkit's DirectML backend is selected.
-backend = "tensorrt" if VK_BACKEND == "tensorrt" else "cpu"
+backend       = "auto"  # "cpu", "cuda", "tensorrt", or "auto" to use Vapourkit's global setting.
 
 
 from vs_undistort import vs_undistort
+backend = backend.lower()
+backend = ("tensorrt" if VK_BACKEND == "tensorrt" else "cpu") if backend == "auto" else backend
 clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s=709)
 clip = vs_undistort(clip, temp_window=temp_window, tiles=tiles, overlap=overlap, interpolation=interpolation, backend=backend, num_streams=num_streams, engine_folder=engine_folder)
 clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s=709)"""

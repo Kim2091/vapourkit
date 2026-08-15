@@ -1,0 +1,23 @@
+name = "Undistort"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_undistort?tab=readme-ov-file#usage
+
+temp_window    = 10  # Larger means better temporal averaging, but higher VRAM usage.
+window_overlap = 0   # Overlap between temporal windows. Larger is slower. Increase if jumps/hitches between windows are noticeable.
+interpolation  = "bicubic"  # "bicubic" is sharper, "bilinear" is softer.
+backend        = "auto"  # "cpu", "cuda", "tensorrt", or "auto" to use Vapourkit's global setting.
+tiles          = 1   # More tiles reduces VRAM usage, but worsens spatial averaging.
+overlap        = 8   # Tile overlap. Increase if seams between tiles are noticable.
+
+
+from vs_undistort import vs_undistort
+backend = backend.lower()
+backend = ("tensorrt" if VK_BACKEND == "tensorrt" else "cpu") if backend == "auto" else backend
+clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s="709")
+clip = vs_undistort(clip, temp_window=temp_window, window_overlap=window_overlap, tiles=tiles, overlap=overlap, interpolation=interpolation, backend=backend)
+clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s="709")"""
+category = [ "Restoration", "Stabilization" ]
+description = "Removes distortions, turbulance, heat haze, or similar. TensorRT is faster, but has less controls."
+
+[metadata]
+createdAt = "2026-08-15T02:44:43.911Z"

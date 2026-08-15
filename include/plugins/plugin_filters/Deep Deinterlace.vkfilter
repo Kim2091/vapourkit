@@ -1,17 +1,15 @@
 name = "Deep Deinterlace"
-category = "Deinterlacing"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_deepdeinterlace?tab=readme-ov-file#usage
-# Available deinterlacers are 1 (DDD), 2 (DeF), and 3 (DfConvEkSA).
-# DfConvEkSA is the highest quality option, but requires its optional mmcv
-# dependency, 5 input fields, and benefits from mocomp on fast camera movement.
+tff = True             # True is top field first, false is bottom field first.
+deinterlacer = [1, 1]  # The first value is the deinterlacer for luma and the second for chroma. Available deinterlacers are 1 (DDD), 2 (DeF)).
+
 
 import vs_deepdeinterlace
-# CUDA and fp16 are used only for an NVIDIA TensorRT configuration. Linux NCNN
-# and Windows DirectML installations include CPU PyTorch instead.
 use_cuda = VK_BACKEND == "tensorrt"
-clip = vs_deepdeinterlace.YUV(clip, tff=True, deinterlacer=[1, 1], tta=[False, False], mocomp=[False, False], matrix_in_s="709", range_in_s="limited", device="cuda" if use_cuda else "cpu", fp16=use_cuda)"""
+clip = vs_deepdeinterlace.YUV(clip, tff=tff, deinterlacer=deinterlacer, device="cuda" if use_cuda else "cpu", fp16=use_cuda)"""
+category = [ "Deinterlacing" ]
 description = "Three AI deinterlacers. Uses CUDA with TensorRT or CPU with NCNN/DirectML; input must be interlaced and output frame rate is doubled."
 
 [metadata]
-createdAt = "2025-11-03T22:46:37.034Z"
+createdAt = "2026-08-15T01:30:11.222Z"

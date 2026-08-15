@@ -1,12 +1,15 @@
 name = "Average Color Fix"
-category = "Color Modification"
 code = """
 # Full Docs: https://github.com/pifroggi/vs_colorfix?tab=readme-ov-file#average-color-fix
 
+radius = 10  # Higher is a more global color fix, lower is more local.
+
+
 import vs_colorfix
-original_clip_converted = core.resize.Point(original_clip, format=clip.format.id)
-clip = vs_colorfix.average(clip, original_clip_converted, radius=10, planes=[0, 1, 2], fast=False)"""
+orig_clip_converted = core.resize.Point(original_clip, format=clip.format.id)
+clip = vs_colorfix.average(clip, orig_clip_converted, radius=radius)"""
+category = [ "Color Modification" ]
 description = "Correct for color shift by matching the average color of the clip to that of the original input clip."
 
 [metadata]
-createdAt = "2025-11-03T16:35:55.081Z"
+createdAt = "2026-08-15T03:07:41.937Z"

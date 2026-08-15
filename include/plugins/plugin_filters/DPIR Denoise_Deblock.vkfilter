@@ -1,7 +1,7 @@
 name = "DPIR Denoise/Deblock"
 category = ["Denoising", "Deblocking"]
 code = """
-from vsmlrt import DPIR, DPIRModel, Backend
+from vsmlrt import DPIR, DPIRModel
 # Full Docs: https://github.com/AmusementClub/vs-mlrt/wiki/DPIR
 # Models: DPIRModel.drunet_color, DPIRModel.drunet_deblocking_color
 
@@ -9,10 +9,9 @@ model       = DPIRModel.drunet_color
 strength    = 5
 fp16        = True
 num_streams = 1
+backend     = "auto"  # "tensorrt", "directml", "ncnn", or "auto" to use Vapourkit's global setting.
 
-# Backend follows the app's backend dropdown (vk_backend is provided by
-# vapourkit). To hardcode one instead, use e.g. Backend.ORT_CUDA(fp16=fp16)
-backend = vk_backend(fp16=fp16, num_streams=num_streams)
+backend = vk_backend(backend, fp16=fp16, num_streams=num_streams)
 clip = core.resize.Bilinear(clip, format=vs.RGBH if fp16 else vs.RGBS, matrix_in_s="709")
 clip = DPIR(clip, strength=strength, model=model, backend=backend)
 clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s="709")"""

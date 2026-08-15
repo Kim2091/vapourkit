@@ -93,9 +93,10 @@ export class VapourSynthScriptGenerator {
     code += '# vsmlrt builds TensorRT engines at runtime by spawning trtexec with a nearly\n';
     code += '# empty environment; these are what the app\'s trtexec shim needs to start.\n';
     code += `VK_BUILD_ENV = {${buildEnvEntries}}\n`;
-    code += 'def vk_backend(**kwargs):\n';
+    code += 'def vk_backend(backend="auto", **kwargs):\n';
     code += '    from vsmlrt import Backend\n';
-    code += `    backend = {${mapEntries}}[VK_BACKEND](**kwargs)\n`;
+    code += '    backend = VK_BACKEND if backend == "auto" else backend.lower()\n';
+    code += `    backend = {${mapEntries}}[backend](**kwargs)\n`;
     code += '    if hasattr(backend, "custom_env"):\n';
     code += '        for _key, _value in VK_BUILD_ENV.items():\n';
     code += '            backend.custom_env.setdefault(_key, _value)\n';

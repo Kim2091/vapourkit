@@ -7,12 +7,12 @@ temp_window   = 10
 tiles         = 1
 overlap       = 8
 interpolation = "bilinear"
-# Vapourkit's TensorRT backend is NVIDIA/CUDA-only. NCNN (the Linux default)
-# and DirectML do not provide CUDA PyTorch, so use the installed CPU wheel.
-backend       = "cuda" if VK_BACKEND == "tensorrt" else "cpu"
+backend       = "auto"  # "cpu", "cuda", or "auto" to use Vapourkit's global setting.
 
 
 from vs_undistort import vs_undistort
+backend = backend.lower()
+backend = ("cuda" if VK_BACKEND == "tensorrt" else "cpu") if backend == "auto" else backend
 clip = core.resize.Bilinear(clip, format=vs.RGBH, matrix_in_s=709)
 clip = vs_undistort(clip, temp_window=temp_window, tiles=tiles, overlap=overlap, interpolation=interpolation, backend=backend)
 clip = core.resize.Point(clip, format=vs.YUV444P16, matrix_s=709)"""
