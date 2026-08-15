@@ -1,7 +1,9 @@
 // electron/pluginInstaller.ts
 import { spawn, ChildProcess } from 'child_process';
+import { promises as nodeFs } from 'fs';
 import { BrowserWindow, app } from 'electron';
 import * as path from 'path';
+import * as os from 'os';
 import * as fs from 'fs-extra';
 import * as https from 'https';
 import { logger } from './logger';
@@ -66,18 +68,85 @@ export class PluginInstaller {
     }
   }
 
+  /**
+   * Gives Windows pip a short junction as its install prefix. Recent PyTorch
+   * wheels contain deeply nested license files; the normal installed-app
+   * prefix can push those paths past Windows' legacy directory-name limit and
+   * leave a partially extracted torch wheel behind.
+   *
+   * Installs launch the real python.exe and use the junction only as
+   * `--prefix`, so generated command launchers retain the permanent
+   * interpreter path. Uninstalls launch through the junction so pip can remove
+   * the same deep files. In both directions, the files live in PATHS.VS.
+   */
+  private async createPipPathAlias(): Promise<{
+    installArgs: string[];
+    pythonPath: string;
+    cleanup: () => Promise<void>;
+  }> {
+    const noCleanup = async () => {};
+    if (process.platform !== 'win32') {
+      return { installArgs: [], pythonPath: PATHS.PYTHON, cleanup: noCleanup };
+    }
+
+    let tempRoot: string | null = null;
+    let pythonAlias: string | null = null;
+
+    const cleanup = async () => {
+      if (pythonAlias) {
+        try {
+          await nodeFs.rmdir(pythonAlias);
+        } catch (error) {
+          logger.warn(`Failed to remove temporary pip junction ${pythonAlias}:`, error);
+        }
+      }
+      if (tempRoot) {
+        try {
+          await nodeFs.rmdir(tempRoot);
+        } catch (error) {
+          logger.warn(`Failed to remove temporary pip directory ${tempRoot}:`, error);
+        }
+      }
+    };
+
+    try {
+      tempRoot = await nodeFs.mkdtemp(path.join(os.tmpdir(), 'vkp-'));
+      pythonAlias = path.join(tempRoot, 'p');
+      await nodeFs.symlink(PATHS.VS, pythonAlias, 'junction');
+      logger.info(`Using short pip install prefix: ${pythonAlias} -> ${PATHS.VS}`);
+
+      return {
+        installArgs: ['--prefix', pythonAlias],
+        pythonPath: path.join(pythonAlias, path.basename(PATHS.PYTHON)),
+        cleanup
+      };
+    } catch (error) {
+      await cleanup();
+      logger.warn('Failed to create a short pip install prefix; using the installed path:', error);
+      return { installArgs: [], pythonPath: PATHS.PYTHON, cleanup: noCleanup };
+    }
+  }
+
   private async runPipInstall(
     packages: string[],
     progressOffset: number,
     progressScale: number,
     extraArgs: string[] = []
   ): Promise<{ success: boolean; error?: string }> {
-    const args = ['-m', 'pip', 'install', '--no-warn-script-location', '--cache-dir', PATHS.PIP_CACHE, ...packages, ...extraArgs];
+    const pathAlias = await this.createPipPathAlias();
+    const args = [
+      '-m', 'pip', 'install',
+      '--no-warn-script-location',
+      '--cache-dir', PATHS.PIP_CACHE,
+      ...pathAlias.installArgs,
+      ...packages,
+      ...extraArgs
+    ];
     
     const commandStr = `${PATHS.PYTHON} ${args.join(' ')}`;
     logger.info(`Running command: ${commandStr}`);
 
-    return new Promise((resolve) => {
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
       this.installProcess = spawn(PATHS.PYTHON, args, createWorkloadSpawnOptions({
         cwd: PATHS.VS,
         windowsHide: true
@@ -238,7 +307,55 @@ export class PluginInstaller {
         logger.error('Failed to start pip process:', error);
         resolve({ success: false, error: error.message });
       });
+    }).finally(() => pathAlias.cleanup());
+  }
+
+  /**
+   * Verifies that modules supplied inside a distribution are actually
+   * importable. `pip list` only checks dist-info metadata, so it cannot detect
+   * an incomplete wheel extraction (for example, `torch` being present while
+   * its bundled top-level `torchgen` package is missing).
+   */
+  private async canImportPythonModules(modules: string[], label: string): Promise<boolean> {
+    const importCode =
+      `import importlib; [importlib.import_module(name) for name in ${JSON.stringify(modules)}]`;
+
+    return new Promise((resolve) => {
+      const checkProcess = spawn(PATHS.PYTHON, ['-c', importCode], {
+        cwd: PATHS.VS,
+        windowsHide: true
+      });
+
+      let errorBuffer = '';
+      checkProcess.stderr?.on('data', (data: Buffer) => {
+        errorBuffer += data.toString();
+      });
+
+      checkProcess.on('close', (code: number | null) => {
+        if (code === 0) {
+          resolve(true);
+          return;
+        }
+
+        logger.warn(
+          `${label} import check failed (exit code: ${code})` +
+          (errorBuffer.trim() ? `: ${errorBuffer.trim()}` : '')
+        );
+        resolve(false);
+      });
+
+      checkProcess.on('error', (error: Error) => {
+        logger.warn(`Failed to run ${label} import check:`, error);
+        resolve(false);
+      });
     });
+  }
+
+  private hasHealthyTorchRuntime(): Promise<boolean> {
+    // torchgen is part of the official torch wheel, not the unrelated PyPI
+    // distribution with the same name. Import both so a partial extraction is
+    // caught even when pip still reports `torch` as installed.
+    return this.canImportPythonModules(['torch', 'torchgen'], 'PyTorch runtime');
   }
 
   /**
@@ -310,11 +427,12 @@ export class PluginInstaller {
    * spawn).
    */
   private async runPipUninstall(packages: string[]): Promise<{ success: boolean; error?: string }> {
+    const pathAlias = await this.createPipPathAlias();
     const args = ['-m', 'pip', 'uninstall', '-y', ...packages];
-    logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
+    logger.info(`Running command: ${pathAlias.pythonPath} ${args.join(' ')}`);
 
-    return new Promise((resolve) => {
-      this.installProcess = spawn(PATHS.PYTHON, args, createWorkloadSpawnOptions({
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      this.installProcess = spawn(pathAlias.pythonPath, args, createWorkloadSpawnOptions({
         cwd: PATHS.VS,
         windowsHide: true
       }));
@@ -349,7 +467,7 @@ export class PluginInstaller {
         this.installProcess = null;
         resolve({ success: false, error: error.message });
       });
-    });
+    }).finally(() => pathAlias.cleanup());
   }
 
   async installDependencies(): Promise<{ success: boolean; error?: string }> {
@@ -436,6 +554,37 @@ export class PluginInstaller {
           message: pytorchResult.error || 'PyTorch installation failed'
         });
         return { success: false, error: pytorchResult.error };
+      }
+
+      // A package can retain valid dist-info metadata even when files from its
+      // wheel are absent. In that state, an ordinary plugin reinstall is a
+      // no-op because pip prints "Requirement already satisfied". Repair the
+      // wheel explicitly before continuing; torchgen ships inside torch and
+      // must never be installed from the unrelated `torchgen` project on PyPI.
+      if (!await this.hasHealthyTorchRuntime()) {
+        logger.warn('PyTorch runtime is incomplete; repairing torch and torchvision in place');
+        this.sendProgress({
+          type: 'installing',
+          progress: 32,
+          message: 'Repairing the PyTorch installation...'
+        });
+
+        const repairResult = await this.runPipInstall(
+          torchInstall.packages,
+          32,
+          3,
+          // Do not uninstall the partial wheel first: a previously successful
+          // short-prefix install can itself contain paths that are too long to
+          // remove through the normal prefix. Overwrite it from the complete
+          // cached wheel instead.
+          [...torchInstall.extraArgs, '--ignore-installed']
+        );
+
+        if (!repairResult.success || !await this.hasHealthyTorchRuntime()) {
+          const error = repairResult.error || 'PyTorch runtime import check failed after reinstall';
+          this.sendProgress({ type: 'error', progress: 0, message: error });
+          return { success: false, error };
+        }
       }
 
       if (this.isCancelled) {
@@ -626,7 +775,21 @@ export class PluginInstaller {
     const foundPackages = packagesToCheck.filter(name => installedNames.has(name));
     const missingNames = packagesToCheck.filter(name => !installedNames.has(name));
 
-    const state = evaluateInstallState(vendor, configManager.getPluginsGpuVendor(), missingNames);
+    // Distribution metadata alone is insufficient for PyTorch: torchgen is a
+    // directory inside the torch wheel and therefore never appears in `pip
+    // list`. Treat its missing package file as an incomplete install so the
+    // Plugins UI offers the repair path above without paying the cost of a
+    // full torch import on every status check.
+    const torchRuntimeHealthy = await fs.pathExists(
+      path.join(PATHS.SITE_PACKAGES, 'torchgen', '__init__.py')
+    );
+    const runtimeProblems = torchRuntimeHealthy ? [] : ['torch-runtime'];
+
+    const state = evaluateInstallState(
+      vendor,
+      configManager.getPluginsGpuVendor(),
+      [...missingNames, ...runtimeProblems]
+    );
 
     if (state.backfillVendor) {
       // Pre-vendor-tracking install on NVIDIA: every 0.17.0 install was
@@ -641,6 +804,9 @@ export class PluginInstaller {
     );
     if (missingNames.length > 0) {
       logger.info(`Missing packages: ${missingNames.join(', ')}`);
+    }
+    if (!torchRuntimeHealthy) {
+      logger.info('PyTorch runtime is incomplete (torchgen package files are missing)');
     }
 
     return { installed: state.installed, packages: foundPackages };
@@ -662,12 +828,13 @@ export class PluginInstaller {
       // branch on the GPU vendor.
       const packagesToUninstall = UNINSTALL_PACKAGE_NAMES;
       const args = ['-m', 'pip', 'uninstall', '-y', ...packagesToUninstall];
+      const pathAlias = await this.createPipPathAlias();
       
-      const commandStr = `${PATHS.PYTHON} ${args.join(' ')}`;
+      const commandStr = `${pathAlias.pythonPath} ${args.join(' ')}`;
       logger.info(`Running command: ${commandStr}`);
 
-      return new Promise((resolve) => {
-        this.installProcess = spawn(PATHS.PYTHON, args, createWorkloadSpawnOptions({
+      return new Promise<{ success: boolean; error?: string }>((resolve) => {
+        this.installProcess = spawn(pathAlias.pythonPath, args, createWorkloadSpawnOptions({
           cwd: PATHS.VS,
           windowsHide: true
         }));
@@ -770,7 +937,7 @@ export class PluginInstaller {
           });
           resolve({ success: false, error: error.message });
         });
-      });
+      }).finally(() => pathAlias.cleanup());
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Plugin dependency uninstallation error:', errorMsg);
