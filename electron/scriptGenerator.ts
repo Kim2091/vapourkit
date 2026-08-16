@@ -2,7 +2,7 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as os from 'os';
-import { IS_WINDOWS, PATHS } from './constants';
+import { PATHS } from './constants';
 import { getSystemRoot } from './trtexecShim';
 import { configManager } from './configManager';
 import { logger } from './logger';
@@ -65,6 +65,13 @@ export interface ScriptConfig {
 }
 
 export class VapourSynthScriptGenerator {
+  /**
+   * The target runtime platform. Production callers use the host platform;
+   * accepting it here makes the platform policy testable without mutating
+   * Node's read-only process.platform.
+   */
+  constructor(private readonly platform: NodeJS.Platform = process.platform) {}
+
   private getTemplatePath(): string {
     const templateName = 'vapoursynth_template.vpy';
     const templatePath = path.join(PATHS.CONFIG, templateName);
@@ -120,7 +127,7 @@ export class VapourSynthScriptGenerator {
    * else, which on Windows is not enough for cmd.exe to launch the .cmd shim.
    */
   private getEngineBuildEnv(): Record<string, string> {
-    if (!IS_WINDOWS) {
+    if (this.platform !== 'win32') {
       return {};
     }
     const systemRoot = getSystemRoot();
@@ -136,7 +143,7 @@ export class VapourSynthScriptGenerator {
 
     // This main-process boundary protects against imported settings, workflows,
     // and queue items containing a backend unsupported by the current OS.
-    const defaultBackend = normalizeBackendForPlatform(config.defaultBackend, process.platform);
+    const defaultBackend = normalizeBackendForPlatform(config.defaultBackend, this.platform);
 
     // Apply colorimetry settings
     const overwriteMatrix = config.colorimetry?.overwriteMatrix ? 'True' : 'False';
@@ -203,7 +210,7 @@ export class VapourSynthScriptGenerator {
         // Check precision and model type for THIS specific model from config, not filter state
         const filterBackend = normalizeBackendForPlatform(
           resolveFilterBackend(filter.backend, defaultBackend),
-          process.platform,
+          this.platform,
         );
         const provider = getProvider(filterBackend);
         const filterUseFp32 = configManager.isModelFp32(filter.modelPath);

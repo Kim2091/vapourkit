@@ -55,8 +55,14 @@ const customFilter = (order: number, preset: string, code = 'clip = core.std.Box
   order,
 });
 
-async function generate(filters: Filter[], generatePreviewOutputs = true, defaultBackend?: string, numStreams?: number): Promise<string> {
-  const generator = new VapourSynthScriptGenerator();
+async function generate(
+  filters: Filter[],
+  generatePreviewOutputs = true,
+  defaultBackend?: string,
+  numStreams?: number,
+  platform: NodeJS.Platform = 'win32',
+): Promise<string> {
+  const generator = new VapourSynthScriptGenerator(platform);
   const scriptPath = await generator.generateScript({
     inputVideo: 'C:\\videos\\input.mkv',
     enginePath: '',
@@ -143,7 +149,7 @@ describe('generateScript preview outputs (vs-view)', () => {
 });
 
 describe('inference backend selection', () => {
-  it('emits TensorRT code for the default backend', async () => {
+  it('emits TensorRT code for the Windows default backend', async () => {
     const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.engine')], false);
 
     expect(script).toContain('core.trt.Model(clip, engine_path="C:/models/m_fp16.engine"');
@@ -250,8 +256,34 @@ describe('inference backend selection', () => {
     const script = await generate([customFilter(0, 'CAS Sharpen')], false);
 
     expect(script).toContain('backend.custom_env.setdefault(_key, _value)');
-    if (process.platform === 'win32') {
-      expect(script).toMatch(/VK_BUILD_ENV = \{.*"SystemRoot".*"COMSPEC".*\}/);
-    }
+    expect(script).toMatch(/VK_BUILD_ENV = \{.*"SystemRoot".*"COMSPEC".*\}/);
+  });
+
+  it('normalizes Windows-only backends to NCNN when generating a Linux script', async () => {
+    const script = await generate(
+      [aiFilter(0, 'C:\\models\\m_fp16.onnx', 'directml')],
+      false,
+      'directml',
+      undefined,
+      'linux',
+    );
+
+    expect(script).toContain('VK_BACKEND = "ncnn"');
+    expect(script).toContain('core.ncnn.Model(clip, network_path="C:/models/m_fp16.onnx"');
+    expect(script).not.toContain('provider="DML"');
+  });
+
+  it('does not emit Windows cmd.exe environment variables for Linux TensorRT scripts', async () => {
+    const script = await generate(
+      [customFilter(0, 'CAS Sharpen')],
+      false,
+      'tensorrt',
+      undefined,
+      'linux',
+    );
+
+    expect(script).toContain('VK_BACKEND = "tensorrt"');
+    expect(script).toContain('VK_BUILD_ENV = {}');
+    expect(script).not.toContain('"COMSPEC"');
   });
 });

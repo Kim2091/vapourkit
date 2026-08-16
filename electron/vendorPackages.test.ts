@@ -34,12 +34,12 @@ import {
 const NON_NVIDIA: GpuVendor[] = ['amd', 'intel', 'unknown'];
 
 describe('getBackendsForVendor', () => {
-  it('gives NVIDIA TensorRT, DirectML, and NCNN', () => {
-    expect(getBackendsForVendor('nvidia')).toEqual(['tensorrt', 'directml', 'ncnn']);
+  it('gives Windows NVIDIA TensorRT, DirectML, and NCNN', () => {
+    expect(getBackendsForVendor('nvidia', 'win32')).toEqual(['tensorrt', 'directml', 'ncnn']);
   });
 
-  it.each(NON_NVIDIA)('gives %s DirectML and NCNN', (vendor) => {
-    expect(getBackendsForVendor(vendor)).toEqual(['directml', 'ncnn']);
+  it.each(NON_NVIDIA)('gives Windows %s DirectML and NCNN', (vendor) => {
+    expect(getBackendsForVendor(vendor, 'win32')).toEqual(['directml', 'ncnn']);
   });
 
   it('uses NCNN as the Linux default, retaining TensorRT as an NVIDIA option', () => {
@@ -53,25 +53,31 @@ describe('getBackendsForVendor', () => {
     expect(getBackendsForVendor('nvidia', 'darwin')).toEqual([]);
     expect(getBackendsForVendor('amd', 'darwin')).toEqual([]);
   });
+
+  it('uses the current platform when none is supplied', () => {
+    for (const vendor of ['nvidia', ...NON_NVIDIA] as GpuVendor[]) {
+      expect(getBackendsForVendor(vendor)).toEqual(getBackendsForVendor(vendor, process.platform));
+    }
+  });
 });
 
 describe('getBackendPipPackages', () => {
-  it('includes the mlrt-ort pin for every vendor', () => {
+  it('includes the mlrt-ort pin for every Windows vendor', () => {
     for (const vendor of ['nvidia', ...NON_NVIDIA] as GpuVendor[]) {
-      expect(getBackendPipPackages(vendor).some(spec => /^vapoursynth-mlrt-ort==/.test(spec))).toBe(true);
+      expect(getBackendPipPackages(vendor, 'win32').some(spec => /^vapoursynth-mlrt-ort==/.test(spec))).toBe(true);
     }
   });
 
-  it('includes the mlrt-trt pin only on NVIDIA', () => {
-    expect(getBackendPipPackages('nvidia').some(spec => spec.startsWith('vapoursynth-mlrt-trt=='))).toBe(true);
+  it('includes the mlrt-trt pin only on Windows NVIDIA', () => {
+    expect(getBackendPipPackages('nvidia', 'win32').some(spec => spec.startsWith('vapoursynth-mlrt-trt=='))).toBe(true);
     for (const vendor of NON_NVIDIA) {
-      expect(getBackendPipPackages(vendor).some(spec => spec.startsWith('vapoursynth-mlrt-trt'))).toBe(false);
+      expect(getBackendPipPackages(vendor, 'win32').some(spec => spec.startsWith('vapoursynth-mlrt-trt'))).toBe(false);
     }
   });
 
   it('includes the NCNN wheel on every supported platform', () => {
     for (const vendor of ['nvidia', ...NON_NVIDIA] as GpuVendor[]) {
-      expect(getBackendPipPackages(vendor)).toContain('vapoursynth-mlrt-ncnn==15.16');
+      expect(getBackendPipPackages(vendor, 'win32')).toContain('vapoursynth-mlrt-ncnn==15.16');
       expect(getBackendPipPackages(vendor, 'linux')).toContain('vapoursynth-mlrt-ncnn==15.16');
     }
   });
@@ -133,22 +139,22 @@ describe('getTorchInstall', () => {
 });
 
 describe('getCheckPackageNames', () => {
-  it('requires both backend wheels on NVIDIA', () => {
-    const names = getCheckPackageNames('nvidia');
+  it('requires all Windows NVIDIA backend wheels', () => {
+    const names = getCheckPackageNames('nvidia', 'win32');
     expect(names).toContain('vapoursynth-mlrt-trt');
     expect(names).toContain('vapoursynth-mlrt-ort');
     expect(names).toContain('vapoursynth');
     expect(names).toContain('torch');
   });
 
-  it.each(NON_NVIDIA)('requires only the ORT wheel on %s', (vendor) => {
-    const names = getCheckPackageNames(vendor);
+  it.each(NON_NVIDIA)('requires the Windows ORT wheel, but not TensorRT, on %s', (vendor) => {
+    const names = getCheckPackageNames(vendor, 'win32');
     expect(names).toContain('vapoursynth-mlrt-ort');
     expect(names).not.toContain('vapoursynth-mlrt-trt');
   });
 
   it('returns PEP 503-normalized names', () => {
-    for (const name of getCheckPackageNames('nvidia')) {
+    for (const name of getCheckPackageNames('nvidia', 'win32')) {
       expect(name).toBe(name.toLowerCase());
       expect(name).not.toContain('_');
       expect(name).not.toMatch(/[[=<>]/);
