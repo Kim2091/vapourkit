@@ -50,9 +50,3 @@ jobs:
           test -n "$appimage"
           test -x "$appimage"
           APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout --signal=TERM 30s "$appimage" --version
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Vapourkit-linux-AppImage
-          path: release/*.AppImage
-          if-no-files-found: error
-          retention-days: 14
