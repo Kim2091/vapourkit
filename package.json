@@ -17,8 +17,7 @@
         "preview": "vite preview",
         "test": "vitest run",
         "test:watch": "vitest",
-        "test:electron": "vitest run -c vitest.config.electron.ts",
-        "update-docs": "tsx scripts/updateModelsDocs.ts"
+        "test:electron": "vitest run -c vitest.config.electron.ts"
     },
     "keywords": [
         "video",

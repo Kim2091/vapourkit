@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 
-// Colour system — see docs/design/README.md
+// Colour system
 //
 // Two families and nothing else:
 //

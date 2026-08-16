@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CodeMirror Selection Fix — accent at low alpha, see docs/design/README.md */
+/* CodeMirror selection fix — accent at low alpha. */
 .cm-editor .cm-selectionLayer .cm-selectionBackground {
   background: rgba(var(--accent-rgb), 0.32) !important;
 }
@@ -41,7 +41,7 @@
   contain: layout style;
 }
 
-/* Colour system — see docs/design/README.md. These mirror the ink ramp and
+/* Colour system. These mirror the ink ramp and
    accent in tailwind.config.js; keep them in sync. */
 :root {
   --ink-950: 14 15 16;
@@ -66,8 +66,8 @@
   --accent-600: 49 155 139;
   --accent-700: 38 126 112;
   --accent-800: 28 95 85;
-  --accent-ink: 4 18 15;
   --accent-900: 18 63 57;
+  --accent-ink: 4 18 15;
 }
 
 body {

@@ -13,7 +13,7 @@ export const VS_MLRT_NCNN_VERSION = '15.16';
 // Minimum vsview version the app requires (named preview outputs rely on its
 // set_output API). The vs-view launch path upgrades older installs to satisfy
 // this floor; the main plugin install already runs pip with --upgrade.
-export const VSVIEW_MIN_VERSION = '0.9.0';
+export const VSVIEW_MIN_VERSION = '0.10.0';
 
 // Extra package indexes required by the PyPI install:
 // - pypi.nvidia.com hosts the TensorRT (tensorrt-cu13*) wheels

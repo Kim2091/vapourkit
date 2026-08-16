@@ -4,7 +4,7 @@
 // rail is always readable without an expand mode to discover. The queue lives
 // here with a live count badge — it is a pane you show or hide, so its switch
 // belongs on the rail, not inside a settings section. Workflow actions live in
-// the title strip. See docs/design/README.md.
+// the title strip.
 
 import { memo } from 'react';
 import { Settings, Plug, RefreshCw, Lock, LockOpen, Info, List } from 'lucide-react';

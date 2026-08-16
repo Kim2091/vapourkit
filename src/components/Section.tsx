@@ -4,7 +4,6 @@
 // 16px padding and a gap between them: ~200px of chrome before a single control
 // was drawn. A sticky 32px header and a hairline do the same separating job for
 // 32px total, and the headers stay legible while the column scrolls.
-// See docs/design/README.md.
 
 import { memo } from 'react';
 import { ChevronDown } from 'lucide-react';

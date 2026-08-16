@@ -6,7 +6,7 @@
   - Engine builds are kill-safe: the engine is written to a temp file and renamed into place, so force-closing mid-build can no longer leave a truncated engine that gets reused as a cache hit and permanently breaks the filter
   - Builds are recorded in the per-item queue log, and the vs-view launch now evaluates the script first so builds happen under Vapourkit's UI instead of freezing vs-view's window
   - Covers `vs_temporalfix`'s TemporalFix (AI) engine builds too — it builds engines its own way, so its existing build log lines are recognized directly (no progress percentage available, so the banner spins)
-  - Third-party filters can opt into the same banner by printing `[vk-build] begin/progress/end` lines to stderr — see "Runtime engine builds" in the Development docs
+  - Third-party filters can opt into the same banner by printing `[vk-build] begin/progress/end` lines to stderr — see the [project documentation](https://github.com/Kim2091/vapourkit-site)
 - The RIFE and DPIR filter templates now use real TensorRT when the TensorRT backend is selected, instead of ONNX Runtime CUDA
   - vs-mlrt builds those engines by shelling out to `trtexec`, which the TensorRT pip wheels don't ship; Vapourkit now installs a `trtexec` shim that routes the build through its own TensorRT Python API builder (the same one the model importer uses)
   - The first run at each resolution builds an engine (a few minutes, with the banner above); later runs at that resolution start instantly from the cached engine in `data/vsmlrt-models`

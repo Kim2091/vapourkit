@@ -3,7 +3,7 @@
 // Replaces two things at once: a card that spent ~100px carrying four numbers
 // at text-base, and a row of py-4 buttons that sat at the end of a scrolling
 // column. Progress is the bar's own top edge, so the strip costs no height at
-// all. See docs/design/README.md.
+// all.
 
 import { memo } from 'react';
 import {

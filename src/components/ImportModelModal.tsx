@@ -4,7 +4,7 @@ import type { ModelImportProgress } from '../electron.d';
 import type { ImportForm } from '../hooks/useModelImport';
 import { getBackendDescriptor } from '../utils/backends';
 
-// Shared recipes — see docs/design/README.md and ActionBar.tsx / SettingsModal.tsx
+// Shared recipes — see ActionBar.tsx / SettingsModal.tsx.
 const LABEL = 'block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1';
 const INPUT = 'w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] placeholder-ink-500 focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50';
 // Option buttons: selection is an accent fill, never a grey band + accent edge

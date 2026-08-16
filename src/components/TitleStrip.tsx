@@ -6,7 +6,7 @@
 // The old header spent 80px on buttons whose labels repeated their tooltips,
 // a centred wordmark with a tagline, and three bordered boxes for workflow,
 // GPU and privacy. This carries the same information as data: chips and
-// meters, no boxes around boxes. See docs/design/README.md.
+// meters, no boxes around boxes.
 
 import { memo, useMemo, useState, useRef, useEffect } from 'react';
 import { Cpu, ChevronDown, Check, X, FileCheck2, Undo, Redo, Lock, FolderOpen, Download, Upload } from 'lucide-react';

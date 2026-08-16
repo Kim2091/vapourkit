@@ -4,7 +4,7 @@
 // reading down one side and back up the other while holding five numbers in
 // your head. One pair per row does the comparison for you, and colouring only
 // the rows that actually differ answers "what is this pipeline changing?"
-// without reading anything. See docs/design/README.md.
+// without reading anything.
 
 import { memo } from 'react';
 import { ArrowRight } from 'lucide-react';

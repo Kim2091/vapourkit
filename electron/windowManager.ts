@@ -26,7 +26,7 @@ export class WindowManager {
       minWidth: 900,
       minHeight: 600,
       // ink-950 — matches body in src/index.css so there is no flash of a
-      // different colour before the renderer paints. See docs/design/README.md.
+      // different colour before the renderer paints.
       backgroundColor: '#0e0f10',
       webPreferences: {
         nodeIntegration: false,

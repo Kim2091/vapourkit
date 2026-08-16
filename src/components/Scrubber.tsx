@@ -4,7 +4,7 @@
 // picture they described. Here the handles ARE the selection: drag to set in
 // and out, the excluded region dims, and the playhead shows where the preview
 // frame came from. Frame-exact entry survives in the popover — drag for speed,
-// type for precision. See docs/design/README.md.
+// type for precision.
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Scissors, RotateCcw, Crosshair, Play } from 'lucide-react';
