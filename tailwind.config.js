@@ -34,6 +34,10 @@ const ink = {
   50:  '#fafafa', // L98
 };
 
+const dynamicInk = Object.fromEntries(
+  Object.keys(ink).map((stop) => [stop, `rgb(var(--ink-${stop}) / <alpha-value>)`]),
+);
+
 const accent = {
   200: 'rgb(var(--accent-200) / <alpha-value>)',
   300: 'rgb(var(--accent-300) / <alpha-value>)',
@@ -58,7 +62,7 @@ export default {
       // place the old palette survived. Any bare `ring-*` would flash blue
       // against a dark UI.
       ringColor: { DEFAULT: accent[500] },
-      ringOffsetColor: { DEFAULT: ink[950] },
+      ringOffsetColor: { DEFAULT: dynamicInk[950] },
 
       fontFamily: {
         // Bahnschrift is the DIN-derived grotesque that ships with Windows 10
@@ -69,9 +73,9 @@ export default {
         mono: ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'ui-monospace', 'monospace'],
       },
       colors: {
-        ink,
+        ink: dynamicInk,
         accent,
-        gray: ink,
+        gray: dynamicInk,
 
         // Full ramps, not just the three stops in use — a `bad-300` that
         // doesn't exist renders as no colour at all rather than failing loudly,

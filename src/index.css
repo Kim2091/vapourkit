@@ -44,14 +44,19 @@
 /* Colour system — see docs/design/README.md. These mirror the ink ramp and
    accent in tailwind.config.js; keep them in sync. */
 :root {
-  --ink-950: #0e0f10;
-  --ink-900: #171819;
-  --ink-850: #1f2123;
-  --ink-800: #292b2e;
-  --ink-750: #333538;
-  --ink-700: #3f4146;
-  --ink-600: #52555b;
-  --ink-200: #e7e8e9;
+  --ink-950: 14 15 16;
+  --ink-900: 23 24 25;
+  --ink-850: 31 33 35;
+  --ink-800: 41 43 46;
+  --ink-750: 51 53 56;
+  --ink-700: 63 65 70;
+  --ink-600: 82 85 91;
+  --ink-500: 135 138 146;
+  --ink-400: 161 164 170;
+  --ink-300: 212 214 216;
+  --ink-200: 231 232 233;
+  --ink-100: 244 245 245;
+  --ink-50: 250 250 250;
   --accent: #3fb9a6;
   --accent-rgb: 63, 185, 166;
   --accent-200: 187 231 225;
@@ -72,8 +77,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--ink-950);
-  color: var(--ink-200);
+  background-color: rgb(var(--ink-950));
+  color: rgb(var(--ink-200));
 }
 
 * {
@@ -110,30 +115,30 @@ progress {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--ink-900);
+  background: rgb(var(--ink-900));
   border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--ink-700, #3f4146);
+  background: rgb(var(--ink-700, 63 65 70));
   border-radius: 6px;
-  border: 2px solid var(--ink-900);
+  border: 2px solid rgb(var(--ink-900));
   transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ink-600, #52555b);
-  border: 2px solid var(--ink-850);
+  background: rgb(var(--ink-600, 82 85 91));
+  border: 2px solid rgb(var(--ink-850));
 }
 
 ::-webkit-scrollbar-corner {
-  background: var(--ink-900);
+  background: rgb(var(--ink-900));
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--ink-700, #3f4146) var(--ink-900);
+  scrollbar-color: rgb(var(--ink-700, 63 65 70)) rgb(var(--ink-900));
 }
 
 /* Filter Duplicate Highlight Animation */

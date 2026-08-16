@@ -168,7 +168,7 @@ export const Scrubber = memo<ScrubberProps>(({
       >
         <div
           className="absolute inset-0 opacity-50"
-          style={{ backgroundImage: 'repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 26px)', color: '#333538' }}
+          style={{ backgroundImage: 'repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 26px)', color: 'rgb(var(--ink-750))' }}
         />
 
         {segment.enabled && hasVideo && (

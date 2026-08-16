@@ -101,13 +101,13 @@ export const PythonCodeEditor = memo(({
       // Section content sits under a 13px header — the editor doesn't outrank it.
       fontSize: '12px',
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-      backgroundColor: '#0f1419 !important',
+      backgroundColor: 'rgb(var(--ink-950))',
       color: '#ffffff',
     },
     '.cm-content': {
       minHeight: minHeight,
       padding: '0',
-      backgroundColor: '#0f1419 !important',
+      backgroundColor: 'rgb(var(--ink-950))',
       caretColor: '#fff',
     },
     '.cm-line': {
@@ -131,12 +131,12 @@ export const PythonCodeEditor = memo(({
     '.cm-scroller': {
       overflow: 'auto',
       maxHeight: '400px',
-      backgroundColor: '#0f1419 !important',
+      backgroundColor: 'rgb(var(--ink-950))',
     },
     '.cm-gutters': {
-      backgroundColor: '#0a0e14',
+      backgroundColor: 'rgb(var(--ink-900))',
       borderRight: '1px solid rgba(255, 255, 255, 0.1)',
-      color: '#4a5568',
+      color: 'rgb(var(--ink-500))',
     },
     '.cm-activeLineGutter': {
       backgroundColor: 'rgba(255, 255, 255, 0.05)',

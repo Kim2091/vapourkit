@@ -44,6 +44,7 @@ import { OutputSettingsPanel } from './components/OutputSettingsPanel';
 import { ModelSelectionPanel } from './components/ModelSelectionPanel';
 import { getPortableModelName } from './utils/modelUtils';
 import { useAccentColor } from './hooks/useAccentColor';
+import { useMainColor } from './hooks/useMainColor';
 
 // Settings column drag bounds, in pixels.
 const SETTINGS_MIN_W = 320;
@@ -84,6 +85,7 @@ function App() {
   const { defaultBackend, setDefaultBackend, numStreams, updateNumStreams, showBackendOverrides, setShowBackendOverrides } = useSettings(recommendedBackend);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
   const { accentColor, setAccentColor, resetAccentColor } = useAccentColor();
+  const { mainColor, setMainColor, resetMainColor } = useMainColor();
   const { 
     ffmpegArgs, 
     processingFormat,
@@ -1006,6 +1008,9 @@ function App() {
         onResetDefaultOutputFolder={handleResetDefaultOutputFolder}
         descriptiveNamingEnabled={descriptiveNamingEnabled}
         onUpdateDescriptiveNamingEnabled={handleUpdateDescriptiveNamingEnabled}
+        mainColor={mainColor}
+        onChangeMainColor={setMainColor}
+        onResetMainColor={resetMainColor}
         accentColor={accentColor}
         onChangeAccentColor={setAccentColor}
         onResetAccentColor={resetAccentColor}

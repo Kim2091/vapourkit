@@ -53,6 +53,9 @@ interface AppModalsProps {
   onResetDefaultOutputFolder: () => void;
   descriptiveNamingEnabled: boolean;
   onUpdateDescriptiveNamingEnabled: (enabled: boolean) => void;
+  mainColor: string;
+  onChangeMainColor: (color: string) => void;
+  onResetMainColor: () => void;
   accentColor: string;
   onChangeAccentColor: (color: string) => void;
   onResetAccentColor: () => void;
@@ -130,6 +133,9 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
         onResetDefaultOutputFolder={props.onResetDefaultOutputFolder}
         descriptiveNamingEnabled={props.descriptiveNamingEnabled}
         onUpdateDescriptiveNamingEnabled={props.onUpdateDescriptiveNamingEnabled}
+        mainColor={props.mainColor}
+        onChangeMainColor={props.onChangeMainColor}
+        onResetMainColor={props.onResetMainColor}
         accentColor={props.accentColor}
         onChangeAccentColor={props.onChangeAccentColor}
         onResetAccentColor={props.onResetAccentColor}

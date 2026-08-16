@@ -3,6 +3,7 @@ import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, 
 import type { BackendId } from '../electron.d';
 import { BACKENDS } from '../utils/backends';
 import { DEFAULT_ACCENT_COLOR } from '../hooks/useAccentColor';
+import { DEFAULT_MAIN_COLOR } from '../hooks/useMainColor';
 
 interface SettingsModalProps {
   show: boolean;
@@ -21,6 +22,9 @@ interface SettingsModalProps {
   onResetDefaultOutputFolder: () => void;
   descriptiveNamingEnabled: boolean;
   onUpdateDescriptiveNamingEnabled: (enabled: boolean) => void;
+  mainColor: string;
+  onChangeMainColor: (color: string) => void;
+  onResetMainColor: () => void;
   accentColor: string;
   onChangeAccentColor: (color: string) => void;
   onResetAccentColor: () => void;
@@ -45,6 +49,9 @@ export const SettingsModal = memo<SettingsModalProps>(({
   onResetDefaultOutputFolder,
   descriptiveNamingEnabled,
   onUpdateDescriptiveNamingEnabled,
+  mainColor,
+  onChangeMainColor,
+  onResetMainColor,
   accentColor,
   onChangeAccentColor,
   onResetAccentColor,
@@ -244,6 +251,30 @@ export const SettingsModal = memo<SettingsModalProps>(({
                     <Palette className="w-3.5 h-3.5 text-ink-500" />
                     <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Appearance</h3>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-3 px-4 py-2.5 border-b border-ink-900">
+                  <label htmlFor="main-color" className="flex-1 min-w-0 cursor-pointer">
+                    <p className="text-[12.5px] text-ink-200">Main Color</p>
+                    <p className="text-[11px] text-ink-500 mt-0.5">Tint the interface surfaces while keeping the application dark.</p>
+                  </label>
+                  <input
+                    id="main-color"
+                    type="color"
+                    value={mainColor}
+                    onChange={(event) => onChangeMainColor(event.target.value)}
+                    aria-label="Choose main color"
+                    className="w-9 h-7 p-0.5 rounded bg-ink-850 border border-ink-750 cursor-pointer"
+                  />
+                  <code className="w-[68px] text-[11px] font-mono text-ink-400 uppercase">{mainColor}</code>
+                  <button
+                    type="button"
+                    onClick={onResetMainColor}
+                    disabled={mainColor === DEFAULT_MAIN_COLOR}
+                    className="text-[11px] text-accent-400 hover:text-accent-300 transition-colors disabled:text-ink-600 disabled:cursor-not-allowed"
+                  >
+                    Reset
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-3 px-4 py-2.5 border-b border-ink-900">
