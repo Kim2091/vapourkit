@@ -72,6 +72,14 @@ export class VapourSynthScriptGenerator {
    */
   constructor(private readonly platform: NodeJS.Platform = process.platform) {}
 
+  /**
+   * Model paths are persisted by the target app, so parse them with that
+   * platform's separator rules instead of the operating system running tests.
+   */
+  private basename(filePath: string): string {
+    return (this.platform === 'win32' ? path.win32 : path.posix).basename(filePath);
+  }
+
   private getTemplatePath(): string {
     const templateName = 'vapoursynth_template.vpy';
     const templatePath = path.join(PATHS.CONFIG, templateName);
@@ -217,7 +225,7 @@ export class VapourSynthScriptGenerator {
         const filterModelType = configManager.getModelType(filter.modelPath);
         const filterTemporalFrames = configManager.getTemporalFrames(filter.modelPath);
         filterCode += this.generateAIModelCode(filter, provider, filterUseFp32, filterModelType, defaultMatrix, defaultPrimaries, defaultTransfer, filter.numStreams ?? config.numStreams, filterTemporalFrames);
-        stageLabel = path.basename(filter.modelPath).replace(/\.(onnx|engine)$/i, '');
+        stageLabel = this.basename(filter.modelPath).replace(/\.(onnx|engine)$/i, '');
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';

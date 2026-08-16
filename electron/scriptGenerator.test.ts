@@ -109,6 +109,19 @@ describe('generateScript preview outputs (vs-view)', () => {
     expect(script).toContain('_vk_set_output(clip, 2, "2. 4x-AnimeSharp")');
   });
 
+  it('uses POSIX basename semantics for Linux model paths', async () => {
+    const script = await generate(
+      [aiFilter(0, '/models/2x_TestModel_fp16.onnx')],
+      true,
+      undefined,
+      undefined,
+      'linux',
+    );
+
+    expect(script).toContain('_vk_set_output(clip, 1, "1. 2x_TestModel_fp16")');
+    expect(script).not.toContain('_vk_set_output(clip, 1, "1. /models/2x_TestModel_fp16")');
+  });
+
   it('falls back to bare set_output when vsview is not importable', async () => {
     const script = await generate([customFilter(0, 'CAS Sharpen')]);
 
@@ -213,7 +226,7 @@ describe('inference backend selection', () => {
   });
 
   it('maps legacy useDirectML booleans to backend ids', async () => {
-    const generator = new VapourSynthScriptGenerator();
+    const generator = new VapourSynthScriptGenerator('win32');
     const scriptPath = await generator.generateScript({
       inputVideo: 'C:\\videos\\input.mkv',
       enginePath: '',
