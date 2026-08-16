@@ -53,7 +53,7 @@ First-run setup creates a private virtual environment and installs VapourSynth, 
 4. Click **Upscale Video** to process it.
 5. Use **Preview Output** or **Compare Videos** to review the result.
 
-For advanced features like custom filters and workflows, see the [Vapourkit documentation](https://github.com/Kim2091/vapourkit-site).
+For advanced features like custom filters and workflows, see the [Vapourkit documentation](https://www.vapourkit.app/introduction/).
 
 ## Features
 
@@ -72,7 +72,7 @@ For advanced features like custom filters and workflows, see the [Vapourkit docu
 
 ### Model Support
 
-See the [Vapourkit documentation](https://github.com/Kim2091/vapourkit-site) for included models, custom model requirements, and model licensing details.
+See the [Vapourkit documentation](https://www.vapourkit.app/introduction/) for included models, custom model requirements, and model licensing details.
 
 ## System Requirements
 
@@ -105,7 +105,7 @@ Templates that depend on Windows-native binaries, CUDA-only plugins, Hybrid scri
 
 ## Development
 
-Development documentation is maintained in the [Vapourkit documentation site](https://github.com/Kim2091/vapourkit-site).
+Development documentation is maintained in the [Vapourkit documentation site](https://www.vapourkit.app/introduction/).
 
 ## License
 
