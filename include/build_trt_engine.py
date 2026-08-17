@@ -4,26 +4,23 @@ TensorRT's pip wheels do not contain trtexec, so VapourKit calls this script for
 both explicit model imports and vs-mlrt's runtime engine builds.
 
 On TensorRT 11+ networks are strongly typed: FP16/BF16 has to be expressed in
-the ONNX graph, rather than set through a builder flag.  For an FP32 ONNX this
-script uses ModelOpt's precision-conversion machinery, then probes TensorRT. If
-a low-precision tactic fails, it learns the relevant ONNX node(s), retries with
-small FP32 islands, and persists the learned node blacklist by graph structure.
-The same architecture can therefore skip the expensive probe cycle next time.
+the ONNX graph, rather than set through a builder flag. The source ONNX graph is
+passed to TensorRT unchanged. If a low-precision tactic fails, the builder
+learns the relevant ONNX node(s), retries with small FP32 islands, and persists
+the learned node blacklist by graph structure.
 
 Supported arguments deliberately mirror the subset of trtexec used by
 VapourKit and vs-mlrt:
 
   --onnx=PATH --saveEngine=PATH
   --shapes/--minShapes/--optShapes/--maxShapes=name:1x3x240x240[,name2:...]
-  --fp16 --bf16 --noTF32 --inputIOFormats=fp16:chw --outputIOFormats=fp16:chw
+  --fp16 --bf16 --noTF32
   --builderOptimizationLevel=N --timingCacheFile=PATH
   --memPoolSize=workspace:N --workspace=N --device=N --verbose
 """
 
 import hashlib
-import inspect
 import json
-import logging
 import os
 import sys
 import time
@@ -43,9 +40,6 @@ REGION_HOPS = 1
 AUTO_BLACKLIST_AMBIGUOUS = False
 PROBE_AVG_TIMING_ITERATIONS = 1
 FINAL_AVG_TIMING_ITERATIONS = 4
-INIT_MAX = 65504.0
-USE_STANDALONE_TYPE_INFERENCE = True
-USE_FAST_MODELOPT_CLEANUP = True
 
 
 # trtexec flags that have no build-time equivalent here. Inference-only or
@@ -146,7 +140,7 @@ def parse_args(argv):
         elif key == 'verbose':
             opts['verbose'] = True
         elif key in ('inputIOFormats', 'outputIOFormats'):
-            # Strongly typed TensorRT takes I/O types from the converted ONNX.
+            # Strongly typed TensorRT takes I/O types from the source ONNX graph.
             pass
         elif key == 'builderOptimizationLevel':
             opts['optimization_level'] = int(value)
@@ -265,7 +259,7 @@ def _shape_of_value_info(value_info):
 def _canonical_attr_for_model_fingerprint(attr):
     # onnx is imported only for low-precision builds, immediately before these
     # helpers are called. Keeping it lazy allows an FP32 build to report missing
-    # TensorRT cleanly even if a ModelOpt dependency is absent.
+    # TensorRT cleanly without importing ONNX unnecessarily.
     attribute_type = attr.type
     if attribute_type == onnx.AttributeProto.FLOAT:
         value = float(attr.f)
@@ -475,238 +469,33 @@ def _source_low_precision_types(model):
     return found
 
 
-def _make_fast_precision_converter(onnx_utils, autocast_utils, PrecisionConverter):
-    """Keep ModelOpt's cleanup decisions while indexing its repeated graph scans."""
-
-    class IndexedModelOptLookup:
-        def __init__(self, model):
-            self.model = model
-            self.consumers = defaultdict(list)
-            self.producers = defaultdict(list)
-            for node in model.graph.node:
-                for input_name in node.input:
-                    if input_name:
-                        self.consumers[input_name].append(node)
-                for output_name in node.output:
-                    if output_name:
-                        self.producers[output_name].append(node)
-
-        @staticmethod
-        def _append_identity_once(items, node):
-            node_id = id(node)
-            if all(id(item) != node_id for item in items):
-                items.append(node)
-
-        @staticmethod
-        def _remove_identity(items, node):
-            node_id = id(node)
-            items[:] = [item for item in items if id(item) != node_id]
-
-        def get_consumer_nodes(self, model, tensor_name):
-            if model is not self.model:
-                return self._original_get_consumer_nodes(model, tensor_name)
-            return [
-                node for node in self.consumers.get(tensor_name, ())
-                if tensor_name in node.input
-            ]
-
-        def get_producer_nodes(self, model, tensor_name):
-            if model is not self.model:
-                return self._original_get_producer_nodes(model, tensor_name)
-            return [
-                node for node in self.producers.get(tensor_name, ())
-                if tensor_name in node.output
-            ]
-
-        def _refresh_node(self, node, old_inputs, old_outputs):
-            new_inputs = list(node.input)
-            new_outputs = list(node.output)
-            for name in set(old_inputs) - set(new_inputs):
-                self._remove_identity(self.consumers[name], node)
-            for name in set(new_inputs) - set(old_inputs):
-                self._append_identity_once(self.consumers[name], node)
-            for name in set(old_outputs) - set(new_outputs):
-                self._remove_identity(self.producers[name], node)
-            for name in set(new_outputs) - set(old_outputs):
-                self._append_identity_once(self.producers[name], node)
-
-        def bypass_cast_node(self, model, node):
-            if model is not self.model:
-                return self._original_bypass_cast_node(model, node)
-
-            input_tensor = node.input[0]
-            output_tensor = node.output[0]
-            affected = []
-            seen = set()
-            candidates = (
-                [node]
-                + self.get_producer_nodes(model, input_tensor)
-                + self.get_consumer_nodes(model, input_tensor)
-                + self.get_consumer_nodes(model, output_tensor)
-            )
-            for candidate in candidates:
-                if id(candidate) not in seen:
-                    seen.add(id(candidate))
-                    affected.append(candidate)
-
-            snapshots = [(node, list(node.input), list(node.output)) for node in affected]
-            result = self._original_bypass_cast_node(model, node)
-            for candidate, old_inputs, old_outputs in snapshots:
-                self._refresh_node(candidate, old_inputs, old_outputs)
-            return result
-
-        def patch(self):
-            self._original_get_consumer_nodes = onnx_utils.get_consumer_nodes
-            self._original_get_producer_nodes = onnx_utils.get_producer_nodes
-            self._original_bypass_cast_node = onnx_utils._bypass_cast_node
-            onnx_utils.get_consumer_nodes = self.get_consumer_nodes
-            onnx_utils.get_producer_nodes = self.get_producer_nodes
-            onnx_utils._bypass_cast_node = self.bypass_cast_node
-
-        def restore(self):
-            onnx_utils.get_consumer_nodes = self._original_get_consumer_nodes
-            onnx_utils.get_producer_nodes = self._original_get_producer_nodes
-            onnx_utils._bypass_cast_node = self._original_bypass_cast_node
-
-    class PreSanitizedPrecisionConverter(PrecisionConverter):
-        def _sanitize_model(self):
-            self.value_info_map, self.initializer_map, self.node_to_init_map = autocast_utils.setup_mappings(
-                self.model
-            )
-            self._fast_cleanup_ok = USE_FAST_MODELOPT_CLEANUP and not any(
-                attr.type in (onnx.AttributeProto.GRAPH, onnx.AttributeProto.GRAPHS)
-                for node in self.model.graph.node
-                for attr in node.attribute
-            )
-
-        def _cleanup_no_consumer_nodes(self):
-            if not self._fast_cleanup_ok:
-                return super()._cleanup_no_consumer_nodes()
-            lookup = IndexedModelOptLookup(self.model)
-            lookup.patch()
-            try:
-                return super()._cleanup_no_consumer_nodes()
-            finally:
-                lookup.restore()
-
-        def _remove_redundant_casts(self):
-            if self.custom_ops:
-                self.model = self._propagate_types_shapes_custom_ops(self.model)
-            else:
-                self.model = onnx_utils.infer_types(
-                    self.model, self.use_standalone_type_inference, strict_mode=True
-                )
-            if not self.use_standalone_type_inference:
-                self.model = onnx_utils.infer_types(
-                    self.model,
-                    self.use_standalone_type_inference,
-                    strict_mode=True,
-                    check_type=True,
-                )
-
-            if not self._fast_cleanup_ok:
-                self.model = onnx_utils.remove_redundant_casts(self.model)
-                return
-
-            lookup = IndexedModelOptLookup(self.model)
-            lookup.patch()
-            try:
-                self.model = onnx_utils.remove_redundant_casts(self.model)
-            finally:
-                lookup.restore()
-
-    return PreSanitizedPrecisionConverter
-
-
-def prepare_precision_context(source_model, precision, pretyped_source):
-    """Prepare a reusable ModelOpt base once, rather than once per retry."""
-    try:
-        import modelopt.onnx.autocast.utils as autocast_utils
-        import modelopt.onnx.utils as onnx_utils
-        from modelopt.onnx.autocast.convert import LATEST_IR_VERSION_SUPPORTED_BY_ORT
-        from modelopt.onnx.autocast.graphsanitizer import GraphSanitizer
-        from modelopt.onnx.autocast.logging_config import configure_logging
-        from modelopt.onnx.autocast.nodeclassifier import NodeClassifier
-        from modelopt.onnx.autocast.precisionconverter import PrecisionConverter
-    except ImportError as import_error:
-        raise RuntimeError(
-            'nvidia-modelopt is required to build an FP16/BF16 TensorRT engine from an '
-            f'FP32 model ({import_error}). Reinstall plugins from the Plugins menu, or '
-            'import this model as FP32.'
-        ) from import_error
-
-    configure_logging(logging.WARNING)
+def prepare_precision_context(source_model, pretyped_source):
+    """Prepare the source ONNX graph without an initial precision conversion."""
     started = time.perf_counter()
-    model = deepcopy(source_model)
+    model = source_model
 
     if pretyped_source:
-        index = make_graph_index(model)
-        fingerprint = model_structure_fingerprint(model)
         types = ', '.join(
             onnx.TensorProto.DataType.Name(item) for item in sorted(_source_low_precision_types(model))
         )
         print(
-            f'Using existing strongly typed {types} graph; only learned FP32 fallback islands '
-            'will be inserted.',
+            f'Using existing strongly typed {types} graph; only learned FP32 fallback islands will be inserted.',
             flush=True,
         )
-        return {
-            'precision': precision,
-            'model': model,
-            'pretyped': True,
-            'fingerprint': fingerprint,
-            'index': index,
-        }
+    else:
+        print('Using source ONNX graph unchanged.', flush=True)
 
-    min_opset = 22 if precision == 'bf16' else 13
-    original_opset = next(
-        (int(item.version) for item in model.opset_import if item.domain in ('', 'ai.onnx')),
-        None,
-    )
-    print(
-        f'Preparing {precision.upper()} precision candidates (opset {original_opset}, minimum {min_opset})...',
-        flush=True,
-    )
-    sanitizer = GraphSanitizer(
-        model,
-        min_opset=min_opset,
-        max_ir_version=LATEST_IR_VERSION_SUPPORTED_BY_ORT,
-    )
-    sanitizer.sanitize()
-    model = sanitizer.model
-    model = onnx_utils.infer_types(model, USE_STANDALONE_TYPE_INFERENCE, strict_mode=True)
-    value_info_map, initializer_map, node_to_init_map = autocast_utils.setup_mappings(model)
-    classifier = NodeClassifier(
-        model,
-        node_to_init_map=node_to_init_map,
-        initializer_map=initializer_map,
-        nodes_to_exclude=[],
-        op_types_to_exclude=[],
-        nodes_to_include=[],
-        op_types_to_include=[],
-        data_max=None,
-        init_max=INIT_MAX,
-        max_depth_of_reduction=None,
-        custom_ops_low_precision_nodes=sanitizer.custom_ops_low_precision_nodes or [],
-    )
-    base_low, base_high = classifier.run(None)
     index = make_graph_index(model)
     fingerprint = model_structure_fingerprint(model)
     print(
-        f'Prepared {len(base_low)} {precision.upper()} candidate node(s) and '
-        f'{len(base_high)} FP32 node(s) in {format_seconds(time.perf_counter() - started)}.',
+        f'Prepared source graph in {format_seconds(time.perf_counter() - started)}.',
         flush=True,
     )
     return {
-        'precision': precision,
         'model': model,
-        'pretyped': False,
-        'custom_ops': sanitizer.custom_ops,
-        'forced_low': set(sanitizer.custom_ops_low_precision_nodes or []),
-        'base_high': set(base_high),
+        'pretyped': True,
         'fingerprint': fingerprint,
         'index': index,
-        'converter_type': _make_fast_precision_converter(onnx_utils, autocast_utils, PrecisionConverter),
     }
 
 
@@ -873,36 +662,8 @@ def _promote_pretyped_nodes_to_fp32(base_model, blacklisted_nodes):
 def convert_model_in_memory(context, blacklisted_nodes):
     """Return a type-consistent ONNX graph without writing a temporary model."""
     started = time.perf_counter()
-    if context['pretyped']:
-        mixed_model = _promote_pretyped_nodes_to_fp32(context['model'], blacklisted_nodes)
-        return mixed_model, time.perf_counter() - started, set(blacklisted_nodes)
-
-    all_node_names = {node.name for node in context['model'].graph.node if node.name}
-    high_precision = (context['base_high'] | blacklisted_nodes) - context['forced_low']
-    low_precision = all_node_names - high_precision
-    converter_type = context['converter_type']
-    parameters = inspect.signature(converter_type.__init__).parameters
-    kwargs = {
-        'model': context['model'],
-        'value_info_map': {},
-        'initializer_map': {},
-        'node_to_init_map': {},
-        # TensorRT model calls in VapourKit use RGBH for FP16/BF16. Keep the
-        # conversion's low-precision I/O behavior from the previous builder.
-        'keep_io_types': False,
-        'low_precision_type': context['precision'],
-        'custom_ops': context['custom_ops'],
-    }
-    if 'use_standalone_type_inference' in parameters:
-        kwargs['use_standalone_type_inference'] = USE_STANDALONE_TYPE_INFERENCE
-    elif USE_STANDALONE_TYPE_INFERENCE:
-        raise RuntimeError(
-            'This TensorRT mixed-precision builder requires ModelOpt 0.42 or newer.'
-        )
-
-    converter = converter_type(**kwargs)
-    mixed_model = converter.convert(sorted(high_precision), sorted(low_precision))
-    return mixed_model, time.perf_counter() - started, high_precision
+    mixed_model = _promote_pretyped_nodes_to_fp32(context['model'], blacklisted_nodes)
+    return mixed_model, time.perf_counter() - started, set(blacklisted_nodes)
 
 
 def _shape_options_given(opts):
@@ -1003,7 +764,7 @@ def report_parse_errors(parser):
 
 
 def build_from_memory(builder, onnx_bytes, opts, trt, logger, average_timing_iterations, timing_cache_bytes, want_engine):
-    """Parse and build a converted ONNX graph entirely in RAM."""
+    """Parse and build an ONNX graph entirely in RAM."""
     network = builder.create_network(
         1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)
     )
@@ -1157,7 +918,7 @@ def save_engine(path, engine_bytes):
 
 
 def build_low_precision_engine(opts, trt):
-    """Run the ModelOpt conversion and TensorRT capability-probe loop."""
+    """Run the TensorRT capability-probe loop without converting the source ONNX."""
     global onnx
     import onnx
 
@@ -1169,16 +930,9 @@ def build_low_precision_engine(opts, trt):
     source_model = onnx.load(opts['onnx'], load_external_data=True)
     onnx.checker.check_model(source_model)
     source_low_types = _source_low_precision_types(source_model)
-    target_type = onnx.TensorProto.BFLOAT16 if precision == 'bf16' else onnx.TensorProto.FLOAT16
     pretyped_source = bool(source_low_types)
-    if pretyped_source and target_type not in source_low_types:
-        names = ', '.join(onnx.TensorProto.DataType.Name(item) for item in sorted(source_low_types))
-        raise RuntimeError(
-            f'--{precision} was requested, but the ONNX is already typed as {names}. '
-            'Use an ONNX with the requested precision or select matching build precision.'
-        )
 
-    context = prepare_precision_context(source_model, precision, pretyped_source)
+    context = prepare_precision_context(source_model, pretyped_source)
     (
         original_nodes,
         node_by_name,

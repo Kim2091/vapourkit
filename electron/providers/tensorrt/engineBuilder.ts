@@ -19,6 +19,8 @@ import type { EngineBuildParams, ModelBuildJob } from '../types';
 const REMOVED_TRT_BUILD_ARGS = new Set([
   '--useCudaGraph',
   '--tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT',
+  '--inputIOFormats=fp16:chw',
+  '--outputIOFormats=fp16:chw',
 ]);
 
 export class TrtEngineBuildJob implements ModelBuildJob {
@@ -304,12 +306,7 @@ export class TrtEngineBuildJob implements ModelBuildJob {
             }
           }
 
-          const conversionMatch = output.match(
-            /(?:Converting ONNX model to|Preparing) (FP16|BF16)(?: precision candidates)?/i
-          );
-          if (conversionMatch) {
-            statusCallback?.(`${conversionMatch[1].toUpperCase()} precision conversion in progress...`);
-          } else if (output.includes('capability probe')) {
+          if (output.includes('capability probe')) {
             statusCallback?.('Checking TensorRT low-precision support and applying safe FP32 fallbacks...');
           } else if (output.includes('Using learned TensorRT')) {
             statusCallback?.('Using previously learned TensorRT compatibility fallbacks...');

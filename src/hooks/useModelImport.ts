@@ -26,13 +26,14 @@ export interface ImportForm {
 export const generateTrtexecCommand = (modelType: 'vsr' | 'image', useFp32: boolean, useStaticShape: boolean, inputName: string = 'input', useBf16: boolean = false, temporalFrames: number = 5): string => {
   const channels = modelType === 'vsr' ? String(temporalFrames * 3) : '3';
   // FP32 is the default in trtexec, so only add --fp16/--bf16 flag when NOT using FP32
-  // For BF16: use --bf16 flag but keep fp16 format strings
+  // Precision is selected by --fp16 or --bf16; TensorRT determines I/O types
+  // from the ONNX graph and does not need explicit format flags here.
   let precisionFlags = '';
   if (!useFp32) {
     if (useBf16) {
-      precisionFlags = '--inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --bf16';
+      precisionFlags = '--bf16';
     } else {
-      precisionFlags = '--inputIOFormats=fp16:chw --outputIOFormats=fp16:chw --fp16';
+      precisionFlags = '--fp16';
     }
   }
   
