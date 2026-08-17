@@ -306,7 +306,12 @@ export class TrtEngineBuildJob implements ModelBuildJob {
             }
           }
 
-          if (output.includes('capability probe')) {
+          const conversionMatch = output.match(
+            /(?:Converting ONNX model to|Preparing) (FP16|BF16)(?: precision candidates)?/i
+          );
+          if (conversionMatch) {
+            statusCallback?.(`${conversionMatch[1].toUpperCase()} precision conversion in progress...`);
+          } else if (output.includes('capability probe')) {
             statusCallback?.('Checking TensorRT low-precision support and applying safe FP32 fallbacks...');
           } else if (output.includes('Using learned TensorRT')) {
             statusCallback?.('Using previously learned TensorRT compatibility fallbacks...');
@@ -324,8 +329,6 @@ export class TrtEngineBuildJob implements ModelBuildJob {
           stderr += output;
           if (output.includes('The model version conversion is not supported by the onnxscript version converter')) {
             statusCallback?.('ONNX opset conversion fallback reported; continuing...');
-          } else if (output.includes('activation calibration ran out of host memory')) {
-            statusCallback?.('Host memory limit reached during calibration; retrying safely...');
           }
           logger.debug(`[engine build stderr] ${output.trim()}`);
         });
