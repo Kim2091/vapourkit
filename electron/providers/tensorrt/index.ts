@@ -27,13 +27,13 @@ export const tensorrtProvider: InferenceProvider = {
     // dependency of the vs-mlrt TRT wheel.
     return [
       `vapoursynth-mlrt-trt==${VS_MLRT_VERSION}`,
-      // ModelOpt AutoCast converts fp32 ONNX models to fp16/bf16 before the
-      // engine build (see include/build_trt_engine.py). The onnx-side packages
+      // ModelOpt prepares fp32 ONNX models for FP16/BF16 TensorRT builds, then
+      // the bundled builder probes TensorRT and learns safe FP32 fallbacks (see
+      // include/build_trt_engine.py). The onnx-side packages
       // are named individually rather than pulled via the nvidia-modelopt[onnx]
       // extra, whose closure adds cupy-cuda12x (CUDA 12, against a CUDA 13
       // stack) and onnxruntime-gpu, and pins onnx back to 1.21 — none of which
-      // AutoCast needs here. Plain CPU onnxruntime is enough: it runs the model
-      // once to measure activation ranges, and never during inference.
+      // this builder needs at inference time.
       'nvidia-modelopt>=0.45',
       'onnx_graphsurgeon',
       'onnxscript',

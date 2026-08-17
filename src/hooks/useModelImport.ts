@@ -38,10 +38,10 @@ export const generateTrtexecCommand = (modelType: 'vsr' | 'image', useFp32: bool
   
   if (useStaticShape) {
     // Static shape mode
-    return `--shapes=${inputName}:1x${channels}x720x1280 --saveEngine=OUTPUT_PATH --builderOptimizationLevel=3 --useCudaGraph --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT${precisionFlags ? ' ' + precisionFlags : ''}`;
+    return `--shapes=${inputName}:1x${channels}x720x1280 --saveEngine=OUTPUT_PATH --builderOptimizationLevel=3${precisionFlags ? ' ' + precisionFlags : ''}`;
   } else {
     // Dynamic shape mode
-    return `--minShapes=${inputName}:1x${channels}x240x240 --optShapes=${inputName}:1x${channels}x720x1280 --maxShapes=${inputName}:1x${channels}x1080x1920 --saveEngine=OUTPUT_PATH --builderOptimizationLevel=3 --useCudaGraph --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT${precisionFlags ? ' ' + precisionFlags : ''}`;
+    return `--minShapes=${inputName}:1x${channels}x240x240 --optShapes=${inputName}:1x${channels}x720x1280 --maxShapes=${inputName}:1x${channels}x1080x1920 --saveEngine=OUTPUT_PATH --builderOptimizationLevel=3${precisionFlags ? ' ' + precisionFlags : ''}`;
   }
 };
 

@@ -14,6 +14,13 @@ import { getBundledBasePath, setupVSEnvironment } from '../../utils';
 import { createWorkloadSpawnOptions, terminateProcessTree } from '../../processLifecycle';
 import type { EngineBuildParams, ModelBuildJob } from '../types';
 
+// These were present in older generated commands. Keep stale custom command
+// strings from reintroducing them when a model is rebuilt.
+const REMOVED_TRT_BUILD_ARGS = new Set([
+  '--useCudaGraph',
+  '--tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT',
+]);
+
 export class TrtEngineBuildJob implements ModelBuildJob {
   private currentProcess: any = null;
   private isForceStopping: boolean = false;
@@ -129,6 +136,8 @@ export class TrtEngineBuildJob implements ModelBuildJob {
       args = this.buildDefaultArgs(onnxPath, enginePath, minShapes, optShapes, maxShapes, useFp32, useBf16, useStaticShape);
     }
 
+    args = args.filter(arg => !REMOVED_TRT_BUILD_ARGS.has(arg));
+
     logger.model(`Engine build arguments: ${args.join(' ')}`);
 
     try {
@@ -228,8 +237,6 @@ export class TrtEngineBuildJob implements ModelBuildJob {
     args.push(
       `--saveEngine=${quotedEnginePath}`,
       '--builderOptimizationLevel=3',
-      '--useCudaGraph',
-      '--tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT',
       '--verbose' // Enable verbose output for progress tracking
     );
 
@@ -297,9 +304,15 @@ export class TrtEngineBuildJob implements ModelBuildJob {
             }
           }
 
-          const conversionMatch = output.match(/Converting ONNX model to (FP16|BF16)/i);
+          const conversionMatch = output.match(
+            /(?:Converting ONNX model to|Preparing) (FP16|BF16)(?: precision candidates)?/i
+          );
           if (conversionMatch) {
-            statusCallback?.(`${conversionMatch[1].toUpperCase()} precision conversion/calibration in progress...`);
+            statusCallback?.(`${conversionMatch[1].toUpperCase()} precision conversion in progress...`);
+          } else if (output.includes('capability probe')) {
+            statusCallback?.('Checking TensorRT low-precision support and applying safe FP32 fallbacks...');
+          } else if (output.includes('Using learned TensorRT')) {
+            statusCallback?.('Using previously learned TensorRT compatibility fallbacks...');
           } else if (output.includes('Parsing ONNX model')) {
             statusCallback?.('Parsing ONNX model...');
           }
