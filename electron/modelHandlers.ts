@@ -9,6 +9,7 @@ import { sendModelImportProgress } from './ipcUtilities';
 import { handleValidated } from './ipcValidation';
 import { z } from 'zod';
 import { resolveProvider } from './providers/registry';
+import { precisionOf, withPrecisionSuffix } from './modelPrecision';
 import type { ModelBuildJob } from './providers/types';
 
 // Module-level build job reference for cancellation support
@@ -181,9 +182,11 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
 
         sendProgress('converting', 0, 'Starting TensorRT engine conversion...');
 
-        // Add precision suffix to model name
-        const precisionSuffix = params.useFp32 ? '_fp32' : params.useBf16 ? '_bf16' : '_fp16';
-        const modelNameWithPrecision = `${params.modelName}${precisionSuffix}`;
+        // Add precision suffix to model name, unless it already declares one
+        const modelNameWithPrecision = withPrecisionSuffix(
+          params.modelName,
+          precisionOf(params.useFp32, params.useBf16)
+        );
         const enginePath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.engine`);
 
         try {
@@ -320,7 +323,17 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
               error: validationResult.error || 'Model validation failed'
             };
           }
-          
+
+          // A graph ONNX Runtime rejects (any BF16 one) is still buildable into
+          // a TensorRT engine, but a backend that runs the ONNX directly would
+          // only hit the same error later, at preview or encode time.
+          if (validationResult.runtimeError && !provider.descriptor.requiresEngineBuild) {
+            const error = `${provider.descriptor.label} runs models through ONNX Runtime, which cannot load this one: ${validationResult.runtimeError}`;
+            logger.error(`Model validation failed: ${error}`);
+            sendModelImportProgress(mainWindow, 'error', 0, error);
+            return { success: false, error };
+          }
+
           logger.model('Model validation passed');
         } else {
           logger.model('Skipping ONNX model validation as requested');
@@ -331,17 +344,14 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         await fs.ensureDir(PATHS.MODELS);
         
         // Add precision suffix to model name only if it doesn't already have fp16/fp32/bf16
-        const modelNameLower = params.modelName.toLowerCase();
-        const hasPrecisionSuffix = modelNameLower.includes('fp16') || modelNameLower.includes('fp32') || modelNameLower.includes('bf16');
-        
-        let modelNameWithPrecision: string;
-        if (hasPrecisionSuffix) {
-          modelNameWithPrecision = params.modelName;
+        const modelNameWithPrecision = withPrecisionSuffix(
+          params.modelName,
+          precisionOf(params.useFp32, params.useBf16)
+        );
+        if (modelNameWithPrecision === params.modelName) {
           logger.model('Model name already contains precision suffix, using as-is');
         } else {
-          const precisionSuffix = params.useFp32 ? '_fp32' : params.useBf16 ? '_bf16' : '_fp16';
-          modelNameWithPrecision = `${params.modelName}${precisionSuffix}`;
-          logger.model(`Added precision suffix: ${precisionSuffix}`);
+          logger.model(`Added precision suffix: ${modelNameWithPrecision.slice(params.modelName.length)}`);
         }
         
         const targetOnnxPath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.onnx`);
@@ -583,7 +593,8 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         outputShape: result.outputShape,
         inputName: result.inputName || 'input', // Default to 'input' if not found
         isStatic: result.isStatic,
-        inputDataType: result.inputDataType
+        inputDataType: result.inputDataType,
+        precision: result.precision
       };
     } catch (error) {
       logger.error('Error validating ONNX model:', error);

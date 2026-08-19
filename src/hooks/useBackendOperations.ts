@@ -62,13 +62,11 @@ export function useBackendOperations({
     let modelType: 'vsr' | 'image' = model.modelType || 'image';
     let temporalFrames = 5;
 
-    // Filename precision suffixes are authoritative for curated bundled models
-    // (many fp16-weight exports still report fp32 I/O, so the detected data
-    // type is only used when the filename has no suffix)
-    const modelNameLower = model.name.toLowerCase();
-    const hasPrecisionSuffix = /_(fp16|fp32|bf16)/.test(modelNameLower);
-    let useFp32 = modelNameLower.includes('_fp32');
-    let useBf16 = modelNameLower.includes('_bf16');
+    // Precision is resolved in the main process from the model name and the
+    // ONNX weights (see electron/modelPrecision.ts); FP16 stands in when
+    // neither says
+    let useFp32 = false;
+    let useBf16 = false;
 
     let inputName = 'input'; // Default fallback
     let useStaticShape = false;
@@ -101,11 +99,10 @@ export function useBackendOperations({
           onLog(`Detected static model with shape: ${detectedShape.join('x')}`);
         }
       }
-      if (validation.isValid && validation.inputDataType && !hasPrecisionSuffix) {
-        const dt = validation.inputDataType.toLowerCase();
-        useFp32 = dt === 'float32';
-        useBf16 = dt === 'bfloat16';
-        onLog(`Detected ${useFp32 ? 'FP32' : useBf16 ? 'BF16' : 'FP16'} precision`);
+      if (validation.precision) {
+        useFp32 = validation.precision === 'fp32';
+        useBf16 = validation.precision === 'bf16';
+        onLog(`Detected ${validation.precision.toUpperCase()} precision`);
       }
     } catch (validationError) {
       console.warn('Could not validate ONNX model:', validationError);

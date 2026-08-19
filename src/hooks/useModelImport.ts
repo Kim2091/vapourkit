@@ -144,19 +144,12 @@ export const useModelImport = (
               addConsoleLog(`[Model] Detected image model (3 channels)`);
             }
           }
-          // Auto-detect precision from input data type
-          if (validation.isValid && validation.inputDataType) {
-            const dt = validation.inputDataType.toLowerCase();
-            if (dt === 'float16') {
-              detectedPrecision = 'fp16';
-              addConsoleLog(`[Model] Detected FP16 precision`);
-            } else if (dt === 'bfloat16') {
-              detectedPrecision = 'bf16';
-              addConsoleLog(`[Model] Detected BF16 precision`);
-            } else if (dt === 'float32') {
-              detectedPrecision = 'fp32';
-              addConsoleLog(`[Model] Detected FP32 precision`);
-            }
+          // Precision comes from the main process, which reads the model name
+          // and the ONNX weights - a BF16 export still has FP32 inputs, so the
+          // input data type cannot answer this on its own
+          if (validation.precision) {
+            detectedPrecision = validation.precision;
+            addConsoleLog(`[Model] Detected ${validation.precision.toUpperCase()} precision`);
           }
         } catch (validationError) {
           console.warn('Could not validate ONNX model:', validationError);
@@ -382,6 +375,7 @@ export const useModelImport = (
     let detectedShape: number[] | undefined;
     let temporalFrames = 5; // Default
     let useFp32 = false;
+    let useBf16 = false;
     try {
       const validation = await window.electronAPI.validateOnnxModel(model.onnxPath);
       if (validation.isValid && validation.inputName) {
@@ -401,15 +395,12 @@ export const useModelImport = (
           addConsoleLog(`[Auto-Build] Detected ${temporalFrames} temporal frames (${inputChannels} channels)`);
         }
       }
-      // Auto-detect precision
-      if (validation.isValid && validation.inputDataType) {
-        const dt = validation.inputDataType.toLowerCase();
-        if (dt === 'float32') {
-          useFp32 = true;
-          addConsoleLog(`[Auto-Build] Detected FP32 precision`);
-        } else {
-          addConsoleLog(`[Auto-Build] Detected ${dt} precision`);
-        }
+      // Auto-detect precision (resolved in the main process from the model name
+      // and the ONNX weights; FP16 stands in when neither says)
+      if (validation.precision) {
+        useFp32 = validation.precision === 'fp32';
+        useBf16 = validation.precision === 'bf16';
+        addConsoleLog(`[Auto-Build] Detected ${validation.precision.toUpperCase()} precision`);
       }
     } catch (validationError) {
       console.warn('Could not validate ONNX model for auto-build:', validationError);
@@ -454,6 +445,7 @@ export const useModelImport = (
         optShapes,
         maxShapes,
         useFp32,
+        useBf16,
         modelType: modelType as 'vsr' | 'image',
         temporalFrames: modelType === 'vsr' ? temporalFrames : undefined,
         displayTag: displayTag || undefined,

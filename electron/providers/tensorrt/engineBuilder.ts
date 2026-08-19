@@ -223,17 +223,12 @@ export class TrtEngineBuildJob implements ModelBuildJob {
       args.push(`--maxShapes=${maxShapes}`);
     }
 
-    // Only add precision flags for FP16/BF16, FP32 is the default
-    // For BF16: use --bf16 flag but keep fp16 format strings
+    // Only add precision flags for FP16/BF16, FP32 is the default. I/O formats
+    // are not passed: strongly typed TensorRT takes them from the ONNX, and the
+    // builder ignores them (REMOVED_TRT_BUILD_ARGS strips them from stale
+    // custom commands for the same reason).
     if (!useFp32) {
-      const precision = 'fp16';
-      if (useBf16) {
-        args.push('--bf16');
-      } else {
-        args.push('--fp16');
-      }
-      args.push(`--inputIOFormats=${precision}:chw`);
-      args.push(`--outputIOFormats=${precision}:chw`);
+      args.push(useBf16 ? '--bf16' : '--fp16');
     }
 
     args.push(

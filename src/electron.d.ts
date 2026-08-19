@@ -317,6 +317,12 @@ export interface ValidateOnnxModelResult {
   inputName?: string;
   isStatic?: boolean;
   inputDataType?: string;
+  /**
+   * Build precision resolved in the main process from the model name and the
+   * ONNX weights. Undefined when neither says - the input data type alone is
+   * not enough, since FP16 and BF16 exports keep FP32 inputs.
+   */
+  precision?: 'fp16' | 'bf16' | 'fp32';
 }
 
 export interface ModelInitProgress {

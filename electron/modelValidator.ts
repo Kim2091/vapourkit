@@ -1,6 +1,9 @@
 // electron/modelValidator.ts
 import * as fs from 'fs-extra';
+import * as path from 'path';
 import { logger } from './logger';
+import { inspectOnnxGraph, type OnnxGraphInfo } from './onnxGraphInspector';
+import { resolveModelPrecision, precisionFromName, type ModelPrecision } from './modelPrecision';
 
 export interface OnnxModelInfo {
   isValid: boolean;
@@ -10,6 +13,14 @@ export interface OnnxModelInfo {
   inputName?: string;
   isStatic?: boolean;
   inputDataType?: string;
+  /** Build precision resolved from the model name and its weights. */
+  precision?: ModelPrecision;
+  /**
+   * Set when the model is a valid ONNX graph that ONNX Runtime itself refuses
+   * to load - BF16 graphs, mainly. Backends that build an engine from the ONNX
+   * do not care; backends that run it through ONNX Runtime cannot use it.
+   */
+  runtimeError?: string;
 }
 
 export class ModelValidator {
@@ -18,12 +29,15 @@ export class ModelValidator {
    */
   async validateOnnxModel(onnxPath: string): Promise<OnnxModelInfo> {
     logger.model(`Validating ONNX model: ${onnxPath}`);
-    
+
+    const modelName = path.basename(onnxPath, path.extname(onnxPath));
+
     try {
       if (!await fs.pathExists(onnxPath)) {
         return {
           isValid: false,
-          error: 'File does not exist'
+          error: 'File does not exist',
+          precision: precisionFromName(modelName)
         };
       }
 
@@ -32,9 +46,24 @@ export class ModelValidator {
       if (stats.size < 100) {
         return {
           isValid: false,
-          error: 'File too small to be a valid ONNX model'
+          error: 'File too small to be a valid ONNX model',
+          precision: precisionFromName(modelName)
         };
       }
+
+      // Read the graph itself first. ONNX Runtime cannot see BF16 weights (or
+      // load a BF16 graph at all), so precision has to come from the file.
+      const graph = inspectOnnxGraph(onnxPath);
+      const precision = resolveModelPrecision({
+        modelName,
+        weightDataTypes: graph?.weightDataTypes,
+        inputDataType: graph?.inputDataType
+      });
+      if (graph) {
+        logger.model(`Graph weights: ${graph.weightDataTypes.join(', ') || 'none'}`);
+        logger.model(`Graph input type: ${graph.inputDataType || 'unknown'}`);
+      }
+      logger.model(`Build precision: ${precision ? precision.toUpperCase() : 'undetermined'}`);
 
       // Try to load the model with ONNX Runtime
       try {
@@ -126,15 +155,24 @@ export class ModelValidator {
           outputShape,
           inputName,
           isStatic,
-          inputDataType
+          inputDataType,
+          precision
         };
-        
+
       } catch (ortError: any) {
-        // If ONNX Runtime fails to load, it's not a valid model
+        // A graph ONNX Runtime rejects is not necessarily a broken model: it
+        // refuses every bfloat16 graph. If the file parsed as ONNX, trust it
+        // and answer from the graph instead.
+        if (graph) {
+          const runtimeError = ortError.message || 'Could not load model with ONNX Runtime';
+          logger.model(`ONNX Runtime could not load the model (${runtimeError}); using the graph read from the file`);
+          return { isValid: true, ...graphModelInfo(graph), precision, runtimeError };
+        }
         logger.error('ONNX Runtime validation failed:', ortError);
         return {
           isValid: false,
-          error: `Invalid ONNX model: ${ortError.message || 'Could not load model with ONNX Runtime'}`
+          error: `Invalid ONNX model: ${ortError.message || 'Could not load model with ONNX Runtime'}`,
+          precision
         };
       }
 
@@ -142,8 +180,26 @@ export class ModelValidator {
       logger.error('Error validating ONNX model:', error);
       return {
         isValid: false,
-        error: error instanceof Error ? error.message : 'Unknown validation error'
+        error: error instanceof Error ? error.message : 'Unknown validation error',
+        precision: precisionFromName(modelName)
       };
     }
   }
+}
+
+/**
+ * Shapes the graph reader's output like ONNX Runtime's. Symbolic dimensions are
+ * strings in both, which the shape type has always glossed over.
+ */
+function graphModelInfo(graph: OnnxGraphInfo): Omit<OnnxModelInfo, 'isValid'> {
+  logger.model(`Input name: ${graph.inputName || 'input'}`);
+  logger.model(`Input shape: ${graph.inputShape ? graph.inputShape.join('x') : 'unknown'}`);
+  logger.model(`Model type: ${graph.isStatic ? 'Static' : 'Dynamic'}`);
+  return {
+    inputShape: graph.inputShape as number[] | undefined,
+    outputShape: graph.outputShape as number[] | undefined,
+    inputName: graph.inputName || 'input',
+    isStatic: graph.isStatic,
+    inputDataType: graph.inputDataType
+  };
 }
