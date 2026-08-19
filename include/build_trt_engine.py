@@ -870,11 +870,148 @@ def _promote_pretyped_nodes_to_fp32(base_model, blacklisted_nodes):
     return model
 
 
+def _wrap_bf16_io_as_fp16(model):
+    """Present a BF16 graph's inputs and outputs as FP16, leaving its interior alone.
+
+    VapourKit feeds TensorRT from an RGBH (FP16) clip, so a network whose I/O
+    tensors are BF16 receives FP16 bit patterns reinterpreted as BF16 - the same
+    numbers read through the wrong exponent layout, which is what a "corrupt"
+    BF16 engine actually is. Only the boundary is changed here: the graph keeps
+    every node, weight, and precision assignment the converter produced, and a
+    Cast is added on each BF16 input and output.
+    """
+    graph = model.graph
+    bf16 = onnx.TensorProto.BFLOAT16
+    fp16 = onnx.TensorProto.FLOAT16
+
+    initializer_names = {item.name for item in graph.initializer if item.name}
+
+    def is_bf16_tensor(value_info):
+        return (
+            value_info.type.HasField('tensor_type')
+            and value_info.type.tensor_type.elem_type == bf16
+        )
+
+    # An initializer listed as a graph input is a weight, not a network input.
+    bf16_inputs = [
+        item for item in graph.input
+        if is_bf16_tensor(item) and item.name not in initializer_names
+    ]
+    bf16_outputs = [item for item in graph.output if is_bf16_tensor(item)]
+    if not bf16_inputs and not bf16_outputs:
+        return model
+
+    used_node_names = {node.name for node in graph.node if node.name}
+    used_tensor_names = set(initializer_names)
+    for collection in (graph.input, graph.output, graph.value_info):
+        used_tensor_names.update(item.name for item in collection if item.name)
+    for node in graph.node:
+        used_tensor_names.update(name for name in node.input if name)
+        used_tensor_names.update(name for name in node.output if name)
+
+    def unique_name(base, used):
+        name = base
+        index = 2
+        while name in used:
+            name = f'{base}_{index}'
+            index += 1
+        used.add(name)
+        return name
+
+    input_casts = []
+    output_casts = []
+    internal_value_infos = []
+    boundary_names = set()
+
+    # Public FP16 input -> the BF16 tensor the existing graph already consumed.
+    for graph_input in bf16_inputs:
+        external = graph_input.name
+        internal = unique_name(f'{external}__vapourkit_bf16', used_tensor_names)
+        for node in graph.node:
+            for index, name in enumerate(node.input):
+                if name == external:
+                    node.input[index] = internal
+
+        internal_info = deepcopy(graph_input)
+        internal_info.name = internal
+        internal_value_infos.append(internal_info)
+        boundary_names.add(external)
+        graph_input.type.tensor_type.elem_type = fp16
+
+        input_casts.append(
+            onnx.helper.make_node(
+                'Cast',
+                [external],
+                [internal],
+                name=unique_name(f'{external}__vapourkit_fp16_to_bf16', used_node_names),
+                to=bf16,
+            )
+        )
+
+    # The BF16 tensor the existing graph already produced -> public FP16 output.
+    for graph_output in bf16_outputs:
+        external = graph_output.name
+        internal = unique_name(f'{external}__vapourkit_bf16', used_tensor_names)
+        producers = 0
+        for node in graph.node:
+            for index, name in enumerate(node.output):
+                if name == external:
+                    node.output[index] = internal
+                    producers += 1
+            # A graph output may also feed further nodes; they want the BF16 value.
+            for index, name in enumerate(node.input):
+                if name == external:
+                    node.input[index] = internal
+        if not producers:
+            raise RuntimeError(
+                f'Graph output {external!r} is BF16 but is not produced by any node, '
+                'so its FP16 boundary cast could not be inserted.'
+            )
+
+        internal_info = deepcopy(graph_output)
+        internal_info.name = internal
+        internal_value_infos.append(internal_info)
+        boundary_names.add(external)
+        graph_output.type.tensor_type.elem_type = fp16
+
+        output_casts.append(
+            onnx.helper.make_node(
+                'Cast',
+                [internal],
+                [external],
+                name=unique_name(f'{external}__vapourkit_bf16_to_fp16', used_node_names),
+                to=fp16,
+            )
+        )
+
+    # Any stale value_info still typing a boundary tensor as BF16 would contradict
+    # the FP16 interface the graph now declares.
+    kept_value_infos = [item for item in graph.value_info if item.name not in boundary_names]
+    del graph.value_info[:]
+    graph.value_info.extend(kept_value_infos)
+    graph.value_info.extend(internal_value_infos)
+
+    # Input casts produce what the first existing node reads, and output casts
+    # consume what the last one writes, so ONNX topological order is preserved.
+    existing_nodes = list(graph.node)
+    del graph.node[:]
+    graph.node.extend(input_casts + existing_nodes + output_casts)
+
+    print(
+        f'Exposed the BF16 network boundary as FP16: {len(input_casts)} input '
+        f'cast(s), {len(output_casts)} output cast(s).',
+        flush=True,
+    )
+    return model
+
+
 def convert_model_in_memory(context, blacklisted_nodes):
     """Return a type-consistent ONNX graph without writing a temporary model."""
     started = time.perf_counter()
     if context['pretyped']:
         mixed_model = _promote_pretyped_nodes_to_fp32(context['model'], blacklisted_nodes)
+        if context['precision'] == 'bf16':
+            mixed_model = _wrap_bf16_io_as_fp16(mixed_model)
         return mixed_model, time.perf_counter() - started, set(blacklisted_nodes)
 
     all_node_names = {node.name for node in context['model'].graph.node if node.name}
@@ -902,6 +1039,8 @@ def convert_model_in_memory(context, blacklisted_nodes):
 
     converter = converter_type(**kwargs)
     mixed_model = converter.convert(sorted(high_precision), sorted(low_precision))
+    if context['precision'] == 'bf16':
+        mixed_model = _wrap_bf16_io_as_fp16(mixed_model)
     return mixed_model, time.perf_counter() - started, high_precision
 
 
