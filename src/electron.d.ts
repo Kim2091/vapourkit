@@ -147,6 +147,12 @@ export interface ElectronAPI {
   getDescriptiveNamingEnabled: () => Promise<{ enabled: boolean }>;
   setDescriptiveNamingEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
 
+  // Discord Rich Presence
+  getDiscordRichPresenceSettings: () => Promise<DiscordRichPresenceSettings>;
+  setDiscordRichPresenceSettings: (settings: DiscordRichPresenceSettings) => Promise<{ success: boolean; error?: string }>;
+  setDiscordRichPresenceActivity: (activity: DiscordRichPresenceActivity) => Promise<{ success: boolean }>;
+  clearDiscordRichPresence: () => Promise<{ success: boolean }>;
+
   // Encoding settings panel state
   getEncodingSettingsExpanded: () => Promise<{ expanded: boolean }>;
   setEncodingSettingsExpanded: (expanded: boolean) => Promise<{ success: boolean }>;
@@ -411,6 +417,17 @@ export interface Filter {
   backend?: FilterBackend;
   /** num_streams override for this AI model; unset inherits the app default. */
   numStreams?: number;
+}
+
+export interface DiscordRichPresenceSettings {
+  enabled: boolean;
+}
+
+export interface DiscordRichPresenceActivity {
+  details?: string;
+  state?: string;
+  /** Unix timestamp in seconds. */
+  startTimestamp?: number;
 }
 
 export interface SegmentSelection {

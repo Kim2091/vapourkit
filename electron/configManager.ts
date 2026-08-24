@@ -6,6 +6,7 @@ import { logger } from './logger';
 import { getBundledBasePath } from './utils';
 import type { ModelType } from './scriptGenerator';
 import type { GpuVendor } from './gpuDetection';
+import type { DiscordRichPresenceSettings } from './discordRichPresence';
 
 // Single source of truth for FFmpeg default arguments
 export const DEFAULT_FFMPEG_ARGS = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1';
@@ -43,6 +44,7 @@ interface AppConfig {
   videoCompareArgs?: string;
   defaultOutputFolder?: string;
   descriptiveNamingEnabled?: boolean;
+  discordRichPresence?: DiscordRichPresenceSettings;
   encodingSettingsExpanded?: boolean;
   vsMlrtVersion?: string;
   /** GPU vendor detected on this machine, refreshed at every app mount. */
@@ -94,6 +96,9 @@ const DEFAULT_CONFIG: AppConfig = {
   videoCompareArgs: DEFAULT_VIDEO_COMPARE_ARGS,
   defaultOutputFolder: undefined,
   descriptiveNamingEnabled: true,
+  discordRichPresence: {
+    enabled: false,
+  },
   encodingSettingsExpanded: false,
   vsMlrtVersion: undefined,
   gpuVendor: undefined,
@@ -453,6 +458,17 @@ export class ConfigManager {
 
   async setDescriptiveNamingEnabled(enabled: boolean): Promise<void> {
     this.config.descriptiveNamingEnabled = enabled;
+    await this.save();
+  }
+
+  getDiscordRichPresenceSettings(): DiscordRichPresenceSettings {
+    return this.config.discordRichPresence ?? DEFAULT_CONFIG.discordRichPresence!;
+  }
+
+  async setDiscordRichPresenceSettings(settings: DiscordRichPresenceSettings): Promise<void> {
+    this.config.discordRichPresence = {
+      enabled: settings.enabled,
+    };
     await this.save();
   }
 

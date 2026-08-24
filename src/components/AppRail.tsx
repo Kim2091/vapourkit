@@ -116,8 +116,8 @@ export const AppRail = memo<AppRailProps>(({
       <RailButton
         label="Privacy"
         title={privacyMode
-          ? 'Privacy mode is on — click to show previews, filenames and notifications'
-          : 'Privacy mode is off — click to hide previews, filenames and notifications'}
+          ? 'Privacy mode is on — click to show previews, filenames, notifications and Discord activity'
+          : 'Privacy mode is off — click to hide previews, filenames, notifications and Discord activity'}
         active={privacyMode}
         tone="warn"
         onClick={onTogglePrivacyMode}

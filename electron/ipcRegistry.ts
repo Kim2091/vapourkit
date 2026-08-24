@@ -8,6 +8,7 @@ import { registerTemplateHandlers } from './templateHandlers';
 import { registerDependencyHandlers } from './dependencyHandlers';
 import { registerUpdateHandlers } from './updateHandlers';
 import { registerQueueHandlers } from './queueHandlers';
+import { registerDiscordRichPresenceHandlers } from './discordRichPresenceHandlers';
 import { DependencyManager } from './dependencyManager';
 import { VapourSynthScriptGenerator } from './scriptGenerator';
 import { TemplateManager } from './templateManager';
@@ -34,4 +35,5 @@ export function registerAllIpcHandlers(
   registerDependencyHandlers(dependencyManager, pluginInstaller);
   registerUpdateHandlers();
   registerQueueHandlers();
+  registerDiscordRichPresenceHandlers();
 }

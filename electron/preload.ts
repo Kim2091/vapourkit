@@ -147,6 +147,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDescriptiveNamingEnabled: () => ipcRenderer.invoke('get-descriptive-naming-enabled'),
   setDescriptiveNamingEnabled: (enabled: boolean) => ipcRenderer.invoke('set-descriptive-naming-enabled', enabled),
 
+  // Discord Rich Presence
+  getDiscordRichPresenceSettings: () => ipcRenderer.invoke('get-discord-rich-presence-settings'),
+  setDiscordRichPresenceSettings: (settings: { enabled: boolean }) =>
+    ipcRenderer.invoke('set-discord-rich-presence-settings', settings),
+  setDiscordRichPresenceActivity: (activity: { details?: string; state?: string; startTimestamp?: number }) =>
+    ipcRenderer.invoke('set-discord-rich-presence-activity', activity),
+  clearDiscordRichPresence: () => ipcRenderer.invoke('clear-discord-rich-presence'),
+
   // Encoding settings panel state
   getEncodingSettingsExpanded: () => ipcRenderer.invoke('get-encoding-settings-expanded'),
   setEncodingSettingsExpanded: (expanded: boolean) => ipcRenderer.invoke('set-encoding-settings-expanded', expanded),

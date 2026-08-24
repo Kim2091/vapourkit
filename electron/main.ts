@@ -7,6 +7,7 @@ import { WindowManager } from './windowManager';
 import { registerAllIpcHandlers } from './ipcRegistry';
 import { cancelActiveModelOperation } from './modelHandlers';
 import { cancelAllVideoProcessing } from './videoHandlers';
+import { shutdownDiscordRichPresence } from './discordRichPresence';
 
 // ============================================================================
 // INITIALIZATION
@@ -96,6 +97,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   logger.info('App quitting, cleaning up child processes');
+  shutdownDiscordRichPresence();
   // Cancel any active model operations (trtexec processes)
   cancelActiveModelOperation();
   // Cancel any active video processing (vspipe, ffmpeg processes)

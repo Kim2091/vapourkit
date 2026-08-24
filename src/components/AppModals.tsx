@@ -9,7 +9,7 @@ import { PluginsModal } from './PluginsModal';
 import { UpdateNotificationModal } from './UpdateNotificationModal';
 import { VsMlrtUpdateModal } from './VsMlrtUpdateModal';
 import { FilterImportModal } from './FilterImportModal';
-import type { BackendId, UpdateInfo, VsMlrtVersionInfo } from '../electron';
+import type { BackendId, DiscordRichPresenceSettings, UpdateInfo, VsMlrtVersionInfo } from '../electron';
 
 interface AppModalsProps {
   // Import Model
@@ -53,6 +53,8 @@ interface AppModalsProps {
   onResetDefaultOutputFolder: () => void;
   descriptiveNamingEnabled: boolean;
   onUpdateDescriptiveNamingEnabled: (enabled: boolean) => void;
+  discordRichPresenceSettings: DiscordRichPresenceSettings;
+  onUpdateDiscordRichPresenceSettings: (settings: DiscordRichPresenceSettings) => Promise<{ success: boolean; error?: string }>;
   mainColor: string;
   onChangeMainColor: (color: string) => void;
   onResetMainColor: () => void;
@@ -133,6 +135,8 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
         onResetDefaultOutputFolder={props.onResetDefaultOutputFolder}
         descriptiveNamingEnabled={props.descriptiveNamingEnabled}
         onUpdateDescriptiveNamingEnabled={props.onUpdateDescriptiveNamingEnabled}
+        discordRichPresenceSettings={props.discordRichPresenceSettings}
+        onUpdateDiscordRichPresenceSettings={props.onUpdateDiscordRichPresenceSettings}
         mainColor={props.mainColor}
         onChangeMainColor={props.onChangeMainColor}
         onResetMainColor={props.onResetMainColor}

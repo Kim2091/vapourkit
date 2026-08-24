@@ -45,6 +45,7 @@ import { ModelSelectionPanel } from './components/ModelSelectionPanel';
 import { getPortableModelName } from './utils/modelUtils';
 import { useAccentColor } from './hooks/useAccentColor';
 import { useMainColor } from './hooks/useMainColor';
+import { useDiscordRichPresence } from './hooks/useDiscordRichPresence';
 
 // Settings column drag bounds, in pixels.
 const SETTINGS_MIN_W = 320;
@@ -84,6 +85,12 @@ function App() {
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, recommendedBackend, setupProgress, isSettingUp, handleSetup, pluginInstallError, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
   const { defaultBackend, setDefaultBackend, numStreams, updateNumStreams, showBackendOverrides, setShowBackendOverrides } = useSettings(recommendedBackend);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
+  const {
+    discordRichPresenceSettings,
+    updateDiscordRichPresenceSettings,
+    publishDiscordRichPresence,
+    clearDiscordRichPresence,
+  } = useDiscordRichPresence(isSetupComplete);
   const { accentColor, setAccentColor, resetAccentColor } = useAccentColor();
   const { mainColor, setMainColor, resetMainColor } = useMainColor();
   const { 
@@ -204,6 +211,58 @@ function App() {
     colorimetry: colorimetrySettings,
     segment,
   });
+
+  const [discordPresenceStartTimestamp, setDiscordPresenceStartTimestamp] = useState<number | undefined>();
+  const discordPresenceHiddenForPrivacyRef = useRef(false);
+  useEffect(() => {
+    setDiscordPresenceStartTimestamp(isProcessing ? Math.floor(Date.now() / 1000) : undefined);
+  }, [isProcessing]);
+
+  useEffect(() => {
+    if (!isSetupComplete) return;
+
+    if (privacyMode) {
+      if (!discordPresenceHiddenForPrivacyRef.current) {
+        discordPresenceHiddenForPrivacyRef.current = true;
+        void clearDiscordRichPresence();
+      }
+      return;
+    }
+
+    discordPresenceHiddenForPrivacyRef.current = false;
+
+    if (isProcessing) {
+      const percentage = upscaleProgress?.percentage;
+      const state = typeof percentage === 'number'
+        ? `${Math.max(0, Math.min(100, Math.round(percentage)))}% complete`
+        : 'Processing';
+      void publishDiscordRichPresence({
+        details: 'Upscaling a video',
+        state,
+        startTimestamp: discordPresenceStartTimestamp,
+      });
+      return;
+    }
+
+    void publishDiscordRichPresence(videoInfo
+      ? {
+          details: 'Video loaded',
+          state: 'Ready to upscale',
+        }
+      : {
+          details: 'Ready to upscale',
+          state: 'Waiting for a video',
+        });
+  }, [
+    discordPresenceStartTimestamp,
+    clearDiscordRichPresence,
+    isProcessing,
+    isSetupComplete,
+    privacyMode,
+    publishDiscordRichPresence,
+    upscaleProgress?.percentage,
+    videoInfo,
+  ]);
   
   // Destructure queue store for convenience
   const {
@@ -1008,6 +1067,8 @@ function App() {
         onResetDefaultOutputFolder={handleResetDefaultOutputFolder}
         descriptiveNamingEnabled={descriptiveNamingEnabled}
         onUpdateDescriptiveNamingEnabled={handleUpdateDescriptiveNamingEnabled}
+        discordRichPresenceSettings={discordRichPresenceSettings}
+        onUpdateDiscordRichPresenceSettings={updateDiscordRichPresenceSettings}
         mainColor={mainColor}
         onChangeMainColor={setMainColor}
         onResetMainColor={resetMainColor}

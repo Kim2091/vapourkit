@@ -1,6 +1,6 @@
 import { memo, useState, useEffect } from 'react';
-import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive, Palette } from 'lucide-react';
-import type { BackendId } from '../electron.d';
+import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive, Palette, MessageCircle } from 'lucide-react';
+import type { BackendId, DiscordRichPresenceSettings } from '../electron.d';
 import { BACKENDS } from '../utils/backends';
 import { DEFAULT_ACCENT_COLOR } from '../hooks/useAccentColor';
 import { DEFAULT_MAIN_COLOR } from '../hooks/useMainColor';
@@ -22,6 +22,8 @@ interface SettingsModalProps {
   onResetDefaultOutputFolder: () => void;
   descriptiveNamingEnabled: boolean;
   onUpdateDescriptiveNamingEnabled: (enabled: boolean) => void;
+  discordRichPresenceSettings: DiscordRichPresenceSettings;
+  onUpdateDiscordRichPresenceSettings: (settings: DiscordRichPresenceSettings) => Promise<{ success: boolean; error?: string }>;
   mainColor: string;
   onChangeMainColor: (color: string) => void;
   onResetMainColor: () => void;
@@ -49,6 +51,8 @@ export const SettingsModal = memo<SettingsModalProps>(({
   onResetDefaultOutputFolder,
   descriptiveNamingEnabled,
   onUpdateDescriptiveNamingEnabled,
+  discordRichPresenceSettings,
+  onUpdateDiscordRichPresenceSettings,
   mainColor,
   onChangeMainColor,
   onResetMainColor,
@@ -112,6 +116,14 @@ export const SettingsModal = memo<SettingsModalProps>(({
       }
     } catch (error) {
       console.error('Error selecting default output folder:', error);
+    }
+  };
+
+  const saveDiscordRichPresenceSettings = async (enabled: boolean): Promise<void> => {
+    try {
+      await onUpdateDiscordRichPresenceSettings({ enabled });
+    } catch (error) {
+      console.error('Unable to save Discord Rich Presence settings:', error);
     }
   };
 
@@ -300,6 +312,33 @@ export const SettingsModal = memo<SettingsModalProps>(({
                     Reset
                   </button>
                 </div>
+              </section>
+
+              {/* Discord Rich Presence Section */}
+              <section className="mt-2 border-t border-ink-700">
+                <div className="h-9 flex items-stretch gap-2.5 bg-ink-850 border-b border-ink-800">
+                  <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <MessageCircle className="w-3.5 h-3.5 text-ink-500" />
+                    <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Discord</h3>
+                  </div>
+                </div>
+
+                <label className="flex items-start gap-3 cursor-pointer px-4 py-2 border-b border-ink-900 hover:bg-ink-850 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={discordRichPresenceSettings.enabled}
+                    onChange={(event) => void saveDiscordRichPresenceSettings(event.target.checked)}
+                    className="w-3.5 h-3.5 mt-0.5 flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12.5px] text-ink-200">Enable Rich Presence</p>
+                    <p className="text-[11px] text-ink-500 mt-0.5">
+                      Show whether Vapourkit is ready or processing, with progress while an upscale is running. Privacy Mode hides Rich Presence entirely.
+                    </p>
+                  </div>
+                </label>
+
               </section>
 
               {/* VapourSynth Folders Section */}
