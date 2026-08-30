@@ -2,16 +2,47 @@ name = "Crop"
 code = """
 # Full Docs: https://www.vapoursynth.com/doc/functions/video/crop_cropabs.html#std.Crop
 
-# Set crop amounts here:
-left   = 0
-right  = 0
-top    = 0
-bottom = 0
+# These public variables are supplied by Vapourkit. They can still be edited
+# manually in the code editor, while the visual editor updates their values.
+left   = {{crop_left}}
+right  = {{crop_right}}
+top    = {{crop_top}}
+bottom = {{crop_bottom}}
 
 
 clip = core.std.Crop(clip, left=left, right=right, top=top, bottom=bottom)"""
 category = [ "Padding/Cropping" ]
 description = "Crops a clip by the specified pixel amount."
+
+[variables.crop_left]
+type = "number"
+default = 0
+description = "Pixels removed from the left edge."
+
+[variables.crop_right]
+type = "number"
+default = 0
+description = "Pixels removed from the right edge."
+
+[variables.crop_top]
+type = "number"
+default = 0
+description = "Pixels removed from the top edge."
+
+[variables.crop_bottom]
+type = "number"
+default = 0
+description = "Pixels removed from the bottom edge."
+
+[editor]
+type = "crop"
+label = "Edit crop"
+
+[editor.variables]
+left = "crop_left"
+right = "crop_right"
+top = "crop_top"
+bottom = "crop_bottom"
 
 [metadata]
 createdAt = "2026-08-15T01:37:14.961Z"

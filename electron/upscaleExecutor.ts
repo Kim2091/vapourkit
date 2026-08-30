@@ -327,9 +327,15 @@ export class UpscaleExecutor {
       } else if (outputInfo.fps) {
         ffmpegArgs.push('-r', `${outputInfo.fps}`);
       }
-    } else {
-      ffmpegArgs.push('-f', 'yuv4mpegpipe');
-    }
+	} else {
+	  ffmpegArgs.push('-f', 'yuv4mpegpipe');
+	  ffmpegArgs.push(
+		'-color_range', 'tv',
+		'-colorspace', 'bt709',
+		'-color_primaries', 'bt709',
+		'-color_trc', 'bt709'
+	  );
+	}
     
     ffmpegArgs.push('-i', 'pipe:0');
 

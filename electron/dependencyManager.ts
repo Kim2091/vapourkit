@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
+import * as TOML from '@iarna/toml';
 import axios from 'axios';
 import { app, BrowserWindow} from 'electron';
 import { ModelExtractor } from './modelExtractor';
@@ -36,6 +37,17 @@ interface ComponentConfig {
   checkPath: string;
   extractTo: string;
 }
+
+const LEGACY_CROP_CODE = `# Full Docs: https://www.vapoursynth.com/doc/functions/video/crop_cropabs.html#std.Crop
+
+# Set crop amounts here:
+left   = 0
+right  = 0
+top    = 0
+bottom = 0
+
+
+clip = core.std.Crop(clip, left=left, right=right, top=top, bottom=bottom)`;
 
 export class DependencyManager {
   private mainWindow: BrowserWindow | null;
@@ -580,6 +592,28 @@ export class DependencyManager {
     }
   }
 
+  /**
+   * Filter templates normally preserve user edits across upgrades. Crop is the
+   * one safe exception: replace only the exact pre-editor bundled template so
+   * existing installs gain its new public variables and visual editor without
+   * touching any customized Crop template.
+   */
+  private async upgradeLegacyCropTemplate(sourcePath: string, destPath: string): Promise<boolean> {
+    try {
+      const content = await fs.readFile(destPath, 'utf-8');
+      const template = TOML.parse(content) as { name?: string; code?: string; editor?: unknown };
+      const code = template.code?.replace(/\r\n?/g, '\n').trim();
+      if (template.name !== 'Crop' || template.editor || code !== LEGACY_CROP_CODE) return false;
+
+      await fs.copy(sourcePath, destPath, { overwrite: true });
+      logger.dependency('Upgraded the unmodified Crop template with visual-editor metadata');
+      return true;
+    } catch (error) {
+      logger.warn('Could not inspect the existing Crop template for upgrade:', error);
+      return false;
+    }
+  }
+
   private async copyFilterTemplates(bundledBasePath: string): Promise<void> {
     logger.dependency('Copying filter templates');
     
@@ -614,6 +648,8 @@ export class DependencyManager {
         if (!await fs.pathExists(destPath)) {
           await fs.copy(sourcePath, destPath);
           logger.dependency(`Copied filter template: ${file}`);
+        } else if (isPluginCatalog && file === 'Crop.vkfilter' && await this.upgradeLegacyCropTemplate(sourcePath, destPath)) {
+          // The migration itself logged the update.
         } else {
           logger.dependency(`Filter template already exists: ${file}`);
         }

@@ -20,13 +20,7 @@ export function registerTemplateHandlers(templateManager: TemplateManager) {
     }
   });
 
-  ipcMain.handle('save-filter-template', async (event, template: { 
-    name: string; 
-    code: string; 
-    description?: string;
-    category?: string | string[];
-    metadata?: any 
-  }) => {
+  ipcMain.handle('save-filter-template', async (event, template: FilterTemplate) => {
     logger.info(`Saving filter template: ${template.name}`);
     try {
       await templateManager.saveTemplate(template);

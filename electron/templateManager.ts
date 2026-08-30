@@ -10,6 +10,21 @@ export interface FilterTemplate {
   code: string;
   category?: string | string[]; // Can be a single category or multiple categories
   description?: string;
+  variables?: Record<string, {
+    type?: 'number' | 'string' | 'boolean';
+    default?: string | number | boolean;
+    description?: string;
+  }>;
+  editor?: {
+    type: 'crop';
+    label?: string;
+    variables: {
+      left: string;
+      right: string;
+      top: string;
+      bottom: string;
+    };
+  };
   metadata?: {
     author?: string;
     createdAt?: string;

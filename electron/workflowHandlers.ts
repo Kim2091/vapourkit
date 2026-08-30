@@ -31,6 +31,9 @@ export function registerWorkflowHandlers() {
           // Per-filter overrides round-trip with the workflow
           backend: f.backend || undefined,
           numStreams: f.numStreams || undefined,
+          parameters: f.parameters || undefined,
+          variables: f.variables || undefined,
+          editor: f.editor || undefined,
           category: Array.isArray(f.category) && f.category.length === 1
             ? f.category[0]
             : (f.category || undefined),
@@ -107,6 +110,9 @@ export function registerWorkflowHandlers() {
             modelType: f.modelType || undefined,
             backend: f.backend || undefined,
             numStreams: typeof f.numStreams === 'number' && f.numStreams >= 1 ? f.numStreams : undefined,
+            parameters: f.parameters || undefined,
+            variables: f.variables || undefined,
+            editor: f.editor || undefined,
             category: normalizedCategory,
           };
         }) : [],

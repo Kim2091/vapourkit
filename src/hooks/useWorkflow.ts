@@ -15,6 +15,9 @@ interface ImportWorkflowModalState {
     description?: string;
     filterType: 'aiModel' | 'custom';
     category?: string | string[];
+    parameters?: Filter['parameters'];
+    variables?: Filter['variables'];
+    editor?: Filter['editor'];
   }[];
 }
 
@@ -205,6 +208,10 @@ export function useWorkflow({
           modelType: wf.modelType,
           category: wf.category,
           backend: wf.backend,
+          numStreams: wf.numStreams,
+          parameters: wf.parameters,
+          variables: wf.variables,
+          editor: wf.editor,
         };
       });
       setFilters(workflowFilters);
@@ -366,6 +373,10 @@ export function useWorkflow({
             modelType: filter.filterType === 'aiModel' ? (filter.modelType || 'image') : undefined,
             category,
             backend: filter.backend,
+            numStreams: filter.numStreams,
+            parameters: filter.parameters,
+            variables: filter.variables,
+            editor: filter.editor,
           };
         }),
         createdAt: new Date().toISOString(),
@@ -443,7 +454,15 @@ export function useWorkflow({
    * Confirm and import selected filters
    */
   const confirmImportFilters = useCallback(async (
-    selectedFilters: { name: string; code: string; description?: string; category?: string | string[] }[]
+    selectedFilters: {
+      name: string;
+      code: string;
+      description?: string;
+      category?: string | string[];
+      parameters?: Filter['parameters'];
+      variables?: Filter['variables'];
+      editor?: Filter['editor'];
+    }[]
   ): Promise<void> => {
     try {
       // Save selected filters as templates
@@ -453,6 +472,8 @@ export function useWorkflow({
           code: filter.code,
           description: filter.description,
           category: filter.category,
+          variables: filter.variables,
+          editor: filter.editor,
         });
       }
       

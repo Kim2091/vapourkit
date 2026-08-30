@@ -19,6 +19,7 @@ interface ModelSelectionPanelProps {
   onFiltersChange: (filters: Filter[]) => void;
   onSaveTemplate?: (template: FilterTemplate) => Promise<boolean>;
   onDeleteTemplate?: (name: string) => Promise<boolean>;
+  onOpenFilterEditor?: (filter: Filter) => void;
 }
 
 export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
@@ -37,6 +38,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
   onDeleteTemplate,
   onImportClick,
   onModelsUpdated,
+  onOpenFilterEditor,
 }: ModelSelectionPanelProps) => {
   return (
     <>
@@ -65,6 +67,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         onDeleteTemplate={onDeleteTemplate}
         onImportClick={onImportClick}
         onModelsUpdated={onModelsUpdated}
+        onOpenFilterEditor={onOpenFilterEditor}
       />
     </>
   );

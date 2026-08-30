@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useRef } from 'react';
-import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Crop } from 'lucide-react';
 import type { BackendId, FilterBackend, Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { BACKENDS, getBackendDescriptor, resolveFilterBackend } from '../utils/backends';
 import { PythonCodeEditor } from './PythonCodeEditor';
@@ -28,6 +28,19 @@ interface DynamicFilterPanelProps {
   draggedFilterId?: string | null;
   onImportClick?: () => void;
   onModelsUpdated?: () => Promise<void>;
+  /** Opens a visual editor declared by the selected .vkfilter template. */
+  onOpenFilterEditor?: (filter: Filter) => void;
+}
+
+function defaultsForVariables(template: FilterTemplate | undefined): NonNullable<Filter['parameters']> | undefined {
+  if (!template?.variables) return undefined;
+
+  const parameters = Object.entries(template.variables).reduce<NonNullable<Filter['parameters']>>((values, [name, variable]) => {
+    if (variable.default !== undefined) values[name] = variable.default;
+    return values;
+  }, {});
+
+  return Object.keys(parameters).length > 0 ? parameters : undefined;
 }
 
 /**
@@ -58,6 +71,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   draggedFilterId,
   onImportClick,
   onModelsUpdated,
+  onOpenFilterEditor,
 }: DynamicFilterPanelProps) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -277,7 +291,15 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const handlePresetChange = (id: string, preset: string) => {
     const templateObj = filterTemplates.find(t => t.name === preset);
     const updatedFilters = pendingFilters.map(f =>
-      f.id === id ? { ...f, preset, code: templateObj?.code || '', category: templateObj?.category } : f
+      f.id === id ? {
+        ...f,
+        preset,
+        code: templateObj?.code || '',
+        category: templateObj?.category,
+        parameters: defaultsForVariables(templateObj),
+        variables: templateObj?.variables,
+        editor: templateObj?.editor,
+      } : f
     );
     setPendingFilters(updatedFilters);
     onFiltersChange(updatedFilters);
@@ -295,6 +317,49 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     if (JSON.stringify(pendingFilters) !== JSON.stringify(filters)) {
       onFiltersChange(pendingFilters);
     }
+  };
+
+  const handleFilterParameterChange = (filterId: string, name: string, value: NonNullable<Filter['parameters']>[string]) => {
+    const updatedFilters = pendingFilters.map(filter => {
+      if (filter.id !== filterId) return filter;
+      const template = filterTemplates.find(candidate => candidate.name === filter.preset);
+      return {
+        ...filter,
+        parameters: {
+          ...defaultsForVariables(template),
+          ...filter.parameters,
+          [name]: value,
+        },
+        variables: filter.variables ?? template?.variables,
+        editor: filter.editor ?? template?.editor,
+      };
+    });
+    setPendingFilters(updatedFilters);
+    onFiltersChange(updatedFilters);
+  };
+
+  const handleOpenInteractiveEditor = (filter: Filter, selectedTemplate?: FilterTemplate) => {
+    const editor = filter.editor ?? selectedTemplate?.editor;
+    if (!editor || !onOpenFilterEditor) return;
+
+    // Older saved filters did not retain template editor metadata. Hydrate them
+    // when opened so the edited values survive filter configuration, workflows,
+    // and queue operations from this point onward.
+    const variables = filter.variables ?? selectedTemplate?.variables;
+    const parameters = {
+      ...defaultsForVariables(selectedTemplate),
+      ...filter.parameters,
+    };
+    const preparedFilter: Filter = {
+      ...filter,
+      editor,
+      variables,
+      parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
+    };
+    const updatedFilters = pendingFilters.map(current => current.id === filter.id ? preparedFilter : current);
+    setPendingFilters(updatedFilters);
+    onFiltersChange(updatedFilters);
+    onOpenFilterEditor(preparedFilter);
   };
 
   const toggleExpanded = (id: string) => {
@@ -318,6 +383,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
         code: filter.code,
         category: presetCategories.length > 0 ? presetCategories : undefined,
         description: presetDescription.trim() || undefined,
+        variables: filter.variables,
+        editor: filter.editor,
       });
       if (success) {
         setPresetName('');
@@ -584,6 +651,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
           const isHovered = hoveredDragHandle === filter.id;
           const isAIModel = filter.filterType === 'aiModel';
           const isNewlyDuplicated = newlyDuplicatedId === filter.id;
+          const interactiveEditor = filter.editor ?? selectedTemplate?.editor;
+          const exposedVariables = filter.variables ?? selectedTemplate?.variables;
 
           // Opens the save-as-template form, pre-filled from the selected
           // template so "save" over an existing one keeps its name and category.
@@ -866,6 +935,62 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             </button>
                           )}
                         </div>
+
+                        {/* A .vkfilter opts into a visual editor with [editor]
+                            metadata. The button is intentionally generic here;
+                            the preview surface selects the matching editor type. */}
+                        {interactiveEditor?.type === 'crop' && onOpenFilterEditor && (
+                          <button
+                            onClick={() => handleOpenInteractiveEditor(filter, selectedTemplate)}
+                            disabled={isProcessing}
+                            className="w-full h-7 px-2 rounded inline-flex items-center justify-center gap-1.5 text-[11.5px] font-semibold bg-accent-500/10 border border-accent-500/40 text-accent-300 hover:bg-accent-500/20 hover:border-accent-500/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={interactiveEditor.label || 'Open visual crop editor'}
+                          >
+                            <Crop className="w-3.5 h-3.5" />
+                            {interactiveEditor.label || 'Edit crop'}
+                          </button>
+                        )}
+
+                        {/* Template variables are intentionally surfaced in the
+                            normal filter panel too: the visual editor is an
+                            accelerator, while values remain inspectable and
+                            editable in a saved .vkfilter configuration. */}
+                        {exposedVariables && Object.keys(exposedVariables).length > 0 && (
+                          <div className="grid grid-cols-2 gap-1.5 rounded-md border border-ink-800 bg-ink-950/40 p-2">
+                            {Object.entries(exposedVariables).map(([name, variable]) => {
+                              const value = filter.parameters?.[name] ?? variable.default ?? '';
+                              return (
+                                <label key={name} className="min-w-0" title={variable.description}>
+                                  <span className="mb-0.5 block truncate text-[10px] font-display font-semibold uppercase tracking-[0.07em] text-ink-500">{name}</span>
+                                  {variable.type === 'boolean' ? (
+                                    <select
+                                      value={value === true ? 'true' : 'false'}
+                                      onChange={(event) => handleFilterParameterChange(filter.id, name, event.target.value === 'true')}
+                                      disabled={isProcessing}
+                                      className="h-6 w-full rounded border border-ink-700 bg-ink-850 px-1.5 text-[11px] text-ink-200 focus:outline-none focus:border-accent-500 disabled:opacity-50"
+                                    >
+                                      <option value="true">True</option>
+                                      <option value="false">False</option>
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type={variable.type === 'number' ? 'number' : 'text'}
+                                      value={String(value)}
+                                      onChange={(event) => {
+                                        const nextValue = variable.type === 'number' ? Number(event.target.value) : event.target.value;
+                                        if (variable.type !== 'number' || Number.isFinite(nextValue)) {
+                                          handleFilterParameterChange(filter.id, name, nextValue);
+                                        }
+                                      }}
+                                      disabled={isProcessing}
+                                      className="h-6 w-full rounded border border-ink-700 bg-ink-850 px-1.5 text-[11px] tabular-nums text-ink-200 focus:outline-none focus:border-accent-500 disabled:opacity-50"
+                                    />
+                                  )}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {/* Save Template Dialog */}
                         {showSaveDialog === filter.id && (

@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { X, Check, Edit2, Filter, Search, CheckCircle } from 'lucide-react';
+import type { FilterEditor, FilterParameterValues, FilterVariables } from '../electron.d';
 
 interface FilterImportItem {
   originalName: string;
@@ -7,6 +8,9 @@ interface FilterImportItem {
   code: string;
   description?: string;
   category?: string | string[];
+  parameters?: FilterParameterValues;
+  variables?: FilterVariables;
+  editor?: FilterEditor;
   selected: boolean;
 }
 
@@ -20,8 +24,19 @@ interface FilterImportModalProps {
     description?: string;
     filterType: 'aiModel' | 'custom';
     category?: string | string[];
+    parameters?: FilterParameterValues;
+    variables?: FilterVariables;
+    editor?: FilterEditor;
   }[];
-  onImport: (selectedFilters: { name: string; code: string; description?: string; category?: string | string[] }[]) => void;
+  onImport: (selectedFilters: {
+    name: string;
+    code: string;
+    description?: string;
+    category?: string | string[];
+    parameters?: FilterParameterValues;
+    variables?: FilterVariables;
+    editor?: FilterEditor;
+  }[]) => void;
 }
 
 export const FilterImportModal = memo<FilterImportModalProps>(({
@@ -60,6 +75,9 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
           code: filter.code,
           description: filter.description,
           category: filter.category,
+          parameters: filter.parameters,
+          variables: filter.variables,
+          editor: filter.editor,
           selected: true, // All selected by default
         }))
       );
@@ -125,6 +143,9 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
         code: item.code,
         description: item.description,
         category: item.category,
+        parameters: item.parameters,
+        variables: item.variables,
+        editor: item.editor,
       }));
     
     if (selectedItems.length === 0) {

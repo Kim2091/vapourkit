@@ -9,7 +9,7 @@ import { ActionBar } from './components/ActionBar';
 import { ConsoleDrawer } from './components/ConsoleDrawer';
 import { Scrubber } from './components/Scrubber';
 import { EngineBuildBanner } from './components/EngineBuildBanner';
-import type { BackendId, EngineBuildStatus, UpdateInfo, SegmentSelection, VsMlrtVersionInfo } from './electron';
+import type { BackendId, EngineBuildStatus, UpdateInfo, SegmentSelection, VsMlrtVersionInfo, Filter, FilterParameterValues } from './electron';
 import { getBackendDescriptor, resolveFilterBackend } from './utils/backends';
 import { AppRail } from './components/AppRail';
 import { TitleStrip } from './components/TitleStrip';
@@ -50,6 +50,14 @@ import { useDiscordRichPresence } from './hooks/useDiscordRichPresence';
 // Settings column drag bounds, in pixels.
 const SETTINGS_MIN_W = 320;
 const SETTINGS_MAX_W = 720;
+
+function parseFrameSize(resolution: string | undefined): { width: number; height: number } | null {
+  const match = resolution?.match(/(\d+)\s*[xX]\s*(\d+)/);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
 
 function App() {
   // Ref to preserve scroll position in right panel
@@ -123,6 +131,7 @@ function App() {
   
   // State management hooks
   const { filters, handleSetFilters, canUndo, canRedo, handleUndo, handleRedo } = useFilterConfig(isSetupComplete, addConsoleLog);
+  const [activeFilterEditorId, setActiveFilterEditorId] = useState<string | null>(null);
   const { colorimetrySettings, handleColorimetryChange } = useColorimetry(isSetupComplete, addConsoleLog);
   const {
     showConsole,
@@ -740,6 +749,52 @@ function App() {
     }
   }, [videoInfo, updatePreviewFrame]);
 
+  const activeFilterEditor = activeFilterEditorId
+    ? filters.find(filter => filter.id === activeFilterEditorId) ?? null
+    : null;
+  const cropSourceSize = parseFrameSize(videoInfo?.resolution);
+
+  const handleOpenFilterEditor = useCallback(async (filter: Filter) => {
+    if (!videoInfo) {
+      notify.warning('Select a video first', 'A source frame is needed to use the visual filter editor.');
+      return;
+    }
+
+    setActiveFilterEditorId(filter.id);
+    const frameNumber = playheadFrame ?? 0;
+    try {
+      // Always use an unprocessed source frame. A processed preview might have
+      // already been cropped or resized, which would make pixel values wrong.
+      const frameImage = await window.electronAPI.getVideoFrameAt(
+        videoInfo.path,
+        frameNumber,
+        videoInfo.fps || 24,
+      );
+      if (frameImage) {
+        updatePreviewFrame(frameImage);
+        setPlayheadFrame(frameNumber);
+      } else {
+        notify.error('Crop editor unavailable', 'Could not load a source frame for the editor.');
+      }
+    } catch (error) {
+      console.warn('Failed to load frame for visual filter editor:', error);
+      notify.error('Crop editor unavailable', 'Could not load a source frame for the editor.');
+    }
+  }, [playheadFrame, updatePreviewFrame, videoInfo]);
+
+  const handleFilterParametersChange = useCallback((filterId: string, parameters: FilterParameterValues) => {
+    handleSetFilters(filters.map(filter => filter.id === filterId ? { ...filter, parameters } : filter));
+  }, [filters, handleSetFilters]);
+
+  useEffect(() => {
+    if (!activeFilterEditorId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActiveFilterEditorId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeFilterEditorId]);
+
   // Determine if processing should be disabled
   // Console drawer — stable identities so the memoised bar and drawer don't
   // re-render on every parent tick.
@@ -888,6 +943,10 @@ function App() {
                     onCompareVideos={handleCompareVideos}
                     onOpenOutputFolder={handleOpenOutputFolder}
                     onVideoError={handleVideoError}
+                    activeFilterEditor={activeFilterEditor}
+                    onCloseFilterEditor={() => setActiveFilterEditorId(null)}
+                    onFilterParametersChange={handleFilterParametersChange}
+                    cropSourceSize={cropSourceSize}
                   />
 
                   <Scrubber
@@ -961,6 +1020,7 @@ function App() {
                     onFiltersChange={handleSetFilters}
                     onSaveTemplate={saveTemplate}
                     onDeleteTemplate={deleteTemplate}
+                    onOpenFilterEditor={handleOpenFilterEditor}
                   />
 
                   {/* Output Settings */}

@@ -417,6 +417,12 @@ export interface Filter {
   backend?: FilterBackend;
   /** num_streams override for this AI model; unset inherits the app default. */
   numStreams?: number;
+  /** Values supplied to {{variable}} placeholders in this filter's code. */
+  parameters?: FilterParameterValues;
+  /** Public variables declared by the .vkfilter template. */
+  variables?: FilterVariables;
+  /** Optional visual editor declared by the .vkfilter template. */
+  editor?: FilterEditor;
 }
 
 export interface DiscordRichPresenceSettings {
@@ -428,6 +434,33 @@ export interface DiscordRichPresenceActivity {
   state?: string;
   /** Unix timestamp in seconds. */
   startTimestamp?: number;
+}
+
+export type FilterParameterValue = string | number | boolean;
+export type FilterParameterValues = Record<string, FilterParameterValue>;
+
+/** A variable a .vkfilter intentionally exposes to the application UI. */
+export interface FilterVariable {
+  type?: 'number' | 'string' | 'boolean';
+  default?: FilterParameterValue;
+  description?: string;
+}
+
+export type FilterVariables = Record<string, FilterVariable>;
+
+/**
+ * Visual editors are opt-in template metadata. More editor kinds can be added
+ * without teaching a filter's Python code about the renderer implementation.
+ */
+export interface FilterEditor {
+  type: 'crop';
+  label?: string;
+  variables: {
+    left: string;
+    right: string;
+    top: string;
+    bottom: string;
+  };
 }
 
 export interface SegmentSelection {
@@ -449,6 +482,8 @@ export interface FilterTemplate {
   code: string;
   category?: string | string[]; // Can be a single category or multiple categories
   description?: string;
+  variables?: FilterVariables;
+  editor?: FilterEditor;
   metadata?: {
     author?: string;
     createdAt?: string;
@@ -471,6 +506,10 @@ export interface WorkflowData {
     modelType?: 'vsr' | 'image';
     category?: string | string[];
     backend?: FilterBackend;
+    numStreams?: number;
+    parameters?: FilterParameterValues;
+    variables?: FilterVariables;
+    editor?: FilterEditor;
   }[];
   createdAt?: string;
   description?: string;

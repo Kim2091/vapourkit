@@ -30,6 +30,14 @@ export interface Filter {
   backend?: FilterBackend;
   /** num_streams override for this AI model; unset inherits config.numStreams. */
   numStreams?: number;
+  /** Values supplied to declared {{variable}} placeholders in custom code. */
+  parameters?: Record<string, string | number | boolean>;
+  /** Declarations limit which placeholders can be rendered. */
+  variables?: Record<string, {
+    type?: 'number' | 'string' | 'boolean';
+    default?: string | number | boolean;
+    description?: string;
+  }>;
 }
 
 export interface SegmentSelection {
@@ -84,6 +92,26 @@ export class VapourSynthScriptGenerator {
     const templateName = 'vapoursynth_template.vpy';
     const templatePath = path.join(PATHS.CONFIG, templateName);
     return templatePath;
+  }
+
+  /**
+   * Replaces values explicitly declared by a .vkfilter's [variables] table.
+   * Keeping this scoped to declarations means ordinary Python braces and
+   * accidental template-like text remain untouched.
+   */
+  private renderCustomFilterCode(filter: Filter): string {
+    if (!filter.variables) return filter.code.trim();
+
+    return filter.code.trim().replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (match, key: string) => {
+      const declaration = filter.variables?.[key];
+      if (!declaration) return match;
+
+      const value = filter.parameters?.[key] ?? declaration.default;
+      if (typeof value === 'number') return Number.isFinite(value) ? String(value) : match;
+      if (typeof value === 'boolean') return value ? 'True' : 'False';
+      if (typeof value === 'string') return pyString(value);
+      return match;
+    });
   }
 
   /**
@@ -229,7 +257,7 @@ export class VapourSynthScriptGenerator {
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';
-        filterCode += filter.code.trim() + '\n\n';
+        filterCode += this.renderCustomFilterCode(filter) + '\n\n';
         stageLabel = filter.preset || 'Custom Filter';
       }
 

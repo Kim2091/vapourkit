@@ -1,0 +1,54 @@
+name = "DLSS Neural Uplift"
+category = ["Restoration", "Sharpening"]
+code = """
+# DLSS-NR ("Neural Uplift", the DLSS 5 generation) run as a 1:1 enhancement pass.
+# Requires: a Blackwell GPU (RTX 50-series), driver 570+, vsdlssnr.dll and nvngx_dlssnr.dll
+# in the VapourSynth plugins folder. NVIDIA does not ship nvngx_dlssnr.dll with the driver.
+#
+# This is NOT an upscaler - the snippet pins its scaling ratio to 1.0 - so put it at the END
+# of the chain, after whatever changed the resolution.
+
+style           = 0     # 0-2. Style block baked into the weights; 0 is neutral.
+style_strength  = 1.0   # 0-1. How far the selected style is blended in. 0 makes style a no-op.
+intensity       = 1.0   # 0-1. Wet/dry blend of the enhanced image against the original.
+local_structure = 1.0   # Detail enhancement strength. Only used while auto_mask is on.
+skin_structure  = -1.0  # Skin-specific structure strength. -1 means "use local_structure".
+auto_mask       = 1     # Let the model derive its own protection mask rather than enhancing
+                        # every pixel uniformly. Turning this off also disables both
+                        # structure strengths, which are only applied through that mask.
+
+src_matrix      = "709"  # Source matrix. "470bg" for SD/DVD material.
+src_transfer    = "709"  # Source transfer. The model wants sRGB, which is close but not equal.
+
+# Colour space here is a correctness requirement, not a tuning choice. The model is LDR-clamped
+# and trained on tonemapped, sRGB-ENCODED frames; hand it linear light and it reads the values
+# as though they were already gamma-encoded, which shows up as lifted blacks and washed-out
+# greys. HDR (PQ/HLG) sources must be tonemapped to SDR before this point.
+src_format = clip.format
+is_rgb = src_format.color_family == vs.RGB
+
+to_srgb = dict(format=vs.RGBS, transfer_in_s=src_transfer, transfer_s="srgb", range_s="full")
+if not is_rgb:
+    to_srgb["matrix_in_s"] = src_matrix
+
+rgb = core.resize.Bicubic(clip, **to_srgb)
+
+rgb = core.dlssnr.Enhance(
+    rgb,
+    style=style,
+    intensity=intensity,
+    style_strength=style_strength,
+    local_structure=local_structure,
+    skin_structure=skin_structure,
+    auto_mask=auto_mask,
+)
+
+from_srgb = dict(format=src_format.id, transfer_in_s="srgb", transfer_s=src_transfer)
+if not is_rgb:
+    from_srgb["matrix_s"] = src_matrix
+
+clip = core.resize.Bicubic(rgb, **from_srgb)"""
+description = "NVIDIA DLSS 5 neural image enhancement (DLSS-NR) applied per frame at 1:1. Blackwell only."
+
+[metadata]
+createdAt = "2026-08-30T00:00:00.000Z"

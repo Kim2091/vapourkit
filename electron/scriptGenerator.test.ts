@@ -161,6 +161,38 @@ describe('generateScript preview outputs (vs-view)', () => {
   });
 });
 
+describe('declared vkfilter variables', () => {
+  it('renders declared placeholders with persisted filter values', async () => {
+    const filter = customFilter(
+      0,
+      'Crop',
+      'left = {{crop_left}}\nright = {{crop_right}}\nlabel = {{label}}\nunknown = {{not_declared}}',
+    );
+    filter.variables = {
+      crop_left: { type: 'number', default: 0 },
+      crop_right: { type: 'number', default: 0 },
+      label: { type: 'string', default: 'default' },
+    };
+    filter.parameters = { crop_left: 48, crop_right: 64, label: 'preview' };
+
+    const script = await generate([filter], false);
+
+    expect(script).toContain('left = 48');
+    expect(script).toContain('right = 64');
+    expect(script).toContain('label = "preview"');
+    expect(script).toContain('unknown = {{not_declared}}');
+  });
+
+  it('uses a declared variable default when a filter has no saved value', async () => {
+    const filter = customFilter(0, 'Crop', 'top = {{crop_top}}');
+    filter.variables = { crop_top: { type: 'number', default: 12 } };
+
+    const script = await generate([filter], false);
+
+    expect(script).toContain('top = 12');
+  });
+});
+
 describe('inference backend selection', () => {
   it('emits TensorRT code for the Windows default backend', async () => {
     const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.engine')], false);

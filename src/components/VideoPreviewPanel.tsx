@@ -1,6 +1,8 @@
-import { memo, useRef } from 'react';
-import { Video, Loader2, XCircle, FolderOpen, GitCompare } from 'lucide-react';
+import { memo, useEffect, useRef, useState } from 'react';
+import { Video, Loader2, XCircle, FolderOpen, GitCompare, Crop, X } from 'lucide-react';
 import { PrivacyVeil } from './PrivacyVeil';
+import { CropEditorOverlay } from './CropEditorOverlay';
+import type { Filter, FilterParameterValues } from '../electron.d';
 
 interface VideoPreviewPanelProps {
   previewFrame: string | null;
@@ -13,6 +15,12 @@ interface VideoPreviewPanelProps {
   onCompareVideos: () => Promise<void>;
   onOpenOutputFolder: () => Promise<void>;
   onVideoError: () => void;
+  /** The selected filter whose template requested an interactive preview editor. */
+  activeFilterEditor?: Filter | null;
+  onCloseFilterEditor?: () => void;
+  onFilterParametersChange?: (filterId: string, parameters: FilterParameterValues) => void;
+  /** Original video dimensions. The scrubber preview is downscaled for speed. */
+  cropSourceSize?: { width: number; height: number } | null;
 }
 
 export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
@@ -26,8 +34,18 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   onCompareVideos,
   onOpenOutputFolder,
   onVideoError,
+  activeFilterEditor = null,
+  onCloseFilterEditor,
+  onFilterParametersChange,
+  cropSourceSize,
 }: VideoPreviewPanelProps) => {
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
+  const [previewImageSize, setPreviewImageSize] = useState<{ width: number; height: number } | null>(null);
+  const cropEditor = activeFilterEditor?.editor?.type === 'crop' ? activeFilterEditor.editor : null;
+
+  useEffect(() => {
+    setPreviewImageSize(null);
+  }, [previewFrame]);
 
   return (
     <div className="flex-1 bg-ink-950 overflow-hidden flex flex-col min-h-0">
@@ -35,6 +53,12 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
         <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <span className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100 whitespace-nowrap">Preview</span>
+          {activeFilterEditor && cropEditor && (
+            <span className="inline-flex items-center gap-1 h-5 px-1.5 rounded border border-accent-500/40 bg-accent-500/10 text-[10px] font-semibold uppercase tracking-[0.08em] text-accent-300 truncate">
+              <Crop className="w-3 h-3 flex-shrink-0" />
+              {cropEditor.label || 'Crop editor'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 self-center">
           {/* Compare and Open Folder buttons - Only visible after processing */}
@@ -66,6 +90,16 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
               </button>
             </>
           )}
+          {activeFilterEditor && (
+            <button
+              onClick={onCloseFilterEditor}
+              className="h-[22px] px-2 rounded inline-flex items-center gap-1 text-[11px] font-medium border bg-ink-850 border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors"
+              title="Close visual filter editor"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Close editor</span>
+            </button>
+          )}
         </div>
       </div>
       <div className="flex-1 flex items-center justify-center p-3 min-h-0 overflow-auto">
@@ -82,7 +116,21 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 className="w-full h-full object-contain rounded-lg shadow-lg"
                 draggable={false}
                 onDragStart={(e) => e.preventDefault()}
+                onLoad={(event) => setPreviewImageSize({
+                  width: event.currentTarget.naturalWidth,
+                  height: event.currentTarget.naturalHeight,
+                })}
               />
+              {cropEditor && activeFilterEditor && (
+                <CropEditorOverlay
+                  editor={cropEditor}
+                  parameters={activeFilterEditor.parameters}
+                  sourceSize={cropSourceSize ?? previewImageSize}
+                  disabled={isProcessing}
+                  onCommit={(parameters) => onFilterParametersChange?.(activeFilterEditor.id, parameters)}
+                  onClose={() => onCloseFilterEditor?.()}
+                />
+              )}
               {isProcessing && (
                 <div className="absolute top-3 right-3 bg-ink-950/90 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-accent-500/30">
                   <div className="flex items-center gap-2">
