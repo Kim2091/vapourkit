@@ -17,6 +17,9 @@ auto_mask       = 1     # Let the model derive its own protection mask rather th
                         # every pixel uniformly. Turning this off also disables both
                         # structure strengths, which are only applied through that mask.
 
+src_matrix      = "709"  # Source matrix. "470bg" for SD/DVD material.
+src_transfer    = "709"  # Source transfer. The model wants sRGB, which is close but not equal.
+
 # Colour space here is a correctness requirement, not a tuning choice. The model is LDR-clamped
 # and trained on tonemapped, sRGB-ENCODED frames; hand it linear light and it reads the values
 # as though they were already gamma-encoded, which shows up as lifted blacks and washed-out
@@ -24,40 +27,9 @@ auto_mask       = 1     # Let the model derive its own protection mask rather th
 src_format = clip.format
 is_rgb = src_format.color_family == vs.RGB
 
-# Resolve colourimetry once from the source. The main script supplies its project defaults only
-# when a source is untagged. An RGB source defaults to sRGB/full range, not BT.709/limited.
-#
-# Resize gives frame properties priority over *_in arguments, so resolving and stamping these
-# properties before the first conversion makes both legs of this round trip agree. It also keeps
-# a correct source tag from being silently re-encoded as BT.709 on output.
-source_props = clip.get_frame(0).props
-fallback_matrix = vs.MATRIX_BT709 if default_matrix == "709" else vs.MATRIX_ST170_M
-fallback_transfer = vs.TRANSFER_BT709 if default_transfer == "709" else vs.TRANSFER_BT601
-
-def known_colour_prop(name, fallback):
-    value = source_props.get(name, fallback)
-    return fallback if value == 2 else value  # ITU-T H.273: 2 = unspecified.
-
-src_matrix = known_colour_prop("_Matrix", fallback_matrix)
-src_transfer = known_colour_prop(
-    "_Transfer", vs.TRANSFER_IEC_61966_2_1 if is_rgb else fallback_transfer
-)
-src_range = source_props.get(
-    "_Range", vs.RANGE_FULL if is_rgb else vs.RANGE_LIMITED
-)
-if src_range not in (vs.RANGE_LIMITED, vs.RANGE_FULL):
-    src_range = vs.RANGE_FULL if is_rgb else vs.RANGE_LIMITED
-
-if is_rgb:
-    clip = core.std.SetFrameProps(clip, _Transfer=src_transfer, _Range=src_range)
-else:
-    clip = core.std.SetFrameProps(
-        clip, _Matrix=src_matrix, _Transfer=src_transfer, _Range=src_range
-    )
-
-to_srgb = dict(
-    format=vs.RGBS, transfer=vs.TRANSFER_IEC_61966_2_1, range=vs.RANGE_FULL
-)
+to_srgb = dict(format=vs.RGBS, transfer_in_s=src_transfer, transfer_s="srgb", range_s="full")
+if not is_rgb:
+    to_srgb["matrix_in_s"] = src_matrix
 
 rgb = core.resize.Bicubic(clip, **to_srgb)
 
@@ -71,15 +43,9 @@ rgb = core.dlssnr.Enhance(
     auto_mask=auto_mask,
 )
 
-from_srgb = dict(
-    format=src_format.id,
-    transfer_in=vs.TRANSFER_IEC_61966_2_1,
-    transfer=src_transfer,
-    range_in=vs.RANGE_FULL,
-    range=src_range,
-)
+from_srgb = dict(format=src_format.id, transfer_in_s="srgb", transfer_s=src_transfer)
 if not is_rgb:
-    from_srgb["matrix"] = src_matrix
+    from_srgb["matrix_s"] = src_matrix
 
 clip = core.resize.Bicubic(rgb, **from_srgb)"""
 description = "NVIDIA DLSS 5 neural image enhancement (DLSS-NR) applied per frame at 1:1. Blackwell only."

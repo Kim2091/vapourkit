@@ -19,7 +19,6 @@
 #include <windows.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -45,8 +44,6 @@ namespace {
 
   struct EnhanceData {
     VSNode* node = nullptr;
-    VSNode* depthNode = nullptr;
-    VSNode* motionNode = nullptr;
     VSVideoInfo vi = {};
 
     // Declaration order is load-bearing: NeuralUpliftContext holds a raw ID3D12Device* borrowed
@@ -70,10 +67,6 @@ namespace {
 
     bool inputIsFloat = false;
     int inputBytesPerSample = 0;
-    bool hasDepth = false;
-    bool depthIsFloat = false;
-    int depthBytesPerSample = 0;
-    bool hasMotion = false;
   };
 
   std::wstring widen(const char* utf8) {
@@ -139,67 +132,6 @@ namespace {
     }
   }
 
-  float readSample(const uint8_t* row, int x, bool isFloat, int bytesPerSample) {
-    if (isFloat) {
-      return reinterpret_cast<const float*>(row)[x];
-    }
-    if (bytesPerSample == 1) {
-      return row[x] * (1.0f / 255.0f);
-    }
-    return reinterpret_cast<const uint16_t*>(row)[x] * (1.0f / 65535.0f);
-  }
-
-  // A depth clip is deliberately a single normalized plane. The NGX interface has no way to
-  // infer whether an arbitrary RGB image represents metric depth, so accepting one would turn a
-  // common wiring mistake into corrupted temporal history rather than a clear create-time error.
-  void packDepth(const EnhanceData* d,
-                 const VSFrame* src,
-                 const VSAPI* vsapi,
-                 uint8_t* dstBase,
-                 uint32_t rowPitch) {
-    const uint8_t* plane = vsapi->getReadPtr(src, 0);
-    const ptrdiff_t stride = vsapi->getStride(src, 0);
-
-    for (int y = 0; y < d->vi.height; ++y) {
-      auto* dstRow = reinterpret_cast<float*>(dstBase + static_cast<size_t>(y) * rowPitch);
-      const uint8_t* srcRow = plane + static_cast<size_t>(y) * stride;
-      for (int x = 0; x < d->vi.width; ++x) {
-        const float value = readSample(srcRow, x, d->depthIsFloat, d->depthBytesPerSample);
-        // Depth values are normalized device depth. Reject NaNs and out-of-domain values at the
-        // boundary instead of passing undefined reprojection data into the snippet.
-        dstRow[x] = std::isfinite(value) ? std::clamp(value, 0.0f, 1.0f) : 0.0f;
-      }
-    }
-  }
-
-  // Motion is RGBS with R = horizontal and G = vertical displacement in signed source pixels.
-  // It remains a float clip at the VS boundary so negative flow and subpixel precision survive;
-  // the upload uses RG16F because that is ample for video motion and halves VRAM bandwidth.
-  void packMotion(const EnhanceData* d,
-                  const VSFrame* src,
-                  const VSAPI* vsapi,
-                  uint8_t* dstBase,
-                  uint32_t rowPitch) {
-    using DirectX::PackedVector::XMConvertFloatToHalf;
-
-    const uint8_t* xPlane = vsapi->getReadPtr(src, 0);
-    const uint8_t* yPlane = vsapi->getReadPtr(src, 1);
-    const ptrdiff_t xStride = vsapi->getStride(src, 0);
-    const ptrdiff_t yStride = vsapi->getStride(src, 1);
-
-    for (int y = 0; y < d->vi.height; ++y) {
-      auto* dstRow = reinterpret_cast<uint16_t*>(dstBase + static_cast<size_t>(y) * rowPitch);
-      const auto* xRow = reinterpret_cast<const float*>(xPlane + static_cast<size_t>(y) * xStride);
-      const auto* yRow = reinterpret_cast<const float*>(yPlane + static_cast<size_t>(y) * yStride);
-      for (int x = 0; x < d->vi.width; ++x) {
-        const float vx = std::isfinite(xRow[x]) ? xRow[x] : 0.0f;
-        const float vy = std::isfinite(yRow[x]) ? yRow[x] : 0.0f;
-        dstRow[x * 2] = XMConvertFloatToHalf(vx);
-        dstRow[x * 2 + 1] = XMConvertFloatToHalf(vy);
-      }
-    }
-  }
-
   void unpackFromHalf4(const EnhanceData* d,
                        VSFrame* dst,
                        const VSAPI* vsapi,
@@ -259,12 +191,6 @@ namespace {
 
     if (activationReason == arInitial) {
       vsapi->requestFrameFilter(n, d->node, frameCtx);
-      if (d->hasDepth) {
-        vsapi->requestFrameFilter(n, d->depthNode, frameCtx);
-      }
-      if (d->hasMotion) {
-        vsapi->requestFrameFilter(n, d->motionNode, frameCtx);
-      }
       return nullptr;
     }
 
@@ -273,8 +199,6 @@ namespace {
     }
 
     const VSFrame* src = vsapi->getFrameFilter(n, d->node, frameCtx);
-    const VSFrame* depth = d->hasDepth ? vsapi->getFrameFilter(n, d->depthNode, frameCtx) : nullptr;
-    const VSFrame* motion = d->hasMotion ? vsapi->getFrameFilter(n, d->motionNode, frameCtx) : nullptr;
     VSFrame* dst = vsapi->newVideoFrame(&d->vi.format, d->vi.width, d->vi.height, src, core);
 
     std::lock_guard<std::mutex> guard(d->mutex);
@@ -288,12 +212,6 @@ namespace {
       vsapi->setFilterError(("dlssnr.Enhance: " + message).c_str(), frameCtx);
       vsapi->freeFrame(dst);
       vsapi->freeFrame(src);
-      if (depth) {
-        vsapi->freeFrame(depth);
-      }
-      if (motion) {
-        vsapi->freeFrame(motion);
-      }
       // A failed evaluation did not advance the snippet's history, so the next frame must not
       // reproject against it.
       d->lastFrame = -2;
@@ -311,28 +229,9 @@ namespace {
     packToHalf4(d, src, vsapi, upload, d->d3d.stagingRowPitch());
     d->d3d.unmapUpload();
 
-    if (d->hasDepth) {
-      uint8_t* depthUpload = d->d3d.mapDepthUpload(error);
-      if (depthUpload == nullptr) {
-        return fail(error);
-      }
-      packDepth(d, depth, vsapi, depthUpload, d->d3d.depthRowPitch());
-      d->d3d.unmapDepthUpload();
-    }
-
-    if (d->hasMotion) {
-      uint8_t* motionUpload = d->d3d.mapMotionUpload(error);
-      if (motionUpload == nullptr) {
-        return fail(error);
-      }
-      packMotion(d, motion, vsapi, motionUpload, d->d3d.motionRowPitch());
-      d->d3d.unmapMotionUpload();
-    }
-
     d->d3d.recordPreEvaluate();
 
-    if (!d->ngx.evaluate(d->d3d.commandList(), d->d3d.colorTexture(), d->d3d.depthTexture(),
-                         d->d3d.motionTexture(), d->d3d.outputTexture(),
+    if (!d->ngx.evaluate(d->d3d.commandList(), d->d3d.colorTexture(), d->d3d.outputTexture(),
                          static_cast<uint32_t>(d->vi.width), static_cast<uint32_t>(d->vi.height),
                          settings, error)) {
       // The list is left open and will be reset by the next begin(); nothing was submitted.
@@ -355,12 +254,6 @@ namespace {
     d->lastFrame = n;
 
     vsapi->freeFrame(src);
-    if (depth) {
-      vsapi->freeFrame(depth);
-    }
-    if (motion) {
-      vsapi->freeFrame(motion);
-    }
     return dst;
   }
 
@@ -368,12 +261,6 @@ namespace {
     (void) core;
     auto* d = static_cast<EnhanceData*>(instanceData);
     vsapi->freeNode(d->node);
-    if (d->depthNode) {
-      vsapi->freeNode(d->depthNode);
-    }
-    if (d->motionNode) {
-      vsapi->freeNode(d->motionNode);
-    }
     delete d;
   }
 
@@ -390,24 +277,10 @@ namespace {
     d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
     d->vi = *vsapi->getVideoInfo(d->node);
 
-    auto releaseNodes = [&]() {
-      if (d->node) {
-        vsapi->freeNode(d->node);
-        d->node = nullptr;
-      }
-      if (d->depthNode) {
-        vsapi->freeNode(d->depthNode);
-        d->depthNode = nullptr;
-      }
-      if (d->motionNode) {
-        vsapi->freeNode(d->motionNode);
-        d->motionNode = nullptr;
-      }
-    };
-
     auto bail = [&](const std::string& message) {
       vsapi->mapSetError(out, ("dlssnr.Enhance: " + message).c_str());
-      releaseNodes();
+      vsapi->freeNode(d->node);
+      d->node = nullptr;
     };
 
     if (!vsh::isConstantVideoFormat(&d->vi)) {
@@ -435,52 +308,6 @@ namespace {
       return;
     }
 
-    int optionalNodeError = 0;
-    d->depthNode = vsapi->mapGetNode(in, "depth", 0, &optionalNodeError);
-    d->hasDepth = d->depthNode != nullptr;
-    d->motionNode = vsapi->mapGetNode(in, "motion", 0, &optionalNodeError);
-    d->hasMotion = d->motionNode != nullptr;
-
-    auto validateTimeline = [&](const VSVideoInfo& aux, const char* name) {
-      if (!vsh::isConstantVideoFormat(&aux) || aux.width != d->vi.width ||
-          aux.height != d->vi.height || aux.numFrames != d->vi.numFrames) {
-        bail(std::string(name) + " must have the same constant dimensions and frame count as clip");
-        return false;
-      }
-      return true;
-    };
-
-    if (d->hasDepth) {
-      const VSVideoInfo& depthVi = *vsapi->getVideoInfo(d->depthNode);
-      if (!validateTimeline(depthVi, "depth")) {
-        return;
-      }
-      if (depthVi.format.colorFamily != cfGray || depthVi.format.numPlanes != 1) {
-        bail("depth must be a single-plane gray clip (GRAY8, GRAY16, or GRAYS)");
-        return;
-      }
-      d->depthIsFloat = depthVi.format.sampleType == stFloat;
-      d->depthBytesPerSample = depthVi.format.bytesPerSample;
-      if ((d->depthIsFloat && depthVi.format.bitsPerSample != 32) ||
-          (!d->depthIsFloat && depthVi.format.bitsPerSample != 8 &&
-           depthVi.format.bitsPerSample != 16)) {
-        bail("depth must be GRAYS, GRAY8, or GRAY16 with normalized values");
-        return;
-      }
-    }
-
-    if (d->hasMotion) {
-      const VSVideoInfo& motionVi = *vsapi->getVideoInfo(d->motionNode);
-      if (!validateTimeline(motionVi, "motion")) {
-        return;
-      }
-      if (motionVi.format.colorFamily != cfRGB || motionVi.format.numPlanes < 2 ||
-          motionVi.format.sampleType != stFloat || motionVi.format.bitsPerSample != 32) {
-        bail("motion must be RGBS: R = horizontal and G = vertical signed pixel displacement");
-        return;
-      }
-    }
-
     int err = 0;
 
     auto optInt = [&](const char* name, int64_t fallback) -> int64_t {
@@ -506,19 +333,6 @@ namespace {
     // which explicitly disables structure enhancement on skin.
     d->settings.skinStructureStrength = static_cast<float>(optFloat("skin_structure", -1.0));
     d->settings.autoMask = optInt("auto_mask", 1) != 0;
-    const int64_t depthInverted = optInt("depth_inverted", 0);
-    if (depthInverted != 0 && depthInverted != 1) {
-      bail("depth_inverted must be 0 or 1");
-      return;
-    }
-    d->settings.depthInverted = depthInverted != 0;
-    d->settings.motionVectorScaleX = static_cast<float>(optFloat("motion_scale_x", 1.0));
-    d->settings.motionVectorScaleY = static_cast<float>(optFloat("motion_scale_y", 1.0));
-    if (!std::isfinite(d->settings.motionVectorScaleX) ||
-        !std::isfinite(d->settings.motionVectorScaleY)) {
-      bail("motion_scale_x and motion_scale_y must be finite");
-      return;
-    }
 
     const int preset = static_cast<int>(optInt("preset", 0));
     const auto featureId = static_cast<uint32_t>(optInt("feature_id", kNgxFeatureDlssNrDefault));
@@ -531,7 +345,7 @@ namespace {
     std::string error;
 
     if (!d->d3d.initialize(static_cast<uint32_t>(d->vi.width), static_cast<uint32_t>(d->vi.height),
-                           d->hasDepth, d->hasMotion, error)) {
+                           error)) {
       bail(error);
       return;
     }
@@ -559,18 +373,12 @@ namespace {
       return;
     }
 
-    std::vector<VSFilterDependency> deps = { { d->node, rpStrictSpatial } };
-    if (d->hasDepth) {
-      deps.push_back({ d->depthNode, rpStrictSpatial });
-    }
-    if (d->hasMotion) {
-      deps.push_back({ d->motionNode, rpStrictSpatial });
-    }
+    VSFilterDependency deps[] = { { d->node, rpStrictSpatial } };
 
     // fmFrameState, not fmParallel: the snippet carries temporal state across evaluations and
     // can only hold one frame's worth at a time, which is precisely what this mode exists for.
     vsapi->createVideoFilter(out, "Enhance", &d->vi, enhanceGetFrame, enhanceFree, fmFrameState,
-                             deps.data(), static_cast<int>(deps.size()), d.get(), core);
+                             deps, 1, d.get(), core);
     d.release();
   }
 
@@ -582,17 +390,12 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
 
   vspapi->registerFunction("Enhance",
                            "clip:vnode;"
-                           "depth:vnode:opt;"
-                           "motion:vnode:opt;"
                            "style:int:opt;"
                            "intensity:float:opt;"
                            "style_strength:float:opt;"
                            "local_structure:float:opt;"
                            "skin_structure:float:opt;"
                            "auto_mask:int:opt;"
-                           "depth_inverted:int:opt;"
-                           "motion_scale_x:float:opt;"
-                           "motion_scale_y:float:opt;"
                            "preset:int:opt;"
                            "feature_id:int:opt;"
                            "app_id:int:opt;"

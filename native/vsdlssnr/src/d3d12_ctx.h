@@ -30,20 +30,12 @@ namespace vsdlssnr {
     D3D12Context(const D3D12Context&) = delete;
     D3D12Context& operator=(const D3D12Context&) = delete;
 
-    // Depth and motion are optional for DLSS-NR, so avoid allocating their VRAM and upload
-    // buffers unless the VapourSynth caller supplied the matching clip.
-    bool initialize(uint32_t width,
-                    uint32_t height,
-                    bool needDepth,
-                    bool needMotion,
-                    std::string& error);
+    bool initialize(uint32_t width, uint32_t height, std::string& error);
 
     ID3D12Device* device() const { return m_device.Get(); }
     ID3D12GraphicsCommandList* commandList() const { return m_commandList.Get(); }
     ID3D12Resource* colorTexture() const { return m_colorTexture.Get(); }
     ID3D12Resource* outputTexture() const { return m_outputTexture.Get(); }
-    ID3D12Resource* depthTexture() const { return m_depthTexture.Get(); }
-    ID3D12Resource* motionTexture() const { return m_motionTexture.Get(); }
 
     uint32_t width() const { return m_width; }
     uint32_t height() const { return m_height; }
@@ -51,14 +43,12 @@ namespace vsdlssnr {
     // Bytes per row in the staging buffers. D3D12 requires copy footprints to be a multiple of
     // D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, so this is generally wider than width * 8.
     uint32_t stagingRowPitch() const { return m_rowPitch; }
-    uint32_t depthRowPitch() const { return m_depthRowPitch; }
-    uint32_t motionRowPitch() const { return m_motionRowPitch; }
 
     // Opens the command list for recording. Every frame starts here.
     bool begin(std::string& error);
 
-    // Records upload -> input textures, and leaves them readable and output writable for the
-    // NGX evaluation the caller records next. Optional textures are copied only when allocated.
+    // Records upload -> colour texture, and leaves colour readable and output writable for the
+    // NGX evaluation the caller records next.
     void recordPreEvaluate();
 
     // Records output -> readback. Call after the NGX evaluation has been recorded.
@@ -73,10 +63,6 @@ namespace vsdlssnr {
     // read it back.
     uint8_t* mapUpload(std::string& error);
     void unmapUpload();
-    uint8_t* mapDepthUpload(std::string& error);
-    void unmapDepthUpload();
-    uint8_t* mapMotionUpload(std::string& error);
-    void unmapMotionUpload();
     const uint8_t* mapReadback(std::string& error);
     void unmapReadback();
 
@@ -84,21 +70,6 @@ namespace vsdlssnr {
     bool createDevice(std::string& error);
     bool createQueueAndList(std::string& error);
     bool createResources(std::string& error);
-    bool createUploadResource(const D3D12_RESOURCE_DESC& textureDesc,
-                              ComPtr<ID3D12Resource>& uploadBuffer,
-                              D3D12_PLACED_SUBRESOURCE_FOOTPRINT& footprint,
-                              uint32_t& rowPitch,
-                              uint64_t& bytes,
-                              const char* label,
-                              std::string& error);
-    void copyUploadToTexture(ID3D12Resource* upload,
-                             const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& footprint,
-                             ID3D12Resource* texture,
-                             D3D12_RESOURCE_STATES& textureState);
-    uint8_t* mapUploadResource(ID3D12Resource* upload,
-                               const char* label,
-                               std::string& error);
-    void unmapUploadResource(ID3D12Resource* upload, uint64_t bytes);
 
     void transition(ID3D12Resource* resource,
                     D3D12_RESOURCE_STATES& tracked,
@@ -114,11 +85,7 @@ namespace vsdlssnr {
 
     ComPtr<ID3D12Resource> m_colorTexture;
     ComPtr<ID3D12Resource> m_outputTexture;
-    ComPtr<ID3D12Resource> m_depthTexture;
-    ComPtr<ID3D12Resource> m_motionTexture;
     ComPtr<ID3D12Resource> m_uploadBuffer;
-    ComPtr<ID3D12Resource> m_depthUploadBuffer;
-    ComPtr<ID3D12Resource> m_motionUploadBuffer;
     ComPtr<ID3D12Resource> m_readbackBuffer;
 
     // Tracked states are speculative while a list is open: the transitions have been recorded
@@ -126,31 +93,19 @@ namespace vsdlssnr {
     // list can roll back to it rather than leaving the tracker describing a frame that never ran.
     D3D12_RESOURCE_STATES m_colorState = D3D12_RESOURCE_STATE_COMMON;
     D3D12_RESOURCE_STATES m_outputState = D3D12_RESOURCE_STATE_COMMON;
-    D3D12_RESOURCE_STATES m_depthState = D3D12_RESOURCE_STATE_COMMON;
-    D3D12_RESOURCE_STATES m_motionState = D3D12_RESOURCE_STATE_COMMON;
     D3D12_RESOURCE_STATES m_committedColorState = D3D12_RESOURCE_STATE_COMMON;
     D3D12_RESOURCE_STATES m_committedOutputState = D3D12_RESOURCE_STATE_COMMON;
-    D3D12_RESOURCE_STATES m_committedDepthState = D3D12_RESOURCE_STATE_COMMON;
-    D3D12_RESOURCE_STATES m_committedMotionState = D3D12_RESOURCE_STATE_COMMON;
 
     // A frame that fails partway through returns without submitting, leaving the list open.
     // Reset must not be called on an open list, so the next begin() closes it first.
     bool m_listOpen = false;
 
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT m_footprint = {};
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT m_depthFootprint = {};
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT m_motionFootprint = {};
 
     uint32_t m_width = 0;
     uint32_t m_height = 0;
     uint32_t m_rowPitch = 0;
-    uint32_t m_depthRowPitch = 0;
-    uint32_t m_motionRowPitch = 0;
     uint64_t m_stagingBytes = 0;
-    uint64_t m_depthUploadBytes = 0;
-    uint64_t m_motionUploadBytes = 0;
-    bool m_needDepth = false;
-    bool m_needMotion = false;
   };
 
 } // namespace vsdlssnr

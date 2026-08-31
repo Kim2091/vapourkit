@@ -228,8 +228,7 @@ namespace vsdlssnr {
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Width, static_cast<unsigned int>(width));
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Height, static_cast<unsigned int>(height));
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Hint_Render_Preset, preset);
-    // This is read per evaluation too; set a deterministic creation value before any depth has
-    // been bound.
+    // No depth is bound, so inversion is meaningless - set anyway so the block is deterministic.
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_DepthInverted, 0);
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Enabled, 1);
     m_parameters->Set(NVSDK_NGX_Parameter_CreationNodeMask, 1u);
@@ -259,8 +258,6 @@ namespace vsdlssnr {
 
   bool NeuralUpliftContext::evaluate(ID3D12GraphicsCommandList* cmdList,
                                      ID3D12Resource* color,
-                                     ID3D12Resource* depth,
-                                     ID3D12Resource* motion,
                                      ID3D12Resource* output,
                                      uint32_t width,
                                      uint32_t height,
@@ -290,31 +287,10 @@ namespace vsdlssnr {
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_OutputSubrectWidth, w);
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_OutputSubrectHeight, h);
 
-    // Do not write null resources into the parameter bag: an unbound input is valid, while a
-    // null resource is indistinguishable from an attempted (and invalid) binding to the snippet.
-    if (motion) {
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_MVec, motion);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_MVecSubrectBaseX, 0);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_MVecSubrectBaseY, 0);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_MVecSubrectWidth, w);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_MVecSubrectHeight, h);
-      // The input clip already stores displacements in pixels of this full-resolution subrect.
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_MVecScaleX, settings.motionVectorScaleX);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_MVecScaleY, settings.motionVectorScaleY);
-    }
-
-    if (depth) {
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Depth, depth);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_DepthSubrectBaseX, 0);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_DepthSubrectBaseY, 0);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_DepthSubrectWidth, w);
-      m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_DepthSubrectHeight, h);
-    }
-
     // Read per evaluation, not just at creation: with Enabled clear the snippet copies its
     // colour input straight to the output and skips the network entirely.
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Enabled, 1);
-    m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_DepthInverted, settings.depthInverted ? 1 : 0);
+    m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_DepthInverted, 0);
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_Reset, settings.resetHistory ? 1 : 0);
     m_parameters->Set(NVSDK_NGX_Parameter_DLSSNR_UseAutoMask, settings.autoMask ? 1 : 0);
     // Style is the one control read back as unsigned.

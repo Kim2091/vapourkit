@@ -29,11 +29,6 @@ namespace vsdlssnr {
     // structure strengths are only consulted when autoMask is on.
     float skinStructureStrength = -1.0f;
     bool autoMask = true;
-    // A normalized depth clip normally uses 0 = near, 1 = far. Set this when its convention is
-    // reversed. Motion values are converted to pixels by these factors inside the snippet.
-    bool depthInverted = false;
-    float motionVectorScaleX = 1.0f;
-    float motionVectorScaleY = 1.0f;
     bool resetHistory = false;
   };
 
@@ -68,13 +63,11 @@ namespace vsdlssnr {
                        uint32_t featureId,
                        std::string& error);
 
-    // Records one evaluation. Depth and motion are optional: null means leave the corresponding
-    // DLSS-NR input unbound. Non-null resources are sampled as normalized R32F depth and RG16F
-    // signed pixel vectors respectively.
+    // Records one evaluation. Depth and motion vectors are deliberately not bound: they are
+    // optional to the snippet, and estimating them from video would feed the temporal path
+    // inputs it has no way to sanity-check. See README.md.
     bool evaluate(ID3D12GraphicsCommandList* cmdList,
                   ID3D12Resource* color,
-                  ID3D12Resource* depth,
-                  ID3D12Resource* motion,
                   ID3D12Resource* output,
                   uint32_t width,
                   uint32_t height,

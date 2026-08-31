@@ -7,9 +7,9 @@
 // silently ignores parameters it does not recognise - a misspelled name does not fail, it
 // just does nothing - so nothing is defined here that was not confirmed against the binary.
 //
-// Only the subset this plugin actually drives is kept. UI separation inputs remain absent: video
-// has no independently composited HUD layer to bind. Depth and motion vectors are supported as
-// optional VapourSynth inputs; see README.md for their precise conventions.
+// Only the subset this plugin actually drives is kept. Depth, motion vectors and the UI
+// separation inputs are deliberately absent: see README.md for why the video path binds
+// neither, and rtx_neural_uplift.h in the Remix tree for the full list.
 
 // The NVSDK_NGX_Feature enum value DLSS-NR is registered under. NVIDIA has not published it;
 // 18 (0x12) was recovered by disassembly and is what the Remix integration runs with. Exposed
@@ -26,10 +26,6 @@
 // --- Per-evaluation inputs / outputs ----------------------------------------------------
 #define NVSDK_NGX_Parameter_DLSSNR_Color                "DLSSNR.Color"
 #define NVSDK_NGX_Parameter_DLSSNR_Output               "DLSSNR.Output"
-#define NVSDK_NGX_Parameter_DLSSNR_Depth                "DLSSNR.Depth"
-#define NVSDK_NGX_Parameter_DLSSNR_MVec                 "DLSSNR.MVec"
-#define NVSDK_NGX_Parameter_DLSSNR_MVecScaleX           "DLSSNR.MVecScaleX"
-#define NVSDK_NGX_Parameter_DLSSNR_MVecScaleY           "DLSSNR.MVecScaleY"
 #define NVSDK_NGX_Parameter_DLSSNR_Reset                "DLSSNR.Reset"
 #define NVSDK_NGX_Parameter_DLSSNR_UICorrection         "DLSSNR.UICorrection"
 
@@ -51,16 +47,6 @@
 #define NVSDK_NGX_Parameter_DLSSNR_OutputSubrectBaseY   "DLSSNR.OutputSubrectBaseY"
 #define NVSDK_NGX_Parameter_DLSSNR_OutputSubrectWidth   "DLSSNR.OutputSubrectWidth"
 #define NVSDK_NGX_Parameter_DLSSNR_OutputSubrectHeight  "DLSSNR.OutputSubrectHeight"
-
-#define NVSDK_NGX_Parameter_DLSSNR_MVecSubrectBaseX     "DLSSNR.MVecSubrectBaseX"
-#define NVSDK_NGX_Parameter_DLSSNR_MVecSubrectBaseY     "DLSSNR.MVecSubrectBaseY"
-#define NVSDK_NGX_Parameter_DLSSNR_MVecSubrectWidth     "DLSSNR.MVecSubrectWidth"
-#define NVSDK_NGX_Parameter_DLSSNR_MVecSubrectHeight    "DLSSNR.MVecSubrectHeight"
-
-#define NVSDK_NGX_Parameter_DLSSNR_DepthSubrectBaseX    "DLSSNR.DepthSubrectBaseX"
-#define NVSDK_NGX_Parameter_DLSSNR_DepthSubrectBaseY    "DLSSNR.DepthSubrectBaseY"
-#define NVSDK_NGX_Parameter_DLSSNR_DepthSubrectWidth    "DLSSNR.DepthSubrectWidth"
-#define NVSDK_NGX_Parameter_DLSSNR_DepthSubrectHeight   "DLSSNR.DepthSubrectHeight"
 
 // Highest DLSSNR.Style the 310.8 snippet ships. It holds three style blocks and clamps
 // anything higher to the last one, so offering more would present duplicates of style 2.
