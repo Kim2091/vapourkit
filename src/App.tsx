@@ -14,6 +14,7 @@ import { getBackendDescriptor, resolveFilterBackend } from './utils/backends';
 import { AppRail } from './components/AppRail';
 import { TitleStrip } from './components/TitleStrip';
 import { ModelBuildNotification } from './components/ModelBuildNotification';
+import { DlssRuntimeNotification } from './components/DlssRuntimeNotification';
 import { useModels } from './hooks/useModels';
 import { useSettings } from './hooks/useSettings';
 import { usePrivacyMode } from './hooks/usePrivacyMode';
@@ -902,6 +903,9 @@ function App() {
           filters={filters}
           onBuildModel={handleBuildModel}
         />
+
+        {/* Notification Bar for a missing DLSS 5 runtime */}
+        <DlssRuntimeNotification filters={filters} />
 
         {/* Main Content */}
         <div className="flex-1 flex min-h-0 overflow-hidden">
