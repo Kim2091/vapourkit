@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useConsoleLog } from '../hooks/useConsoleLog';
 import { ModalSectionHeader as SectionHeader } from './ModalSectionHeader';
+import { DlssRuntimeSection } from './DlssRuntimeSection';
 
 interface PluginDependencyProgress {
   type: 'download' | 'extract' | 'install' | 'complete' | 'error';
@@ -238,6 +239,8 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
               )}
             </div>
           </section>
+
+          <DlssRuntimeSection />
 
           <section className="mt-2 border-t border-ink-700">
             <button onClick={() => setShowConsole(!showConsole)} aria-expanded={showConsole} className="w-full text-left">
