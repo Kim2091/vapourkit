@@ -95,7 +95,13 @@ namespace vsdlssnr {
 
     ID3D12Device* m_device = nullptr;
     HMODULE m_snippet = nullptr;
-    void** m_callerCheckHookSlot = nullptr;
+    // Whether this context holds a reference on the process-wide caller-check bypass. The hook
+    // itself is shared between every live context - see caller_hook.h - so what is tracked here
+    // is only the reference, to be released exactly once.
+    bool m_holdsCallerCheckBypass = false;
+    // Whether this context is counted among the live NGX runtimes in the process, which is what
+    // decides who gets to call the two Shutdown1s.
+    bool m_runtimeCounted = false;
     bool m_snippetInitialized = false;
     bool m_coreInitialized = false;
 

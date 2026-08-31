@@ -15,14 +15,22 @@ namespace vsdlssnr {
   // asked about this module, and passes every other query through. The snippet's code is not
   // modified.
   //
-  // Ported from the dxvk-remix DLSS-NR integration, where this technique is already validated
-  // against a running snippet.
+  // The hook is REFERENCE COUNTED because it is process-wide while its callers are not. The
+  // snippet is loaded once no matter how many filter instances exist - LoadLibraryW hands every
+  // caller after the first the same already-hooked module - so tying the hook's lifetime to
+  // whichever instance happened to install it means destroying that instance silently breaks
+  // every other live one, which then fails at EvaluateFeature with FAIL_PlatformError. Install
+  // on the first acquire, restore on the last release.
   //
-  // Returns the IAT slot that was written, for unhookCallerCheck to restore, or nullptr if
-  // nothing was touched.
-  void** hookCallerCheck(HMODULE snippet);
+  // Ported from the dxvk-remix DLSS-NR integration, where a single owning object made a plain
+  // install/restore pair correct.
 
-  // Restores the slot. Must run before the snippet is unmapped - the slot lives inside it.
-  void unhookCallerCheck(void** slot);
+  // Returns false when the hook could not be installed, in which case the caller holds nothing
+  // and must not call release.
+  bool acquireCallerCheckBypass(HMODULE snippet);
+
+  // Restores the import when the last holder releases it. Every holder must call this before
+  // the snippet is unmapped - the slot it points into disappears with the module.
+  void releaseCallerCheckBypass();
 
 } // namespace vsdlssnr

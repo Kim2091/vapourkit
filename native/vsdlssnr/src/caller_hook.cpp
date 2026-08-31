@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 
 namespace vsdlssnr {
 
@@ -40,9 +41,8 @@ namespace vsdlssnr {
       return g_realGetModuleFileNameW(hModule, lpFilename, nSize);
     }
 
-  } // namespace
-
-  void** hookCallerCheck(HMODULE snippet) {
+  // Installs the hook. Returns the IAT slot written, or nullptr if nothing was touched.
+  void** installHook(HMODULE snippet) {
     auto* const base = reinterpret_cast<uint8_t*>(snippet);
 
     // The image is walked defensively throughout. Nothing here is trusted to be well formed:
@@ -188,7 +188,7 @@ namespace vsdlssnr {
     return nullptr;
   }
 
-  void unhookCallerCheck(void** slot) {
+  void restoreHook(void** slot) {
     if (slot == nullptr || g_realGetModuleFileNameW == nullptr) {
       return;
     }
@@ -205,6 +205,49 @@ namespace vsdlssnr {
 
     g_realGetModuleFileNameW = nullptr;
     g_spoofedModule = nullptr;
+  }
+
+  // Guards the pair below. Contention is nil - this runs at filter create and destroy - but the
+  // state is process-wide and VapourSynth builds filter graphs from more than one thread.
+  std::mutex g_bypassMutex;
+  int g_bypassRefCount = 0;
+  void** g_bypassSlot = nullptr;
+
+  } // namespace
+
+  bool acquireCallerCheckBypass(HMODULE snippet) {
+    std::lock_guard<std::mutex> guard(g_bypassMutex);
+
+    if (g_bypassRefCount > 0) {
+      // Already installed by an earlier instance against the same module: the snippet is loaded
+      // once per process, so there is nothing to install again, only a reference to add.
+      ++g_bypassRefCount;
+      return true;
+    }
+
+    g_bypassSlot = installHook(snippet);
+    if (g_bypassSlot == nullptr) {
+      return false;
+    }
+
+    g_bypassRefCount = 1;
+    return true;
+  }
+
+  void releaseCallerCheckBypass() {
+    std::lock_guard<std::mutex> guard(g_bypassMutex);
+
+    if (g_bypassRefCount == 0) {
+      return;
+    }
+
+    if (--g_bypassRefCount > 0) {
+      // Another instance is still driving the snippet; restoring now would break it.
+      return;
+    }
+
+    restoreHook(g_bypassSlot);
+    g_bypassSlot = nullptr;
   }
 
 } // namespace vsdlssnr

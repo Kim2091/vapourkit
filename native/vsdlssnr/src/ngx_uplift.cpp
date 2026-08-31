@@ -6,6 +6,7 @@
 
 #include <windows.h>
 
+#include <mutex>
 #include <sstream>
 #include <vector>
 
@@ -86,22 +87,39 @@ namespace vsdlssnr {
       return out;
     }
 
+    // Live contexts in this process. Both NGX shutdowns below behave as process-wide teardown
+    // rather than the per-device teardown their ID3D12Device* argument suggests: with two
+    // filter instances alive, destroying the first left the second's next EvaluateFeature
+    // failing with FAIL_InvalidParameter, because its capability parameter block had gone out
+    // from under it. So the shutdowns are deferred until the last context goes away.
+    std::mutex g_runtimeMutex;
+    int g_runtimeRefs = 0;
+
   } // namespace
 
   NeuralUpliftContext::~NeuralUpliftContext() {
     releaseFeature();
 
+    bool lastContext = true;
+    {
+      std::lock_guard<std::mutex> guard(g_runtimeMutex);
+      if (m_runtimeCounted) {
+        lastContext = (--g_runtimeRefs == 0);
+        m_runtimeCounted = false;
+      }
+    }
+
     if (m_snippet) {
       // Shutdown goes through the caller check like everything else, so the hook has to survive
       // until it has been called - and has to be undone before the library is unmapped, since
       // the slot it points into disappears with it.
-      if (m_snippetInitialized && m_pfnShutdown1) {
+      if (lastContext && m_snippetInitialized && m_pfnShutdown1) {
         m_pfnShutdown1(m_device);
       }
 
-      if (m_callerCheckHookSlot) {
-        unhookCallerCheck(m_callerCheckHookSlot);
-        m_callerCheckHookSlot = nullptr;
+      if (m_holdsCallerCheckBypass) {
+        releaseCallerCheckBypass();
+        m_holdsCallerCheckBypass = false;
       }
 
       FreeLibrary(m_snippet);
@@ -112,10 +130,10 @@ namespace vsdlssnr {
     // destroyed separately, matching the Remix integration.
     m_parameters = nullptr;
 
-    if (m_coreInitialized && m_device) {
+    if (lastContext && m_coreInitialized && m_device) {
       NVSDK_NGX_D3D12_Shutdown1(m_device);
-      m_coreInitialized = false;
     }
+    m_coreInitialized = false;
   }
 
   bool NeuralUpliftContext::load(ID3D12Device* device,
@@ -190,7 +208,7 @@ namespace vsdlssnr {
 
     // Must be installed before the first snippet call, Init included.
     if (bypassCallerCheck) {
-      m_callerCheckHookSlot = hookCallerCheck(m_snippet);
+      m_holdsCallerCheckBypass = acquireCallerCheckBypass(m_snippet);
     } else {
       logInfo("Caller check left in place (bypass_caller_check=0); the snippet is expected to "
               "reject calls from this module");
@@ -205,6 +223,13 @@ namespace vsdlssnr {
     }
 
     m_snippetInitialized = true;
+
+    {
+      std::lock_guard<std::mutex> guard(g_runtimeMutex);
+      ++g_runtimeRefs;
+      m_runtimeCounted = true;
+    }
+
     logInfo("Snippet initialized");
     return true;
   }
