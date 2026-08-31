@@ -9,3 +9,6 @@
 /*.png
 /include/plugins/plugins
 /include/scripts/extra_scripts
+
+# Native plugin build output
+native/*/build/

@@ -113,6 +113,10 @@ export interface ElectronAPI {
   openConfigFolder: () => Promise<{ success: boolean }>;
   openVSPluginsFolder: () => Promise<{ success: boolean }>;
   openVSScriptsFolder: () => Promise<{ success: boolean }>;
+
+  // DLSS 5 Neural Uplift runtime (nvngx_dlssnr.dll)
+  dlssRuntimeStatus: () => Promise<DlssRuntimeStatus>;
+  dlssRuntimeImport: () => Promise<DlssImportResult>;
   
   // Console logs
   onDevConsoleLog: (callback: (log: DevConsoleLog) => void) => () => void;
@@ -216,6 +220,20 @@ export interface ElectronAPI {
   updateVsMlrtVersion: () => Promise<{ success: boolean; version?: string; error?: string }>;
   updateVsMlrtPlugin: () => Promise<{ success: boolean; version?: string; error?: string }>;
   onVsMlrtUpdateProgress: (callback: (progress: { progress: number; message: string }) => void) => () => void;
+}
+
+export interface DlssRuntimeStatus {
+  installed: boolean;
+  installedVersion: string | null;
+  /** Where the runtime goes, so a user who would rather copy it themselves can. */
+  targetDirectory: string;
+}
+
+export interface DlssImportResult {
+  success: boolean;
+  canceled?: boolean;
+  error?: string;
+  version?: string | null;
 }
 
 export interface DevConsoleLog {

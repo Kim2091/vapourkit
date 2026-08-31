@@ -13,6 +13,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useConsoleLog } from '../hooks/useConsoleLog';
+import { ModalSectionHeader as SectionHeader } from './ModalSectionHeader';
+import { DlssRuntimeSection } from './DlssRuntimeSection';
 
 interface PluginDependencyProgress {
   type: 'download' | 'extract' | 'install' | 'complete' | 'error';
@@ -25,25 +27,6 @@ interface PluginsModalProps {
   show: boolean;
   onClose: () => void;
   onInstallationComplete?: () => void;
-}
-
-interface SectionHeaderProps {
-  icon: typeof Package;
-  title: string;
-  action?: React.ReactNode;
-}
-
-function SectionHeader({ icon: Icon, title, action }: SectionHeaderProps) {
-  return (
-    <div className="h-9 flex items-stretch gap-2.5 pr-3 bg-ink-850 border-b border-ink-800">
-      <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        <Icon className="w-3.5 h-3.5 text-ink-500" />
-        <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100 truncate">{title}</h3>
-      </div>
-      {action && <div className="flex items-center flex-shrink-0">{action}</div>}
-    </div>
-  );
 }
 
 export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstallationComplete }) => {
@@ -256,6 +239,8 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
               )}
             </div>
           </section>
+
+          <DlssRuntimeSection />
 
           <section className="mt-2 border-t border-ink-700">
             <button onClick={() => setShowConsole(!showConsole)} aria-expanded={showConsole} className="w-full text-left">
