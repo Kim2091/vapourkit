@@ -1052,46 +1052,73 @@ export class PluginInstaller {
       // Ensure temp directory exists
       await fs.ensureDir(tempDir);
 
-      // Download the zip file
-      await new Promise<void>((resolve, reject) => {
-        const file = fs.createWriteStream(zipPath);
-        https.get(downloadUrl, (response) => {
-          if (response.statusCode === 302 || response.statusCode === 301) {
-            // Handle redirect
-            const redirectUrl = response.headers.location;
-            if (redirectUrl) {
-              https.get(redirectUrl, (redirectResponse) => {
-                redirectResponse.pipe(file);
-                file.on('finish', () => {
-                  file.close();
-                  resolve();
-                });
-              }).on('error', (err) => {
-                fs.unlink(zipPath, () => {});
-                reject(err);
-              });
-            } else {
-              reject(new Error('Redirect without location'));
-            }
-          } else {
-            response.pipe(file);
-            file.on('finish', () => {
-              file.close();
-              resolve();
-            });
-          }
-        }).on('error', (err) => {
-          fs.unlink(zipPath, () => {});
-          reject(err);
-        });
+      // Download the zip file.
+      //
+      // Three things here are load-bearing, and the previous version got each of them wrong in
+      // a way that only showed up on some machines:
+      //
+      //  * Redirects are followed to a fixed depth rather than exactly once. GitHub sends
+      //    /archive/<sha>.zip to codeload.github.com, and that hop can itself redirect. Piping
+      //    a redirect's (empty) body to disk produced a zero-byte "zip" and the misleading
+      //    "Can not open the file as archive".
+      //  * Only a 200 is written. An error page saved under a .zip name fails the same way,
+      //    and blaming 7-Zip for it costs an hour.
+      //  * The promise settles on the write stream's 'close', not 'finish'. finish fires while
+      //    the descriptor is still open, so extraction could start against a file this process
+      //    still held - which is exactly what "used by another process" was reporting.
+      try {
+        await fs.remove(zipPath);
+      } catch {
+        // A leftover from an interrupted run is not fatal; the write below truncates anyway.
+      }
 
-        file.on('error', (err) => {
-          fs.unlink(zipPath, () => {});
-          reject(err);
-        });
+      await new Promise<void>((resolve, reject) => {
+        const maxRedirects = 5;
+
+        const fetch = (url: string, hop: number): void => {
+          if (hop > maxRedirects) {
+            reject(new Error(`Too many redirects fetching VapourSynth scripts (${maxRedirects})`));
+            return;
+          }
+
+          https.get(url, (response) => {
+            const status = response.statusCode ?? 0;
+
+            if (status >= 300 && status < 400 && response.headers.location) {
+              response.resume(); // Drain, or the socket is never released.
+              fetch(new URL(response.headers.location, url).toString(), hop + 1);
+              return;
+            }
+
+            if (status !== 200) {
+              response.resume();
+              reject(new Error(`VapourSynth scripts download failed with HTTP ${status}`));
+              return;
+            }
+
+            const file = fs.createWriteStream(zipPath);
+            file.on('close', () => resolve());
+            file.on('error', reject);
+            response.on('error', reject);
+            response.pipe(file);
+          }).on('error', reject);
+        };
+
+        fetch(downloadUrl, 0);
+      }).catch(async (err) => {
+        await fs.remove(zipPath).catch(() => {});
+        throw err;
       });
 
-      logger.info('Download completed, extracting...');
+      // Cheap guard so a bad download is reported as a bad download rather than as a 7-Zip
+      // failure three lines further on.
+      const downloaded = await fs.stat(zipPath);
+      if (downloaded.size === 0) {
+        await fs.remove(zipPath).catch(() => {});
+        throw new Error('The VapourSynth scripts download produced an empty file');
+      }
+
+      logger.info(`Download completed (${downloaded.size} bytes), extracting...`);
       this.sendProgress({
         type: 'installing',
         progress: 87,
