@@ -7,6 +7,8 @@ param(
   [string]$Config = "Release",
   [string]$NgxSdkDir = "C:\Users\sparkles\Projects\Fable_5_testing\dxvk-remix-dlss5\external\ngx_sdk_dldn",
   [string]$VapourSynthIncludeDir = "C:\Users\sparkles\Projects\vapourkit\data\vapoursynth-portable\Lib\site-packages\vapoursynth\include",
+  # Vulkan HEADERS only - vulkan-1.lib is never linked, the loader is resolved at runtime.
+  [string]$VulkanIncludeDir = "C:\VulkanSDK\1.4.357.0\Include",
   [switch]$Install
 )
 
@@ -32,6 +34,7 @@ foreach ($tool in @($cmake, $ninja, $vcvars)) {
 
 if (-not (Test-Path $NgxSdkDir)) { throw "NGX SDK not found at $NgxSdkDir" }
 if (-not (Test-Path $VapourSynthIncludeDir)) { throw "VapourSynth headers not found at $VapourSynthIncludeDir" }
+if (-not (Test-Path (Join-Path $VulkanIncludeDir "vulkan\vulkan.h"))) { throw "vulkan/vulkan.h not found under $VulkanIncludeDir" }
 
 # vcvars64 only sets the environment for the process it starts, so configure and build both run
 # inside one cmd invocation rather than trying to import the variables back out.
@@ -42,6 +45,7 @@ $configure = @(
   "-DCMAKE_BUILD_TYPE=$Config",
   "-DNGX_SDK_DIR=`"$($NgxSdkDir -replace '\\','/')`"",
   "-DVAPOURSYNTH_INCLUDE_DIR=`"$($VapourSynthIncludeDir -replace '\\','/')`"",
+  "-DVULKAN_INCLUDE_DIR=`"$($VulkanIncludeDir -replace '\\','/')`"",
   "-S `"$root`"",
   "-B `"$buildDir`""
 ) -join " "

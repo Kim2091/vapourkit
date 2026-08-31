@@ -14,6 +14,14 @@ endif()
 set(NGX_SDK_DIR "" CACHE PATH "Root of the NGX SDK (the directory containing include/ and lib/)")
 set(VAPOURSYNTH_INCLUDE_DIR "" CACHE PATH "Directory containing VapourSynth4.h and VSHelper4.h")
 
+# Vulkan HEADERS ONLY. vulkan-1.lib is deliberately never linked: this plugin ships to every
+# user, and a static import means that on any machine with a missing or broken loader
+# vsdlssnr.dll fails to load at all - taking the working D3D12 backend down with it. The loader
+# is resolved with LoadLibraryW at runtime, and its absence degrades to "the Vulkan backend is
+# unavailable" instead.
+set(VULKAN_INCLUDE_DIR "C:/VulkanSDK/1.4.357.0/Include"
+    CACHE PATH "Directory containing vulkan/vulkan.h")
+
 if(NOT NGX_SDK_DIR)
   message(FATAL_ERROR "Set NGX_SDK_DIR to an NGX SDK root (see build.ps1 for the default).")
 endif()
@@ -35,23 +43,34 @@ if(NOT NGX_LIBRARY)
   message(FATAL_ERROR "Could not find nvsdk_ngx_s.lib under ${NGX_SDK_DIR}")
 endif()
 
+if(NOT EXISTS "${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h")
+  message(FATAL_ERROR "vulkan/vulkan.h was not found under ${VULKAN_INCLUDE_DIR}. "
+                      "Set VULKAN_INCLUDE_DIR to a Vulkan SDK Include directory.")
+endif()
+
 add_library(vsdlssnr SHARED
   src/plugin.cpp
+  src/convert_simd.cpp
   src/d3d12_ctx.cpp
   src/ngx_uplift.cpp
   src/caller_hook.cpp
   src/log.cpp
+  src/vulkan_ctx.cpp
+  src/vulkan_ngx.cpp
+  src/vulkan_backend.cpp
 )
 
 target_include_directories(vsdlssnr PRIVATE
   "${NGX_SDK_DIR}/include"
   "${VAPOURSYNTH_INCLUDE_DIR}"
+  "${VULKAN_INCLUDE_DIR}"
   src
 )
 
 target_link_libraries(vsdlssnr PRIVATE
   "${NGX_LIBRARY}"
   d3d12
+  d3dcompiler
   dxgi
   advapi32
   shell32
@@ -69,6 +88,9 @@ target_compile_definitions(vsdlssnr PRIVATE
 
 if(MSVC)
   target_compile_options(vsdlssnr PRIVATE /W4 /permissive- /EHsc)
+  # ONE file gets AVX2. The rest stays baseline x64 so the plugin loads on any CPU; the AVX2
+  # row converters are reached only after a CPUID check made from a baseline translation unit.
+  set_source_files_properties(src/convert_simd.cpp PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
   # The NGX static lib is built against the dynamic CRT.
   set_property(TARGET vsdlssnr PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endif()
