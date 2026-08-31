@@ -13,8 +13,8 @@ namespace vsdlssnr {
     // _SRGB view would have the hardware linearise them on read, which is exactly the
     // double-transfer bug the Remix port hit from the other direction.
     constexpr DXGI_FORMAT kColorFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
-
-    constexpr uint32_t kBytesPerPixel = 8; // 4 channels * 16-bit float
+    constexpr DXGI_FORMAT kDepthFormat = DXGI_FORMAT_R32_FLOAT;
+    constexpr DXGI_FORMAT kMotionFormat = DXGI_FORMAT_R16G16_FLOAT;
 
     std::string hrToString(const char* what, HRESULT hr) {
       std::ostringstream os;
@@ -52,9 +52,15 @@ namespace vsdlssnr {
     }
   }
 
-  bool D3D12Context::initialize(uint32_t width, uint32_t height, std::string& error) {
+  bool D3D12Context::initialize(uint32_t width,
+                                uint32_t height,
+                                bool needDepth,
+                                bool needMotion,
+                                std::string& error) {
     m_width = width;
     m_height = height;
+    m_needDepth = needDepth;
+    m_needMotion = needMotion;
 
     return createDevice(error) && createQueueAndList(error) && createResources(error);
   }
@@ -141,6 +147,44 @@ namespace vsdlssnr {
     return true;
   }
 
+  bool D3D12Context::createUploadResource(const D3D12_RESOURCE_DESC& textureDesc,
+                                           ComPtr<ID3D12Resource>& uploadBuffer,
+                                           D3D12_PLACED_SUBRESOURCE_FOOTPRINT& footprint,
+                                           uint32_t& rowPitch,
+                                           uint64_t& bytes,
+                                           const char* label,
+                                           std::string& error) {
+    UINT numRows = 0;
+    UINT64 rowSizeBytes = 0;
+    m_device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeBytes,
+                                    &bytes);
+    rowPitch = footprint.Footprint.RowPitch;
+    if (numRows != m_height || rowPitch < rowSizeBytes) {
+      error = std::string("GetCopyableFootprints returned an invalid ") + label + " footprint";
+      return false;
+    }
+
+    D3D12_RESOURCE_DESC bufferDesc = {};
+    bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    bufferDesc.Width = bytes;
+    bufferDesc.Height = 1;
+    bufferDesc.DepthOrArraySize = 1;
+    bufferDesc.MipLevels = 1;
+    bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
+    bufferDesc.SampleDesc.Count = 1;
+    bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    const D3D12_HEAP_PROPERTIES uploadHeap = heapProps(D3D12_HEAP_TYPE_UPLOAD);
+    const HRESULT hr = m_device->CreateCommittedResource(
+      &uploadHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+      IID_PPV_ARGS(&uploadBuffer));
+    if (FAILED(hr)) {
+      error = hrToString((std::string("CreateCommittedResource (") + label + " upload)").c_str(), hr);
+      return false;
+    }
+    return true;
+  }
+
   bool D3D12Context::createResources(std::string& error) {
     D3D12_RESOURCE_DESC texDesc = {};
     texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -176,20 +220,48 @@ namespace vsdlssnr {
       return false;
     }
 
-    UINT numRows = 0;
-    UINT64 rowSizeBytes = 0;
-    m_device->GetCopyableFootprints(&texDesc, 0, 1, 0, &m_footprint, &numRows, &rowSizeBytes,
-                                    &m_stagingBytes);
-    m_rowPitch = m_footprint.Footprint.RowPitch;
-
-    if (m_rowPitch < m_width * kBytesPerPixel) {
-      error = "GetCopyableFootprints returned a row pitch narrower than one row of pixels";
+    if (!createUploadResource(texDesc, m_uploadBuffer, m_footprint, m_rowPitch, m_stagingBytes,
+                              "colour", error)) {
       return false;
+    }
+
+    // Inputs are sampled by NGX only. Keep depth at full precision and store motion as half
+    // floats: values are signed pixels and half has ample dynamic range while halving traffic.
+    D3D12_RESOURCE_DESC inputDesc = texDesc;
+    inputDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    if (m_needDepth) {
+      inputDesc.Format = kDepthFormat;
+      hr = m_device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &inputDesc,
+                                             D3D12_RESOURCE_STATE_COMMON, nullptr,
+                                             IID_PPV_ARGS(&m_depthTexture));
+      if (FAILED(hr)) {
+        error = hrToString("CreateCommittedResource (depth)", hr);
+        return false;
+      }
+      if (!createUploadResource(inputDesc, m_depthUploadBuffer, m_depthFootprint,
+                                m_depthRowPitch, m_depthUploadBytes, "depth", error)) {
+        return false;
+      }
+    }
+
+    if (m_needMotion) {
+      inputDesc.Format = kMotionFormat;
+      hr = m_device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &inputDesc,
+                                             D3D12_RESOURCE_STATE_COMMON, nullptr,
+                                             IID_PPV_ARGS(&m_motionTexture));
+      if (FAILED(hr)) {
+        error = hrToString("CreateCommittedResource (motion)", hr);
+        return false;
+      }
+      if (!createUploadResource(inputDesc, m_motionUploadBuffer, m_motionFootprint,
+                                m_motionRowPitch, m_motionUploadBytes, "motion", error)) {
+        return false;
+      }
     }
 
     D3D12_RESOURCE_DESC bufferDesc = {};
     bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    bufferDesc.Alignment = 0;
     bufferDesc.Width = m_stagingBytes;
     bufferDesc.Height = 1;
     bufferDesc.DepthOrArraySize = 1;
@@ -197,16 +269,6 @@ namespace vsdlssnr {
     bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
     bufferDesc.SampleDesc.Count = 1;
     bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    bufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-    const D3D12_HEAP_PROPERTIES uploadHeap = heapProps(D3D12_HEAP_TYPE_UPLOAD);
-    hr = m_device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc,
-                                          D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-                                          IID_PPV_ARGS(&m_uploadBuffer));
-    if (FAILED(hr)) {
-      error = hrToString("CreateCommittedResource (upload)", hr);
-      return false;
-    }
 
     const D3D12_HEAP_PROPERTIES readbackHeap = heapProps(D3D12_HEAP_TYPE_READBACK);
     hr = m_device->CreateCommittedResource(&readbackHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc,
@@ -248,6 +310,8 @@ namespace vsdlssnr {
       m_listOpen = false;
       m_colorState = m_committedColorState;
       m_outputState = m_committedOutputState;
+      m_depthState = m_committedDepthState;
+      m_motionState = m_committedMotionState;
     }
 
     HRESULT hr = m_allocator->Reset();
@@ -266,23 +330,37 @@ namespace vsdlssnr {
     return true;
   }
 
-  void D3D12Context::recordPreEvaluate() {
-    transition(m_colorTexture.Get(), m_colorState, D3D12_RESOURCE_STATE_COPY_DEST);
-
+  void D3D12Context::copyUploadToTexture(ID3D12Resource* upload,
+                                          const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& footprint,
+                                          ID3D12Resource* texture,
+                                          D3D12_RESOURCE_STATES& textureState) {
+    transition(texture, textureState, D3D12_RESOURCE_STATE_COPY_DEST);
     D3D12_TEXTURE_COPY_LOCATION dst = {};
-    dst.pResource = m_colorTexture.Get();
+    dst.pResource = texture;
     dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     dst.SubresourceIndex = 0;
 
     D3D12_TEXTURE_COPY_LOCATION src = {};
-    src.pResource = m_uploadBuffer.Get();
+    src.pResource = upload;
     src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    src.PlacedFootprint = m_footprint;
+    src.PlacedFootprint = footprint;
 
     m_commandList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    transition(texture, textureState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+  }
+
+  void D3D12Context::recordPreEvaluate() {
+    copyUploadToTexture(m_uploadBuffer.Get(), m_footprint, m_colorTexture.Get(), m_colorState);
+    if (m_needDepth) {
+      copyUploadToTexture(m_depthUploadBuffer.Get(), m_depthFootprint, m_depthTexture.Get(),
+                          m_depthState);
+    }
+    if (m_needMotion) {
+      copyUploadToTexture(m_motionUploadBuffer.Get(), m_motionFootprint, m_motionTexture.Get(),
+                          m_motionState);
+    }
 
     // The Remix integration binds colour read-only and output as a UAV; mirror that split.
-    transition(m_colorTexture.Get(), m_colorState, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     transition(m_outputTexture.Get(), m_outputState, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   }
 
@@ -310,6 +388,8 @@ namespace vsdlssnr {
       // Nothing was submitted, so the recorded transitions never happened.
       m_colorState = m_committedColorState;
       m_outputState = m_committedOutputState;
+      m_depthState = m_committedDepthState;
+      m_motionState = m_committedMotionState;
       error = hrToString("CommandList::Close", hr);
       return false;
     }
@@ -320,6 +400,8 @@ namespace vsdlssnr {
     // Submitted: the recorded transitions are now what the GPU will have seen.
     m_committedColorState = m_colorState;
     m_committedOutputState = m_outputState;
+    m_committedDepthState = m_depthState;
+    m_committedMotionState = m_motionState;
 
     const uint64_t value = ++m_fenceValue;
     hr = m_queue->Signal(m_fence.Get(), value);
@@ -346,23 +428,49 @@ namespace vsdlssnr {
     return true;
   }
 
-  uint8_t* D3D12Context::mapUpload(std::string& error) {
+  uint8_t* D3D12Context::mapUploadResource(ID3D12Resource* upload,
+                                            const char* label,
+                                            std::string& error) {
     void* mapped = nullptr;
     // Null read range: the CPU will not read what it wrote, and saying so lets the driver skip
     // making the write-combined range coherent for reads.
     const D3D12_RANGE noRead = { 0, 0 };
-    const HRESULT hr = m_uploadBuffer->Map(0, &noRead, &mapped);
+    const HRESULT hr = upload->Map(0, &noRead, &mapped);
     if (FAILED(hr)) {
-      error = hrToString("Upload buffer Map", hr);
+      error = hrToString((std::string(label) + " upload buffer Map").c_str(), hr);
       return nullptr;
     }
     return static_cast<uint8_t*>(mapped);
   }
 
-  void D3D12Context::unmapUpload() {
+  void D3D12Context::unmapUploadResource(ID3D12Resource* upload, uint64_t bytes) {
     // Null written range would mean "wrote nothing"; the whole buffer was written.
-    const D3D12_RANGE written = { 0, static_cast<SIZE_T>(m_stagingBytes) };
-    m_uploadBuffer->Unmap(0, &written);
+    const D3D12_RANGE written = { 0, static_cast<SIZE_T>(bytes) };
+    upload->Unmap(0, &written);
+  }
+
+  uint8_t* D3D12Context::mapUpload(std::string& error) {
+    return mapUploadResource(m_uploadBuffer.Get(), "colour", error);
+  }
+
+  void D3D12Context::unmapUpload() {
+    unmapUploadResource(m_uploadBuffer.Get(), m_stagingBytes);
+  }
+
+  uint8_t* D3D12Context::mapDepthUpload(std::string& error) {
+    return mapUploadResource(m_depthUploadBuffer.Get(), "depth", error);
+  }
+
+  void D3D12Context::unmapDepthUpload() {
+    unmapUploadResource(m_depthUploadBuffer.Get(), m_depthUploadBytes);
+  }
+
+  uint8_t* D3D12Context::mapMotionUpload(std::string& error) {
+    return mapUploadResource(m_motionUploadBuffer.Get(), "motion", error);
+  }
+
+  void D3D12Context::unmapMotionUpload() {
+    unmapUploadResource(m_motionUploadBuffer.Get(), m_motionUploadBytes);
   }
 
   const uint8_t* D3D12Context::mapReadback(std::string& error) {

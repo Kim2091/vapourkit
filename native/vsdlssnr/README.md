@@ -9,6 +9,14 @@ clip = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s="709",
 clip = core.dlssnr.Enhance(clip)
 ```
 
+With aligned auxiliary clips:
+
+```python
+# depth: GRAYS, normalized device depth. motion: RGBS, R/G = signed pixel displacement.
+# Motion must point from each current-frame pixel to its position in the previous frame.
+clip = core.dlssnr.Enhance(clip, depth=depth, motion=motion)
+```
+
 ## What this is, and is not
 
 DLSS-NR **is not an upscaler**. The snippet pins `DLSSNR.ScalingRatio` to 1.0 — input and
@@ -55,17 +63,32 @@ Note the staging texture is `DXGI_FORMAT_R16G16B16A16_FLOAT`, a plain float form
 an `_SRGB`-typed one, on purpose: the curve lives in the *values*. An `_SRGB` view would have
 the hardware linearise on read, producing the inverse of the same bug.
 
-## No depth, no motion vectors
+## Optional depth and motion vectors
 
-The snippet accepts `DLSSNR.Depth` and `DLSSNR.MVec` but **does not require them** — only
-`Color` and `Output` are checked. Without them it loses temporal reprojection and still runs,
-and that is the mode this plugin ships.
+The snippet accepts `DLSSNR.Depth` and `DLSSNR.MVec` but does not require either — only `Color`
+and `Output` are mandatory. `Enhance` exposes the optional inputs directly, allocating and
+uploading their GPU textures only when they are supplied:
 
-That is a deliberate choice rather than an unfinished one. The temporal path uses depth for
-reprojection and disocclusion; monocular depth estimated from video is relative and temporally
-unstable, so flickering depth would mean flickering history rejection. With neither bound there
-is no way to feed it a bad G-buffer. If estimated depth and flow are added later, they should
-be proven to beat this baseline, not assumed to.
+| Argument | Required format and convention |
+|---|---|
+| `depth` | `GRAYS`, `GRAY16`, or `GRAY8`, at exactly the source resolution and frame count. Values are normalized device depth: normally 0 = near and 1 = far. Use `depth_inverted=1` for the reverse convention. |
+| `motion` | `RGBS`, at exactly the source resolution and frame count. R is horizontal and G is vertical **signed displacement in pixels**, pointing from the current frame to the previous frame. B is ignored. |
+| `motion_scale_x`, `motion_scale_y` | Extra scale applied by the snippet after sampling motion; both default to `1.0`. Leave them there when vectors are already expressed in source pixels. |
+
+This convention matches an NVOFA call made with the **current** image as input and the
+**previous** image as reference: NVOFA's forward flow then points current → previous, which is
+the direction temporal reprojection needs. NVOFA writes S10.5 vectors; convert those to the
+`RGBS` pixel values above before handing them to this plugin.
+
+Depth should be omitted unless it is a stable, aligned depth estimate. A flickering monocular
+depth sequence can make disocclusion rejection worse than the no-depth baseline. Motion alone
+is nevertheless useful and is the preferred first auxiliary input for footage.
+
+The extra upload footprint is intentionally small: depth is `R32_FLOAT` and motion is
+`R16G16_FLOAT` on the GPU (four bytes per source pixel each). This path does not run a CPU flow
+estimator or inference model; it only packs supplied planes and copies them to the textures NGX
+samples. An automatic NVOFA producer remains a separate integration because this checkout has
+the driver runtime but not the NVIDIA Optical Flow SDK header needed to call its D3D12 ABI safely.
 
 Temporal history is still live across frames within the snippet. `DLSSNR.Reset` is asserted
 whenever the requested frame does not directly follow the last one processed — a seek in the
@@ -83,6 +106,10 @@ rejected evaluation does not advance the history the snippet holds.
 | `local_structure` | `1.0` | Detail enhancement strength. Only consulted while `auto_mask` is on. |
 | `skin_structure` | `-1.0` | Structure strength for skin, kept separate so faces are not over-sharpened. `-1` is the snippet's "unset" sentinel meaning "use `local_structure`" — not the same as `0`, which disables it on skin. |
 | `auto_mask` | `1` | Let the snippet derive its own protection mask. Turning it off also disables both structure strengths. |
+| `depth` | — | Optional normalized depth clip: `GRAYS`, `GRAY16`, or `GRAY8`; same dimensions and frame count as `clip`. |
+| `depth_inverted` | `0` | Set to `1` when the depth clip uses 1 = near and 0 = far. |
+| `motion` | — | Optional `RGBS` vector clip: R/G are current → previous horizontal/vertical motion in source pixels. |
+| `motion_scale_x`, `motion_scale_y` | `1.0` | Multiplier applied to the supplied motion vectors by DLSS-NR. |
 | `preset` | `0` | `DLSSNR.Hint.Render.Preset`. Selects nothing in the 310.8 snippet — it ships one set of weights registered as preset 1 and falls back to it for every other value. |
 | `feature_id` | `18` | The `NVSDK_NGX_Feature` value DLSS-NR is registered under. Undocumented by NVIDIA; sweep this if creation fails with `FAIL_FeatureNotFound`. |
 | `app_id` | `102100511` | NGX application id. |
@@ -125,16 +152,7 @@ parameter name in `src/dlssnr_params.h` was confirmed against the binary rather 
 
 ## Status
 
-**Written, not yet compiled or run.** The NGX call sequence, the parameter-type discipline and
-the caller-check bypass are ported from a DLSS-NR integration that has been exercised against a
-real snippet in dxvk-remix; the D3D12 host, the VapourSynth binding and the colour handling
-around them are new here and unverified.
-
-Open questions for first light, in the order they will bite:
-
-1. Does the feature create at all over D3D12? Vulkan is the validated path; the D3D12 exports
-   are present but untried.
-2. What does a model trained to make *rendered* frames photoreal do to footage that already is?
-   `auto_mask` and `skin_structure` suggest faces got attention, but this is genuinely unknown.
-3. Per-frame upload/evaluate/readback cost. Measure peak VRAM and frame time before this goes
-   anywhere near a long encode.
+The native project builds locally with the supplied Visual Studio bootstrapper. The new
+depth/motion path has compile-time validation and retains the color-only behavior when neither
+clip is provided. It still needs a real Blackwell playback test with representative auxiliary
+clips before being used for a long encode; validate both visual stability and frame time.
