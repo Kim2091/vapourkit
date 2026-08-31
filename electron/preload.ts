@@ -108,6 +108,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openVSPluginsFolder: () => ipcRenderer.invoke('open-vs-plugins-folder'),
   openVSScriptsFolder: () => ipcRenderer.invoke('open-vs-scripts-folder'),
 
+  // DLSS 5 Neural Uplift runtime (nvngx_dlssnr.dll)
+  dlssRuntimeStatus: () => ipcRenderer.invoke('dlss-runtime-status'),
+  dlssRuntimeImport: () => ipcRenderer.invoke('dlss-runtime-import'),
+
   // Console logs
   onDevConsoleLog: (callback: (log: any) => void) => {
     const listener = (event: any, log: any) => callback(log);
