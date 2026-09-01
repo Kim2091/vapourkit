@@ -15,7 +15,9 @@ import {
   getEncoderDisplayName,
   getEncoderShortName,
   getDefaultPreset,
-  getPresetDisplayName
+  getPresetDisplayName,
+  getQualityLabel,
+  clampQuality
 } from '../utils/ffmpegConfig';
 
 interface OutputSettingsPanelProps {
@@ -101,11 +103,13 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   };
 
   const handleCodecChange = (codec: Codec) => {
-    const crfRange = getRecommendedCrfRange(codec);
     const availableEncodersForCodec = getAvailableEncoders(codec);
     
     // Preserve current encoder if it's available for the new codec, otherwise fall back to software
     const encoder = availableEncodersForCodec.includes(config.encoder) ? config.encoder : 'software' as Encoder;
+    
+    // The quality scale depends on the encoder too, so resolve it before the range
+    const crfRange = getRecommendedCrfRange(codec, encoder);
     
     // Get appropriate default preset for the encoder and codec
     const preset = getDefaultPreset(encoder, codec);
@@ -131,7 +135,10 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   const handleEncoderChange = (encoder: Encoder) => {
     // Update preset to match encoder's defaults
     const preset = getDefaultPreset(encoder, config.codec);
-    const newConfig = { ...config, encoder, preset };
+    // Encoders do not share a quality scale (NVENC has no 0, AMF's AV1 range is
+    // 0-255), so pull the current value into the one the new encoder accepts.
+    const crf = clampQuality(config.codec, encoder, config.crf);
+    const newConfig = { ...config, encoder, preset, crf };
     onFfmpegArgsChange(generateFfmpegArgs(newConfig));
   };
 
@@ -149,7 +156,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
     onFfmpegArgsChange(args);
   };
 
-  const crfRange = getRecommendedCrfRange(config.codec);
+  const crfRange = getRecommendedCrfRange(config.codec, config.encoder);
   const availableEncoders = getAvailableEncoders(config.codec);
 
   return (
@@ -433,7 +440,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                     Quality
                   </label>
                   <span className="text-sm font-medium text-accent-500">
-                    CRF {config.crf}
+                    {getQualityLabel(config.encoder)} {config.crf}
                   </span>
                 </div>
                 <input

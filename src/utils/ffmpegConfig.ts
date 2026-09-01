@@ -65,6 +65,83 @@ const CODEC_ENCODER_TO_FFMPEG: Record<string, string> = {
   'prores-software': 'prores_ks'
 };
 
+interface QualityRange {
+  min: number;
+  max: number;
+  default: number;
+}
+
+/**
+ * Constant-quality scales, per codec+encoder pair.
+ *
+ * The number the slider produces is fed straight to the encoder, so each entry
+ * mirrors that encoder's own scale rather than rescaling a shared 0-51/0-63
+ * range onto it:
+ *  - software (x264/x265/SVT-AV1) takes -crf on its native scale
+ *  - NVENC takes -cq, where 0 means "automatic" rather than "lossless", so the
+ *    minimum is 1
+ *  - AMF takes a real quantiser; AV1 uses the 0-255 qindex scale, not 0-63
+ *  - QSV takes -global_quality (ICQ), which is 1-51 for every codec
+ */
+const QUALITY_RANGES: Record<string, QualityRange> = {
+  'h264-software': { min: 0, max: 51, default: 18 },
+  'h265-software': { min: 0, max: 51, default: 20 },
+  'av1-software': { min: 0, max: 63, default: 25 },
+
+  'h264-nvidia': { min: 1, max: 51, default: 20 },
+  'h265-nvidia': { min: 1, max: 51, default: 20 },
+  'av1-nvidia': { min: 1, max: 63, default: 25 },
+
+  'h264-amd': { min: 0, max: 51, default: 20 },
+  'h265-amd': { min: 0, max: 51, default: 20 },
+  'av1-amd': { min: 0, max: 255, default: 100 },
+
+  'h264-intel': { min: 1, max: 51, default: 20 },
+  'h265-intel': { min: 1, max: 51, default: 20 },
+  'av1-intel': { min: 1, max: 51, default: 25 }
+};
+
+const FALLBACK_QUALITY_RANGE: QualityRange = { min: 0, max: 51, default: 18 };
+
+/**
+ * Clamp a quality value into the range its codec+encoder pair actually accepts
+ */
+export function clampQuality(codec: Codec, encoder: Encoder, value: number): number {
+  const range = getRecommendedCrfRange(codec, encoder);
+  if (!Number.isFinite(value)) {
+    return range.default;
+  }
+  return Math.min(range.max, Math.max(range.min, Math.round(value)));
+}
+
+/**
+ * Build the rate-control arguments that put an encoder into constant-quality mode.
+ *
+ * Only the software encoders understand -crf. Passing it to NVENC/AMF/QSV leaves
+ * the flag unconsumed (FFmpeg only warns) and the encoder runs in its default
+ * bitrate-targeted mode, which is why a hardware encode used to come out at a
+ * few Mbps no matter where the quality slider sat.
+ */
+export function getQualityArgs(codec: Codec, encoder: Encoder, quality: number): string[] {
+  const value = clampQuality(codec, encoder, quality);
+
+  switch (encoder) {
+    case 'nvidia':
+      // -b:v 0 lifts the default bitrate cap that would otherwise bound -cq.
+      return [`-cq ${value}`, '-b:v 0'];
+    case 'amd':
+      // hevc_amf has no -qp_b; emitting it there would go unconsumed.
+      return codec === 'h265'
+        ? ['-rc cqp', `-qp_i ${value}`, `-qp_p ${value}`]
+        : ['-rc cqp', `-qp_i ${value}`, `-qp_p ${value}`, `-qp_b ${value}`];
+    case 'intel':
+      return [`-global_quality ${value}`];
+    case 'software':
+    default:
+      return [`-crf ${value}`];
+  }
+}
+
 /**
  * Parse FFmpeg args string to extract codec, encoder, preset, and CRF
  */
@@ -92,10 +169,16 @@ export function parseFfmpegArgs(args: string): FfmpegConfig {
     preset = presetMatch[1] as Preset;
   }
 
-  // Parse CRF
-  const crfMatch = args.match(/-crf\s+(\d+)/);
-  if (crfMatch) {
-    crf = parseInt(crfMatch[1], 10);
+  // Parse the quality value. Which flag carries it depends on the encoder, so
+  // accept any of them and fall back to this pair's default.
+  crf = getRecommendedCrfRange(codec, encoder).default;
+  const qualityMatch =
+    args.match(/-crf\s+(\d+)/) ??
+    args.match(/-cq\s+(\d+)/) ??
+    args.match(/-qp_i\s+(\d+)/) ??
+    args.match(/-global_quality\s+(\d+)/);
+  if (qualityMatch) {
+    crf = clampQuality(codec, encoder, parseInt(qualityMatch[1], 10));
   }
 
   // If it's a custom codec or has additional flags, mark as custom
@@ -121,6 +204,15 @@ function hasCustomFlags(args: string): boolean {
     .replace(/-c:v\s+\S+/, '')
     .replace(/-preset\s+\S+/, '')
     .replace(/-crf\s+\d+/, '')
+    // Hardware rate-control flags this module generates itself. -b:v is only
+    // matched at 0 so a real bitrate target still counts as custom.
+    .replace(/-cq\s+\d+/, '')
+    .replace(/-b:v\s+0(?!\S)/, '')
+    .replace(/-rc\s+cqp/, '')
+    .replace(/-qp_i\s+\d+/, '')
+    .replace(/-qp_p\s+\d+/, '')
+    .replace(/-qp_b\s+\d+/, '')
+    .replace(/-global_quality\s+\d+/, '')
     .replace(/-vf\s+\S+/, '')
     .replace(/-map_metadata\s+\d+/, '')
     .trim();
@@ -151,9 +243,12 @@ export function generateFfmpegArgs(config: FfmpegConfig): string {
     parts.push(`-preset ${config.preset}`);
   }
 
-  // Add CRF (not applicable to ProRes)
+  // Add the quality control (not applicable to ProRes).
+  // Each encoder family names this differently, and the hardware encoders ignore
+  // -crf outright, so emitting it there silently falls back to their default
+  // bitrate-targeted rate control.
   if (config.codec !== 'prores') {
-    parts.push(`-crf ${config.crf}`);
+    parts.push(...getQualityArgs(config.codec, config.encoder, config.crf));
   }
 
   // Add video filter for color parameters
@@ -166,18 +261,34 @@ export function generateFfmpegArgs(config: FfmpegConfig): string {
 }
 
 /**
- * Get recommended CRF ranges for different codecs
+ * Get the constant-quality range for a codec on a given encoder.
+ *
+ * The encoder matters: NVENC treats 0 as "automatic", and AMF's AV1 quantiser
+ * runs 0-255 rather than 0-63, so a single per-codec range would hand some
+ * encoders values they cannot act on.
  */
-export function getRecommendedCrfRange(codec: Codec): { min: number; max: number; default: number } {
-  switch (codec) {
-    case 'h264':
-      return { min: 0, max: 51, default: 18 };
-    case 'h265':
-      return { min: 0, max: 51, default: 20 };
-    case 'av1':
-      return { min: 0, max: 63, default: 25 };
+export function getRecommendedCrfRange(
+  codec: Codec,
+  encoder: Encoder = 'software'
+): { min: number; max: number; default: number } {
+  return QUALITY_RANGES[`${codec}-${encoder}`]
+    ?? QUALITY_RANGES[`${codec}-software`]
+    ?? FALLBACK_QUALITY_RANGE;
+}
+
+/**
+ * Get the name of the quality flag an encoder actually uses, for display
+ */
+export function getQualityLabel(encoder: Encoder): string {
+  switch (encoder) {
+    case 'nvidia':
+      return 'CQ';
+    case 'amd':
+      return 'QP';
+    case 'intel':
+      return 'ICQ';
     default:
-      return { min: 0, max: 51, default: 18 };
+      return 'CRF';
   }
 }
 

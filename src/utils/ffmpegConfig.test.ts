@@ -11,6 +11,7 @@ import {
   getAvailableEncoders,
   getEncoderDisplayName,
   getEncoderShortName,
+  clampQuality,
   type FfmpegConfig,
 } from './ffmpegConfig';
 
@@ -218,5 +219,127 @@ describe('getEncoderShortName', () => {
   it('returns correct short names', () => {
     expect(getEncoderShortName('software')).toBe('CPU');
     expect(getEncoderShortName('nvidia')).toBe('NVIDIA');
+  });
+});
+
+describe('hardware encoder rate control', () => {
+  it('uses -cq instead of -crf for NVENC, which ignores -crf entirely', () => {
+    const config: FfmpegConfig = { codec: 'av1', encoder: 'nvidia', preset: 'p7', crf: 20 };
+    const result = generateFfmpegArgs(config);
+    expect(result).toContain('-c:v av1_nvenc');
+    expect(result).toContain('-cq 20');
+    expect(result).not.toContain('-crf');
+  });
+
+  it('pairs -cq with -b:v 0 so the default bitrate cap does not bound quality', () => {
+    const config: FfmpegConfig = { codec: 'av1', encoder: 'nvidia', preset: 'p7', crf: 20 };
+    expect(generateFfmpegArgs(config)).toContain('-b:v 0');
+  });
+
+  it('lifts NVENC quality 0 to 1, since 0 means "automatic" not "lossless"', () => {
+    const config: FfmpegConfig = { codec: 'av1', encoder: 'nvidia', preset: 'p7', crf: 0 };
+    const result = generateFfmpegArgs(config);
+    expect(result).toContain('-cq 1');
+    expect(result).not.toContain('-cq 0');
+  });
+
+  it('uses cqp quantisers for AMF', () => {
+    const config: FfmpegConfig = { codec: 'h264', encoder: 'amd', preset: 'quality', crf: 20 };
+    const result = generateFfmpegArgs(config);
+    expect(result).toContain('-rc cqp');
+    expect(result).toContain('-qp_i 20');
+    expect(result).toContain('-qp_p 20');
+    expect(result).toContain('-qp_b 20');
+    expect(result).not.toContain('-crf');
+  });
+
+  it('omits -qp_b for hevc_amf, which has no such option', () => {
+    const config: FfmpegConfig = { codec: 'h265', encoder: 'amd', preset: 'quality', crf: 20 };
+    const result = generateFfmpegArgs(config);
+    expect(result).toContain('-qp_i 20');
+    expect(result).not.toContain('-qp_b');
+  });
+
+  it('uses -global_quality for QSV', () => {
+    const config: FfmpegConfig = { codec: 'h265', encoder: 'intel', preset: 'veryslow', crf: 22 };
+    const result = generateFfmpegArgs(config);
+    expect(result).toContain('-global_quality 22');
+    expect(result).not.toContain('-crf');
+  });
+
+  it('keeps -crf for software encoders', () => {
+    const config: FfmpegConfig = { codec: 'av1', encoder: 'software', preset: '8', crf: 25 };
+    const result = generateFfmpegArgs(config);
+    expect(result).toContain('-crf 25');
+    expect(result).not.toContain('-cq');
+  });
+});
+
+describe('encoder-aware quality ranges', () => {
+  it('starts NVENC ranges at 1 rather than 0', () => {
+    expect(getRecommendedCrfRange('av1', 'nvidia').min).toBe(1);
+    expect(getRecommendedCrfRange('h264', 'nvidia').min).toBe(1);
+  });
+
+  it('keeps 0 available on software encoders', () => {
+    expect(getRecommendedCrfRange('h264', 'software').min).toBe(0);
+  });
+
+  it('uses the 0-255 qindex scale for AMF AV1', () => {
+    expect(getRecommendedCrfRange('av1', 'amd').max).toBe(255);
+  });
+
+  it('caps AV1 on QSV at the 1-51 ICQ scale', () => {
+    expect(getRecommendedCrfRange('av1', 'intel').max).toBe(51);
+  });
+
+  it('defaults to the software range when no encoder is given', () => {
+    expect(getRecommendedCrfRange('av1')).toEqual(getRecommendedCrfRange('av1', 'software'));
+  });
+
+  it('clamps values into the target encoder range', () => {
+    expect(clampQuality('av1', 'nvidia', 0)).toBe(1);
+    expect(clampQuality('av1', 'intel', 63)).toBe(51);
+    expect(clampQuality('av1', 'amd', 300)).toBe(255);
+    expect(clampQuality('h264', 'software', 18)).toBe(18);
+  });
+});
+
+describe('round-tripping hardware args', () => {
+  it('reads back generated NVENC args without falling back to custom', () => {
+    const config: FfmpegConfig = { codec: 'av1', encoder: 'nvidia', preset: 'p7', crf: 30 };
+    const parsed = parseFfmpegArgs(generateFfmpegArgs(config));
+    expect(parsed.codec).toBe('av1');
+    expect(parsed.encoder).toBe('nvidia');
+    expect(parsed.preset).toBe('p7');
+    expect(parsed.crf).toBe(30);
+  });
+
+  it('reads back generated AMF args', () => {
+    const config: FfmpegConfig = { codec: 'h264', encoder: 'amd', preset: 'quality', crf: 24 };
+    const parsed = parseFfmpegArgs(generateFfmpegArgs(config));
+    expect(parsed.codec).toBe('h264');
+    expect(parsed.encoder).toBe('amd');
+    expect(parsed.crf).toBe(24);
+  });
+
+  it('reads back generated QSV args', () => {
+    const config: FfmpegConfig = { codec: 'h265', encoder: 'intel', preset: 'veryslow', crf: 26 };
+    const parsed = parseFfmpegArgs(generateFfmpegArgs(config));
+    expect(parsed.encoder).toBe('intel');
+    expect(parsed.crf).toBe(26);
+  });
+
+  it('migrates a saved -crf on a hardware encoder into that encoder range', () => {
+    // What users had stored before the fix
+    const parsed = parseFfmpegArgs('-c:v av1_nvenc -preset p7 -crf 0');
+    expect(parsed.encoder).toBe('nvidia');
+    expect(parsed.crf).toBe(1);
+    expect(generateFfmpegArgs(parsed)).toContain('-cq 1');
+  });
+
+  it('still treats a real bitrate target as custom', () => {
+    const parsed = parseFfmpegArgs('-c:v av1_nvenc -preset p7 -cq 20 -b:v 5M');
+    expect(parsed.codec).toBe('custom');
   });
 });
