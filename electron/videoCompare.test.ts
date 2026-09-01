@@ -8,11 +8,18 @@ vi.mock('./utils', () => ({
   resolveHostCommand: vi.fn(),
 }));
 
+vi.mock('child_process', () => ({
+  spawn: vi.fn(),
+}));
+
+import { EventEmitter } from 'events';
 import * as fs from 'fs-extra';
+import { spawn } from 'child_process';
 import { resolveHostCommand } from './utils';
 import {
   getVideoCompareUnavailableMessage,
   isVideoCompareAvailable,
+  launchVideoCompare,
   resolveVideoCompareCommand,
 } from './videoCompare';
 
@@ -40,5 +47,50 @@ describe('video-compare availability', () => {
 
   it('explains that video comparison is optional on Linux', () => {
     expect(getVideoCompareUnavailableMessage('linux')).toContain('optional on Linux');
+  });
+});
+
+
+describe('launching video-compare', () => {
+  function stubChild() {
+    const child = new EventEmitter() as EventEmitter & { unref: () => void };
+    child.unref = vi.fn();
+    vi.mocked(spawn).mockReturnValue(child as never);
+    return child;
+  }
+
+  beforeEach(() => {
+    vi.mocked(spawn).mockReset();
+  });
+
+  it('does not hide the window, which would leave SDL decoding with nothing on screen', async () => {
+    const child = stubChild();
+
+    const launched = launchVideoCompare('video-compare', ['-W', 'a.mp4', 'b.mp4']);
+    child.emit('spawn');
+    await launched;
+
+    const options = vi.mocked(spawn).mock.calls[0][2] as Record<string, unknown>;
+    expect(options.windowsHide).toBeUndefined();
+    expect(options.detached).toBe(true);
+  });
+
+  it('detaches the child so closing Vapourkit leaves the comparison open', async () => {
+    const child = stubChild();
+
+    const launched = launchVideoCompare('video-compare', ['a.mp4', 'b.mp4']);
+    child.emit('spawn');
+    await launched;
+
+    expect(child.unref).toHaveBeenCalled();
+  });
+
+  it('surfaces a spawn failure rather than reporting success', async () => {
+    const child = stubChild();
+
+    const launched = launchVideoCompare('video-compare', ['a.mp4', 'b.mp4']);
+    child.emit('error', new Error('spawn video-compare ENOENT'));
+
+    await expect(launched).rejects.toThrow('ENOENT');
   });
 });
