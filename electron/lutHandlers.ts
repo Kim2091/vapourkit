@@ -67,10 +67,24 @@ export function registerLutHandlers() {
       const safe = name.replace(/[^a-zA-Z0-9_\-\s.]/g, '_').replace(/\.(cube|3dl)$/i, '') || 'Imported LUT';
       const directory = path.join(PATHS.APP_DATA, 'luts');
       await fs.ensureDir(directory);
-      const target = path.join(directory, `${safe}.cube`);
+
+      // Two LUTs called Sunset.cube from different folders are two different
+      // looks. Overwriting by basename would repoint every saved workflow
+      // holding that path at whichever was imported last, silently. So an
+      // identical file is reused, and a different one gets its own name.
+      let target = path.join(directory, `${safe}.cube`);
+      let stored = safe;
+      for (let attempt = 2; attempt <= 999; attempt++) {
+        if (!await fs.pathExists(target)) break;
+        const existing = await fs.readFile(target, 'utf8').catch(() => null);
+        if (existing === text) break;
+        stored = `${safe} (${attempt})`;
+        target = path.join(directory, `${stored}.cube`);
+      }
+
       await fs.writeFile(target, text, 'utf8');
       logger.info(`Installed LUT: ${target}`);
-      return { success: true as const, path: target, name: safe };
+      return { success: true as const, path: target, name: stored };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('Error installing LUT:', error);

@@ -100,7 +100,11 @@ describe('.cube', () => {
 describe('.3dl', () => {
   it('writes blue as the fastest-changing channel, unlike .cube', () => {
     const text = write3dl(rampOn(2, 3), 12);
-    const rows = text.split('\n').filter(l => /^\d/.test(l)).slice(1).map(l => Number(l.split(' ')[0]));
+    // Rows only: "3DMESH" also begins with a digit, and the ramp is dropped.
+    const rows = text.split('\n')
+      .filter(l => /^\d+( \d+)+$/.test(l))
+      .slice(1)
+      .map(l => Number(l.split(' ')[0]));
     // Blue fastest, and the table ramps on blue, so the first three rows walk
     // 0 to full scale. The same table written as .cube would not.
     expect(rows.slice(0, 3)).toEqual([0, 2048, 4095]);
@@ -266,5 +270,47 @@ describe('to3d', () => {
   it('hands back a table that is already what was asked for', () => {
     const already = identityLut(33);
     expect(to3d(already, 33)).toBe(already);
+  });
+});
+
+describe('.3dl value scaling', () => {
+  // The other silent corruptor this file's header names. The ordering tests
+  // above use asymmetric tables; these use dark ones, because a table that
+  // never gets bright is where an inferred bit depth goes wrong — and every
+  // .3dl fixture above happens to saturate, which is why this went unnoticed.
+  const darken = (m: number) => ({ ...GRADE_NEUTRAL, gain: { r: 1, g: 1, b: 1, m } });
+
+  it('round-trips a table that never reaches full scale', () => {
+    for (const gain of [0.9, 0.2501, 0.2499, 0.06, 0.01]) {
+      const baked = bakeGradeToLut(darken(gain), 17);
+      const back = parse3dl(write3dl(baked, 12));
+      let worst = 0;
+      for (let i = 0; i < baked.data.length; i++) {
+        worst = Math.max(worst, Math.abs(back.data[i] - baked.data[i]));
+      }
+      // Quantisation at 12 bits, and nothing else. Before the depth was
+      // stated in the file this was 168/255 at gain 0.22.
+      expect(worst * 255).toBeLessThan(0.5);
+    }
+  });
+
+  it('states the output depth rather than leaving it to be guessed', () => {
+    const text = write3dl(identityLut(3), 12);
+    expect(text).toMatch(/^Mesh 12 12$/m);
+    expect(text).toContain('3DMESH');
+  });
+
+  it('believes a declared depth over the table it is reading', () => {
+    // Values that would infer as 10-bit, declared as 12-bit.
+    const body = Array.from({ length: 8 }, () => '0 0 1023').join('\n');
+    expect(parse3dl(`3DMESH\nMesh 12 12\n0 4095\n${body}`).data[2]).toBeCloseTo(1023 / 4095, 6);
+    expect(parse3dl(`3DMESH\nMesh 10 10\n0 1023\n${body}`).data[2]).toBeCloseTo(1, 6);
+  });
+
+  it('falls back to the ramp before the table when no depth is declared', () => {
+    const body = Array.from({ length: 8 }, () => '0 0 500').join('\n');
+    // The ramp tops out at 4095, so the table is 12-bit even though its own
+    // largest value would have inferred 10.
+    expect(parse3dl(`0 4095\n${body}`).data[2]).toBeCloseTo(500 / 4095, 6);
   });
 });

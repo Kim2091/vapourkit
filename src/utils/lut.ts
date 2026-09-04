@@ -214,14 +214,23 @@ export function writeCube(lut: Lut, title?: string): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * .3dl carries integers, not floats, and the scale is implied rather than
- * declared: the first non-comment line is an input ramp whose length gives
- * the cube size, and the output values are quantised to a bit depth the file
- * never states. Both have to be inferred, and getting the depth wrong scales
- * the whole table — so it is taken from the largest value present, rounded up
- * to the depth that can hold it, exactly as OpenColorIO does.
+ * .3dl carries integers, not floats, and the scale is usually implied rather
+ * than declared. Inferring it from the largest value in the table — which is
+ * what OpenColorIO does, and what this used to do alone — is wrong for any
+ * LUT that never gets bright: a table whose peak output is 0.25 has a largest
+ * integer of 1023 at 12-bit, reads back as 10-bit, and comes out four times
+ * too light. Measured, a plain darken round-tripped 168/255 off.
+ *
+ * So the depth is taken from the first of these that exists:
+ *
+ *   1. a Lustre "Mesh <in> <out>" header, which states it outright
+ *   2. the top of the input ramp, which write3dl writes at the output scale
+ *   3. the largest value in the table, the old guess, for files with neither
+ *
+ * write3dl emits both 1 and 2, because other tools infer the same way and a
+ * dark export would otherwise be mis-scaled by them too.
  */
-function outputDepth(maxValue: number): number {
+function depthForMax(maxValue: number): number {
   for (const bits of [8, 10, 12, 14, 16]) {
     if (maxValue <= (1 << bits) - 1) return bits;
   }
@@ -231,6 +240,7 @@ function outputDepth(maxValue: number): number {
 export function parse3dl(text: string): Lut {
   const lines = text.split(/\r?\n/);
   let ramp: number[] | null = null;
+  let declaredDepth: number | null = null;
   const rows: number[] = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -238,8 +248,15 @@ export function parse3dl(text: string): Lut {
     if (!line) continue;
     const fields = line.split(/\s+/);
     // Lustre writes a "3DMESH" block header, and "Mesh <in> <out>" before the
-    // ramp. Neither carries data this reader needs.
-    if (!NUMBER.test(fields[0])) continue;
+    // ramp. The second states the output depth, which is the one thing that
+    // cannot be recovered reliably from the numbers alone.
+    if (!NUMBER.test(fields[0])) {
+      if (fields[0].toUpperCase() === 'MESH' && fields.length >= 3) {
+        const bits = Number(fields[2]);
+        if (Number.isInteger(bits) && bits >= 1 && bits <= 32) declaredDepth = bits;
+      }
+      continue;
+    }
 
     const values = numbers(fields, i + 1);
     // The ramp is the first numeric line, and it has to be recognised by
@@ -275,7 +292,10 @@ export function parse3dl(text: string): Lut {
     if (value < 0) throw new LutParseError('.3dl values are unsigned integers');
     if (value > peak) peak = value;
   }
-  const scale = (1 << outputDepth(peak)) - 1;
+  const rampTop = ramp[ramp.length - 1];
+  const scale = declaredDepth !== null
+    ? (1 << declaredDepth) - 1
+    : (1 << depthForMax(Math.max(peak, rampTop))) - 1;
 
   // Transposed on the way in: .3dl runs blue fastest, and everything past this
   // function is red-fastest.
@@ -300,7 +320,12 @@ export function write3dl(lut: Lut, bitDepth: 10 | 12 | 16 = 12): string {
   const { size, data } = lut;
   const scale = (1 << bitDepth) - 1;
   const out: string[] = ['# Created by Vapourkit'];
-  // The input ramp, at the same depth as the output.
+  // Stated outright, because inferring the depth from the table is what
+  // breaks on a dark LUT — here and in every other tool that reads one.
+  out.push('3DMESH');
+  out.push(`Mesh ${bitDepth} ${bitDepth}`);
+  // The input ramp, at the same depth as the output, so a reader that ignores
+  // the header still has something better than the table's peak to go on.
   out.push(Array.from({ length: size }, (_, i) => Math.round((i / (size - 1)) * scale)).join(' '));
 
   for (let r = 0; r < size; r++) {

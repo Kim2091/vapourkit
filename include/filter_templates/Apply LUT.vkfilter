@@ -37,6 +37,13 @@ def _check_lut_path(path):
     if not os.path.isfile(path):
         raise ValueError("Apply LUT cannot find " + str(path) + " any more.")
 
+def _is_number(text):
+    try:
+        float(text)
+        return True
+    except ValueError:
+        return False
+
 def _read_cube(path):
     size = None
     dmin = [0.0, 0.0, 0.0]
@@ -52,17 +59,28 @@ def _read_cube(path):
             if head == "LUT_3D_SIZE":
                 size = int(fields[1])
             elif head == "LUT_1D_SIZE":
-                raise ValueError("That is a 1D cube; Apply LUT takes a 3D one.")
+                raise ValueError(
+                    "That is a 1D cube. Importing it through the grading dock "
+                    "lifts it onto a 3D lattice; the timecube plugin also reads "
+                    "1D directly, but this fallback path does not.")
             elif head == "DOMAIN_MIN":
                 dmin = [float(v) for v in fields[1:4]]
             elif head == "DOMAIN_MAX":
                 dmax = [float(v) for v in fields[1:4]]
-            elif head == "TITLE":
+            elif not _is_number(fields[0]):
+                # TITLE, and anything else a .cube may legally carry that this
+                # reader has no use for. Skipped rather than pushed at float(),
+                # which is what turned a LUT_3D_INPUT_RANGE line - or any junk
+                # file - into a traceback instead of a message.
                 continue
+            elif len(fields) < 3:
+                raise ValueError("A table row needs three values; found %d." % len(fields))
             else:
                 rows.append((float(fields[0]), float(fields[1]), float(fields[2])))
     if size is None:
         raise ValueError("No LUT_3D_SIZE in " + str(path) + " - that is not a 3D .cube.")
+    if size < 2 or size > 256:
+        raise ValueError("LUT_3D_SIZE %d is outside the 2..256 a cube allows." % size)
     if len(rows) != size ** 3:
         raise ValueError("LUT_3D_SIZE %d needs %d rows, found %d." % (size, size ** 3, len(rows)))
     # .cube runs red fastest. Indexed here as [channel][blue][green][red].
