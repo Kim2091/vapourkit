@@ -188,6 +188,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectWorkflowFile: (mode: 'open' | 'save') => ipcRenderer.invoke('select-workflow-file', mode),
   exportWorkflow: (workflow: any, filePath: string) => ipcRenderer.invoke('export-workflow', workflow, filePath),
   importWorkflow: (filePath: string) => ipcRenderer.invoke('import-workflow', filePath),
+  selectLutFile: (mode: 'open' | 'save', defaultName?: string) =>
+    ipcRenderer.invoke('select-lut-file', mode, defaultName),
+  writeLutFile: (filePath: string, text: string) => ipcRenderer.invoke('write-lut-file', filePath, text),
+  readLutFile: (filePath: string) => ipcRenderer.invoke('read-lut-file', filePath),
+  installLut: (name: string, text: string) => ipcRenderer.invoke('install-lut', name, text),
   
   // Filter configurations
   getFilterConfigurations: () => ipcRenderer.invoke('get-filter-configurations'),

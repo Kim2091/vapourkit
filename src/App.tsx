@@ -43,6 +43,7 @@ import { VideoPreviewPanel } from './components/VideoPreviewPanel';
 import { ColorGradeDock, GRADE_COMPACT_BELOW, GRADE_DOCK_HEIGHT, GRADE_DOCK_COMPACT_HEIGHT } from './components/ColorGradeDock';
 import { solveScopeColumnWidth, clampScopeColumnWidth } from './components/GradeScopeColumn';
 import { gradeBasePx } from './components/gradeType';
+import { bakeGradeToLut, writeLut, writeCube, parseLut, to3d, type LutFormat } from './utils/lut';
 import type { CompareMode } from './components/ColorGradeOverlay';
 import type { ScopeKind } from './components/GradeScopes';
 import { useColorGrade } from './hooks/useColorGrade';
@@ -867,6 +868,95 @@ function App() {
     return solveScopeColumnWidth(gradePaneWidth, pictureHeight, aspect);
   }, [colorGrade.editor, scopeColumnOverride, gradePaneWidth, windowHeight, cropSourceSize]);
 
+  // Export bakes the grade over a lattice and writes it; import is the other
+  // direction and cannot be, because a LUT is an arbitrary transform and the
+  // trackballs are not. So an imported table arrives as its own filter step
+  // rather than as grade values, which is also what lets it sit anywhere in
+  // the chain like everything else.
+  const handleExportLut = useCallback(async (size: number) => {
+    if (!colorGrade.editor) return;
+    const suggested = `${(currentWorkflow || 'Grade').replace(/[\/:*?"<>|]/g, '_')}.cube`;
+    const target = await window.electronAPI.selectLutFile('save', suggested);
+    if (!target) return;
+    const format: LutFormat = target.toLowerCase().endsWith('.3dl') ? '3dl' : 'cube';
+    try {
+      const baked = bakeGradeToLut(colorGrade.values, size, currentWorkflow || 'Vapourkit grade');
+      const written = await window.electronAPI.writeLutFile(target, writeLut(baked, format));
+      if (!written.success) {
+        notify.error('LUT not written', written.error);
+        return;
+      }
+      notify.success('LUT exported', `${size}x${size}x${size} .${format} written.`);
+    } catch (error) {
+      notify.error('LUT not written', getErrorMessage(error));
+    }
+  }, [colorGrade.editor, colorGrade.values, currentWorkflow]);
+
+  const handleImportLut = useCallback(async () => {
+    const template = filterTemplates.find(t => t.name === 'Apply LUT');
+    if (!template) {
+      notify.error('Apply LUT is missing', 'The Apply LUT filter template is not installed.');
+      return;
+    }
+    const source = await window.electronAPI.selectLutFile('open');
+    if (!source) return;
+
+    const read = await window.electronAPI.readLutFile(source);
+    if (!read.success) {
+      notify.error('LUT not imported', read.error);
+      return;
+    }
+
+    let normalised: string;
+    let title: string;
+    try {
+      // Parsed here rather than in the main process so this tested parser is
+      // the only one, and so its "line 4: ..." reaches the person who has to
+      // fix the file. A 1D table is lifted onto a lattice; .3dl and declared
+      // domains are folded away, leaving one plain shape for the render.
+      const parsed = to3d(parseLut(read.text, read.name));
+      title = parsed.title || read.name.replace(/\.[^.]+$/, '');
+      normalised = writeCube(parsed, title);
+    } catch (error) {
+      notify.error('That LUT could not be read', getErrorMessage(error));
+      return;
+    }
+
+    const installed = await window.electronAPI.installLut(read.name, normalised);
+    if (!installed.success) {
+      notify.error('LUT not imported', installed.error);
+      return;
+    }
+
+    const defaults = Object.entries(template.variables ?? {}).reduce<Record<string, string | number | boolean>>(
+      (values, [name, variable]) => {
+        if (variable.default !== undefined) values[name] = variable.default;
+        return values;
+      }, {});
+
+    const step: Filter = {
+      id: `filter-${Date.now()}`,
+      enabled: true,
+      filterType: 'custom',
+      preset: 'Apply LUT',
+      code: template.code,
+      category: template.category,
+      parameters: { ...defaults, lut_path: installed.path },
+      variables: template.variables,
+      editor: template.editor,
+      order: filters.length,
+    };
+
+    // Straight after the grade it was imported from, so the chain reads in
+    // the order the look was built.
+    const at = filters.findIndex(filter => filter.id === activeFilterEditorId);
+    const next = at === -1 ? [...filters, step] : [
+      ...filters.slice(0, at + 1), step, ...filters.slice(at + 1),
+    ];
+    handleSetFilters(next.map((filter, index) => ({ ...filter, order: index })));
+    notify.success('LUT imported', `"${title}" added to the chain as an Apply LUT step.`);
+  }, [activeFilterEditorId, filterTemplates, filters, handleSetFilters]);
+
   const gradeStepLabel = useMemo(() => {
     if (!colorGrade.editor || !activeFilterEditor) return '';
     const enabled = filters.filter(filter => filter.enabled);
@@ -1099,6 +1189,8 @@ function App() {
                       disabled={isProcessing}
                       dockScope={dockScope}
                       onDockScopeChange={setDockScope}
+                      onExportLut={handleExportLut}
+                      onImportLut={handleImportLut}
                       onChange={colorGrade.setValues}
                       onCommit={colorGrade.commit}
                       onApply={colorGrade.apply}

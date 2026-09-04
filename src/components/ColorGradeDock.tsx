@@ -15,10 +15,11 @@
 // seven at once instead of scrolling two of them out of sight.
 
 import { memo, useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { RotateCcw, Save, Gauge } from 'lucide-react';
+import { RotateCcw, Save, Gauge, Upload, Download } from 'lucide-react';
 import { Trackball, readoutColumns, trackballColumnWidth } from './Trackball';
 import { GRADE_TYPE, gradeBasePx } from './gradeType';
 import { Scope, SCOPE_LABELS, type ScopeKind } from './GradeScopes';
+import { LUT_SIZES } from '../utils/lut';
 import {
   BALL_SPECS,
   SCALAR_SPECS,
@@ -53,9 +54,21 @@ interface ColorGradeDockProps {
   onCommit: () => void;
   onApply: (values: GradeValues) => void;
   onSaveTemplate?: () => void;
+  /** Bake this grade to a lookup table at the chosen lattice size. */
+  onExportLut?: (size: number) => void;
+  /** Bring a table in as its own step in the chain. */
+  onImportLut?: () => void;
 }
 
 const DOCK_SCOPES: ScopeKind[] = ['parade', 'waveform', 'vectorscope', 'histogram'];
+
+/** What a size costs, measured: peak error against the grade itself, on a
+    typical look, at 8-bit code values. See src/utils/lut.test.ts. */
+const LUT_SIZE_NOTE: Record<number, string> = {
+  17: 'small file',
+  33: 'standard',
+  65: 'closest match',
+};
 
 /** Gap between balls, and the primaries block's own horizontal padding. */
 const BALL_GAP = 14;
@@ -229,7 +242,10 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
   onCommit,
   onApply,
   onSaveTemplate,
+  onExportLut,
+  onImportLut,
 }: ColorGradeDockProps) => {
+  const [lutMenuOpen, setLutMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -273,6 +289,72 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
           <span className="text-ink-500 truncate" style={{ fontSize: GRADE_TYPE.label }}>{stepLabel}</span>
         </div>
         <div className="flex items-center gap-1.5 self-center flex-shrink-0">
+          {onImportLut && (
+            <button
+              type="button"
+              onClick={onImportLut}
+              disabled={disabled}
+              title="Bring a .cube or .3dl in as its own step in the chain"
+              style={{ fontSize: GRADE_TYPE.button }}
+              className="h-[21px] px-2 rounded inline-flex items-center gap-1.5 font-medium bg-ink-850 border border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+            >
+              <Upload className="w-3 h-3" />
+              Import LUT
+            </button>
+          )}
+          {onExportLut && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setLutMenuOpen(open => !open)}
+                disabled={disabled}
+                aria-expanded={lutMenuOpen}
+                aria-haspopup="menu"
+                title="Bake this grade into a lookup table"
+                style={{ fontSize: GRADE_TYPE.button }}
+                className="h-[21px] px-2 rounded inline-flex items-center gap-1.5 font-medium bg-ink-850 border border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              >
+                <Download className="w-3 h-3" />
+                Export LUT
+              </button>
+              {lutMenuOpen && (
+                <>
+                  {/* Clicking anywhere else closes it, including the button. */}
+                  <span
+                    className="fixed inset-0 z-40"
+                    aria-hidden="true"
+                    onClick={() => setLutMenuOpen(false)}
+                  />
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-[23px] z-50 w-[188px] rounded border border-ink-750 bg-ink-900 shadow-lg overflow-hidden"
+                  >
+                    <span
+                      className="block px-2 pt-1.5 pb-1 text-ink-600"
+                      style={{ fontSize: GRADE_TYPE.hint }}
+                    >
+                      Lattice size
+                    </span>
+                    {LUT_SIZES.map(size => (
+                      <button
+                        key={size}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setLutMenuOpen(false); onExportLut(size); }}
+                        style={{ fontSize: GRADE_TYPE.button }}
+                        className="w-full px-2 py-1 flex items-center justify-between gap-2 text-left text-ink-300 hover:bg-ink-850 hover:text-ink-100 transition-colors focus-visible:outline-none focus-visible:bg-ink-850"
+                      >
+                        <span className="font-mono tabular-nums">{size}</span>
+                        <span className="text-ink-600" style={{ fontSize: GRADE_TYPE.hint }}>
+                          {LUT_SIZE_NOTE[size]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={() => onApply(GRADE_NEUTRAL)}

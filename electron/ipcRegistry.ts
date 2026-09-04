@@ -10,6 +10,7 @@ import { registerUpdateHandlers } from './updateHandlers';
 import { registerQueueHandlers } from './queueHandlers';
 import { registerDiscordRichPresenceHandlers } from './discordRichPresenceHandlers';
 import { registerDlssRuntimeHandlers } from './dlssRuntimeHandlers';
+import { registerLutHandlers } from './lutHandlers';
 import { DependencyManager } from './dependencyManager';
 import { VapourSynthScriptGenerator } from './scriptGenerator';
 import { TemplateManager } from './templateManager';
@@ -32,6 +33,7 @@ export function registerAllIpcHandlers(
   registerVideoHandlers(mainWindow, scriptGenerator, dependencyManager);
   registerConfigHandlers(mainWindow);
   registerWorkflowHandlers();
+  registerLutHandlers();
   registerTemplateHandlers(templateManager);
   registerDependencyHandlers(dependencyManager, pluginInstaller);
   registerUpdateHandlers();

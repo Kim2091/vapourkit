@@ -195,6 +195,15 @@ export interface ElectronAPI {
   exportWorkflow: (workflow: WorkflowData, filePath: string) => Promise<{ success: boolean; error?: string }>;
   importWorkflow: (filePath: string) => Promise<{ success: boolean; workflow?: WorkflowData; error?: string }>;
   selectWorkflowFile: (mode: 'open' | 'save') => Promise<string | null>;
+  /** Colour lookup tables. The text crosses the boundary unparsed, so the
+      renderer's tested parser is the only one, and its errors reach the UI. */
+  selectLutFile: (mode: 'open' | 'save', defaultName?: string) => Promise<string | null>;
+  writeLutFile: (filePath: string, text: string) =>
+    Promise<{ success: true; path: string } | { success: false; error: string }>;
+  readLutFile: (filePath: string) =>
+    Promise<{ success: true; text: string; name: string } | { success: false; error: string }>;
+  installLut: (name: string, text: string) =>
+    Promise<{ success: true; path: string; name: string } | { success: false; error: string }>;
   
   // Plugin dependency operations
   installPluginDependencies: () => Promise<{ success: boolean; error?: string }>;
