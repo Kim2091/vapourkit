@@ -51,6 +51,8 @@ interface VideoPreviewPanelProps {
   onScopeColumnResize?: (width: number) => void;
   /** Double-clicking the handle gives the width back to the automatic rule. */
   onScopeColumnReset?: () => void;
+  /** The grading panel's type base, shared with the dock. */
+  gradeBasePx?: number;
 }
 
 export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
@@ -74,6 +76,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   scopeColumnWidth = 0,
   onScopeColumnResize,
   onScopeColumnReset,
+  gradeBasePx = 12,
 }: VideoPreviewPanelProps) => {
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
   const previewImageRef = useRef<HTMLImageElement>(null);
@@ -312,6 +315,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
             sample={scopeSample}
             values={gradePreview.values}
             width={scopeColumnWidth}
+            basePx={gradeBasePx}
           />
         </>
       )}

@@ -8,6 +8,7 @@
 
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { gradePixel, LUMA_R, LUMA_G, LUMA_B, type GradeValues } from '../utils/colorGrade';
+import { GRADE_TYPE } from './gradeType';
 
 export type ScopeKind = 'parade' | 'waveform' | 'vectorscope' | 'histogram';
 
@@ -244,11 +245,16 @@ export const Scope = memo<ScopeProps>(({
   return (
     <div className={`relative bg-ink-950 min-w-0 min-h-0 ${className}`}>
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
-      <span className="absolute top-1 left-1.5 font-display text-[9px] font-semibold uppercase tracking-[0.11em] text-ink-500 pointer-events-none">
+      <span
+        className="absolute top-1 left-1.5 font-display font-semibold uppercase tracking-[0.11em] text-ink-500 pointer-events-none"
+        style={{ fontSize: GRADE_TYPE.section }}
+      >
         {SCOPE_LABELS[kind]}
       </span>
       {!sample && (
-        <span className="absolute inset-0 grid place-items-center text-[10px] text-ink-600">No frame</span>
+        <span className="absolute inset-0 grid place-items-center text-ink-600" style={{ fontSize: GRADE_TYPE.value }}>
+          No frame
+        </span>
       )}
     </div>
   );

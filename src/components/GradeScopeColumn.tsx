@@ -15,6 +15,7 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react';
 import { Gauge } from 'lucide-react';
 import { Scope, type ScopeKind } from './GradeScopes';
+import { GRADE_TYPE } from './gradeType';
 import type { GradeValues } from '../utils/colorGrade';
 
 /** Most useful first, because a short column only shows the first two.
@@ -96,10 +97,12 @@ interface GradeScopeColumnProps {
   sample: Float32Array | null;
   values: GradeValues;
   width: number;
+  /** The dock's type base, so the whole grading panel reads at one size. */
+  basePx: number;
 }
 
 export const GradeScopeColumn = memo<GradeScopeColumnProps>(({
-  sample, values, width,
+  sample, values, width, basePx,
 }: GradeScopeColumnProps) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
@@ -119,15 +122,18 @@ export const GradeScopeColumn = memo<GradeScopeColumnProps>(({
   return (
     <div
       ref={rootRef}
-      style={{ width }}
+      style={{ width, fontSize: basePx }}
       className="flex-shrink-0 flex flex-col min-h-0 border-l border-ink-800 bg-ink-900"
     >
       <div className="h-7 flex-shrink-0 flex items-center gap-2 px-2.5 bg-ink-850 border-b border-ink-800">
         <Gauge className="w-3 h-3 text-ink-500 flex-shrink-0" aria-hidden="true" />
-        <span className="font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-300">
+        <span
+          className="font-display font-semibold uppercase tracking-[0.14em] text-ink-300"
+          style={{ fontSize: GRADE_TYPE.title }}
+        >
           Scopes
         </span>
-        <span className="ml-auto text-[9.5px] text-ink-600">after this grade</span>
+        <span className="ml-auto text-ink-600" style={{ fontSize: GRADE_TYPE.hint }}>after this grade</span>
       </div>
       <div
         className="flex-1 min-h-0 grid gap-px bg-ink-800"

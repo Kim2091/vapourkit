@@ -17,6 +17,7 @@
 import { memo, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { RotateCcw, Save, Gauge } from 'lucide-react';
 import { Trackball, readoutColumns, trackballColumnWidth } from './Trackball';
+import { GRADE_TYPE, gradeBasePx } from './gradeType';
 import { Scope, SCOPE_LABELS, type ScopeKind } from './GradeScopes';
 import {
   BALL_SPECS,
@@ -29,10 +30,10 @@ import {
 } from '../utils/colorGrade';
 
 export const GRADE_DOCK_HEIGHT = 230;
-export const GRADE_DOCK_COMPACT_HEIGHT = 190;
+export const GRADE_DOCK_COMPACT_HEIGHT = 198;
 /** A one-column tone list is seven rows tall; a two-column one is four, so
     the one-column layout needs the extra rows back. */
-export const GRADE_DOCK_COMPACT_TALL = 206;
+export const GRADE_DOCK_COMPACT_TALL = 214;
 /** Below this window height the balls shrink rather than eat the viewer. */
 export const GRADE_COMPACT_BELOW = 960;
 
@@ -69,23 +70,24 @@ const TONE_COLUMN_MIN = 180;
    if the constant above it is short. Change a ball size or a readout row and
    that test tells you which constant has to move. */
 const DOCK_HEADER = 28;
-/** Section label, its gap, and the block's own py-2. */
-const BLOCK_CHROME = 35;
-/** Master bar, label, hint, and the gaps stacking them under the disc. */
-const BALL_CHROME = 42;
-const READOUT_ROW = 11;
 const READOUT_ROW_GAP = 2;
-const TONE_ROW = 16;
+/** Every row below holds text, so every one of them moves with the base. */
+const blockChrome = (basePx: number) => 22 + basePx * 1.1;
+/** Master bar, label, hint, and the gaps stacking them under the disc. */
+const ballChrome = (basePx: number) => 21 + basePx * 1.7;
+const readoutRowHeight = (basePx: number) => basePx * 0.92;
+/** Exported because the tone grid uses it as its row floor. */
+export const toneRowHeight = (basePx: number) => basePx * 1.33;
 
 /** The height this layout's tallest block actually needs. */
-export function dockContentNeeded(ballSize: number, toneColumns: number): number {
-  const readoutRows = Math.ceil(4 / readoutColumns(ballSize));
-  const primaries = ballSize + BALL_CHROME
-    + readoutRows * READOUT_ROW + (readoutRows - 1) * READOUT_ROW_GAP;
+export function dockContentNeeded(ballSize: number, toneColumns: number, basePx: number): number {
+  const readoutRows = Math.ceil(4 / readoutColumns(ballSize, basePx));
+  const primaries = ballSize + ballChrome(basePx)
+    + readoutRows * readoutRowHeight(basePx) + (readoutRows - 1) * READOUT_ROW_GAP;
   const toneRows = Math.ceil(SCALAR_SPECS.length / toneColumns);
   const toneGap = toneColumns === 1 ? 4 : 6;
-  const tone = toneRows * TONE_ROW + (toneRows - 1) * toneGap;
-  return DOCK_HEADER + BLOCK_CHROME + Math.max(primaries, tone);
+  const tone = toneRows * toneRowHeight(basePx) + (toneRows - 1) * toneGap;
+  return DOCK_HEADER + blockChrome(basePx) + Math.max(primaries, tone);
 }
 /** Narrower than this a scope is a smear, so it leaves rather than shrink. */
 const SCOPE_MIN = 160;
@@ -95,6 +97,8 @@ export interface DockLayout {
   scopeWidth: number;
   toneColumns: number;
   height: number;
+  /** Font size the whole panel's em sizes resolve against. */
+  basePx: number;
 }
 
 /** Solve the dock's blocks for the width it actually has. */
@@ -102,10 +106,11 @@ export function solveDockLayout(width: number, compact: boolean, scopesInColumn 
   // An unmeasured dock (width 0) resolves to the tightest layout, which is
   // also the tallest; useLayoutEffect measures before paint, so that one
   // never reaches the screen.
+  const basePx = gradeBasePx(width, compact);
   const ballSize = compact
     ? (width < 820 ? 48 : 56)
     : (width < 1100 ? 68 : 84);
-  const primaries = trackballColumnWidth(ballSize) * 4 + BALL_GAP * 3 + BLOCK_PADDING;
+  const primaries = trackballColumnWidth(ballSize, basePx) * 4 + BALL_GAP * 3 + BLOCK_PADDING;
   const forTools = Math.max(0, width - primaries - 2);
 
   const wanted = forTools >= 1060 ? 380 : forTools >= 720 ? 360 : forTools >= 440 ? 260 : 200;
@@ -122,7 +127,7 @@ export function solveDockLayout(width: number, compact: boolean, scopesInColumn 
     ? (toneColumns === 1 ? GRADE_DOCK_COMPACT_TALL : GRADE_DOCK_COMPACT_HEIGHT)
     : GRADE_DOCK_HEIGHT;
 
-  return { ballSize, scopeWidth, toneColumns, height };
+  return { ballSize, scopeWidth, toneColumns, height, basePx };
 }
 
 const formatScalar = (spec: ScalarSpec, value: number) => {
@@ -195,16 +200,16 @@ const ToneSlider = memo<{
         focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500
         ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-ew-resize'}`}
     >
-      <span className="text-[10.5px] text-ink-400 truncate">{spec.label}</span>
-      <span className="h-[3px] rounded-sm bg-ink-800 relative block">
-        <span aria-hidden="true" className="absolute -top-0.5 w-px h-[7px] bg-ink-700" style={{ left: `${neutral * 100}%` }} />
+      <span className="text-ink-400 truncate" style={{ fontSize: GRADE_TYPE.label }}>{spec.label}</span>
+      <span className="h-[4px] rounded-sm bg-ink-800 relative block">
+        <span aria-hidden="true" className="absolute -top-[2px] w-px h-[8px] bg-ink-700" style={{ left: `${neutral * 100}%` }} />
         <span
           aria-hidden="true"
-          className="absolute -top-[3px] w-[9px] h-[9px] rounded-full bg-accent-500 border border-ink-950"
-          style={{ left: `calc(${Math.min(1, Math.max(0, fraction)) * 100}% - 4.5px)` }}
+          className="absolute -top-[3px] w-[10px] h-[10px] rounded-full bg-accent-500 border border-ink-950"
+          style={{ left: `calc(${Math.min(1, Math.max(0, fraction)) * 100}% - 5px)` }}
         />
       </span>
-      <span className="font-mono text-[10px] tabular-nums text-ink-300 text-right">
+      <span className="font-mono tabular-nums text-ink-300 text-right" style={{ fontSize: GRADE_TYPE.value }}>
         {formatScalar(spec, value)}
       </span>
     </div>
@@ -248,21 +253,24 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
     onChange({ ...values, [name]: value });
   }, [onChange, values]);
 
-  const { ballSize, scopeWidth, toneColumns, height } = solveDockLayout(width, compact, scopesInColumn);
+  const { ballSize, scopeWidth, toneColumns, height, basePx } = solveDockLayout(width, compact, scopesInColumn);
 
   return (
     <div
       ref={rootRef}
       className="flex-shrink-0 flex flex-col bg-ink-900 border-t border-ink-700"
-      style={{ height }}
+      style={{ height, fontSize: basePx }}
     >
       <div className="h-7 flex-shrink-0 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800">
         <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <span className="font-display text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-100 whitespace-nowrap">
+          <span
+            className="font-display font-semibold uppercase tracking-[0.14em] text-ink-100 whitespace-nowrap"
+            style={{ fontSize: GRADE_TYPE.title }}
+          >
             Color wheels
           </span>
-          <span className="text-[10.5px] text-ink-500 truncate">{stepLabel}</span>
+          <span className="text-ink-500 truncate" style={{ fontSize: GRADE_TYPE.label }}>{stepLabel}</span>
         </div>
         <div className="flex items-center gap-1.5 self-center flex-shrink-0">
           <button
@@ -270,7 +278,8 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
             onClick={() => onApply(GRADE_NEUTRAL)}
             disabled={disabled}
             title="Reset every control on this grade"
-            className="h-[21px] px-2 rounded inline-flex items-center gap-1.5 text-[10.5px] font-medium bg-ink-850 border border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+            style={{ fontSize: GRADE_TYPE.button }}
+            className="h-[21px] px-2 rounded inline-flex items-center gap-1.5 font-medium bg-ink-850 border border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
           >
             <RotateCcw className="w-3 h-3" />
             Reset all
@@ -281,7 +290,8 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
               onClick={onSaveTemplate}
               disabled={disabled}
               title="Save this grade as a filter template"
-              className="h-[21px] px-2 rounded inline-flex items-center gap-1.5 text-[10.5px] font-medium bg-ink-850 border border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              style={{ fontSize: GRADE_TYPE.button }}
+            className="h-[21px] px-2 rounded inline-flex items-center gap-1.5 font-medium bg-ink-850 border border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
             >
               <Save className="w-3 h-3" />
               Save as template
@@ -294,7 +304,10 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
         {/* Primaries */}
         <div className="flex-shrink-0 flex flex-col gap-1.5 px-3 py-2 border-r border-ink-850">
           {/* One line, clipped: wrapped to two, it stole a row from the balls. */}
-          <span className="font-display text-[9px] font-semibold uppercase tracking-[0.13em] text-ink-500 flex items-center gap-1.5 min-w-0 whitespace-nowrap overflow-hidden">
+          <span
+            className="font-display font-semibold uppercase tracking-[0.13em] text-ink-500 flex items-center gap-1.5 min-w-0 whitespace-nowrap overflow-hidden"
+            style={{ fontSize: GRADE_TYPE.section }}
+          >
             Primaries
             <span className="normal-case tracking-normal text-ink-600 font-sans font-normal truncate">
               double-click a ball to reset
@@ -309,6 +322,7 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
                 hint={hint}
                 value={values[name]}
                 size={ballSize}
+                basePx={basePx}
                 disabled={disabled}
                 onChange={(ball) => setBall(name, ball)}
                 onCommit={onCommit}
@@ -321,10 +335,25 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
             after the primaries and the scope, and picks a column count that
             shows all seven controls without scrolling either way. */}
         <div className="flex-1 min-w-0 flex flex-col gap-1.5 px-3 py-2 border-r border-ink-850 overflow-y-auto">
-          <span className="font-display text-[9px] font-semibold uppercase tracking-[0.13em] text-ink-500">Tone</span>
+          <span
+            className="font-display font-semibold uppercase tracking-[0.13em] text-ink-500"
+            style={{ fontSize: GRADE_TYPE.section }}
+          >
+            Tone
+          </span>
+          {/* The rows share the height the primaries block sets, rather than
+              stacking at the top of it and leaving the rest of the dock blank.
+              minmax keeps the floor the height budget was computed against, so
+              a seven-row column still fits; above that floor the space goes
+              into the rows, and a row that fills its share is a drag target
+              you can actually hit. */}
           <div
-            className={`grid gap-x-5 content-start ${toneColumns === 1 ? 'gap-y-1' : 'gap-y-1.5'}`}
-            style={{ gridTemplateColumns: `repeat(${toneColumns}, minmax(0, 1fr))` }}
+            className="grid gap-x-5 flex-1 min-h-0"
+            style={{
+              gridTemplateColumns: `repeat(${toneColumns}, minmax(0, 1fr))`,
+              gridAutoRows: `minmax(${toneRowHeight(basePx)}px, 1fr)`,
+              rowGap: toneColumns === 1 ? 4 : 6,
+            }}
           >
             {SCALAR_SPECS.map(spec => (
               <ToneSlider
@@ -356,7 +385,8 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
                   onClick={() => onDockScopeChange(kind)}
                   aria-pressed={dockScope === kind}
                   title={SCOPE_LABELS[kind]}
-                  className={`px-1.5 h-[17px] text-[9px] border-r border-ink-750 last:border-r-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
+                  style={{ fontSize: GRADE_TYPE.hint }}
+                  className={`px-1.5 py-[3px] leading-none border-r border-ink-750 last:border-r-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
                     dockScope === kind ? 'bg-accent-500/16 text-accent-300' : 'text-ink-500 hover:text-ink-300'
                   }`}
                 >

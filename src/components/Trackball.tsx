@@ -11,6 +11,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ballToPuck, puckToBall, BALL_NEUTRAL, type BallName, type BallValues } from '../utils/colorGrade';
+import { GRADE_TYPE, readoutCellWidth } from './gradeType';
 
 interface TrackballProps {
   name: BallName;
@@ -19,6 +20,8 @@ interface TrackballProps {
   value: BallValues;
   /** Disc diameter in px; the dock shrinks these on short windows. */
   size: number;
+  /** The dock's type base, which the readout's width is measured against. */
+  basePx: number;
   disabled?: boolean;
   /** Fires continuously while dragging. */
   onChange: (value: BallValues) => void;
@@ -35,25 +38,22 @@ const MASTER_RANGE: Record<BallName, { min: number; max: number }> = {
 
 const CHANNELS = ['r', 'g', 'b', 'm'] as const;
 
-/** A readout cell holds five monospace characters — "1.000", "-.120", "+.020"
-    — which at 9px is about 27px, so 29 is one that never collides with its
-    neighbour. Four of them across an 84px ball is 21px each, which is what
-    made the numbers overlap into a smear at every size; the row wraps instead
-    of overflowing, and the column widens if even two will not fit. */
-const READOUT_CELL = 29;
 const READOUT_GAP = 2;
 
-/** How many readout cells fit across a ball of this size. */
-export function readoutColumns(size: number): number {
-  return size >= READOUT_CELL * 4 + READOUT_GAP * 3 ? 4 : 2;
+/** How many readout cells fit across a ball of this size. Four never has:
+    that is what made the numbers overlap into a smear, at every size. */
+export function readoutColumns(size: number, basePx: number): number {
+  const cell = readoutCellWidth(basePx);
+  return size >= cell * 4 + READOUT_GAP * 3 ? 4 : 2;
 }
 
-/** A trackball column is as wide as its ball, or its numbers, whichever needs
-    more. The dock's width solver has to agree with this or the primaries
-    block silently overflows. */
-export function trackballColumnWidth(size: number): number {
-  const columns = readoutColumns(size);
-  return Math.max(size, columns * READOUT_CELL + (columns - 1) * READOUT_GAP);
+/** A trackball column is as wide as its ball, or as its numbers, whichever
+    needs more. The dock's width solver has to agree with this or the
+    primaries block silently overflows. */
+export function trackballColumnWidth(size: number, basePx: number): number {
+  const columns = readoutColumns(size, basePx);
+  const cell = readoutCellWidth(basePx);
+  return Math.max(size, columns * cell + (columns - 1) * READOUT_GAP);
 }
 
 const CHANNEL_TINT: Record<(typeof CHANNELS)[number], string> = {
@@ -67,7 +67,7 @@ const CHANNEL_TINT: Record<(typeof CHANNELS)[number], string> = {
 const fineFactor = (event: { shiftKey: boolean }) => (event.shiftKey ? 0.1 : 1);
 
 export const Trackball = memo<TrackballProps>(({
-  name, label, hint, value, size, disabled = false, onChange, onCommit,
+  name, label, hint, value, size, basePx, disabled = false, onChange, onCommit,
 }: TrackballProps) => {
   const discRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<{ kind: 'disc' | 'master' | 'channel'; channel?: number; startX: number; startY: number; origin: BallValues } | null>(null);
@@ -198,12 +198,12 @@ export const Trackball = memo<TrackballProps>(({
   };
 
   const radius = size / 2;
-  const columns = readoutColumns(size);
+  const columns = readoutColumns(size, basePx);
 
   return (
     <div
       className="flex flex-col items-center gap-1.5 flex-shrink-0"
-      style={{ width: trackballColumnWidth(size) }}
+      style={{ width: trackballColumnWidth(size, basePx) }}
     >
       <div
         ref={discRef}
@@ -268,10 +268,15 @@ export const Trackball = memo<TrackballProps>(({
         />
       </div>
 
-      <span className="font-display text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400 leading-none">
+      <span
+        className="font-display font-semibold uppercase tracking-[0.12em] text-ink-400 leading-none"
+        style={{ fontSize: GRADE_TYPE.label }}
+      >
         {label}
       </span>
-      <span className="text-[9px] text-ink-600 leading-none -mt-1">{hint}</span>
+      <span className="text-ink-600 leading-none -mt-1" style={{ fontSize: GRADE_TYPE.hint }}>
+        {hint}
+      </span>
 
       <div
         className="grid w-full"
@@ -291,7 +296,8 @@ export const Trackball = memo<TrackballProps>(({
               onCommit();
             }}
             title={`${label} ${channel.toUpperCase()} — drag to change, double-click to reset`}
-            className={`font-mono text-[9px] tabular-nums leading-none py-[1px] rounded-sm cursor-ew-resize
+            style={{ fontSize: GRADE_TYPE.value }}
+            className={`font-mono tabular-nums leading-none py-[1px] rounded-sm cursor-ew-resize
               hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50
               focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${CHANNEL_TINT[channel]}`}
           >

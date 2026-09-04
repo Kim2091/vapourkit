@@ -35,9 +35,13 @@ describe('solveScopeColumnWidth', () => {
     // A tall window: the picture runs out of width before it runs out of
     // height, so there is nothing spare to take.
     expect(solveScopeColumnWidth(paneWidth(1000), pictureHeight(1400), 16 / 9)).toBe(0);
-    // A 2.39:1 source is the frame wide enough to want the whole pane: at
-    // 1200x675 it needs 841 of the 1103 there are, and 262 is not a column.
-    expect(solveScopeColumnWidth(paneWidth(1200), pictureHeight(675), 2.39)).toBe(0);
+    // The boundary itself, rather than a window size that would drift the
+    // moment an unrelated constant moves: a pixel short of the narrowest
+    // column worth showing, and it withdraws instead of shaving the picture.
+    const picture = 400;
+    const needs = picture * 2.39;
+    expect(solveScopeColumnWidth(needs + 299, picture, 2.39)).toBe(0);
+    expect(solveScopeColumnWidth(needs + 300, picture, 2.39)).toBe(300);
   });
 
   it('has more to spare for a narrow frame, not less', () => {

@@ -13,10 +13,10 @@ import { trackballColumnWidth } from './Trackball';
 /** Blocks the dock lays out beside the tone column. */
 const BALL_GAP = 14;
 const BLOCK_PADDING = 24;
-const primariesWidth = (ballSize: number) =>
-  trackballColumnWidth(ballSize) * 4 + BALL_GAP * 3 + BLOCK_PADDING;
+const primariesWidth = (ballSize: number, basePx: number) =>
+  trackballColumnWidth(ballSize, basePx) * 4 + BALL_GAP * 3 + BLOCK_PADDING;
 const toneWidth = (width: number, layout: ReturnType<typeof solveDockLayout>) =>
-  width - primariesWidth(layout.ballSize) - layout.scopeWidth - 2;
+  width - primariesWidth(layout.ballSize, layout.basePx) - layout.scopeWidth - 2;
 
 /** Chrome between the window edge and the dock: rail, and the folded strip. */
 const dockWidth = (windowWidth: number) => windowWidth - 63 - 34;
@@ -42,7 +42,7 @@ describe('solveDockLayout', () => {
     for (let window = 900; window <= 2600; window += 1) {
       const width = dockWidth(window);
       const layout = solveDockLayout(width, true);
-      const used = primariesWidth(layout.ballSize) + layout.scopeWidth + 2;
+      const used = primariesWidth(layout.ballSize, layout.basePx) + layout.scopeWidth + 2;
       expect(used).toBeLessThan(width);
       // Every window the app can actually be sized to keeps its scope.
       expect(layout.scopeWidth).toBeGreaterThan(0);
@@ -72,6 +72,19 @@ describe('solveDockLayout', () => {
     // A tall window keeps full-size balls once there is width for them.
     expect(solveDockLayout(dockWidth(2560), false).ballSize).toBe(84);
   });
+
+  it('sizes the panel type up with the room, never below the floor', () => {
+    const small = solveDockLayout(dockWidthWithSettings(1200), true).basePx;
+    const large = solveDockLayout(dockWidth(2560), false).basePx;
+    expect(small).toBeGreaterThanOrEqual(12);
+    expect(large).toBeGreaterThan(small);
+    // Nothing the solver can pick goes back to the 9px the panel started at.
+    for (let width = 600; width <= 2600; width += 1) {
+      for (const compact of [true, false]) {
+        expect(solveDockLayout(width, compact).basePx).toBeGreaterThanOrEqual(12);
+      }
+    }
+  });
 });
 
 describe('scopes in the column beside the viewer', () => {
@@ -99,7 +112,7 @@ describe('the dock is tall enough for what it chose to show', () => {
       for (const compact of [true, false]) {
         for (const scopesInColumn of [true, false]) {
           const layout = solveDockLayout(width, compact, scopesInColumn);
-          expect(dockContentNeeded(layout.ballSize, layout.toneColumns))
+          expect(dockContentNeeded(layout.ballSize, layout.toneColumns, layout.basePx))
             .toBeLessThanOrEqual(layout.height);
         }
       }

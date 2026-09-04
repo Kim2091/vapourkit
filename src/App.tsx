@@ -42,6 +42,7 @@ import { SetupScreen } from './components/SetupScreen';
 import { VideoPreviewPanel } from './components/VideoPreviewPanel';
 import { ColorGradeDock, GRADE_COMPACT_BELOW, GRADE_DOCK_HEIGHT, GRADE_DOCK_COMPACT_HEIGHT } from './components/ColorGradeDock';
 import { solveScopeColumnWidth, clampScopeColumnWidth } from './components/GradeScopeColumn';
+import { gradeBasePx } from './components/gradeType';
 import type { CompareMode } from './components/ColorGradeOverlay';
 import type { ScopeKind } from './components/GradeScopes';
 import { useColorGrade } from './hooks/useColorGrade';
@@ -924,9 +925,17 @@ function App() {
     return index === -1 ? undefined : `editing ${index + 1} of ${queue.length}`;
   })();
 
+  // A visual editor owns the preview pane, and processing wants it back: the
+  // dock disables itself the moment a run starts, so an editor left open is
+  // one you are locked out of, sitting on top of the frames you want to
+  // watch. Guarded on isProcessing, because this must never reach the Stop
+  // the same button turns into.
+  const startBlockedByEditor = !isProcessing && Boolean(activeFilterEditorId);
+
   const isStartDisabled = (() => {
     // Disable if stopping
     if (isStopping) return true;
+    if (startBlockedByEditor) return true;
 
     // Basic validation - benchmark mode doesn't need outputPath
     if (!videoInfo) return true;
@@ -1077,6 +1086,7 @@ function App() {
                     onScopeColumnResize={(width) =>
                       setScopeColumnOverride(clampScopeColumnWidth(width, gradePaneWidth))}
                     onScopeColumnReset={() => setScopeColumnOverride(null)}
+                    gradeBasePx={gradeBasePx(gradePaneWidth, windowHeight < GRADE_COMPACT_BELOW)}
                   />
 
                   {colorGrade.editor && (
@@ -1221,6 +1231,9 @@ function App() {
           isProcessing={isProcessing}
           isStopping={isStopping}
           isStartDisabled={isStartDisabled}
+          startDisabledReason={startBlockedByEditor
+            ? 'Close the editor above the preview before processing'
+            : undefined}
           upscaleProgress={upscaleProgress}
           isValidating={isValidating}
           validationStatus={validationStatus}

@@ -25,6 +25,8 @@ interface ActionBarProps {
   isProcessing: boolean;
   isStopping: boolean;
   isStartDisabled: boolean;
+  /** Why the button is off, shown on hover. Undefined when it is not. */
+  startDisabledReason?: string;
 
   // Validation state
   isValidating: boolean;
@@ -86,6 +88,7 @@ export const ActionBar = memo(function ActionBar({
   isProcessing,
   isStopping,
   isStartDisabled,
+  startDisabledReason,
   isValidating,
   validationStatus,
   validationError,
@@ -270,6 +273,7 @@ export const ActionBar = memo(function ActionBar({
             ? handleCancelUpscale
             : () => handleUpscale(selectedModel || '', defaultBackend, filters, numStreams, segment, benchmarkMode)}
           disabled={isStartDisabled}
+          title={isStartDisabled ? startDisabledReason : undefined}
           className={
             isStopping
               ? `${BTN} bg-warn-600 border-warn-600 text-ink-950 cursor-not-allowed`
