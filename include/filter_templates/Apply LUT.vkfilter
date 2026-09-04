@@ -1,14 +1,18 @@
 name = "Apply LUT"
 category = [ "Color Modification" ]
-description = "Experimental. Applies a 3D colour lookup table (.cube). Import one through the grading dock, or point this at a file yourself. Costs about 2GB of memory at 4K unless the timecube plugin is installed."
+description = "Experimental. Applies a 3D colour lookup table (.cube). Import one through the grading dock, or point this at a file yourself. Uses the timecube plugin; without it a slower fallback runs, which costs about 2GB more memory at 4K."
 code = """
 # Applies a 3D LUT, preferring the timecube plugin and falling back to one
 # built out of akarin.Expr when it is absent.
 #
-# timecube is the right tool: one node, a table that costs 400KB whatever the
-# resolution, and native SIMD. The fallback exists because it is not on PyPI,
-# which is where the Linux install comes from, and a look that only works on
-# Windows is worse than a slow one.
+# timecube is the right tool and setup installs it from PyPI on both
+# platforms: one node, a table that costs 400KB whatever the resolution, and
+# native SIMD. The fallback is for an install that predates it, or one where
+# the wheel could not be fetched — a slow look beats a broken one.
+#
+# Both paths agree to 1.2e-7. timecube's interp=1 is tetrahedral and is
+# deliberately left alone, because taking it would make the render depend on
+# which plugin happened to be installed.
 #
 # The fallback is worth understanding before relying on it. akarin.Expr can
 # read a pixel at a computed coordinate, so the table travels as a companion

@@ -117,6 +117,21 @@ export function getPypiPackages(vendor: GpuVendor): string[] {
     ...(isNvidia ? ['vapoursynth-nlm-cuda'] : []),
     'vapoursynth-scxvid',
     'vapoursynth-dctfilter',
+    // Applies 3D LUTs for the "Apply LUT" template. Without it that filter
+    // still works, but falls back to a table built out of akarin.Expr which
+    // has to carry the table as a companion clip the size of the picture.
+    // Measured, per 24 frames:
+    //
+    //          timecube            akarin fallback     no LUT step
+    //   1080p  185 fps  +524MB      43 fps  +1060MB     +523MB
+    //   4K      43 fps +2091MB      10 fps  +4192MB    +2089MB
+    //
+    // So timecube costs nothing over the pipeline's own baseline, where the
+    // fallback doubles it. Both agree to 1.2e-7 on the same cube, because
+    // timecube's default interpolation is trilinear like ours; its interp=1
+    // is tetrahedral and deliberately not used, or the render would change
+    // depending on which plugin happened to be installed.
+    'vapoursynth-timecube',
     // Needed by the bundled (non-PyPI) vs_deepdeinterlace scripts
     'positional-encodings',
     'einops',
