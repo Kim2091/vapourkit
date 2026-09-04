@@ -1,6 +1,6 @@
 // src/App.tsx - Refactored with extracted components and hooks
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { NotificationContainer } from './components/NotificationContainer';
 import { notify } from './utils/notifications';
 import { QueuePanel } from './components/QueuePanel';
@@ -39,6 +39,10 @@ import { useProcessingConfig } from './hooks/useProcessingConfig';
 import { getErrorMessage } from './types/errors';
 import { SetupScreen } from './components/SetupScreen';
 import { VideoPreviewPanel } from './components/VideoPreviewPanel';
+import { ColorGradeDock, GRADE_COMPACT_BELOW } from './components/ColorGradeDock';
+import type { CompareMode } from './components/ColorGradeOverlay';
+import type { ScopeKind } from './components/GradeScopes';
+import { useColorGrade } from './hooks/useColorGrade';
 import { VideoInputPanel } from './components/VideoInputPanel';
 import { VideoInfoPanel } from './components/VideoPanel';
 import { OutputSettingsPanel } from './components/OutputSettingsPanel';
@@ -787,14 +791,67 @@ function App() {
     handleSetFilters(filters.map(filter => filter.id === filterId ? { ...filter, parameters } : filter));
   }, [filters, handleSetFilters]);
 
+  // Colour grading. The values live in the filter's parameters; the hook holds
+  // the draft while a trackball is being dragged so history records one entry
+  // per gesture rather than one per pixel of travel.
+  const colorGrade = useColorGrade({
+    filter: activeFilterEditor,
+    onParametersChange: handleFilterParametersChange,
+  });
+  const [gradeCompareMode, setGradeCompareMode] = useState<CompareMode>('wipe');
+  const [holdingBefore, setHoldingBefore] = useState(false);
+  const [scopeSample, setScopeSample] = useState<Float32Array | null>(null);
+  const [dockScope, setDockScope] = useState<ScopeKind>('parade');
+  const [windowHeight, setWindowHeight] = useState(() => window.innerHeight);
+
+  useEffect(() => {
+    const onResize = () => setWindowHeight(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const gradeStepLabel = useMemo(() => {
+    if (!colorGrade.editor || !activeFilterEditor) return '';
+    const enabled = filters.filter(filter => filter.enabled);
+    const position = enabled.findIndex(filter => filter.id === activeFilterEditor.id);
+    const previous = position > 0 ? enabled[position - 1] : null;
+    const previousName = previous?.preset
+      || (previous?.modelPath ? getPortableModelName(previous.modelPath) : null);
+    if (position < 0) return 'this step is disabled';
+    return previousName
+      ? `step ${position + 1} of ${enabled.length} · after ${previousName}`
+      : `step ${position + 1} of ${enabled.length} · from the source`;
+  }, [activeFilterEditor, colorGrade.editor, filters]);
+
   useEffect(() => {
     if (!activeFilterEditorId) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setActiveFilterEditorId(null);
+      // Hold to see the frame entering this step. Ignored while typing, so a
+      // "b" in the code editor or a filename never flickers the preview.
+      const target = event.target as HTMLElement | null;
+      const typing = target && (target.isContentEditable
+        || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+      if (!typing && (event.key === 'b' || event.key === 'B')) setHoldingBefore(true);
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'b' || event.key === 'B') setHoldingBefore(false);
+    };
+    // A window that loses focus mid-hold would otherwise stay stuck on "before".
+    const onBlur = () => setHoldingBefore(false);
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
   }, [activeFilterEditorId]);
+
+  useEffect(() => {
+    if (!colorGrade.editor) setHoldingBefore(false);
+  }, [colorGrade.editor]);
 
   // Determine if processing should be disabled
   // Console drawer — stable identities so the memoised bar and drawer don't
@@ -951,7 +1008,31 @@ function App() {
                     onCloseFilterEditor={() => setActiveFilterEditorId(null)}
                     onFilterParametersChange={handleFilterParametersChange}
                     cropSourceSize={cropSourceSize}
+                    gradePreview={colorGrade.editor ? {
+                      values: colorGrade.values,
+                      mode: gradeCompareMode,
+                      holdingBefore,
+                      stepLabel: gradeStepLabel,
+                      onModeChange: setGradeCompareMode,
+                    } : null}
+                    onFrameSampled={setScopeSample}
                   />
+
+                  {colorGrade.editor && (
+                    <ColorGradeDock
+                      values={colorGrade.values}
+                      scopeSample={scopeSample}
+                      stepLabel={gradeStepLabel}
+                      compact={windowHeight < GRADE_COMPACT_BELOW}
+                      scopesElsewhere={false}
+                      disabled={isProcessing}
+                      dockScope={dockScope}
+                      onDockScopeChange={setDockScope}
+                      onChange={colorGrade.setValues}
+                      onCommit={colorGrade.commit}
+                      onApply={colorGrade.apply}
+                    />
+                  )}
 
                   <Scrubber
                     videoInfo={videoInfo}

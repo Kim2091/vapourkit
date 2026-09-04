@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
-import type { FilterEditor, FilterParameterValues } from '../electron.d';
+import type { CropFilterEditor, FilterParameterValues } from '../electron.d';
 
 interface CropValues {
   left: number;
@@ -19,7 +19,7 @@ interface DragState {
 }
 
 interface CropEditorOverlayProps {
-  editor: FilterEditor;
+  editor: CropFilterEditor;
   parameters?: FilterParameterValues;
   sourceSize: { width: number; height: number } | null;
   disabled?: boolean;
@@ -30,13 +30,13 @@ interface CropEditorOverlayProps {
 const clamp = (value: number, minimum: number, maximum: number) => Math.min(Math.max(value, minimum), maximum);
 
 function cropFromParameters(
-  editor: FilterEditor,
+  editor: CropFilterEditor,
   parameters: FilterParameterValues | undefined,
   sourceSize: { width: number; height: number } | null,
 ): CropValues {
   const maximumWidth = Math.max(0, (sourceSize?.width ?? 1) - 1);
   const maximumHeight = Math.max(0, (sourceSize?.height ?? 1) - 1);
-  const getValue = (name: keyof FilterEditor['variables'], maximum: number) => {
+  const getValue = (name: keyof CropFilterEditor['variables'], maximum: number) => {
     const value = parameters?.[editor.variables[name]];
     return typeof value === 'number' && Number.isFinite(value) ? clamp(Math.round(value), 0, maximum) : 0;
   };
@@ -53,7 +53,7 @@ function cropFromParameters(
   return { left, right, top, bottom };
 }
 
-function cropToParameters(editor: FilterEditor, crop: CropValues, parameters?: FilterParameterValues): FilterParameterValues {
+function cropToParameters(editor: CropFilterEditor, crop: CropValues, parameters?: FilterParameterValues): FilterParameterValues {
   return {
     ...parameters,
     [editor.variables.left]: crop.left,

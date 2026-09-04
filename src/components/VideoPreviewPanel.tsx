@@ -1,8 +1,25 @@
-import { memo, useEffect, useRef, useState } from 'react';
-import { Video, Loader2, XCircle, FolderOpen, GitCompare, Crop, X } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { Video, Loader2, XCircle, FolderOpen, GitCompare, Crop, X, Palette } from 'lucide-react';
 import { PrivacyVeil } from './PrivacyVeil';
 import { CropEditorOverlay } from './CropEditorOverlay';
+import { ColorGradeOverlay, type CompareMode } from './ColorGradeOverlay';
+import { sampleFrame } from '../utils/gradeRenderer';
+import type { GradeValues } from '../utils/colorGrade';
 import type { Filter, FilterParameterValues } from '../electron.d';
+
+/** Everything the preview needs to show an open grade step. */
+export interface GradePreview {
+  values: GradeValues;
+  mode: CompareMode;
+  holdingBefore: boolean;
+  stepLabel: string;
+  onModeChange: (mode: CompareMode) => void;
+}
+
+const COMPARE_MODES: { id: CompareMode; label: string; title: string }[] = [
+  { id: 'wipe', label: 'Wipe', title: 'Drag the divider to compare across the frame' },
+  { id: 'after', label: 'After', title: 'Show the graded frame in full' },
+];
 
 interface VideoPreviewPanelProps {
   previewFrame: string | null;
@@ -21,6 +38,10 @@ interface VideoPreviewPanelProps {
   onFilterParametersChange?: (filterId: string, parameters: FilterParameterValues) => void;
   /** Original video dimensions. The scrubber preview is downscaled for speed. */
   cropSourceSize?: { width: number; height: number } | null;
+  /** Set when the active editor is a colour grade. */
+  gradePreview?: GradePreview | null;
+  /** Fires with a small RGB sample of the ungraded frame, for the scopes. */
+  onFrameSampled?: (sample: Float32Array | null) => void;
 }
 
 export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
@@ -38,14 +59,31 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   onCloseFilterEditor,
   onFilterParametersChange,
   cropSourceSize,
+  gradePreview = null,
+  onFrameSampled,
 }: VideoPreviewPanelProps) => {
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
+  const previewImageRef = useRef<HTMLImageElement>(null);
   const [previewImageSize, setPreviewImageSize] = useState<{ width: number; height: number } | null>(null);
   const cropEditor = activeFilterEditor?.editor?.type === 'crop' ? activeFilterEditor.editor : null;
 
+  // A data: URL can finish loading before this effect flushes, so clearing
+  // unconditionally would discard a size onLoad had already recorded and
+  // leave it null for good. Re-read the element instead of assuming.
   useEffect(() => {
-    setPreviewImageSize(null);
+    const image = previewImageRef.current;
+    setPreviewImageSize(image?.complete && image.naturalWidth
+      ? { width: image.naturalWidth, height: image.naturalHeight }
+      : null);
   }, [previewFrame]);
+
+  // The scopes grade a small sample of the frame rather than the frame itself,
+  // so it is taken once here when the picture changes.
+  const handleImageLoad = useCallback((image: HTMLImageElement) => {
+    setPreviewImageSize({ width: image.naturalWidth, height: image.naturalHeight });
+    if (!onFrameSampled) return;
+    onFrameSampled(sampleFrame(image, image.naturalWidth, image.naturalHeight));
+  }, [onFrameSampled]);
 
   return (
     <div className="flex-1 bg-ink-950 overflow-hidden flex flex-col min-h-0">
@@ -58,6 +96,32 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
               <Crop className="w-3 h-3 flex-shrink-0" />
               {cropEditor.label || 'Crop editor'}
             </span>
+          )}
+          {gradePreview && (
+            <>
+              <span className="inline-flex items-center gap-1 h-5 px-1.5 rounded border border-accent-500/40 bg-accent-500/10 text-[10px] font-semibold uppercase tracking-[0.08em] text-accent-300 truncate flex-shrink-0">
+                <Palette className="w-3 h-3 flex-shrink-0" />
+                Grade
+              </span>
+              <div className="flex rounded border border-ink-750 overflow-hidden flex-shrink-0">
+                {COMPARE_MODES.map(mode => (
+                  <button
+                    key={mode.id}
+                    onClick={() => gradePreview.onModeChange(mode.id)}
+                    aria-pressed={gradePreview.mode === mode.id}
+                    title={mode.title}
+                    className={`px-1.5 h-[18px] text-[10px] border-r border-ink-750 last:border-r-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
+                      gradePreview.mode === mode.id ? 'bg-accent-500/16 text-accent-300' : 'text-ink-500 hover:text-ink-300'
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+              <span className={`text-[10px] whitespace-nowrap flex-shrink-0 ${gradePreview.holdingBefore ? 'text-accent-300' : 'text-ink-600'}`}>
+                Hold <kbd className="font-mono">B</kbd> for before
+              </span>
+            </>
           )}
         </div>
         <div className="flex items-center gap-1.5 self-center">
@@ -111,16 +175,24 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           >
             <div className="relative w-full h-full flex items-center justify-center">
               <img
+                ref={previewImageRef}
                 src={previewFrame}
                 alt="Preview"
                 className="w-full h-full object-contain rounded-lg shadow-lg"
                 draggable={false}
                 onDragStart={(e) => e.preventDefault()}
-                onLoad={(event) => setPreviewImageSize({
-                  width: event.currentTarget.naturalWidth,
-                  height: event.currentTarget.naturalHeight,
-                })}
+                onLoad={(event) => handleImageLoad(event.currentTarget)}
               />
+              {gradePreview && (
+                <ColorGradeOverlay
+                  imageRef={previewImageRef}
+                  frameSize={previewImageSize}
+                  values={gradePreview.values}
+                  mode={gradePreview.mode}
+                  holdingBefore={gradePreview.holdingBefore}
+                  stepLabel={gradePreview.stepLabel}
+                />
+              )}
               {cropEditor && activeFilterEditor && (
                 <CropEditorOverlay
                   editor={cropEditor}

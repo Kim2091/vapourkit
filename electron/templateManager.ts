@@ -24,6 +24,23 @@ export interface FilterTemplate {
       top: string;
       bottom: string;
     };
+  } | {
+    type: 'colorGrade';
+    label?: string;
+    variables: {
+      /** Each ball names four variables, in R, G, B, master order. */
+      lift: [string, string, string, string];
+      gamma: [string, string, string, string];
+      gain: [string, string, string, string];
+      offset: [string, string, string, string];
+      temperature: string;
+      tint: string;
+      contrast: string;
+      pivot: string;
+      saturation: string;
+      hue: string;
+      brightness: string;
+    };
   };
   metadata?: {
     author?: string;

@@ -1,0 +1,249 @@
+name = "Color Grade"
+category = [ "Color Modification" ]
+description = "Lift, gamma, gain and offset trackballs with temperature, tint, contrast, saturation and hue. Open the grading dock from the filter, or edit the numbers here."
+code = """
+# Lift / gamma / gain / offset, per channel, in Rec.709 RGB.
+#
+# These public variables are supplied by Vapourkit's grading dock. They can
+# still be edited by hand here, and the dock will read whatever it finds.
+#
+# Operation order matches DaVinci Resolve, and matches src/utils/colorGrade.ts
+# so the live preview and this render agree:
+#
+#   per channel:  offset -> gain (incl. white balance) -> lift -> gamma
+#                 -> contrast about the pivot -> brightness
+#   across:       hue rotation -> saturation
+
+lift   = ({{lift_r}},   {{lift_g}},   {{lift_b}},   {{lift_m}})
+gamma  = ({{gamma_r}},  {{gamma_g}},  {{gamma_b}},  {{gamma_m}})
+gain   = ({{gain_r}},   {{gain_g}},   {{gain_b}},   {{gain_m}})
+offset = ({{offset_r}}, {{offset_g}}, {{offset_b}}, {{offset_m}})
+
+temperature = {{temperature}}   # Kelvin offset, -4000 .. 4000
+tint        = {{tint}}          # green vs magenta, -100 .. 100
+contrast    = {{contrast}}
+pivot       = {{pivot}}
+saturation  = {{saturation}}
+hue         = {{hue}}           # degrees
+brightness  = {{brightness}}
+
+import math
+
+LUMA_R, LUMA_G, LUMA_B = 0.2126, 0.7152, 0.0722
+
+def _clamp(value, low, high):
+    return min(max(value, low), high)
+
+def _f(value):
+    # std.Expr parses decimals, not scientific notation, so never hand it 1e-05.
+    return "{:.8f}".format(float(value))
+
+# Temperature and tint as per-channel gains. Full travel is a 20% swing.
+_t = _clamp(temperature / 4000.0, -1.0, 1.0) * 0.2
+_n = _clamp(tint / 100.0, -1.0, 1.0) * 0.2
+white = (1.0 + _t, 1.0 + _n, 1.0 - _t)
+
+# Fold the master into each channel once, so the expressions stay short.
+_offset = tuple(offset[i] + offset[3] for i in range(3))
+_gain = tuple(gain[i] * gain[3] * white[i] for i in range(3))
+_lift = tuple(lift[i] + lift[3] for i in range(3))
+_inv_gamma = tuple(1.0 / max(0.01, gamma[i] * gamma[3]) for i in range(3))
+
+_is_neutral = (
+    _offset == (0.0, 0.0, 0.0)
+    and _gain == (1.0, 1.0, 1.0)
+    and _lift == (0.0, 0.0, 0.0)
+    and _inv_gamma == (1.0, 1.0, 1.0)
+    and contrast == 1.0
+    and brightness == 0.0
+    and saturation == 1.0
+    and hue == 0.0
+)
+
+if not _is_neutral:
+    _source_format = clip.format.id
+    _source_is_rgb = clip.format.color_family == vs.RGB
+
+    # resize refuses matrix_in_s when the input is already RGB.
+    if _source_is_rgb:
+        _graded = core.resize.Bicubic(clip, format=vs.RGBS)
+    else:
+        _graded = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s="709")
+
+    # Per-channel stage. v * (1 - lift) + lift is the same curve as
+    # v + lift * (1 - v), written so std.Expr needs no stack duplication.
+    def _channel_expr(i):
+        return (
+            "x {off} + {gn} * {ilift} * {lift} + 0 max 1 min {igamma} pow "
+            "{pivot} - {contrast} * {pivot} + {bright} + 0 max 1 min"
+        ).format(
+            off=_f(_offset[i]), gn=_f(_gain[i]), ilift=_f(1.0 - _lift[i]), lift=_f(_lift[i]),
+            igamma=_f(_inv_gamma[i]), pivot=_f(pivot), contrast=_f(contrast), bright=_f(brightness),
+        )
+
+    _graded = core.std.Expr(_graded, [_channel_expr(0), _channel_expr(1), _channel_expr(2)])
+
+    # Hue and saturation need all three planes at once, so they only run when
+    # they actually do something.
+    if hue != 0.0 or saturation != 1.0:
+        _cos, _sin = math.cos(math.radians(hue)), math.sin(math.radians(hue))
+        _r = core.std.ShufflePlanes(_graded, 0, vs.GRAY)
+        _g = core.std.ShufflePlanes(_graded, 1, vs.GRAY)
+        _b = core.std.ShufflePlanes(_graded, 2, vs.GRAY)
+
+        Y = "x {lr} * y {lg} * + z {lb} * +".format(lr=_f(LUMA_R), lg=_f(LUMA_G), lb=_f(LUMA_B))
+        CR = "x {y} -".format(y=Y)
+        CB = "z {y} -".format(y=Y)
+        CRR = "{cb} {s} * {cr} {c} * +".format(cb=CB, cr=CR, s=_f(_sin), c=_f(_cos))
+        CBR = "{cb} {c} * {cr} {s} * -".format(cb=CB, cr=CR, s=_f(_sin), c=_f(_cos))
+
+        _planes = [_r, _g, _b]
+        _sat = _f(saturation)
+        _out_r = core.std.Expr(_planes, "{y} {crr} {sat} * + 0 max 1 min".format(y=Y, crr=CRR, sat=_sat))
+        _out_b = core.std.Expr(_planes, "{y} {cbr} {sat} * + 0 max 1 min".format(y=Y, cbr=CBR, sat=_sat))
+        # Green falls out of holding luma fixed while red and blue move.
+        _out_g = core.std.Expr(_planes, (
+            "{y} {crr} {lr} * {cbr} {lb} * + {sat} * {lg} / - 0 max 1 min"
+        ).format(y=Y, crr=CRR, cbr=CBR, lr=_f(LUMA_R), lb=_f(LUMA_B), lg=_f(LUMA_G), sat=_sat))
+
+        _graded = core.std.ShufflePlanes([_out_r, _out_g, _out_b], [0, 0, 0], vs.RGB)
+
+    if _source_is_rgb:
+        clip = core.resize.Bicubic(_graded, format=_source_format)
+    else:
+        clip = core.resize.Bicubic(_graded, format=_source_format, matrix_s="709")"""
+
+[variables.lift_r]
+type = "number"
+default = 0.0
+description = "Red lift. Raises the shadow floor."
+
+[variables.lift_g]
+type = "number"
+default = 0.0
+description = "Green lift."
+
+[variables.lift_b]
+type = "number"
+default = 0.0
+description = "Blue lift."
+
+[variables.lift_m]
+type = "number"
+default = 0.0
+description = "Master lift, added to all three channels."
+
+[variables.gamma_r]
+type = "number"
+default = 1.0
+description = "Red gamma. Bends the midtones."
+
+[variables.gamma_g]
+type = "number"
+default = 1.0
+description = "Green gamma."
+
+[variables.gamma_b]
+type = "number"
+default = 1.0
+description = "Blue gamma."
+
+[variables.gamma_m]
+type = "number"
+default = 1.0
+description = "Master gamma, multiplied into all three channels."
+
+[variables.gain_r]
+type = "number"
+default = 1.0
+description = "Red gain. Scales the highlights."
+
+[variables.gain_g]
+type = "number"
+default = 1.0
+description = "Green gain."
+
+[variables.gain_b]
+type = "number"
+default = 1.0
+description = "Blue gain."
+
+[variables.gain_m]
+type = "number"
+default = 1.0
+description = "Master gain, multiplied into all three channels."
+
+[variables.offset_r]
+type = "number"
+default = 0.0
+description = "Red offset. Shifts the whole channel before anything else."
+
+[variables.offset_g]
+type = "number"
+default = 0.0
+description = "Green offset."
+
+[variables.offset_b]
+type = "number"
+default = 0.0
+description = "Blue offset."
+
+[variables.offset_m]
+type = "number"
+default = 0.0
+description = "Master offset, added to all three channels."
+
+[variables.temperature]
+type = "number"
+default = 0.0
+description = "Kelvin offset. Positive warms the image, negative cools it."
+
+[variables.tint]
+type = "number"
+default = 0.0
+description = "Green against magenta."
+
+[variables.contrast]
+type = "number"
+default = 1.0
+description = "Contrast, applied about the pivot."
+
+[variables.pivot]
+type = "number"
+default = 0.435
+description = "The tone contrast rotates around. Resolve's default is 0.435."
+
+[variables.saturation]
+type = "number"
+default = 1.0
+description = "Distance from Rec.709 luma. 0 is monochrome."
+
+[variables.hue]
+type = "number"
+default = 0.0
+description = "Hue rotation in degrees."
+
+[variables.brightness]
+type = "number"
+default = 0.0
+description = "Flat offset applied after contrast."
+
+[editor]
+type = "colorGrade"
+label = "Open grade"
+
+[editor.variables]
+lift   = [ "lift_r",   "lift_g",   "lift_b",   "lift_m"   ]
+gamma  = [ "gamma_r",  "gamma_g",  "gamma_b",  "gamma_m"  ]
+gain   = [ "gain_r",   "gain_g",   "gain_b",   "gain_m"   ]
+offset = [ "offset_r", "offset_g", "offset_b", "offset_m" ]
+temperature = "temperature"
+tint = "tint"
+contrast = "contrast"
+pivot = "pivot"
+saturation = "saturation"
+hue = "hue"
+brightness = "brightness"
+
+[metadata]
+createdAt = "2026-09-04T00:00:00.000Z"

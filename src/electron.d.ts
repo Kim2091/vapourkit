@@ -469,8 +469,10 @@ export type FilterVariables = Record<string, FilterVariable>;
 /**
  * Visual editors are opt-in template metadata. More editor kinds can be added
  * without teaching a filter's Python code about the renderer implementation.
+ * Every editor maps its own roles onto the template's variable names, so the
+ * emitted Python stays readable and editable by hand.
  */
-export interface FilterEditor {
+export interface CropFilterEditor {
   type: 'crop';
   label?: string;
   variables: {
@@ -480,6 +482,29 @@ export interface FilterEditor {
     bottom: string;
   };
 }
+
+/** A trackball's four variables, in R, G, B, master order. */
+export type ColorGradeBallVariables = [string, string, string, string];
+
+export interface ColorGradeFilterEditor {
+  type: 'colorGrade';
+  label?: string;
+  variables: {
+    lift: ColorGradeBallVariables;
+    gamma: ColorGradeBallVariables;
+    gain: ColorGradeBallVariables;
+    offset: ColorGradeBallVariables;
+    temperature: string;
+    tint: string;
+    contrast: string;
+    pivot: string;
+    saturation: string;
+    hue: string;
+    brightness: string;
+  };
+}
+
+export type FilterEditor = CropFilterEditor | ColorGradeFilterEditor;
 
 export interface SegmentSelection {
   enabled: boolean;

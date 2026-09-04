@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useRef } from 'react';
-import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Crop } from 'lucide-react';
+import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Crop, Palette } from 'lucide-react';
 import type { BackendId, FilterBackend, Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { BACKENDS, getBackendDescriptor, resolveFilterBackend } from '../utils/backends';
 import { PythonCodeEditor } from './PythonCodeEditor';
@@ -939,15 +939,19 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                         {/* A .vkfilter opts into a visual editor with [editor]
                             metadata. The button is intentionally generic here;
                             the preview surface selects the matching editor type. */}
-                        {interactiveEditor?.type === 'crop' && onOpenFilterEditor && (
+                        {interactiveEditor && onOpenFilterEditor && (
                           <button
                             onClick={() => handleOpenInteractiveEditor(filter, selectedTemplate)}
                             disabled={isProcessing}
                             className="w-full h-7 px-2 rounded inline-flex items-center justify-center gap-1.5 text-[11.5px] font-semibold bg-accent-500/10 border border-accent-500/40 text-accent-300 hover:bg-accent-500/20 hover:border-accent-500/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={interactiveEditor.label || 'Open visual crop editor'}
+                            title={interactiveEditor.label
+                              || (interactiveEditor.type === 'colorGrade' ? 'Open the grading dock' : 'Open visual crop editor')}
                           >
-                            <Crop className="w-3.5 h-3.5" />
-                            {interactiveEditor.label || 'Edit crop'}
+                            {interactiveEditor.type === 'colorGrade'
+                              ? <Palette className="w-3.5 h-3.5" />
+                              : <Crop className="w-3.5 h-3.5" />}
+                            {interactiveEditor.label
+                              || (interactiveEditor.type === 'colorGrade' ? 'Open grade' : 'Edit crop')}
                           </button>
                         )}
 
