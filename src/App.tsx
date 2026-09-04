@@ -37,9 +37,11 @@ import { useQueueProcessing } from './hooks/useQueueProcessing';
 import { useBatchConfig } from './hooks/useBatchConfig';
 import { useProcessingConfig } from './hooks/useProcessingConfig';
 import { getErrorMessage } from './types/errors';
+import { ChevronLeft } from 'lucide-react';
 import { SetupScreen } from './components/SetupScreen';
 import { VideoPreviewPanel } from './components/VideoPreviewPanel';
-import { ColorGradeDock, GRADE_COMPACT_BELOW } from './components/ColorGradeDock';
+import { ColorGradeDock, GRADE_COMPACT_BELOW, GRADE_DOCK_HEIGHT, GRADE_DOCK_COMPACT_HEIGHT } from './components/ColorGradeDock';
+import { solveScopeColumnWidth, clampScopeColumnWidth } from './components/GradeScopeColumn';
 import type { CompareMode } from './components/ColorGradeOverlay';
 import type { ScopeKind } from './components/GradeScopes';
 import { useColorGrade } from './hooks/useColorGrade';
@@ -803,12 +805,66 @@ function App() {
   const [scopeSample, setScopeSample] = useState<Float32Array | null>(null);
   const [dockScope, setDockScope] = useState<ScopeKind>('parade');
   const [windowHeight, setWindowHeight] = useState(() => window.innerHeight);
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
 
   useEffect(() => {
-    const onResize = () => setWindowHeight(window.innerHeight);
+    const onResize = () => {
+      setWindowHeight(window.innerHeight);
+      setWindowWidth(window.innerWidth);
+    };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Grading is a mode, so it gets the window. A 16:9 window has no vertical
+  // room to spare and the dock is the thing that needs width, so while a grade
+  // is open the settings column folds to a strip and the preview column — dock
+  // included — takes what it was using. One click brings the column back for
+  // as long as this grade stays open.
+  const [settingsRevealed, setSettingsRevealed] = useState(false);
+  const gradeFocus = Boolean(colorGrade.editor) && !settingsRevealed;
+
+  useEffect(() => {
+    if (!colorGrade.editor) setSettingsRevealed(false);
+  }, [colorGrade.editor]);
+
+  // Where the scope column beside the picture gets its width, and why taking
+  // it costs nothing. The picture is laid out object-contain, so in a pane
+  // wider than the frame can use at that height the extra width goes nowhere.
+  // In a 16:9 window it always is: the spare runs from 97px at 1200x675 to
+  // 193px at 2560x1440 *beyond* the 380px the column asks for. So the column
+  // is only ever offered out of width the picture had no use for, and it
+  // disappears the moment that stops being true — a tall window, a portrait
+  // source, or the settings column brought back over the top of a grade.
+  // Dragged by hand this wins over the rule above, and is remembered. Null
+  // means nobody has asked, so the spare-width rule keeps deciding — which is
+  // also what double-clicking the handle puts it back to.
+  const [scopeColumnOverride, setScopeColumnOverride] = useState<number | null>(() => {
+    const stored = Number(window.localStorage.getItem('vk-scope-column-width'));
+    return Number.isFinite(stored) && stored > 0 ? stored : null;
+  });
+
+  useEffect(() => {
+    if (scopeColumnOverride === null) window.localStorage.removeItem('vk-scope-column-width');
+    else window.localStorage.setItem('vk-scope-column-width', String(scopeColumnOverride));
+  }, [scopeColumnOverride]);
+
+  const gradePaneWidth = windowWidth - 63
+    - (queueStore.showQueue ? 240 : 0)
+    - (gradeFocus ? 34 : 5 + settingsWidth);
+
+  const scopeColumnWidth = useMemo(() => {
+    if (!colorGrade.editor) return 0;
+    if (scopeColumnOverride !== null) {
+      return clampScopeColumnWidth(scopeColumnOverride, gradePaneWidth);
+    }
+    const dockHeight = windowHeight < GRADE_COMPACT_BELOW ? GRADE_DOCK_COMPACT_HEIGHT : GRADE_DOCK_HEIGHT;
+    const pictureHeight = windowHeight - (45 + 37 + dockHeight + 41) - 24;
+    const aspect = cropSourceSize && cropSourceSize.height > 0
+      ? cropSourceSize.width / cropSourceSize.height
+      : 16 / 9;
+    return solveScopeColumnWidth(gradePaneWidth, pictureHeight, aspect);
+  }, [colorGrade.editor, scopeColumnOverride, gradePaneWidth, windowHeight, cropSourceSize]);
 
   const gradeStepLabel = useMemo(() => {
     if (!colorGrade.editor || !activeFilterEditor) return '';
@@ -1016,6 +1072,11 @@ function App() {
                       onModeChange: setGradeCompareMode,
                     } : null}
                     onFrameSampled={setScopeSample}
+                    scopeSample={scopeSample}
+                    scopeColumnWidth={scopeColumnWidth}
+                    onScopeColumnResize={(width) =>
+                      setScopeColumnOverride(clampScopeColumnWidth(width, gradePaneWidth))}
+                    onScopeColumnReset={() => setScopeColumnOverride(null)}
                   />
 
                   {colorGrade.editor && (
@@ -1024,7 +1085,7 @@ function App() {
                       scopeSample={scopeSample}
                       stepLabel={gradeStepLabel}
                       compact={windowHeight < GRADE_COMPACT_BELOW}
-                      scopesElsewhere={false}
+                      scopesInColumn={scopeColumnWidth > 0}
                       disabled={isProcessing}
                       dockScope={dockScope}
                       onDockScopeChange={setDockScope}
@@ -1061,14 +1122,30 @@ function App() {
                 aria-label="Resize the settings column"
                 title="Drag to resize the settings column"
                 className={`w-[5px] flex-shrink-0 cursor-ew-resize relative transition-colors ${
-                  isResizingSettings ? 'bg-accent-500/30' : 'hover:bg-accent-500/20'
-                }`}
+                  gradeFocus ? 'hidden' : ''
+                } ${isResizingSettings ? 'bg-accent-500/30' : 'hover:bg-accent-500/20'}`}
               >
                 <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-ink-800" aria-hidden="true" />
               </div>
 
+              {/* Folded settings — the grade has the window; this brings it back */}
+              {gradeFocus && (
+                <button
+                  type="button"
+                  onClick={() => setSettingsRevealed(true)}
+                  title="Show the settings column"
+                  aria-label="Show the settings column"
+                  className="w-[34px] flex-shrink-0 flex flex-col items-center gap-2 py-2.5 bg-ink-900 border-l border-ink-800 text-ink-500 hover:text-ink-200 hover:bg-ink-850 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-inset"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                  <span className="font-display text-[10px] font-semibold uppercase tracking-[0.16em] [writing-mode:vertical-rl]">
+                    Settings
+                  </span>
+                </button>
+              )}
+
               {/* Settings column — pixel width, dragged at its left edge */}
-                <div ref={rightPanelRef} style={{ width: settingsWidth }} className="flex-shrink-0 flex flex-col overflow-y-auto overflow-x-hidden min-h-0 bg-ink-950">
+                <div ref={rightPanelRef} style={{ width: settingsWidth }} className={`flex-shrink-0 flex-col overflow-y-auto overflow-x-hidden min-h-0 bg-ink-950 ${gradeFocus ? 'hidden' : 'flex'}`}>
                   {/* Video Input */}
                   <VideoInputPanel
                     editingLabel={queueEditingLabel}

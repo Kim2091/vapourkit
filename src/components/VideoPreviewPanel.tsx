@@ -3,6 +3,7 @@ import { Video, Loader2, XCircle, FolderOpen, GitCompare, Crop, X, Palette } fro
 import { PrivacyVeil } from './PrivacyVeil';
 import { CropEditorOverlay } from './CropEditorOverlay';
 import { ColorGradeOverlay, type CompareMode } from './ColorGradeOverlay';
+import { GradeScopeColumn } from './GradeScopeColumn';
 import { sampleFrame } from '../utils/gradeRenderer';
 import type { GradeValues } from '../utils/colorGrade';
 import type { Filter, FilterParameterValues } from '../electron.d';
@@ -42,6 +43,14 @@ interface VideoPreviewPanelProps {
   gradePreview?: GradePreview | null;
   /** Fires with a small RGB sample of the ungraded frame, for the scopes. */
   onFrameSampled?: (sample: Float32Array | null) => void;
+  /** That same sample, back again, for the scope column beside the picture. */
+  scopeSample?: Float32Array | null;
+  /** Width for the scope column, or 0 when the pane is too narrow for one. */
+  scopeColumnWidth?: number;
+  /** Fires with the width the handle was dragged to. */
+  onScopeColumnResize?: (width: number) => void;
+  /** Double-clicking the handle gives the width back to the automatic rule. */
+  onScopeColumnReset?: () => void;
 }
 
 export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
@@ -61,11 +70,38 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   cropSourceSize,
   gradePreview = null,
   onFrameSampled,
+  scopeSample = null,
+  scopeColumnWidth = 0,
+  onScopeColumnResize,
+  onScopeColumnReset,
 }: VideoPreviewPanelProps) => {
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
   const previewImageRef = useRef<HTMLImageElement>(null);
   const [previewImageSize, setPreviewImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [resizingScopes, setResizingScopes] = useState(false);
   const cropEditor = activeFilterEditor?.editor?.type === 'crop' ? activeFilterEditor.editor : null;
+
+  // Dragging left widens the column, so the delta is subtracted. The parent
+  // owns the clamping: it is the one that knows the pane's width.
+  const beginScopeResize = useCallback((event: React.MouseEvent) => {
+    if (!onScopeColumnResize) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = scopeColumnWidth;
+    setResizingScopes(true);
+    const onMove = (move: MouseEvent) => onScopeColumnResize(startWidth - (move.clientX - startX));
+    const onUp = () => {
+      setResizingScopes(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+  }, [onScopeColumnResize, scopeColumnWidth]);
 
   // A data: URL can finish loading before this effect flushes, so clearing
   // unconditionally would discard a size onLoad had already recorded and
@@ -157,7 +193,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           {activeFilterEditor && (
             <button
               onClick={onCloseFilterEditor}
-              className="h-[22px] px-2 rounded inline-flex items-center gap-1 text-[11px] font-medium border bg-ink-850 border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors"
+              className="h-[22px] px-2 rounded inline-flex items-center gap-1 text-[11px] font-semibold border border-accent-500 bg-accent-500 text-accent-ink hover:bg-accent-400 hover:border-accent-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 focus-visible:ring-offset-ink-850"
               title="Close visual filter editor"
             >
               <X className="w-3.5 h-3.5" />
@@ -166,7 +202,8 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           )}
         </div>
       </div>
-      <div className="flex-1 flex items-center justify-center p-3 min-h-0 overflow-auto">
+      <div className="flex-1 flex min-h-0 min-w-0">
+      <div className="flex-1 flex items-center justify-center p-3 min-h-0 min-w-0 overflow-auto">
         {previewFrame ? (
           <PrivacyVeil
             enabled={privacyMode}
@@ -251,6 +288,33 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
             <p className="text-[12.5px]">Preview will appear here during processing</p>
           </div>
         )}
+      </div>
+
+      {/* Scopes, beside the picture rather than under it. A 16:9 picture is
+          bound by the pane's height, so this column is drawn from width the
+          picture could not have used anyway. */}
+      {gradePreview && scopeColumnWidth > 0 && (
+        <>
+          <div
+            onMouseDown={beginScopeResize}
+            onDoubleClick={onScopeColumnReset}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the scopes"
+            title="Drag to resize the scopes — double-click to fit them to the spare width"
+            className={`w-[5px] flex-shrink-0 cursor-ew-resize relative transition-colors ${
+              resizingScopes ? 'bg-accent-500/30' : 'hover:bg-accent-500/20'
+            }`}
+          >
+            <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-ink-800" aria-hidden="true" />
+          </div>
+          <GradeScopeColumn
+            sample={scopeSample}
+            values={gradePreview.values}
+            width={scopeColumnWidth}
+          />
+        </>
+      )}
       </div>
     </div>
   );

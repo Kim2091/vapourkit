@@ -5,7 +5,9 @@
 // puck somewhere you did not ask for. Double-click the disc resets the ball,
 // double-click the bar resets only the master. The four numbers underneath are
 // R, G, B and master, and each scrubs — that is where "split by R, G and B"
-// actually lives, and it is what you read back in the saved .vkfilter.
+// actually lives, and it is what you read back in the saved .vkfilter. They
+// wrap to two rows rather than four columns, because five monospace digits
+// four times over has never fitted across a ball this size.
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ballToPuck, puckToBall, BALL_NEUTRAL, type BallName, type BallValues } from '../utils/colorGrade';
@@ -32,6 +34,28 @@ const MASTER_RANGE: Record<BallName, { min: number; max: number }> = {
 };
 
 const CHANNELS = ['r', 'g', 'b', 'm'] as const;
+
+/** A readout cell holds five monospace characters — "1.000", "-.120", "+.020"
+    — which at 9px is about 27px, so 29 is one that never collides with its
+    neighbour. Four of them across an 84px ball is 21px each, which is what
+    made the numbers overlap into a smear at every size; the row wraps instead
+    of overflowing, and the column widens if even two will not fit. */
+const READOUT_CELL = 29;
+const READOUT_GAP = 2;
+
+/** How many readout cells fit across a ball of this size. */
+export function readoutColumns(size: number): number {
+  return size >= READOUT_CELL * 4 + READOUT_GAP * 3 ? 4 : 2;
+}
+
+/** A trackball column is as wide as its ball, or its numbers, whichever needs
+    more. The dock's width solver has to agree with this or the primaries
+    block silently overflows. */
+export function trackballColumnWidth(size: number): number {
+  const columns = readoutColumns(size);
+  return Math.max(size, columns * READOUT_CELL + (columns - 1) * READOUT_GAP);
+}
+
 const CHANNEL_TINT: Record<(typeof CHANNELS)[number], string> = {
   r: 'text-bad-400',
   g: 'text-ok-400',
@@ -174,9 +198,13 @@ export const Trackball = memo<TrackballProps>(({
   };
 
   const radius = size / 2;
+  const columns = readoutColumns(size);
 
   return (
-    <div className="flex flex-col items-center gap-1.5 flex-shrink-0" style={{ width: size }}>
+    <div
+      className="flex flex-col items-center gap-1.5 flex-shrink-0"
+      style={{ width: trackballColumnWidth(size) }}
+    >
       <div
         ref={discRef}
         role="slider"
@@ -227,7 +255,8 @@ export const Trackball = memo<TrackballProps>(({
         onMouseDown={(event) => begin('master', event)}
         onDoubleClick={resetMaster}
         title={`${label} master — drag to change, double-click to reset`}
-        className={`w-full h-[3px] rounded-sm bg-ink-800 relative
+        style={{ width: size }}
+        className={`h-[3px] rounded-sm bg-ink-800 relative
           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900
           ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-ew-resize'}`}
       >
@@ -244,7 +273,13 @@ export const Trackball = memo<TrackballProps>(({
       </span>
       <span className="text-[9px] text-ink-600 leading-none -mt-1">{hint}</span>
 
-      <div className="grid grid-cols-4 gap-[2px] w-full">
+      <div
+        className="grid w-full"
+        style={{
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          gap: READOUT_GAP,
+        }}
+      >
         {CHANNELS.map((channel, index) => (
           <button
             key={channel}
