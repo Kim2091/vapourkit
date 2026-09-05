@@ -10,7 +10,7 @@ code = """
 # Operation order matches DaVinci Resolve, and matches src/utils/colorGrade.ts
 # so the live preview and this render agree:
 #
-#   per channel:  offset -> gain (incl. white balance) -> lift -> gamma
+#   per channel:  offset -> one lift/gain ramp (incl. white balance) -> gamma
 #                 -> contrast about the pivot -> brightness
 #   across:       hue rotation -> saturation
 
@@ -47,6 +47,8 @@ white = (1.0 + _t, 1.0 + _n, 1.0 - _t)
 _offset = tuple(offset[i] + offset[3] for i in range(3))
 _gain = tuple(gain[i] * gain[3] * white[i] for i in range(3))
 _lift = tuple(lift[i] + lift[3] for i in range(3))
+# Black lands on lift, white lands on gain. Slope carries both.
+_slope = tuple(_gain[i] - _lift[i] for i in range(3))
 _inv_gamma = tuple(1.0 / max(0.01, gamma[i] * gamma[3]) for i in range(3))
 
 _is_neutral = (
@@ -70,14 +72,21 @@ if not _is_neutral:
     else:
         _graded = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s="709")
 
-    # Per-channel stage. v * (1 - lift) + lift is the same curve as
-    # v + lift * (1 - v), written so std.Expr needs no stack duplication.
+    # Per-channel stage. One ramp: v * (gain - lift) + lift puts black on
+    # lift and white on gain without either dragging the other.
+    #
+    # Only the lower bound is clamped before pow, which needs a non-negative
+    # base. The clip is RGBS, so anything above 1 is real headroom that gamma
+    # and contrast can still pull back; flattening it here threw that away and
+    # left the scopes unable to show the difference between just-landed and
+    # crushed. The output clamp stays, because that value is displayed and
+    # baked into LUTs.
     def _channel_expr(i):
         return (
-            "x {off} + {gn} * {ilift} * {lift} + 0 max 1 min {igamma} pow "
+            "x {off} + {slope} * {lift} + 0 max {igamma} pow "
             "{pivot} - {contrast} * {pivot} + {bright} + 0 max 1 min"
         ).format(
-            off=_f(_offset[i]), gn=_f(_gain[i]), ilift=_f(1.0 - _lift[i]), lift=_f(_lift[i]),
+            off=_f(_offset[i]), slope=_f(_slope[i]), lift=_f(_lift[i]),
             igamma=_f(_inv_gamma[i]), pivot=_f(pivot), contrast=_f(contrast), bright=_f(brightness),
         )
 

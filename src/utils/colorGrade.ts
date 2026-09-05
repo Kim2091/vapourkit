@@ -185,9 +185,17 @@ export function whiteBalance(temperature: number, tint: number): { r: number; g:
 /** Everything a single channel does, before the channels are mixed. */
 function channel(value: number, offset: number, gain: number, lift: number, invGamma: number, values: GradeValues): number {
   let v = value + offset;
-  v = v * gain;
-  v = v * (1 - lift) + lift;
-  v = clamp(v, 0, 1);
+  // One ramp, so black lands on lift and white lands on gain, independently.
+  // Scaling by gain and then mapping through lift made white come out at
+  // gain + lift * (1 - gain): every lift move dragged the highlights with it.
+  // At the default gain of 1 the two are identical, so only grades using both
+  // controls change.
+  v = v * (gain - lift) + lift;
+  // pow needs a non-negative base and nothing more. Clamping the top here
+  // flattened every highlight above 1 into the same value before gamma and
+  // contrast had a chance to bring them back, and made an overshoot of 0.001
+  // look exactly like an overshoot of 0.05 on the scopes.
+  v = Math.max(v, 0);
   v = Math.pow(v, invGamma);
   v = (v - values.pivot) * values.contrast + values.pivot;
   v = v + values.brightness;
@@ -360,9 +368,8 @@ void main() {
   vec3 c = texture2D(uFrame, vUv).rgb;
 
   c = c + uOffset;
-  c = c * uGain;
-  c = c * (vec3(1.0) - uLift) + uLift;
-  c = clamp(c, 0.0, 1.0);
+  c = c * (uGain - uLift) + uLift;
+  c = max(c, vec3(0.0));
   c = pow(c, uInvGamma);
   c = (c - vec3(uPivot)) * uContrast + vec3(uPivot);
   c = c + vec3(uBrightness);

@@ -81,6 +81,44 @@ describe('grade model', () => {
     }
   });
 
+  it('lands black on lift and white on gain, independently', () => {
+    // The property that makes the two controls usable: setting a black point
+    // must not drag the highlights, and setting a white point must not drag
+    // the floor. Scaling by gain and then mapping through lift put white at
+    // gain + lift * (1 - gain) instead, so every lift move shifted it.
+    const values = {
+      ...GRADE_NEUTRAL,
+      lift: { r: 0, g: 0, b: 0, m: 0.1 },
+      gain: { r: 1, g: 1, b: 1, m: 0.8 },
+    };
+
+    const black = gradePixel([0, 0, 0], values);
+    const white = gradePixel([1, 1, 1], values);
+
+    black.forEach(v => expect(v).toBeCloseTo(0.1, 6));
+    white.forEach(v => expect(v).toBeCloseTo(0.8, 6));
+  });
+
+  it('keeps highlight headroom alive until the output', () => {
+    // Two pixels driven above 1 by gain must stay distinguishable, so a gamma
+    // that pulls them back recovers detail rather than a flat patch. Clamping
+    // before pow made both of these land on exactly 1.
+    const values = {
+      ...GRADE_NEUTRAL,
+      gain: { r: 1, g: 1, b: 1, m: 1.5 },
+      contrast: 0.5,
+      pivot: 0.5,
+    };
+
+    // Gain drives both above 1, then contrast about the pivot brings them
+    // back. Clamped before pow, both arrived as exactly 1 and came out equal.
+    const [lower] = gradePixel([0.7, 0.7, 0.7], values);
+    const [higher] = gradePixel([0.9, 0.9, 0.9], values);
+
+    expect(lower).toBeLessThan(higher);
+    expect(higher).toBeLessThan(1);
+  });
+
   it('survives a zero gamma without producing NaN', () => {
     const out = gradePixel([0.5, 0.5, 0.5], { ...GRADE_NEUTRAL, gamma: { r: 0, g: 0, b: 0, m: 0 } });
     out.forEach(value => expect(Number.isFinite(value)).toBe(true));
@@ -176,8 +214,8 @@ function buildExpressions(values: GradeValues) {
   const terms = channelTerms(values);
   const f = (value: number) => value.toFixed(8);
   const channelExpr = (c: 'r' | 'g' | 'b') =>
-    `x ${f(terms.offset[c])} + ${f(terms.gain[c])} * ${f(1 - terms.lift[c])} * ${f(terms.lift[c])} + ` +
-    `0 max 1 min ${f(terms.invGamma[c])} pow ${f(values.pivot)} - ${f(values.contrast)} * ` +
+    `x ${f(terms.offset[c])} + ${f(terms.gain[c] - terms.lift[c])} * ${f(terms.lift[c])} + ` +
+    `0 max ${f(terms.invGamma[c])} pow ${f(values.pivot)} - ${f(values.contrast)} * ` +
     `${f(values.pivot)} + ${f(values.brightness)} + 0 max 1 min`;
 
   const angle = (values.hue * Math.PI) / 180;

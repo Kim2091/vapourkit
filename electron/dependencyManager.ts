@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
+import * as crypto from 'crypto';
 import * as TOML from '@iarna/toml';
 import axios from 'axios';
 import { app, BrowserWindow} from 'electron';
@@ -592,6 +593,41 @@ export class DependencyManager {
     }
   }
 
+  /**
+   * SHA-256 of every shipped Color Grade `code` block whose maths the current
+   * app no longer matches.
+   *
+   * The grade is implemented three times over — this template, the WebGL
+   * shader, and the reference in colorGrade.ts — and they have to agree or the
+   * preview lies about the render. So when the maths changes, an untouched
+   * installed template has to come along. A user's own edits still win: only
+   * an exact match to something we shipped is replaced.
+   */
+  private static readonly SUPERSEDED_GRADE_CODE = new Set([
+    // Pre-2.0.1: gain and lift as two steps, which put white at
+    // gain + lift * (1 - gain), and a clamp to 1 before pow that threw away
+    // highlight headroom.
+    '741f8c831597afcdb1f00b09bf57fdcbcdb3aceeb2dc873ac4242dbc16555428',
+  ]);
+
+  private async upgradeSupersededGradeTemplate(sourcePath: string, destPath: string): Promise<boolean> {
+    try {
+      const template = TOML.parse(await fs.readFile(destPath, 'utf-8')) as { name?: string; code?: string };
+      if (template.name !== 'Color Grade' || !template.code) return false;
+
+      const code = template.code.replace(/\r\n?/g, '\n').trim();
+      const digest = crypto.createHash('sha256').update(code).digest('hex');
+      if (!DependencyManager.SUPERSEDED_GRADE_CODE.has(digest)) return false;
+
+      await fs.copy(sourcePath, destPath, { overwrite: true });
+      logger.dependency('Updated the unmodified Color Grade template to the current grade maths');
+      return true;
+    } catch (error) {
+      logger.warn('Could not inspect the existing Color Grade template for upgrade:', error);
+      return false;
+    }
+  }
+
   private async copyTemplateIfNeeded(userPath: string, bundledPath: string, logName: string): Promise<void> {
     if (!await fs.pathExists(userPath)) {
       if (await fs.pathExists(bundledPath)) {
@@ -658,6 +694,8 @@ export class DependencyManager {
           await fs.copy(sourcePath, destPath);
           logger.dependency(`Copied filter template: ${file}`);
         } else if (isPluginCatalog && file === 'Crop.vkfilter' && await this.upgradeLegacyCropTemplate(sourcePath, destPath)) {
+          // The migration itself logged the update.
+        } else if (file === 'Color Grade.vkfilter' && await this.upgradeSupersededGradeTemplate(sourcePath, destPath)) {
           // The migration itself logged the update.
         } else {
           logger.dependency(`Filter template already exists: ${file}`);
