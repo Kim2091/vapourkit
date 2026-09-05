@@ -4,9 +4,23 @@ import { PrivacyVeil } from './PrivacyVeil';
 import { CropEditorOverlay } from './CropEditorOverlay';
 import { ColorGradeOverlay, type CompareMode } from './ColorGradeOverlay';
 import { GradeScopeColumn } from './GradeScopeColumn';
-import { sampleFrame } from '../utils/gradeRenderer';
+import { PreviewStepRail } from './PreviewStepRail';
+import { ChainPreviewCanvas } from './ChainPreviewCanvas';
+import { sampleFrame, sampleBuffer } from '../utils/gradeRenderer';
 import type { GradeValues } from '../utils/colorGrade';
+import type { ChainPreviewFrame, ChainPreviewStep } from '../hooks/useChainPreview';
 import type { Filter, FilterParameterValues } from '../electron.d';
+
+/** The open preview session, as the panel needs to see it. */
+export interface ChainPreview {
+  steps: ChainPreviewStep[];
+  selected: number;
+  frame: ChainPreviewFrame | null;
+  isRendering: boolean;
+  isStale: boolean;
+  onSelect: (index: number) => void;
+  onReload: () => void;
+}
 
 /** Everything the preview needs to show an open grade step. */
 export interface GradePreview {
@@ -53,6 +67,8 @@ interface VideoPreviewPanelProps {
   onScopeColumnReset?: () => void;
   /** The grading panel's type base, shared with the dock. */
   gradeBasePx?: number;
+  /** Set while a preview session is open, so the panel shows the chain. */
+  chainPreview?: ChainPreview | null;
 }
 
 export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
@@ -77,6 +93,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   onScopeColumnResize,
   onScopeColumnReset,
   gradeBasePx = 12,
+  chainPreview = null,
 }: VideoPreviewPanelProps) => {
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
   const previewImageRef = useRef<HTMLImageElement>(null);
@@ -123,6 +140,14 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
     if (!onFrameSampled) return;
     onFrameSampled(sampleFrame(image, image.naturalWidth, image.naturalHeight));
   }, [onFrameSampled]);
+
+  // A session frame never becomes an <img>, so it is sampled from the buffer
+  // instead. Same scopes, real pixels.
+  const chainFrame = chainPreview?.frame ?? null;
+  useEffect(() => {
+    if (!chainFrame || !onFrameSampled) return;
+    onFrameSampled(sampleBuffer(chainFrame.pixels, chainFrame.width, chainFrame.height));
+  }, [chainFrame, onFrameSampled]);
 
   return (
     <div className="flex-1 bg-ink-950 overflow-hidden flex flex-col min-h-0">
@@ -205,9 +230,30 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           )}
         </div>
       </div>
+      {chainPreview && (
+        <PreviewStepRail
+          steps={chainPreview.steps}
+          selected={chainPreview.selected}
+          isRendering={chainPreview.isRendering}
+          isStale={chainPreview.isStale}
+          frameSize={chainFrame ? { width: chainFrame.width, height: chainFrame.height } : null}
+          onSelect={chainPreview.onSelect}
+          onReload={chainPreview.onReload}
+        />
+      )}
       <div className="flex-1 flex min-h-0 min-w-0">
       <div className="flex-1 flex items-center justify-center p-3 min-h-0 min-w-0 overflow-auto">
-        {previewFrame ? (
+        {chainFrame ? (
+          <PrivacyVeil
+            enabled={privacyMode}
+            className="w-full h-full"
+            label="Preview hidden — click to reveal"
+          >
+            <div className="relative w-full h-full flex items-center justify-center">
+              <ChainPreviewCanvas frame={chainFrame} />
+            </div>
+          </PrivacyVeil>
+        ) : previewFrame ? (
           <PrivacyVeil
             enabled={privacyMode}
             className="w-full h-full"

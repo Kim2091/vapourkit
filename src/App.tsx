@@ -47,6 +47,7 @@ import { bakeGradeToLut, writeLut, writeCube, parseLut, to3d, type LutFormat } f
 import type { CompareMode } from './components/ColorGradeOverlay';
 import type { ScopeKind } from './components/GradeScopes';
 import { useColorGrade } from './hooks/useColorGrade';
+import { useChainPreview } from './hooks/useChainPreview';
 import { VideoInputPanel } from './components/VideoInputPanel';
 import { VideoInfoPanel } from './components/VideoPanel';
 import { OutputSettingsPanel } from './components/OutputSettingsPanel';
@@ -738,8 +739,48 @@ function App() {
   // Which frame the preview is showing — drives the scrubber playhead.
   const [playheadFrame, setPlayheadFrame] = useState<number | null>(null);
 
+  // The in-app previewer. While its session is open the picture comes from
+  // VapourSynth at real resolution, through the same script the render uses,
+  // rather than from ffmpeg's 640px JPEG.
+  //
+  // A fixed width for now; sizing it to the pane arrives with the zoom work,
+  // which is when the difference starts to matter.
+  const chainPreview = useChainPreview({
+    videoInfo,
+    filters,
+    selectedModel,
+    defaultBackend,
+    numStreams,
+    segment,
+    previewWidth: 1280,
+    onError: (message) => addConsoleLog(`Preview: ${message}`),
+  });
+
+  const {
+    isOpen: chainPreviewOpen,
+    open: openChainPreview,
+    close: closeChainPreview,
+    seek: seekChainPreview,
+  } = chainPreview;
+
+  const handleToggleChainPreview = useCallback(() => {
+    if (chainPreviewOpen) {
+      void closeChainPreview();
+      return;
+    }
+    addConsoleLog('Opening the chain preview...');
+    void openChainPreview();
+  }, [chainPreviewOpen, openChainPreview, closeChainPreview, addConsoleLog]);
+
   const handleSeekFrame = useCallback(async (frameNumber: number) => {
     if (!videoInfo) return;
+
+    // With a session open the frame comes from the chain, not from ffmpeg.
+    if (chainPreviewOpen) {
+      seekChainPreview(frameNumber);
+      setPlayheadFrame(frameNumber);
+      return;
+    }
     
     try {
       const frameImage = await window.electronAPI.getVideoFrameAt(
@@ -756,7 +797,7 @@ function App() {
       // Silently fail - frame extraction is non-critical
       console.warn('Failed to extract frame:', error);
     }
-  }, [videoInfo, updatePreviewFrame]);
+  }, [videoInfo, updatePreviewFrame, chainPreviewOpen, seekChainPreview]);
 
   const activeFilterEditor = activeFilterEditorId
     ? filters.find(filter => filter.id === activeFilterEditorId) ?? null
@@ -1177,6 +1218,15 @@ function App() {
                       setScopeColumnOverride(clampScopeColumnWidth(width, gradePaneWidth))}
                     onScopeColumnReset={() => setScopeColumnOverride(null)}
                     gradeBasePx={gradeBasePx(gradePaneWidth, windowHeight < GRADE_COMPACT_BELOW)}
+                    chainPreview={chainPreview.isOpen ? {
+                      steps: chainPreview.steps,
+                      selected: chainPreview.selected,
+                      frame: chainPreview.frame,
+                      isRendering: chainPreview.isRendering,
+                      isStale: chainPreview.isStale,
+                      onSelect: chainPreview.select,
+                      onReload: () => void chainPreview.open(),
+                    } : null}
                   />
 
                   {colorGrade.editor && (
@@ -1333,6 +1383,8 @@ function App() {
           validateWorkflow={validateWorkflow}
           cancelValidation={cancelValidation}
           isLaunchingPreviewer={isLaunchingPreviewer}
+          chainPreviewOpen={chainPreview.isOpen}
+          isOpeningChainPreview={chainPreview.isOpening}
           previewerStatus={previewerStatus}
           videoInfo={videoInfo}
           selectedModel={selectedModel}
@@ -1347,6 +1399,7 @@ function App() {
           queue={queue}
           handleForceStop={handleForceStop}
           handleLaunchPreviewer={handleLaunchPreviewer}
+          handleToggleChainPreview={handleToggleChainPreview}
           handleUpscale={handleUpscale}
           handleCancelUpscale={handleCancelUpscale}
           handleStartQueue={handleStartQueue}

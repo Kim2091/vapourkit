@@ -7,7 +7,7 @@
 
 import { memo } from 'react';
 import {
-  Sparkles, XCircle, Loader2, CheckCircle, AlertCircle, Play, Gauge,
+  Sparkles, XCircle, Loader2, CheckCircle, AlertCircle, Play, Gauge, Layers,
   AlertTriangle, Terminal,
 } from 'lucide-react';
 import type { BackendId, QueueItem, SegmentSelection, Filter, UpscaleProgress } from '../electron.d';
@@ -38,6 +38,9 @@ interface ActionBarProps {
   // Preview state
   isLaunchingPreviewer: boolean;
   previewerStatus: 'idle' | 'success' | 'error';
+  /** True while the in-app chain preview session is open. */
+  chainPreviewOpen: boolean;
+  isOpeningChainPreview: boolean;
 
   // Video/model state
   videoInfo: any;
@@ -57,6 +60,7 @@ interface ActionBarProps {
   // Handlers
   handleForceStop: () => void;
   handleLaunchPreviewer: () => void;
+  handleToggleChainPreview: () => void;
   handleUpscale: (model: string, defaultBackend: BackendId, filters: Filter[], numStreams: number, segment: SegmentSelection, benchmarkMode: boolean) => void;
   handleCancelUpscale: () => void;
   handleStartQueue: () => void;
@@ -96,6 +100,8 @@ export const ActionBar = memo(function ActionBar({
   cancelValidation,
   isLaunchingPreviewer,
   previewerStatus,
+  chainPreviewOpen,
+  isOpeningChainPreview,
   videoInfo,
   selectedModel,
   defaultBackend,
@@ -109,6 +115,7 @@ export const ActionBar = memo(function ActionBar({
   queue,
   handleForceStop,
   handleLaunchPreviewer,
+  handleToggleChainPreview,
   handleUpscale,
   handleCancelUpscale,
   handleStartQueue,
@@ -225,6 +232,30 @@ export const ActionBar = memo(function ActionBar({
             : validationStatus === 'success' ? <><CheckCircle className="w-4 h-4" />Valid</>
             : validationStatus === 'error' ? <><AlertCircle className="w-4 h-4" />Failed</>
             : <><CheckCircle className="w-4 h-4" />Validate</>}
+        </button>
+      )}
+
+      {/* The in-app previewer. vs-view stays beside it for scening, comparison
+          and the spectrum tools; this is the one for the daily loop. */}
+      {!isProcessing && (
+        <button
+          onClick={handleToggleChainPreview}
+          disabled={!videoInfo || isOpeningChainPreview}
+          aria-pressed={chainPreviewOpen}
+          className={
+            isOpeningChainPreview
+              ? `${BTN} bg-ink-800 border-ink-750 text-ink-300 cursor-wait`
+              : chainPreviewOpen
+                ? `${BTN} bg-accent-500/14 border-accent-500/50 text-accent-300 hover:bg-accent-500/20`
+                : BTN_SECONDARY
+          }
+          title={chainPreviewOpen
+            ? 'Close the chain preview'
+            : 'Preview each step of the chain, at full resolution, in the app'}
+        >
+          {isOpeningChainPreview
+            ? <><Loader2 className="w-4 h-4 animate-spin" />Opening</>
+            : <><Layers className="w-4 h-4" />{chainPreviewOpen ? 'Close' : 'Inspect'}</>}
         </button>
       )}
 

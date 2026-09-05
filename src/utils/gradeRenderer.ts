@@ -117,6 +117,27 @@ export class GradeRenderer {
     gl.viewport(0, 0, width, height);
   }
 
+  /**
+   * Uploads packed RGB24 straight from the preview session.
+   *
+   * The session sends three bytes per pixel with no row padding, so the
+   * unpack alignment has to drop to 1 — WebGL defaults to 4, which would
+   * shear the picture on any width that is not a multiple of four.
+   */
+  setFrameBuffer(pixels: Uint8Array, width: number, height: number): void {
+    if (this.isLost) return;
+    const gl = this.gl;
+    this.size = { width, height };
+    this.canvas.width = width;
+    this.canvas.height = height;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, pixels);
+    gl.viewport(0, 0, width, height);
+  }
+
   get frameSize(): { width: number; height: number } {
     return this.size;
   }
@@ -170,6 +191,43 @@ export class GradeRenderer {
  * small enough to re-grade at interactive rates without touching the GPU.
  */
 export const SCOPE_SAMPLE_WIDTH = 240;
+
+/**
+ * The same sample, taken from a packed RGB24 buffer instead of an image.
+ *
+ * Frames from the preview session never become an <img>, so there is nothing
+ * for sampleFrame to draw. Striding the buffer is also the cheaper path: no
+ * canvas, no getImageData, and no chance of a taint failure.
+ */
+export function sampleBuffer(
+  pixels: Uint8Array,
+  width: number,
+  height: number,
+): Float32Array | null {
+  if (!width || !height) return null;
+  const sampleWidth = Math.min(SCOPE_SAMPLE_WIDTH, width);
+  const sampleHeight = Math.max(1, Math.round((sampleWidth * height) / width));
+
+  const out = new Float32Array(sampleWidth * sampleHeight * 3 + 2);
+  out[0] = sampleWidth;
+  out[1] = sampleHeight;
+
+  // Nearest-neighbour: the scopes want the distribution, and averaging
+  // neighbours would pull clipped pixels back inside the range, which is
+  // precisely the thing a grader is looking for.
+  let o = 2;
+  for (let y = 0; y < sampleHeight; y++) {
+    const sourceY = Math.min(height - 1, Math.floor((y * height) / sampleHeight));
+    for (let x = 0; x < sampleWidth; x++) {
+      const sourceX = Math.min(width - 1, Math.floor((x * width) / sampleWidth));
+      const i = (sourceY * width + sourceX) * 3;
+      out[o++] = pixels[i] / 255;
+      out[o++] = pixels[i + 1] / 255;
+      out[o++] = pixels[i + 2] / 255;
+    }
+  }
+  return out;
+}
 
 export function sampleFrame(image: CanvasImageSource, width: number, height: number): Float32Array | null {
   if (!width || !height) return null;
