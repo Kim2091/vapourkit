@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Video, Loader2, XCircle, FolderOpen, GitCompare, Crop, X, Palette } from 'lucide-react';
+import { Video, Loader2, XCircle, FolderOpen, GitCompare, Crop, X, Palette, Ban, Pipette } from 'lucide-react';
 import { PrivacyVeil } from './PrivacyVeil';
 import { CropEditorOverlay } from './CropEditorOverlay';
 import { ColorGradeOverlay, type CompareMode } from './ColorGradeOverlay';
@@ -165,16 +165,31 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
 
   // The grade belongs on exactly one step: the one feeding it. Anywhere else
   // the picture is shown as it renders.
-  useEffect(() => {
-    if (!gradePreview) setPicking(false);
-  }, [gradePreview]);
-
   const gradeIsLive = Boolean(
     gradePreview &&
     chainPreview &&
     chainPreview.liveGradeStep !== null &&
     chainPreview.selected === chainPreview.liveGradeStep,
   );
+
+  // Clip marks are drawn by the shader, so they need a picture going through
+  // it: any session frame, or the scrubber frame once a grade has put the
+  // overlay over it. A bare <img> has nothing to stripe.
+  const canShowClipping = Boolean(chainFrame || (previewFrame && gradePreview));
+
+  // The picker solves this grade's lift from the picture entering it. In a
+  // session that is only true on the step feeding the grade; outside one the
+  // <img> is that picture by definition.
+  const canPickBlack = Boolean(
+    gradePreview?.onPickBlack && (chainFrame ? gradeIsLive : previewFrame),
+  );
+
+  // Disarmed the moment it stops being offered — otherwise closing the dock or
+  // stepping off the grade's input leaves a click armed with no way to see it.
+  useEffect(() => {
+    if (!canPickBlack) setPicking(false);
+  }, [canPickBlack]);
+
   useEffect(() => {
     if (!chainFrame || !onFrameSampled) return;
     onFrameSampled(sampleBuffer(chainFrame.pixels, chainFrame.width, chainFrame.height));
@@ -217,6 +232,38 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 Hold <kbd className="font-mono">B</kbd> for before
               </span>
             </>
+          )}
+          {/* Grading tools, not chain tools: they belong to the picture, so
+              they stay put whether or not a preview session is open. */}
+          {canPickBlack && (
+            <button
+              onClick={() => setPicking(value => !value)}
+              aria-pressed={picking}
+              title="Click something that should be black, and lift is solved per channel to put it there — level and colour cast in one go."
+              className={`inline-flex items-center gap-1 h-[18px] px-1.5 rounded border text-[10px] whitespace-nowrap flex-shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
+                picking
+                  ? 'border-accent-500/50 bg-accent-500/12 text-accent-300'
+                  : 'border-ink-750 text-ink-500 hover:text-ink-300'
+              }`}
+            >
+              <Pipette className="w-3 h-3" />
+              {picking ? 'Pick a black' : 'Black point'}
+            </button>
+          )}
+          {canShowClipping && (
+            <button
+              onClick={() => setShowClipping(value => !value)}
+              aria-pressed={showClipping}
+              title="Stripe the pixels sitting on the clip point — red at the top, blue at the bottom. Follows the grade as you drag it."
+              className={`inline-flex items-center gap-1 h-[18px] px-1.5 rounded border text-[10px] whitespace-nowrap flex-shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
+                showClipping
+                  ? 'border-accent-500/50 bg-accent-500/12 text-accent-300'
+                  : 'border-ink-750 text-ink-500 hover:text-ink-300'
+              }`}
+            >
+              <Ban className="w-3 h-3" />
+              Clip
+            </button>
           )}
         </div>
         <div className="flex items-center gap-1.5 self-center">
@@ -269,12 +316,6 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           isStale={chainPreview.isStale}
           bakedFromStep={chainPreview.bakedFromStep}
           frame={chainFrame}
-          showClipping={showClipping}
-          onToggleClipping={() => setShowClipping(value => !value)}
-          picking={picking}
-          onTogglePicking={gradeIsLive && gradePreview?.onPickBlack
-            ? () => setPicking(value => !value)
-            : undefined}
           frameSize={chainFrame ? { width: chainFrame.width, height: chainFrame.height } : null}
           onSelect={chainPreview.onSelect}
           onReload={chainPreview.onReload}
@@ -333,6 +374,13 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                   mode={gradePreview.mode}
                   holdingBefore={gradePreview.holdingBefore}
                   stepLabel={gradePreview.stepLabel}
+                  showClipping={showClipping}
+                  picking={picking}
+                  onPick={(sample) => {
+                    gradePreview.onPickBlack?.(sample);
+                    // One pick per arming, as on the session path.
+                    setPicking(false);
+                  }}
                 />
               )}
               {cropEditor && activeFilterEditor && (

@@ -23,6 +23,12 @@ interface ColorGradeOverlayProps {
   /** True while the "hold for before" key is down. */
   holdingBefore: boolean;
   stepLabel: string;
+  /** Stripe the pixels sitting on either clamp. */
+  showClipping?: boolean;
+  /** Arm the black point picker: the next click samples instead of wiping. */
+  picking?: boolean;
+  /** Fires with an averaged RGB sample of the ungraded frame, 0..1. */
+  onPick?: (sample: [number, number, number]) => void;
   onRendererError?: (message: string) => void;
 }
 
@@ -50,6 +56,9 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
   mode,
   holdingBefore,
   stepLabel,
+  showClipping = false,
+  picking = false,
+  onPick,
   onRendererError,
 }: ColorGradeOverlayProps) => {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -118,8 +127,8 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
   // Read the grade through a ref here: an upload only has to happen when the
   // picture changes, and depending on values would re-register the load
   // listener on every frame of a trackball drag.
-  const latest = useRef({ values, holdingBefore });
-  latest.current = { values, holdingBefore };
+  const latest = useRef({ values, holdingBefore, showClipping });
+  latest.current = { values, holdingBefore, showClipping };
 
   const uploadFrame = useCallback(() => {
     const image = imageRef.current;
@@ -133,6 +142,7 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
     const renderer = rendererRef.current;
     if (!renderer) return;
     renderer.setFrame(image, image.naturalWidth, image.naturalHeight);
+    renderer.setClipMarks(latest.current.showClipping);
     renderer.render(latest.current.holdingBefore ? GRADE_NEUTRAL : latest.current.values);
   }, [imageRef]);
 
@@ -150,10 +160,78 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
   }, [imageRef, uploadFrame, frameSize, generation]);
 
   useEffect(() => {
-    rendererRef.current?.render(holdingBefore ? GRADE_NEUTRAL : values);
-  }, [values, holdingBefore]);
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    // The flag lives on the renderer rather than in the render call, so it has
+    // to be set on every draw — including one that only toggled the flag.
+    renderer.setClipMarks(showClipping);
+    renderer.render(holdingBefore ? GRADE_NEUTRAL : values);
+  }, [values, holdingBefore, showClipping]);
+
+  /**
+   * The picture under the cursor, averaged over a small patch.
+   *
+   * Averaged because a black point taken from one pixel is a black point taken
+   * from that pixel's noise. Read off the <img>, which is the frame entering
+   * this grade, rather than off the canvas, which is already graded.
+   *
+   * This path samples the 640px lossy JPEG the scrubber produced, so a black
+   * point picked here carries that scaling and that quantisation with it — it
+   * is close, but a pick taken in Inspect is taken from the real pixels.
+   */
+  const samplePatch = useCallback((clientX: number, clientY: number): [number, number, number] | null => {
+    const image = imageRef.current;
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!image || !rect || !box || !box.width || !box.height) return null;
+    const source = { width: image.naturalWidth, height: image.naturalHeight };
+    if (!source.width || !source.height) return null;
+
+    const fx = (clientX - rect.left - box.left) / box.width;
+    const fy = (clientY - rect.top - box.top) / box.height;
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
+
+    const patch = 5;
+    const width = Math.min(patch, source.width);
+    const height = Math.min(patch, source.height);
+    const cx = Math.min(source.width - 1, Math.max(0, Math.floor(fx * source.width)));
+    const cy = Math.min(source.height - 1, Math.max(0, Math.floor(fy * source.height)));
+    const left = Math.min(Math.max(0, cx - (patch >> 1)), source.width - width);
+    const top = Math.min(Math.max(0, cy - (patch >> 1)), source.height - height);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    context.drawImage(image, left, top, width, height, 0, 0, width, height);
+
+    let data: Uint8ClampedArray;
+    try {
+      data = context.getImageData(0, 0, width, height).data;
+    } catch {
+      return null; // a tainted canvas; the pick is dropped rather than throwing
+    }
+
+    let r = 0, g = 0, b = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+    }
+    const count = data.length / 4;
+    if (!count) return null;
+    return [r / count / 255, g / count / 255, b / count / 255];
+  }, [imageRef, box]);
 
   const onWipeDown = (event: React.MouseEvent) => {
+    if (picking) {
+      const sample = samplePatch(event.clientX, event.clientY);
+      if (sample) {
+        event.preventDefault();
+        onPick?.(sample);
+      }
+      return;
+    }
     if (mode !== 'wipe' || !box) return;
     event.preventDefault();
     const move = (pointer: { clientX: number }) => {
@@ -182,7 +260,11 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
   // left canvasRef null on the one pass the renderer effect runs, so the
   // renderer was never built and the picture never graded.
   return (
-    <div ref={rootRef} className="absolute inset-0" onMouseDown={onWipeDown}>
+    <div
+      ref={rootRef}
+      className={`absolute inset-0 ${picking ? 'cursor-crosshair' : ''}`}
+      onMouseDown={onWipeDown}
+    >
       <div
         className="absolute overflow-hidden"
         style={{
