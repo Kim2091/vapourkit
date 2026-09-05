@@ -18,6 +18,18 @@ export interface ChainPreview {
   frame: ChainPreviewFrame | null;
   isRendering: boolean;
   isStale: boolean;
+  /**
+   * The one step the live grade belongs on: the output feeding the open grade
+   * step. Selected elsewhere, the shader must stay out of the way, or an
+   * upstream step would be shown wearing a grade that is not applied to it.
+   */
+  liveGradeStep: number | null;
+  /**
+   * First step carrying a grade baked in at load. While the dock is open,
+   * this step and everything after it show stale values, so they are offered
+   * as unavailable rather than as truth.
+   */
+  bakedFromStep: number | null;
   onSelect: (index: number) => void;
   onReload: () => void;
 }
@@ -144,6 +156,15 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   // A session frame never becomes an <img>, so it is sampled from the buffer
   // instead. Same scopes, real pixels.
   const chainFrame = chainPreview?.frame ?? null;
+
+  // The grade belongs on exactly one step: the one feeding it. Anywhere else
+  // the picture is shown as it renders.
+  const gradeIsLive = Boolean(
+    gradePreview &&
+    chainPreview &&
+    chainPreview.liveGradeStep !== null &&
+    chainPreview.selected === chainPreview.liveGradeStep,
+  );
   useEffect(() => {
     if (!chainFrame || !onFrameSampled) return;
     onFrameSampled(sampleBuffer(chainFrame.pixels, chainFrame.width, chainFrame.height));
@@ -236,6 +257,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           selected={chainPreview.selected}
           isRendering={chainPreview.isRendering}
           isStale={chainPreview.isStale}
+          bakedFromStep={chainPreview.bakedFromStep}
           frameSize={chainFrame ? { width: chainFrame.width, height: chainFrame.height } : null}
           onSelect={chainPreview.onSelect}
           onReload={chainPreview.onReload}
@@ -255,13 +277,13 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                   shader can apply it live. No round trip, real pixels. */}
               <ChainPreviewCanvas
                 frame={chainFrame}
-                gradeValues={gradePreview ? gradePreview.values : null}
-                holdingBefore={gradePreview?.holdingBefore ?? false}
+                gradeValues={gradeIsLive ? gradePreview!.values : null}
+                holdingBefore={gradeIsLive && gradePreview!.holdingBefore}
               />
-              {gradePreview && (
+              {gradeIsLive && (
                 <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 h-[22px] px-2 rounded border border-accent-500/40 bg-ink-950/85 backdrop-blur-sm text-[10.5px] font-medium text-accent-300 pointer-events-none">
                   <Palette className="w-3 h-3" />
-                  {gradePreview.holdingBefore ? 'Before' : 'Live grade'}
+                  {gradePreview!.holdingBefore ? 'Before' : 'Live grade'}
                 </span>
               )}
             </div>

@@ -1262,6 +1262,10 @@ function App() {
                       frame: chainPreview.frame,
                       isRendering: chainPreview.isRendering,
                       isStale: chainPreview.isStale,
+                      liveGradeStep: gradeUpstreamOutput,
+                      // The grade's own output and everything above it were
+                      // built with the values the script loaded with.
+                      bakedFromStep: gradeUpstreamOutput === null ? null : gradeUpstreamOutput + 1,
                       onSelect: chainPreview.select,
                       onReload: () => void chainPreview.open(),
                     } : null}

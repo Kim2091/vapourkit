@@ -14,6 +14,12 @@ interface PreviewStepRailProps {
   selected: number;
   isRendering: boolean;
   isStale: boolean;
+  /**
+   * First step whose picture carries a grade baked in when the script loaded.
+   * That step and everything after it cannot follow a live drag, so they are
+   * shown as unavailable rather than as a stale truth.
+   */
+  bakedFromStep?: number | null;
   frameSize: { width: number; height: number } | null;
   onSelect: (index: number) => void;
   onReload: () => void;
@@ -24,6 +30,7 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
   selected,
   isRendering,
   isStale,
+  bakedFromStep = null,
   frameSize,
   onSelect,
   onReload,
@@ -47,6 +54,7 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
       const position = event.key === '0' ? 9 : Number(event.key) - 1;
       const step = steps[position];
       if (!step) return;
+      if (bakedFromStep !== null && step.index >= bakedFromStep) return;
 
       event.preventDefault();
       onSelect(step.index);
@@ -54,7 +62,7 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [steps, isStale, onSelect]);
+  }, [steps, isStale, bakedFromStep, onSelect]);
 
   if (steps.length === 0) return null;
 
@@ -81,22 +89,28 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
       <div className="flex items-stretch min-w-0 flex-1 overflow-x-auto">
         {steps.map((step, position) => {
           const isSelected = step.index === selected;
+          const isBaked = bakedFromStep !== null && step.index >= bakedFromStep;
           return (
             <button
               key={step.index}
               onClick={() => onSelect(step.index)}
+              disabled={isBaked}
               aria-pressed={isSelected}
-              title={`${step.label} — ${step.width}×${step.height}${position < 10 ? ` (${position === 9 ? 0 : position + 1})` : ''}`}
+              title={isBaked
+                ? `${step.label} — not available while grading: it carries the grade values the script loaded with, not the ones being dragged. Close the grade to see it.`
+                : `${step.label} — ${step.width}×${step.height}${position < 10 ? ` (${position === 9 ? 0 : position + 1})` : ''}`}
               className={`px-2.5 flex items-center gap-1.5 border-r border-ink-800 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent-500 ${
-                isSelected
-                  ? 'bg-accent-500/12 text-accent-300 shadow-[inset_0_-2px_0_rgb(var(--accent-500))]'
-                  : 'text-ink-500 hover:text-ink-300 hover:bg-ink-850'
+                isBaked
+                  ? 'text-ink-700 cursor-not-allowed'
+                  : isSelected
+                    ? 'bg-accent-500/12 text-accent-300 shadow-[inset_0_-2px_0_rgb(var(--accent-500))]'
+                    : 'text-ink-500 hover:text-ink-300 hover:bg-ink-850'
               }`}
             >
               {position < 10 && (
                 <span
                   className={`text-[9px] font-mono leading-none px-1 py-0.5 rounded-sm border ${
-                    isSelected ? 'border-accent-500/50' : 'border-ink-750'
+                    isBaked ? 'border-ink-800' : isSelected ? 'border-accent-500/50' : 'border-ink-750'
                   }`}
                 >
                   {position === 9 ? 0 : position + 1}
@@ -109,6 +123,9 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
       </div>
 
       <div className="flex items-center gap-2.5 px-3 flex-shrink-0 text-[10.5px] font-mono tabular-nums text-ink-600">
+        {bakedFromStep !== null && (
+          <span className="text-ink-600 font-sans">Grading — later steps hold the loaded grade</span>
+        )}
         {frameSize && <span>{frameSize.width}×{frameSize.height}</span>}
         {isRendering && <Loader2 className="w-3 h-3 text-accent-500 animate-spin" />}
       </div>
