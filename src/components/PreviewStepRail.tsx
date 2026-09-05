@@ -6,8 +6,28 @@
 // fingers — 1 is the first tab, and 0 is the tenth.
 
 import { memo, useEffect } from 'react';
-import { Loader2, RefreshCw, Layers } from 'lucide-react';
-import type { ChainPreviewStep } from '../hooks/useChainPreview';
+import { Loader2, RefreshCw, Layers, AlertTriangle } from 'lucide-react';
+import type { ChainPreviewFrame, ChainPreviewStep } from '../hooks/useChainPreview';
+
+/** VapourSynth's _ColorRange, as words. */
+const RANGE_NAMES: Record<number, string> = { 0: 'full', 1: 'limited' };
+
+/**
+ * Does this look like limited-range video being read as full?
+ *
+ * The signature is both ends at once: a floor near 16 and a ceiling near 235,
+ * in a picture that should be reaching 0 and 255. The ceiling is the
+ * discriminating half — plenty of legitimate footage never goes near black,
+ * but very little of it stops dead at 235.
+ *
+ * Deliberately narrow. A hint that fires on a merely dark shot would be worse
+ * than no hint, because it would teach you to ignore it.
+ */
+function looksLimitedAsFull(frame: ChainPreviewFrame | null): boolean {
+  const y = frame?.levels?.y;
+  if (!y) return false;
+  return y.low >= 13 && y.low <= 19 && y.high >= 231 && y.high <= 239;
+}
 
 interface PreviewStepRailProps {
   steps: ChainPreviewStep[];
@@ -20,6 +40,8 @@ interface PreviewStepRailProps {
    * shown as unavailable rather than as a stale truth.
    */
   bakedFromStep?: number | null;
+  /** The frame on screen, for its levels and its tagging. */
+  frame?: ChainPreviewFrame | null;
   frameSize: { width: number; height: number } | null;
   onSelect: (index: number) => void;
   onReload: () => void;
@@ -31,6 +53,7 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
   isRendering,
   isStale,
   bakedFromStep = null,
+  frame = null,
   frameSize,
   onSelect,
   onReload,
@@ -63,6 +86,27 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [steps, isStale, bakedFromStep, onSelect]);
+
+  const luma = frame?.levels?.y ?? null;
+  const rangeHint = looksLimitedAsFull(frame);
+
+  const levelsTitle = frame?.levels
+    ? [
+        'Code values in this frame, 0-255.',
+        `luma    ${frame.levels.y.min.toFixed(0)} .. ${frame.levels.y.max.toFixed(0)}  (0.1% ${frame.levels.y.low.toFixed(1)}, 99.9% ${frame.levels.y.high.toFixed(1)})`,
+        `red     ${frame.levels.r.min.toFixed(0)} .. ${frame.levels.r.max.toFixed(0)}`,
+        `green   ${frame.levels.g.min.toFixed(0)} .. ${frame.levels.g.max.toFixed(0)}`,
+        `blue    ${frame.levels.b.min.toFixed(0)} .. ${frame.levels.b.max.toFixed(0)}`,
+        frame.source
+          ? `
+Source: ${frame.source.format ?? 'unknown format'}, range ${
+              frame.source.colorRange === null
+                ? 'untagged'
+                : RANGE_NAMES[frame.source.colorRange] ?? String(frame.source.colorRange)
+            }`
+          : '',
+      ].join('\n')
+    : undefined;
 
   if (steps.length === 0) return null;
 
@@ -126,6 +170,25 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
         {bakedFromStep !== null && (
           <span className="text-ink-600 font-sans">Grading — later steps hold the loaded grade</span>
         )}
+
+        {rangeHint && (
+          <span
+            className="inline-flex items-center gap-1 h-[18px] px-1.5 rounded border border-warn-500/45 bg-warn-500/10 text-warn-300 font-sans"
+            title={'The picture stops at 16 and 235 rather than 0 and 255, which is what limited-range video looks like when it is read as full. If that is the case, the fix is the tagging, not the grade.'}
+          >
+            <AlertTriangle className="w-3 h-3" />
+            range?
+          </span>
+        )}
+
+        {/* Luma floor and ceiling: the number you would otherwise be
+            estimating from the height of a line on the waveform. */}
+        {luma && (
+          <span className="text-ink-400" title={levelsTitle}>
+            Y {luma.low.toFixed(0)}–{luma.high.toFixed(0)}
+          </span>
+        )}
+
         {frameSize && <span>{frameSize.width}×{frameSize.height}</span>}
         {isRendering && <Loader2 className="w-3 h-3 text-accent-500 animate-spin" />}
       </div>

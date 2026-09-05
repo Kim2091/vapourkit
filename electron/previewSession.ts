@@ -27,12 +27,40 @@ export interface PreviewOutput {
   format: string | null;
 }
 
+/** Floor, ceiling and 0.1/99.9 percentiles, in 8-bit code values. */
+export interface PreviewSpread {
+  min: number;
+  max: number;
+  low: number;
+  high: number;
+}
+
+export interface PreviewLevels {
+  r: PreviewSpread;
+  g: PreviewSpread;
+  b: PreviewSpread;
+  /** Rec.709 luma — the trace a colourist reads a black level off. */
+  y: PreviewSpread;
+}
+
+/** How the clip feeding this step is tagged, before the RGB conversion. */
+export interface PreviewSourceProps {
+  /** VapourSynth's convention: 0 full, 1 limited, null when the file is silent. */
+  colorRange: number | null;
+  matrix: number | null;
+  transfer: number | null;
+  primaries: number | null;
+  format: string | null;
+}
+
 export interface PreviewFrame {
   n: number;
   width: number;
   height: number;
   output: number;
   data: Buffer;
+  levels: PreviewLevels | null;
+  source: PreviewSourceProps | null;
 }
 
 interface Reply {
@@ -220,6 +248,8 @@ export class PreviewSession {
       height: header.height,
       output: header.output,
       data: payload,
+      levels: header.levels ?? null,
+      source: header.source ?? null,
     };
   }
 

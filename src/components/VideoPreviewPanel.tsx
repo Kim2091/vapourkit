@@ -258,6 +258,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           isRendering={chainPreview.isRendering}
           isStale={chainPreview.isStale}
           bakedFromStep={chainPreview.bakedFromStep}
+          frame={chainFrame}
           frameSize={chainFrame ? { width: chainFrame.width, height: chainFrame.height } : null}
           onSelect={chainPreview.onSelect}
           onReload={chainPreview.onReload}

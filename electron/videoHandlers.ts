@@ -734,6 +734,8 @@ export function registerVideoHandlers(
         height: frame.height,
         output: frame.output,
         data: frame.data,
+        levels: frame.levels,
+        source: frame.source,
       };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };

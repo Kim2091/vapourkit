@@ -12,7 +12,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BackendId,
   Filter,
+  PreviewLevels,
   PreviewOutput,
+  PreviewSourceProps,
   SegmentSelection,
   VideoInfo,
 } from '../electron.d';
@@ -28,6 +30,10 @@ export interface ChainPreviewFrame {
   height: number;
   n: number;
   output: number;
+  /** Where the picture sits, per channel and in luma, in 8-bit code values. */
+  levels: PreviewLevels | null;
+  /** How the clip feeding this step is tagged. */
+  source: PreviewSourceProps | null;
 }
 
 interface UseChainPreviewOptions {
@@ -197,6 +203,8 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
           height: result.height!,
           n: result.n!,
           output: result.output!,
+          levels: result.levels ?? null,
+          source: result.source ?? null,
         });
         setError(null);
       } else if (result.error) {

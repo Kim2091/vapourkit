@@ -298,6 +298,36 @@ export interface PreviewOutput {
   format: string | null;
 }
 
+/** Floor, ceiling and 0.1/99.9 percentiles, in 8-bit code values. */
+export interface PreviewSpread {
+  min: number;
+  max: number;
+  low: number;
+  high: number;
+}
+
+/**
+ * Where the picture actually sits. Luma is the one that answers "are these
+ * blacks raised": on anything with saturated colour, a single channel's floor
+ * is set by the primaries rather than by the shadows.
+ */
+export interface PreviewLevels {
+  r: PreviewSpread;
+  g: PreviewSpread;
+  b: PreviewSpread;
+  y: PreviewSpread;
+}
+
+/** How the clip feeding a step is tagged, before the conversion to RGB. */
+export interface PreviewSourceProps {
+  /** VapourSynth's convention: 0 full, 1 limited, null when untagged. */
+  colorRange: number | null;
+  matrix: number | null;
+  transfer: number | null;
+  primaries: number | null;
+  format: string | null;
+}
+
 /** A rendered preview frame: packed RGB24, three bytes per pixel, no padding. */
 export interface PreviewFrameResult {
   success: boolean;
@@ -307,6 +337,8 @@ export interface PreviewFrameResult {
   height?: number;
   output?: number;
   data?: Uint8Array;
+  levels?: PreviewLevels | null;
+  source?: PreviewSourceProps | null;
 }
 
 export interface VideoInfo {

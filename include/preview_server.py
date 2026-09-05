@@ -88,6 +88,10 @@ class PreviewSession:
     def __init__(self) -> None:
         self.outputs: dict[int, vs.VideoNode] = {}
         self.selected: int = 0
+        # Frame props of the clip feeding each output, before the conversion
+        # to RGB. Cached because they answer a question about the file, which
+        # does not change frame to frame.
+        self._source_props: dict[int, dict] = {}
         # Keyed by (output index, preview width). A resize node rebuilt per
         # frame would throw away the cache it is supposed to be feeding.
         self._preview_nodes: dict[tuple[int, int], vs.VideoNode] = {}
@@ -148,6 +152,7 @@ class PreviewSession:
     def close(self) -> None:
         self.outputs = {}
         self._preview_nodes = {}
+        self._source_props = {}
         self._buffer = None
         self._buffer_shape = None
         vs.clear_outputs()
@@ -200,9 +205,75 @@ class PreviewSession:
             "width": frame_width,
             "height": height,
             "output": self.selected,
+            "levels": self._levels(),
+            "source": self._props(self.selected, n),
             "bytes": len(payload),
         }
         return header, payload
+
+    def _levels(self) -> dict | None:
+        """
+        Where the picture actually sits, per channel, in 8-bit code values.
+
+        Reported alongside the pixels because the question it answers — are
+        these blacks raised, and by how much — is otherwise a judgement about
+        the height of an unlabelled line on a waveform.
+
+        Percentiles as well as the extremes: one stray hot pixel should not be
+        the whole answer for the ceiling.
+        """
+        if np is None or self._buffer is None:
+            return None
+
+        # Every fourth pixel. A floor is a property of the picture, not of the
+        # sample rate, and this keeps the cost off the frame budget.
+        sample = self._buffer[::2, ::2, :]
+        out = {}
+        for index, name in enumerate(("r", "g", "b")):
+            out[name] = _spread(sample[:, :, index])
+
+        # Luma as well, and it is the one that answers the question. On
+        # anything with saturated colour in it, a channel's own floor is set
+        # by the primaries rather than by the shadows — pure red pins green
+        # and blue at 0 no matter where black sits. The waveform a colourist
+        # reads for a black level is luma, so report that too.
+        luma = (
+            sample[:, :, 0].astype(np.float32) * 0.2126
+            + sample[:, :, 1].astype(np.float32) * 0.7152
+            + sample[:, :, 2].astype(np.float32) * 0.0722
+        )
+        out["y"] = _spread(luma)
+        return out
+
+    def _props(self, index: int, n: int) -> dict | None:
+        """
+        The tagging of the clip feeding this output, before RGB conversion.
+
+        This is what tells a raised-blacks complaint apart from a range
+        mismatch: a limited-range file read as full lands its floor at 16
+        rather than 0, and no amount of grading is the right fix for that.
+
+        The frame is already in VapourSynth's cache from rendering the preview
+        that depends on it, so this costs a lookup rather than a render.
+        """
+        cached = self._source_props.get(index)
+        if cached is not None:
+            return cached
+
+        try:
+            props = self.outputs[index].get_frame(n).props
+            resolved = {
+                "colorRange": _prop_int(props, "_ColorRange"),
+                "matrix": _prop_int(props, "_Matrix"),
+                "transfer": _prop_int(props, "_Transfer"),
+                "primaries": _prop_int(props, "_Primaries"),
+                "format": self.outputs[index].format.name if self.outputs[index].format else None,
+            }
+        except Exception:  # noqa: BLE001 - a diagnostic must never break the frame
+            return None
+
+        self._source_props[index] = resolved
+        return resolved
 
     def _pack(self, frame: vs.VideoFrame, width: int, height: int) -> memoryview:
         """
@@ -224,6 +295,28 @@ class PreviewSession:
             self._buffer[:, :, plane] = np.asarray(frame[plane])
 
         return memoryview(self._buffer).cast("B")
+
+
+def _spread(plane) -> dict:
+    """Floor, ceiling and the 0.1/99.9 percentiles, in 8-bit code values."""
+    low, high = np.percentile(plane, (0.1, 99.9))
+    return {
+        "min": round(float(plane.min()), 1),
+        "max": round(float(plane.max()), 1),
+        "low": round(float(low), 1),
+        "high": round(float(high), 1),
+    }
+
+
+def _prop_int(props, name: str) -> int | None:
+    """A frame prop as a plain int, or None when the file does not say."""
+    value = props.get(name)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def reply(header: dict, payload: memoryview | bytes = b"") -> None:
