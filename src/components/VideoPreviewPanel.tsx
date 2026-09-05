@@ -41,6 +41,8 @@ export interface GradePreview {
   holdingBefore: boolean;
   stepLabel: string;
   onModeChange: (mode: CompareMode) => void;
+  /** Solve this grade's lift so a sampled pixel becomes the black point. */
+  onPickBlack?: (sample: [number, number, number]) => void;
 }
 
 const COMPARE_MODES: { id: CompareMode; label: string; title: string }[] = [
@@ -114,6 +116,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   // Panel-local: it is a way of looking at the picture, not part of the grade,
   // and it should hold while stepping between steps and frames.
   const [showClipping, setShowClipping] = useState(false);
+  const [picking, setPicking] = useState(false);
   const cropEditor = activeFilterEditor?.editor?.type === 'crop' ? activeFilterEditor.editor : null;
 
   // Dragging left widens the column, so the delta is subtracted. The parent
@@ -162,6 +165,10 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
 
   // The grade belongs on exactly one step: the one feeding it. Anywhere else
   // the picture is shown as it renders.
+  useEffect(() => {
+    if (!gradePreview) setPicking(false);
+  }, [gradePreview]);
+
   const gradeIsLive = Boolean(
     gradePreview &&
     chainPreview &&
@@ -264,6 +271,10 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           frame={chainFrame}
           showClipping={showClipping}
           onToggleClipping={() => setShowClipping(value => !value)}
+          picking={picking}
+          onTogglePicking={gradeIsLive && gradePreview?.onPickBlack
+            ? () => setPicking(value => !value)
+            : undefined}
           frameSize={chainFrame ? { width: chainFrame.width, height: chainFrame.height } : null}
           onSelect={chainPreview.onSelect}
           onReload={chainPreview.onReload}
@@ -287,6 +298,13 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 holdingBefore={gradeIsLive && gradePreview!.holdingBefore}
                 mode={gradePreview?.mode}
                 showClipping={showClipping}
+                picking={picking}
+                onPick={(sample) => {
+                  gradePreview?.onPickBlack?.(sample);
+                  // One pick per arming, so a stray second click cannot
+                  // silently re-solve against the picture it just changed.
+                  setPicking(false);
+                }}
                 stepLabel={gradePreview?.stepLabel}
               />
             </div>

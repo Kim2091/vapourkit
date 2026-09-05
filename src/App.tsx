@@ -44,6 +44,7 @@ import { ColorGradeDock, GRADE_COMPACT_BELOW, GRADE_DOCK_HEIGHT, GRADE_DOCK_COMP
 import { solveScopeColumnWidth, clampScopeColumnWidth } from './components/GradeScopeColumn';
 import { gradeBasePx } from './components/gradeType';
 import { bakeGradeToLut, writeLut, writeCube, parseLut, to3d, type LutFormat } from './utils/lut';
+import { solveBlackPoint } from './utils/colorGrade';
 import type { CompareMode } from './components/ColorGradeOverlay';
 import type { ScopeKind } from './components/GradeScopes';
 import { useColorGrade } from './hooks/useColorGrade';
@@ -1028,6 +1029,30 @@ function App() {
   // on the GPU — so a trackball drag costs a draw call, not a script reload.
   // Selecting the grade's own output would show the values that were baked
   // into the script when it loaded, which is exactly the stale picture.
+  // Click something that should be black; lift is solved per channel to put it
+  // there. It targets the primaries ramp, so contrast and brightness still do
+  // what they were set to afterwards — which is what a black point means.
+  const handlePickBlack = useCallback((sample: [number, number, number]) => {
+    const solved = solveBlackPoint(colorGrade.values, sample);
+    if (!solved) {
+      notify.warning(
+        'Too bright for a black point',
+        'That pixel is too far up the range to sit at black. Pick something in the shadows.',
+      );
+      return;
+    }
+
+    colorGrade.apply(solved.values);
+    if (solved.clamped) {
+      notify.info(
+        'Black point set, partly',
+        'The colour cast in those shadows is stronger than the lift ball can correct on its own.',
+      );
+    } else {
+      addConsoleLog('Black point set from the picture');
+    }
+  }, [colorGrade, addConsoleLog]);
+
   const gradeUpstreamOutput = useMemo(() => {
     if (!colorGrade.editor || !activeFilterEditor) return null;
     const enabled = filters.filter(filter => filter.enabled).sort((a, b) => a.order - b.order);
@@ -1276,6 +1301,7 @@ function App() {
                       holdingBefore,
                       stepLabel: gradeStepLabel,
                       onModeChange: setGradeCompareMode,
+                      onPickBlack: handlePickBlack,
                     } : null}
                     onFrameSampled={setScopeSample}
                     scopeSample={scopeSample}

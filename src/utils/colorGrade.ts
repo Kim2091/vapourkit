@@ -139,6 +139,20 @@ export function deltasToPuck(r: number, g: number, b: number): { x: number; y: n
   return { x: (b - g) / Math.sqrt(3), y: r };
 }
 
+/**
+ * Travel of each ball's master bar.
+ *
+ * Lives with the grade model rather than the widget: the black point solver
+ * has to know what it is allowed to ask for, and a second copy of these
+ * numbers is a second thing to keep in step.
+ */
+export const MASTER_RANGE: Record<BallName, { min: number; max: number }> = {
+  lift: { min: -0.5, max: 0.5 },
+  offset: { min: -0.5, max: 0.5 },
+  gamma: { min: 0.25, max: 4 },
+  gain: { min: 0, max: 4 },
+};
+
 const ballScale = (name: BallName) => (name === 'lift' || name === 'offset' ? LIFT_RANGE : MULTIPLY_RANGE);
 const ballBase = (name: BallName) => (name === 'lift' || name === 'offset' ? 0 : 1);
 
@@ -255,6 +269,71 @@ export function gradePixel(rgb: readonly [number, number, number], values: Grade
     clamp(y - ((LUMA_R * crRotated + LUMA_B * cbRotated) * s) / LUMA_G, 0, 1),
     clamp(y + cbRotated * s, 0, 1),
   ];
+}
+
+export interface BlackPointSolution {
+  values: GradeValues;
+  /** True when the answer had to be trimmed to what the controls can express. */
+  clamped: boolean;
+}
+
+/**
+ * The lift that puts a sampled pixel on the black point.
+ *
+ * The ramp is out = (x + offset) * (gain - lift) + lift, so asking for out = 0
+ * gives lift = -u * gain / (1 - u) with u = x + offset. Solved per channel,
+ * which is what neutralises a cast in the shadows as well as setting the level.
+ *
+ * It targets the ramp, not the final pixel. Contrast, brightness and gamma sit
+ * downstream and will move the result away from zero — which is correct, and
+ * is what a black point means in Resolve too: the primaries put black where
+ * you asked, and the tone controls do what you asked afterwards.
+ *
+ * Returns null when the pixel cannot be a black point: as u approaches white
+ * the lift needed runs away to negative infinity, and a picker that answered
+ * anyway would silently produce nonsense.
+ */
+export function solveBlackPoint(
+  values: GradeValues,
+  sample: readonly [number, number, number],
+): BlackPointSolution | null {
+  const terms = channelTerms(values);
+  const names = ['r', 'g', 'b'] as const;
+  const folded: number[] = [];
+
+  for (let i = 0; i < 3; i++) {
+    const u = sample[i] + terms.offset[names[i]];
+    // Past about three quarters the solution grows faster than the control can
+    // follow, and the pixel was never a plausible black anyway.
+    if (!Number.isFinite(u) || u > 0.75) return null;
+    folded.push((-u * terms.gain[names[i]]) / (1 - u));
+  }
+
+  // The master carries the level and the puck carries the cast, which is how
+  // the ball is built: deltas around a master always sum to zero.
+  const master = (folded[0] + folded[1] + folded[2]) / 3;
+  let deltas = folded.map(value => value - master);
+
+  let clamped = false;
+  const puck = deltasToPuck(deltas[0] / LIFT_RANGE, deltas[1] / LIFT_RANGE, deltas[2] / LIFT_RANGE);
+  const radius = Math.hypot(puck.x, puck.y);
+  if (radius > 1) {
+    // Keep the direction of the cast correction and give up some of its size,
+    // rather than storing a puck position the disc cannot show.
+    deltas = deltas.map(value => value / radius);
+    clamped = true;
+  }
+
+  const boundedMaster = clamp(master, MASTER_RANGE.lift.min, MASTER_RANGE.lift.max);
+  if (boundedMaster !== master) clamped = true;
+
+  return {
+    values: {
+      ...values,
+      lift: { r: deltas[0], g: deltas[1], b: deltas[2], m: boundedMaster },
+    },
+    clamped,
+  };
 }
 
 /** A neutral grade emits no VapourSynth stage and needs no shader pass. */

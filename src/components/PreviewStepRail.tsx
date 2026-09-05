@@ -6,7 +6,7 @@
 // fingers — 1 is the first tab, and 0 is the tenth.
 
 import { memo, useEffect } from 'react';
-import { Loader2, RefreshCw, Layers, AlertTriangle, Ban } from 'lucide-react';
+import { Loader2, RefreshCw, Layers, AlertTriangle, Ban, Pipette } from 'lucide-react';
 import type { ChainPreviewFrame, ChainPreviewStep } from '../hooks/useChainPreview';
 
 /** VapourSynth's _ColorRange, as words. */
@@ -45,6 +45,9 @@ interface PreviewStepRailProps {
   frameSize: { width: number; height: number } | null;
   showClipping?: boolean;
   onToggleClipping?: () => void;
+  /** Only offered while a grade is open — it solves that grade's lift. */
+  picking?: boolean;
+  onTogglePicking?: () => void;
   onSelect: (index: number) => void;
   onReload: () => void;
 }
@@ -59,6 +62,8 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
   frameSize,
   showClipping = false,
   onToggleClipping,
+  picking = false,
+  onTogglePicking,
   onSelect,
   onReload,
 }: PreviewStepRailProps) => {
@@ -183,6 +188,22 @@ Source: ${frame.source.format ?? 'unknown format'}, range ${
             <AlertTriangle className="w-3 h-3" />
             range?
           </span>
+        )}
+
+        {onTogglePicking && (
+          <button
+            onClick={onTogglePicking}
+            aria-pressed={picking}
+            title="Click something that should be black, and lift is solved per channel to put it there — level and colour cast in one go."
+            className={`inline-flex items-center gap-1 h-[18px] px-1.5 rounded border font-sans transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
+              picking
+                ? 'border-accent-500/50 bg-accent-500/12 text-accent-300'
+                : 'border-ink-750 text-ink-500 hover:text-ink-300'
+            }`}
+          >
+            <Pipette className="w-3 h-3" />
+            {picking ? 'Pick a black' : 'Black point'}
+          </button>
         )}
 
         {onToggleClipping && (

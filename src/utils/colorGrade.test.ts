@@ -18,6 +18,7 @@ import {
   LUMA_G,
   LUMA_B,
   type GradeValues,
+  solveBlackPoint,
 } from './colorGrade';
 import type { ColorGradeFilterEditor } from '../electron.d';
 
@@ -149,6 +150,59 @@ describe('grade model', () => {
     const [r, g, b] = gradePixel([0.8, 0.3, 0.1], { ...GRADE_NEUTRAL, saturation: 0 });
     expect(g).toBeCloseTo(r, 6);
     expect(b).toBeCloseTo(r, 6);
+  });
+});
+
+describe('the black point solver', () => {
+  // Downstream of the ramp everything is neutral, so a ramp that lands on zero
+  // lands the pixel on zero: pow(0) is 0, contrast about any pivot leaves 0
+  // alone at contrast 1, and a black pixel has no chroma for hue or saturation
+  // to move. That makes the whole grade a fair check on the ramp.
+  const base = {
+    ...GRADE_NEUTRAL,
+    gain: { r: 1.05, g: 1, b: 0.92, m: 0.95 },
+    offset: { r: 0.004, g: 0, b: -0.002, m: 0.01 },
+    temperature: 500,
+    tint: -8,
+    saturation: 1.3,
+    hue: 12,
+  };
+
+  it('puts the sampled pixel on black, cast and all', () => {
+    const sample: [number, number, number] = [0.07, 0.062, 0.083];
+
+    const solved = solveBlackPoint(base, sample);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.clamped).toBe(false);
+    gradePixel(sample, solved!.values).forEach(v => expect(v).toBeCloseTo(0, 6));
+  });
+
+  it('leaves an already-black pixel alone', () => {
+    const solved = solveBlackPoint(GRADE_NEUTRAL, [0, 0, 0]);
+
+    expect(solved).not.toBeNull();
+    const { r, g, b, m } = solved!.values.lift;
+    [r, g, b, m].forEach(v => expect(v).toBeCloseTo(0, 9));
+  });
+
+  it('keeps the puck on the disc, and says when it had to', () => {
+    // A wildly coloured "black" asks for more cast correction than the disc
+    // holds. Trimming it is right; doing so silently is not.
+    const solved = solveBlackPoint(GRADE_NEUTRAL, [0.5, 0.02, 0.02]);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.clamped).toBe(true);
+
+    const lift = solved!.values.lift;
+    const puck = ballToPuck('lift', lift);
+    expect(Math.hypot(puck.x, puck.y)).toBeLessThanOrEqual(1 + 1e-9);
+  });
+
+  it('refuses a pixel too bright to be a black point', () => {
+    // The lift needed runs away to negative infinity as the sample approaches
+    // white, so answering at all would be answering with nonsense.
+    expect(solveBlackPoint(GRADE_NEUTRAL, [0.9, 0.9, 0.9])).toBeNull();
   });
 });
 

@@ -10,7 +10,7 @@
 // four times over has never fitted across a ball this size.
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ballToPuck, puckToBall, BALL_NEUTRAL, type BallName, type BallValues } from '../utils/colorGrade';
+import { ballToPuck, puckToBall, BALL_NEUTRAL, MASTER_RANGE, type BallName, type BallValues } from '../utils/colorGrade';
 import { GRADE_TYPE, readoutCellWidth } from './gradeType';
 
 interface TrackballProps {
@@ -28,13 +28,6 @@ interface TrackballProps {
   /** Fires once when a gesture ends, so history records one entry per drag. */
   onCommit: () => void;
 }
-
-const MASTER_RANGE: Record<BallName, { min: number; max: number }> = {
-  lift: { min: -0.5, max: 0.5 },
-  offset: { min: -0.5, max: 0.5 },
-  gamma: { min: 0.25, max: 4 },
-  gain: { min: 0, max: 4 },
-};
 
 const CHANNELS = ['r', 'g', 'b', 'm'] as const;
 

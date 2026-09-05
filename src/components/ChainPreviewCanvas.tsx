@@ -32,6 +32,10 @@ interface ChainPreviewCanvasProps {
   mode?: CompareMode;
   /** Stripe the pixels sitting on either clamp. */
   showClipping?: boolean;
+  /** Arm the black point picker: the next click samples instead of wiping. */
+  picking?: boolean;
+  /** Fires with an averaged RGB sample of the ungraded frame, 0..1. */
+  onPick?: (sample: [number, number, number]) => void;
   stepLabel?: string;
   onRendererError?: (message: string) => void;
 }
@@ -42,6 +46,8 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
   holdingBefore = false,
   mode = 'after',
   showClipping = false,
+  picking = false,
+  onPick,
   stepLabel = '',
   onRendererError,
 }: ChainPreviewCanvasProps) => {
@@ -116,7 +122,51 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
 
   const box = containBox(bounds, frame ? { width: frame.width, height: frame.height } : { width: 0, height: 0 });
 
+  /**
+   * The picture under the cursor, averaged over a small patch.
+   *
+   * Averaged because a black point taken from one pixel is a black point taken
+   * from that pixel's noise. Read from the frame buffer rather than the canvas,
+   * so it is the ungraded picture entering the grade — which is what the solver
+   * needs, and is not what the canvas is showing.
+   */
+  const samplePatch = useCallback((clientX: number, clientY: number): [number, number, number] | null => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!frame || !box || !rect || !box.width || !box.height) return null;
+
+    const fx = (clientX - rect.left - box.left) / box.width;
+    const fy = (clientY - rect.top - box.top) / box.height;
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
+
+    const cx = Math.min(frame.width - 1, Math.max(0, Math.floor(fx * frame.width)));
+    const cy = Math.min(frame.height - 1, Math.max(0, Math.floor(fy * frame.height)));
+
+    const radius = 2;
+    let r = 0, g = 0, b = 0, count = 0;
+    for (let y = cy - radius; y <= cy + radius; y++) {
+      if (y < 0 || y >= frame.height) continue;
+      for (let x = cx - radius; x <= cx + radius; x++) {
+        if (x < 0 || x >= frame.width) continue;
+        const i = (y * frame.width + x) * 3;
+        r += frame.pixels[i];
+        g += frame.pixels[i + 1];
+        b += frame.pixels[i + 2];
+        count++;
+      }
+    }
+    if (!count) return null;
+    return [r / count / 255, g / count / 255, b / count / 255];
+  }, [frame, box]);
+
   const onWipeDown = useCallback((event: React.MouseEvent) => {
+    if (picking) {
+      const sample = samplePatch(event.clientX, event.clientY);
+      if (sample) {
+        event.preventDefault();
+        onPick?.(sample);
+      }
+      return;
+    }
     if (mode !== 'wipe' || !gradeValues || !box) return;
     event.preventDefault();
     const move = (clientX: number) => {
@@ -132,7 +182,7 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [mode, gradeValues, box]);
+  }, [picking, samplePatch, onPick, mode, gradeValues, box]);
 
   if (failed) {
     return (
@@ -146,7 +196,11 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
   const showDivider = Boolean(box) && mode === 'wipe' && Boolean(gradeValues) && !holdingBefore;
 
   return (
-    <div ref={rootRef} className="absolute inset-0" onMouseDown={onWipeDown}>
+    <div
+      ref={rootRef}
+      className={`absolute inset-0 ${picking ? 'cursor-crosshair' : ''}`}
+      onMouseDown={onWipeDown}
+    >
       <canvas
         ref={canvasRef}
         className="absolute block rounded-lg shadow-lg"
