@@ -64,6 +64,8 @@ export interface UseChainPreviewResult {
   frame: ChainPreviewFrame | null;
   error: string | null;
   open: () => Promise<void>;
+  /** Stops an open in flight. Safe to call when nothing is opening. */
+  cancel: () => Promise<void>;
   close: () => Promise<void>;
   select: (index: number) => void;
   seek: (n: number) => void;
@@ -142,6 +144,10 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
 
   const key = chainKey(options);
   const openKey = useRef<string | null>(null);
+  // An open can sit in a preflight for minutes, so a cancel usually lands
+  // while one is still running. This is what stops the abandoned open from
+  // reporting success over the top of it.
+  const openToken = useRef(0);
 
   const labels = useMemo(() => stepLabels(filters), [filters]);
 
@@ -197,6 +203,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
 
   const open = useCallback(async () => {
     if (!videoInfo || isOpening) return;
+    const token = ++openToken.current;
     setIsOpening(true);
     setError(null);
 
@@ -211,8 +218,11 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
         options.segment,
       );
 
+      if (token !== openToken.current) return;
+
       if (!result.success || !result.outputs) {
-        fail(result.error ?? 'Could not open the preview session');
+        // A cancel is not a failure; it does not belong in the console.
+        if (!result.cancelled) fail(result.error ?? 'Could not open the preview session');
         return;
       }
 
@@ -226,16 +236,31 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       await window.electronAPI.previewSelect(last.index);
       request(playhead.current, last.index);
     } catch (caught) {
-      fail(caught instanceof Error ? caught.message : String(caught));
+      if (token === openToken.current) {
+        fail(caught instanceof Error ? caught.message : String(caught));
+      }
     } finally {
-      setIsOpening(false);
+      if (token === openToken.current) setIsOpening(false);
     }
     // `key` is read for the staleness marker, not to re-run this callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoInfo, filters, options.selectedModel, options.defaultBackend,
       options.numStreams, options.segment, isOpening, fail, request, key]);
 
+  const cancel = useCallback(async () => {
+    openToken.current++;
+    queued.current = null;
+    setIsOpening(false);
+    setError(null);
+    try {
+      await window.electronAPI.previewCancel();
+    } catch {
+      // Nothing to stop, or it is already stopping.
+    }
+  }, []);
+
   const close = useCallback(async () => {
+    openToken.current++;
     queued.current = null;
     setIsOpen(false);
     setIsStale(false);
@@ -294,6 +319,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     frame,
     error,
     open,
+    cancel,
     close,
     select,
     seek,

@@ -240,21 +240,25 @@ export const ActionBar = memo(function ActionBar({
       {!isProcessing && (
         <button
           onClick={handleToggleChainPreview}
-          disabled={!videoInfo || isOpeningChainPreview}
+          disabled={!videoInfo}
           aria-pressed={chainPreviewOpen}
           className={
             isOpeningChainPreview
-              ? `${BTN} bg-ink-800 border-ink-750 text-ink-300 cursor-wait`
+              ? `${BTN} bg-ink-800 border-warn-500/45 text-warn-300 hover:bg-ink-750`
               : chainPreviewOpen
                 ? `${BTN} bg-accent-500/14 border-accent-500/50 text-accent-300 hover:bg-accent-500/20`
                 : BTN_SECONDARY
           }
-          title={chainPreviewOpen
-            ? 'Close the chain preview'
-            : 'Preview each step of the chain, at full resolution, in the app'}
+          title={isOpeningChainPreview
+            ? 'Stop opening the preview — an engine build or a cold source can take a while'
+            : chainPreviewOpen
+              ? 'Close the chain preview'
+              : 'Preview each step of the chain, at full resolution, in the app'}
         >
+          {/* Opening can sit in an engine build for minutes, so this stays a
+              live control rather than a disabled spinner. */}
           {isOpeningChainPreview
-            ? <><Loader2 className="w-4 h-4 animate-spin" />Opening</>
+            ? <><Loader2 className="w-4 h-4 animate-spin" />Cancel</>
             : <><Layers className="w-4 h-4" />{chainPreviewOpen ? 'Close' : 'Inspect'}</>}
         </button>
       )}

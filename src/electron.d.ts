@@ -36,9 +36,11 @@ export interface ElectronAPI {
     filters?: Filter[],
     numStreams?: number,
     segment?: SegmentSelection
-  ) => Promise<{ success: boolean; error?: string; outputs?: PreviewOutput[] }>;
+  ) => Promise<{ success: boolean; error?: string; cancelled?: boolean; outputs?: PreviewOutput[] }>;
   previewSelect: (index: number) => Promise<{ success: boolean; error?: string }>;
   previewFrame: (n: number, width: number) => Promise<PreviewFrameResult>;
+  /** Stops an open in flight, including a preflight sitting in an engine build. */
+  previewCancel: () => Promise<{ success: boolean; cancelled: boolean }>;
   previewClose: () => Promise<{ success: boolean }>;
   getOutputResolution: (
     videoPath: string,

@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ) => ipcRenderer.invoke('preview-open', videoPath, modelPath, defaultBackend, upscalingEnabled, filters, numStreams, segment),
   previewSelect: (index: number) => ipcRenderer.invoke('preview-select', index),
   previewFrame: (n: number, width: number) => ipcRenderer.invoke('preview-frame', n, width),
+  previewCancel: () => ipcRenderer.invoke('preview-cancel'),
   previewClose: () => ipcRenderer.invoke('preview-close'),
   getFilePathFromFile: (file: File) => webUtils.getPathForFile(file),
   

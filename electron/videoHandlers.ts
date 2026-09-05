@@ -34,6 +34,17 @@ let previewSession: PreviewSession | null = null;
 let previewScriptPath: string | null = null;
 
 /**
+ * Bumped by every open and by every cancel.
+ *
+ * Opening runs a preflight that can sit in an engine build for minutes and a
+ * source open that can take seconds, so a cancel usually lands while an open
+ * is still in flight. Without this the cancelled open would go on to install
+ * its session afterwards, and the user would be left with the thing they just
+ * stopped.
+ */
+let previewOpenToken = 0;
+
+/**
  * Cache ceiling for a preview session, in MB.
  *
  * Deliberately not the template's 15000: a preview process can be sitting
@@ -591,8 +602,12 @@ export function registerVideoHandlers(
     numStreams?: number,
     segment?: { enabled: boolean; startFrame: number; endFrame: number }
   ) => {
+    const token = ++previewOpenToken;
+    const superseded = () => token !== previewOpenToken;
+
     try {
       const metadata = await extractVideoMetadata(videoPath);
+      if (superseded()) return { success: false, cancelled: true };
 
       const scriptPath = await scriptGenerator.generateScript({
         inputVideo: videoPath,
@@ -628,6 +643,13 @@ export function registerVideoHandlers(
         infoExecutor = null;
       }
 
+      // A cancel during the preflight surfaces as an error from it, so the
+      // token is what tells the two apart.
+      if (superseded()) {
+        await scriptGenerator.cleanupScript(scriptPath).catch(() => {});
+        return { success: false, cancelled: true };
+      }
+
       if (preflight.error) {
         logger.error('Preview preflight failed:', preflight.error);
         await scriptGenerator.cleanupScript(scriptPath);
@@ -647,6 +669,14 @@ export function registerVideoHandlers(
       await session.start();
       const outputs = await session.open(scriptPath, PREVIEW_CACHE_MB);
 
+      // Opening a cold source can take seconds, which is plenty of time for a
+      // cancel to arrive. Do not install a session nobody is waiting for.
+      if (superseded()) {
+        session.dispose();
+        await scriptGenerator.cleanupScript(scriptPath).catch(() => {});
+        return { success: false, cancelled: true };
+      }
+
       previewSession = session;
       previewScriptPath = scriptPath;
 
@@ -657,6 +687,27 @@ export function registerVideoHandlers(
       logger.error('Error opening preview session:', error);
       return { success: false, error: errorMsg };
     }
+  });
+
+  ipcMain.handle('preview-cancel', async () => {
+    logger.info('Cancelling the preview session');
+    // Invalidates any open still in flight, so it tears itself down instead
+    // of installing a session after the user asked to stop.
+    previewOpenToken++;
+
+    if (infoExecutor) {
+      infoExecutor.cancelInfoExtraction();
+      infoExecutor = null;
+    }
+    if (previewSession) {
+      previewSession.dispose();
+      previewSession = null;
+    }
+    if (previewScriptPath) {
+      await scriptGenerator.cleanupScript(previewScriptPath).catch(() => {});
+      previewScriptPath = null;
+    }
+    return { success: true, cancelled: true };
   });
 
   ipcMain.handle('preview-select', async (event, index: number) => {
@@ -690,6 +741,7 @@ export function registerVideoHandlers(
   });
 
   ipcMain.handle('preview-close', async () => {
+    previewOpenToken++;
     if (previewSession) {
       previewSession.dispose();
       previewSession = null;

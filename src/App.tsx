@@ -761,18 +761,28 @@ function App() {
     isOpen: chainPreviewOpen,
     open: openChainPreview,
     close: closeChainPreview,
+    cancel: cancelChainPreview,
     seek: seekChainPreview,
     select: selectChainStep,
+    isOpening: isOpeningChainPreview,
   } = chainPreview;
 
   const handleToggleChainPreview = useCallback(() => {
+    // Mid-open the button is a cancel: a preflight can sit in an engine build
+    // for minutes, and there is otherwise no way out of it.
+    if (isOpeningChainPreview) {
+      addConsoleLog('Cancelled opening the chain preview');
+      void cancelChainPreview();
+      return;
+    }
     if (chainPreviewOpen) {
       void closeChainPreview();
       return;
     }
     addConsoleLog('Opening the chain preview...');
     void openChainPreview();
-  }, [chainPreviewOpen, openChainPreview, closeChainPreview, addConsoleLog]);
+  }, [isOpeningChainPreview, chainPreviewOpen, openChainPreview, closeChainPreview,
+      cancelChainPreview, addConsoleLog]);
 
   const handleSeekFrame = useCallback(async (frameNumber: number) => {
     if (!videoInfo) return;
@@ -1426,7 +1436,7 @@ function App() {
           cancelValidation={cancelValidation}
           isLaunchingPreviewer={isLaunchingPreviewer}
           chainPreviewOpen={chainPreview.isOpen}
-          isOpeningChainPreview={chainPreview.isOpening}
+          isOpeningChainPreview={isOpeningChainPreview}
           previewerStatus={previewerStatus}
           videoInfo={videoInfo}
           selectedModel={selectedModel}
