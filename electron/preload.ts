@@ -31,6 +31,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getOutputResolution: (videoPath: string, modelPath: string | null, defaultBackend?: string, upscalingEnabled?: boolean, filters?: any, upscalePosition?: number, numStreams?: number, sourceFps?: number) =>
     ipcRenderer.invoke('get-output-resolution', videoPath, modelPath, defaultBackend, upscalingEnabled, filters, upscalePosition, numStreams, sourceFps),
   cancelValidation: () => ipcRenderer.invoke('cancel-validation'),
+
+  // In-app chain preview — a warm VapourSynth session, one step at a time
+  previewOpen: (
+    videoPath: string,
+    modelPath: string | null,
+    defaultBackend?: string,
+    upscalingEnabled?: boolean,
+    filters?: any[],
+    numStreams?: number,
+    segment?: { enabled: boolean; startFrame: number; endFrame: number }
+  ) => ipcRenderer.invoke('preview-open', videoPath, modelPath, defaultBackend, upscalingEnabled, filters, numStreams, segment),
+  previewSelect: (index: number) => ipcRenderer.invoke('preview-select', index),
+  previewFrame: (n: number, width: number) => ipcRenderer.invoke('preview-frame', n, width),
+  previewClose: () => ipcRenderer.invoke('preview-close'),
   getFilePathFromFile: (file: File) => webUtils.getPathForFile(file),
   
   // Model operations

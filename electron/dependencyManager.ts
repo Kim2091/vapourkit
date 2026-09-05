@@ -570,17 +570,26 @@ export class DependencyManager {
   private async updateBundledFiles(): Promise<void> {
     const bundledBasePath = getBundledBasePath();
 
-    // Always overwrite VapourSynth template — it's a placeholder-driven generated script,
-    // not user-customizable, and must match the current script generator.
-    const bundledTemplatePath = path.join(bundledBasePath, 'include', 'vapoursynth_template.vpy');
-    const userTemplatePath = path.join(PATHS.CONFIG, 'vapoursynth_template.vpy');
-    if (await fs.pathExists(bundledTemplatePath)) {
-      await fs.copy(bundledTemplatePath, userTemplatePath, { overwrite: true });
-      logger.dependency('Updated VapourSynth template from bundled source');
-    }
+    await this.syncGeneratedConfigFiles(bundledBasePath);
 
     // Copy any new filter templates (existing ones are preserved)
     await this.copyFilterTemplates(bundledBasePath);
+  }
+
+  /**
+   * Overwrites the config files that are app infrastructure rather than user
+   * settings: the placeholder template the script generator fills in, and the
+   * preview session's server. Both must match the app version — a template
+   * missing a placeholder, or a server that disagrees with previewSession.ts
+   * about the protocol, fails at runtime — so neither preserves local edits.
+   */
+  private async syncGeneratedConfigFiles(bundledBasePath: string): Promise<void> {
+    for (const name of ['vapoursynth_template.vpy', 'preview_server.py']) {
+      const bundledPath = path.join(bundledBasePath, 'include', name);
+      if (!await fs.pathExists(bundledPath)) continue;
+      await fs.copy(bundledPath, path.join(PATHS.CONFIG, name), { overwrite: true });
+      logger.dependency(`Updated ${name} from bundled source`);
+    }
   }
 
   private async copyTemplateIfNeeded(userPath: string, bundledPath: string, logName: string): Promise<void> {
@@ -695,17 +704,8 @@ export class DependencyManager {
       'App configuration'
     );
     
-    // Always overwrite VapourSynth template from bundled source.
-    // This is a generated-script template with placeholders, not a user-customizable file,
-    // so it must stay in sync with the current app version to avoid runtime errors
-    // (e.g. missing imports like set_output).
-    const userTemplatePath = path.join(PATHS.CONFIG, 'vapoursynth_template.vpy');
-    const bundledTemplatePath = path.join(bundledBasePath, 'include', 'vapoursynth_template.vpy');
-    if (await fs.pathExists(bundledTemplatePath)) {
-      await fs.copy(bundledTemplatePath, userTemplatePath, { overwrite: true });
-      logger.dependency('Updated VapourSynth template from bundled source');
-    }
-    
+    await this.syncGeneratedConfigFiles(bundledBasePath);
+
     // Copy filter templates from bundled location
     await this.copyFilterTemplates(bundledBasePath);
     

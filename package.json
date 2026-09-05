@@ -81,6 +81,7 @@
             "include/filter_templates/**/*.vkfilter",
             "include/vapoursynth_template.vpy",
             "include/build_trt_engine.py",
+            "include/preview_server.py",
             "include/stock-app-config.json",
             "package.json",
             "!data/**/*"
@@ -93,6 +94,7 @@
             "include/filter_templates/**/*.vkfilter",
             "include/vapoursynth_template.vpy",
             "include/build_trt_engine.py",
+            "include/preview_server.py",
             "include/stock-app-config.json",
             "node_modules/7zip-bin/**/*"
         ],

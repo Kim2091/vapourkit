@@ -18,6 +18,7 @@ import { DependencyManager } from './dependencyManager';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 import { FFmpegManager } from './ffmpegManager';
 import { VsViewManager } from './vsViewManager';
+import { PreviewSession } from './previewSession';
 import { QueueItemLogger } from './queueItemLogger';
 import {
   getVideoCompareUnavailableMessage,
@@ -29,6 +30,16 @@ let upscaleExecutor: UpscaleExecutor | null = null;
 let previewExecutor: UpscaleExecutor | null = null;
 let infoExecutor: UpscaleExecutor | null = null;
 let activeQueueItemLogger: QueueItemLogger | null = null;
+let previewSession: PreviewSession | null = null;
+let previewScriptPath: string | null = null;
+
+/**
+ * Cache ceiling for a preview session, in MB.
+ *
+ * Deliberately not the template's 15000: a preview process can be sitting
+ * beside a running queue job, and the decoder's own floor dominates anyway.
+ */
+const PREVIEW_CACHE_MB = 1000;
 
 /**
  * Cancels all active video processing executors and their child processes
@@ -52,6 +63,10 @@ export function cancelAllVideoProcessing(): void {
   if (infoExecutor) {
     infoExecutor.cancelInfoExtraction();
     infoExecutor = null;
+  }
+  if (previewSession) {
+    previewSession.dispose();
+    previewSession = null;
   }
 }
 
@@ -557,6 +572,133 @@ export function registerVideoHandlers(
       const errorMsg = error instanceof Error ? error.message : String(error);
       return { success: false, error: errorMsg };
     }
+  });
+
+  // ---- In-app chain preview ------------------------------------------------
+  //
+  // The same generated multi-output script vs-view is handed, executed instead
+  // by a warm python session this app talks to directly. One session lives for
+  // as long as the preview panel is open; a change to the chain closes it and
+  // opens a new one, because the output indices move when filters do.
+
+  ipcMain.handle('preview-open', async (
+    event,
+    videoPath: string,
+    modelPath: string | null,
+    defaultBackend?: string,
+    upscalingEnabled?: boolean,
+    filters?: any[],
+    numStreams?: number,
+    segment?: { enabled: boolean; startFrame: number; endFrame: number }
+  ) => {
+    try {
+      const metadata = await extractVideoMetadata(videoPath);
+
+      const scriptPath = await scriptGenerator.generateScript({
+        inputVideo: videoPath,
+        enginePath: modelPath || '',
+        pluginsPath: PATHS.PLUGINS,
+        defaultBackend: resolveBackendId(defaultBackend),
+        useFp32: modelPath ? configManager.isModelFp32(modelPath) : false,
+        modelType: modelPath ? configManager.getModelType(modelPath) : 'image' as const,
+        upscalingEnabled: upscalingEnabled || false,
+        colorimetry: configManager.getColorimetrySettings(),
+        filters: filters || [],
+        numStreams: numStreams || 2,
+        outputFormat: 'vs.YUV420P8',
+        segment,
+        sourceFps: metadata.fps,
+        generatePreviewOutputs: true,
+      });
+
+      // Same preflight as the vs-view launch: a TensorRT step with no cached
+      // engine would otherwise block the session's open for minutes with
+      // nothing on screen explaining why.
+      if (infoExecutor) {
+        infoExecutor.cancelInfoExtraction();
+      }
+      const preflightExecutor = new UpscaleExecutor(
+        dependencyManager.getVSPipePath(),
+        dependencyManager.getPythonExecutablePath(),
+        mainWindow,
+      );
+      infoExecutor = preflightExecutor;
+      const preflight = await preflightExecutor.getOutputInfo(scriptPath);
+      if (infoExecutor === preflightExecutor) {
+        infoExecutor = null;
+      }
+
+      if (preflight.error) {
+        logger.error('Preview preflight failed:', preflight.error);
+        await scriptGenerator.cleanupScript(scriptPath);
+        return { success: false, error: preflight.error };
+      }
+
+      if (previewSession) {
+        previewSession.dispose();
+        previewSession = null;
+      }
+      if (previewScriptPath) {
+        await scriptGenerator.cleanupScript(previewScriptPath).catch(() => {});
+        previewScriptPath = null;
+      }
+
+      const session = new PreviewSession();
+      await session.start();
+      const outputs = await session.open(scriptPath, PREVIEW_CACHE_MB);
+
+      previewSession = session;
+      previewScriptPath = scriptPath;
+
+      logger.info(`Preview session open with ${outputs.length} steps`);
+      return { success: true, outputs };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error('Error opening preview session:', error);
+      return { success: false, error: errorMsg };
+    }
+  });
+
+  ipcMain.handle('preview-select', async (event, index: number) => {
+    if (!previewSession) return { success: false, error: 'No preview session is open' };
+    try {
+      await previewSession.select(index);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Returns pixels through invoke, which copies them. That is affordable for
+  // the one frame this handler serves; playback replaces it with a
+  // MessageChannel port so frames are transferred rather than cloned.
+  ipcMain.handle('preview-frame', async (event, n: number, width: number) => {
+    if (!previewSession) return { success: false, error: 'No preview session is open' };
+    try {
+      const frame = await previewSession.frame(n, width);
+      return {
+        success: true,
+        n: frame.n,
+        width: frame.width,
+        height: frame.height,
+        output: frame.output,
+        data: frame.data,
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  ipcMain.handle('preview-close', async () => {
+    if (previewSession) {
+      previewSession.dispose();
+      previewSession = null;
+    }
+    if (previewScriptPath) {
+      await scriptGenerator.cleanupScript(previewScriptPath).catch(() => {});
+      previewScriptPath = null;
+    }
+    return { success: true };
   });
 
   // Preview segment handler - processes a short segment and opens it in the default video player

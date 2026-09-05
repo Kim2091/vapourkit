@@ -22,6 +22,24 @@ export interface ElectronAPI {
   readVideoFile: (filePath: string) => Promise<ArrayBuffer>;
   getVideoThumbnail: (filePath: string) => Promise<string | null>;
   getVideoFrameAt: (filePath: string, frameNumber: number, fps: number) => Promise<string | null>;
+
+  /**
+   * One step of the filter chain, as the preview session reports it. The index
+   * is the script's output index: 0 is the untouched source, and each enabled
+   * filter adds one. Labels come from the app's own filter list, not from here.
+   */
+  previewOpen: (
+    videoPath: string,
+    modelPath: string | null,
+    defaultBackend?: BackendId,
+    upscalingEnabled?: boolean,
+    filters?: Filter[],
+    numStreams?: number,
+    segment?: SegmentSelection
+  ) => Promise<{ success: boolean; error?: string; outputs?: PreviewOutput[] }>;
+  previewSelect: (index: number) => Promise<{ success: boolean; error?: string }>;
+  previewFrame: (n: number, width: number) => Promise<PreviewFrameResult>;
+  previewClose: () => Promise<{ success: boolean }>;
   getOutputResolution: (
     videoPath: string,
     modelPath: string | null,
@@ -264,6 +282,29 @@ export interface SetupProgress {
   component: string;
   progress: number;
   message: string;
+}
+
+/** One selectable step of the chain, as the open script exposes it. */
+export interface PreviewOutput {
+  /** Script output index: 0 is the source, then one per enabled filter. */
+  index: number;
+  width: number;
+  height: number;
+  frames: number;
+  fpsNum: number;
+  fpsDen: number;
+  format: string | null;
+}
+
+/** A rendered preview frame: packed RGB24, three bytes per pixel, no padding. */
+export interface PreviewFrameResult {
+  success: boolean;
+  error?: string;
+  n?: number;
+  width?: number;
+  height?: number;
+  output?: number;
+  data?: Uint8Array;
 }
 
 export interface VideoInfo {
