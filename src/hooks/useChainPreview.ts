@@ -99,7 +99,7 @@ function stepLabels(filters: Filter[]): string[] {
  * output indices may have moved, so step 3's picture could appear under step
  * 4's label. vs-view answers the same problem with Ctrl+R; so does this.
  */
-function chainKey(options: UseChainPreviewOptions): string {
+function chainKey(options: UseChainPreviewOptions, liveParameters: string | null): string {
   const enabled = options.filters
     .filter(f => f.enabled)
     .sort((a, b) => a.order - b.order)
@@ -110,7 +110,13 @@ function chainKey(options: UseChainPreviewOptions): string {
       m: f.modelPath,
       b: f.backend,
       s: f.numStreams,
-      v: f.id === options.liveParameterFilterId ? undefined : f.parameters,
+      // The open editor contributes the values it had when it opened, frozen,
+      // so dragging does not move the key — and neither does opening, which
+      // would otherwise retire a session the instant a saved grade was
+      // opened for editing.
+      v: f.id === options.liveParameterFilterId && liveParameters !== null
+        ? liveParameters
+        : JSON.stringify(f.parameters ?? null),
     }));
 
   return JSON.stringify({
@@ -142,7 +148,17 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
   const queued = useRef<{ n: number; index: number } | null>(null);
   const playhead = useRef(0);
 
-  const key = chainKey(options);
+  // Snapshot of the open editor's parameters, held for as long as it is open.
+  const frozenLive = useRef<{ id: string; json: string } | null>(null);
+  const liveId = options.liveParameterFilterId ?? null;
+  if (liveId === null) {
+    frozenLive.current = null;
+  } else if (frozenLive.current?.id !== liveId) {
+    const target = options.filters.find(f => f.id === liveId);
+    frozenLive.current = { id: liveId, json: JSON.stringify(target?.parameters ?? null) };
+  }
+
+  const key = chainKey(options, frozenLive.current?.json ?? null);
   const openKey = useRef<string | null>(null);
   // An open can sit in a preflight for minutes, so a cancel usually lands
   // while one is still running. This is what stops the abandoned open from

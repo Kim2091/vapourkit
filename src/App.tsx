@@ -1041,23 +1041,41 @@ function App() {
     ? chainPreview.steps[chainPreview.steps.length - 1].index
     : null;
 
-  // Only act on a transition, so a manual step choice is not yanked back.
-  const gradeUpstreamRef = useRef<number | null>(null);
+  // Park once per open editor, rather than on a transition.
+  //
+  // Watching for a change in the step was wrong in a way that showed up only
+  // in the ordering people actually use: opening takes a moment, and anything
+  // that set the grade step while the session was still opening left the
+  // before and after values equal by the time it was open. The effect then
+  // concluded nothing had changed and never selected anything, so the session
+  // sat on the last step until a tab was clicked by hand.
+  //
+  // Keyed on the editor instead, both orderings park exactly once, and a step
+  // chosen by hand afterwards is left alone.
+  const parkedForRef = useRef<string | null>(null);
+  const parkKey = gradeUpstreamOutput === null
+    ? null
+    : `${activeFilterEditorId}:${gradeUpstreamOutput}`;
+
   useEffect(() => {
     if (!chainPreviewOpen) {
-      gradeUpstreamRef.current = gradeUpstreamOutput;
+      parkedForRef.current = null;
       return;
     }
-    const previous = gradeUpstreamRef.current;
-    gradeUpstreamRef.current = gradeUpstreamOutput;
 
-    if (gradeUpstreamOutput !== null) {
-      if (gradeUpstreamOutput !== previous) selectChainStep(gradeUpstreamOutput);
-    } else if (previous !== null && lastChainStep !== null) {
-      // The grade closed, so show the whole chain again.
-      selectChainStep(lastChainStep);
+    if (parkKey === null) {
+      // The grade closed, so show the whole chain again — once.
+      if (parkedForRef.current !== null && lastChainStep !== null) {
+        parkedForRef.current = null;
+        selectChainStep(lastChainStep);
+      }
+      return;
     }
-  }, [chainPreviewOpen, gradeUpstreamOutput, lastChainStep, selectChainStep]);
+
+    if (parkedForRef.current === parkKey) return;
+    parkedForRef.current = parkKey;
+    selectChainStep(gradeUpstreamOutput!);
+  }, [chainPreviewOpen, parkKey, gradeUpstreamOutput, lastChainStep, selectChainStep]);
 
   useEffect(() => {
     if (!activeFilterEditorId) return;
