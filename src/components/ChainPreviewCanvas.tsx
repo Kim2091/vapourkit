@@ -30,6 +30,8 @@ interface ChainPreviewCanvasProps {
   holdingBefore?: boolean;
   /** Wipe compares across the frame; after shows the graded picture in full. */
   mode?: CompareMode;
+  /** Stripe the pixels sitting on either clamp. */
+  showClipping?: boolean;
   stepLabel?: string;
   onRendererError?: (message: string) => void;
 }
@@ -39,6 +41,7 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
   gradeValues = null,
   holdingBefore = false,
   mode = 'after',
+  showClipping = false,
   stepLabel = '',
   onRendererError,
 }: ChainPreviewCanvasProps) => {
@@ -107,8 +110,9 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
   useEffect(() => {
     const renderer = rendererRef.current;
     if (!renderer || !frame) return;
+    renderer.setClipMarks(showClipping);
     renderer.renderWipe(gradeValues ?? GRADE_NEUTRAL, before);
-  }, [frame, gradeValues, before, generation]);
+  }, [frame, gradeValues, before, showClipping, generation]);
 
   const box = containBox(bounds, frame ? { width: frame.width, height: frame.height } : { width: 0, height: 0 });
 

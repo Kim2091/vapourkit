@@ -361,6 +361,10 @@ uniform float uBrightness;
 uniform float uSaturation;
 uniform float uHueCos;
 uniform float uHueSin;
+// Display only. Never touches the grade, and so never affects agreement with
+// the emitted Python — it decides what is drawn over the result, not what the
+// result is.
+uniform float uClipMarks;
 
 const vec3 LUMA = vec3(${LUMA_R}, ${LUMA_G}, ${LUMA_B});
 
@@ -373,6 +377,14 @@ void main() {
   c = pow(c, uInvGamma);
   c = (c - vec3(uPivot)) * uContrast + vec3(uPivot);
   c = c + vec3(uBrightness);
+
+  // Watched at both clamps, because either can be the one that flattens a
+  // pixel: this per-channel stage, and the output after saturation. Reading
+  // only the final value would miss a channel that was already pinned here
+  // and then pulled back inside the range by a desaturation.
+  bool clipHigh = any(greaterThan(c, vec3(0.999)));
+  bool clipLow = any(lessThan(c, vec3(0.001)));
+
   c = clamp(c, 0.0, 1.0);
 
   float y = dot(c, LUMA);
@@ -386,7 +398,22 @@ void main() {
     y - ((LUMA.r * crR + LUMA.b * cbR) * uSaturation) / LUMA.g,
     y + cbR * uSaturation
   );
-  gl_FragColor = vec4(clamp(outColor, 0.0, 1.0), 1.0);
+
+  clipHigh = clipHigh || any(greaterThan(outColor, vec3(0.999)));
+  clipLow = clipLow || any(lessThan(outColor, vec3(0.001)));
+
+  vec3 shown = clamp(outColor, 0.0, 1.0);
+
+  // Diagonal stripes rather than a flat fill: a solid red patch is exactly
+  // what a blown highlight already looks like, so a flat marker is the one
+  // thing that cannot be told apart from what it is marking.
+  if (uClipMarks > 0.5 && (clipHigh || clipLow)) {
+    if (mod(gl_FragCoord.x + gl_FragCoord.y, 8.0) < 4.0) {
+      shown = clipHigh ? vec3(1.0, 0.16, 0.10) : vec3(0.16, 0.45, 1.0);
+    }
+  }
+
+  gl_FragColor = vec4(shown, 1.0);
 }
 `;
 

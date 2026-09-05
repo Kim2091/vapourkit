@@ -42,6 +42,7 @@ export class GradeRenderer {
   private locations: Record<string, WebGLUniformLocation | null> = {};
   private size = { width: 0, height: 0 };
   private disposed = false;
+  private clipMarks = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     // preserveDrawingBuffer matters here: this renderer draws on demand, when
@@ -93,10 +94,21 @@ export class GradeRenderer {
     for (const name of [
       'uFrame', 'uOffset', 'uGain', 'uLift', 'uInvGamma',
       'uContrast', 'uPivot', 'uBrightness', 'uSaturation', 'uHueCos', 'uHueSin',
+      'uClipMarks',
     ]) {
       this.locations[name] = gl.getUniformLocation(program, name);
     }
     gl.uniform1i(this.locations.uFrame, 0);
+  }
+
+  /**
+   * Stripe the pixels that land on either clamp.
+   *
+   * Held on the renderer rather than passed per draw, so a wipe marks both
+   * halves and the setting survives a re-render of the same frame.
+   */
+  setClipMarks(enabled: boolean): void {
+    this.clipMarks = enabled;
   }
 
   get isLost(): boolean {
@@ -158,6 +170,7 @@ export class GradeRenderer {
     gl.uniform1f(this.locations.uSaturation, u.uSaturation);
     gl.uniform1f(this.locations.uHueCos, u.uHueCos);
     gl.uniform1f(this.locations.uHueSin, u.uHueSin);
+    gl.uniform1f(this.locations.uClipMarks, this.clipMarks ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

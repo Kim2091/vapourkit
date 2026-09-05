@@ -111,6 +111,9 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   const previewImageRef = useRef<HTMLImageElement>(null);
   const [previewImageSize, setPreviewImageSize] = useState<{ width: number; height: number } | null>(null);
   const [resizingScopes, setResizingScopes] = useState(false);
+  // Panel-local: it is a way of looking at the picture, not part of the grade,
+  // and it should hold while stepping between steps and frames.
+  const [showClipping, setShowClipping] = useState(false);
   const cropEditor = activeFilterEditor?.editor?.type === 'crop' ? activeFilterEditor.editor : null;
 
   // Dragging left widens the column, so the delta is subtracted. The parent
@@ -259,6 +262,8 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           isStale={chainPreview.isStale}
           bakedFromStep={chainPreview.bakedFromStep}
           frame={chainFrame}
+          showClipping={showClipping}
+          onToggleClipping={() => setShowClipping(value => !value)}
           frameSize={chainFrame ? { width: chainFrame.width, height: chainFrame.height } : null}
           onSelect={chainPreview.onSelect}
           onReload={chainPreview.onReload}
@@ -281,6 +286,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 gradeValues={gradeIsLive ? gradePreview!.values : null}
                 holdingBefore={gradeIsLive && gradePreview!.holdingBefore}
                 mode={gradePreview?.mode}
+                showClipping={showClipping}
                 stepLabel={gradePreview?.stepLabel}
               />
             </div>

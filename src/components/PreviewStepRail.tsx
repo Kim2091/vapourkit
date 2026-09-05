@@ -6,7 +6,7 @@
 // fingers — 1 is the first tab, and 0 is the tenth.
 
 import { memo, useEffect } from 'react';
-import { Loader2, RefreshCw, Layers, AlertTriangle } from 'lucide-react';
+import { Loader2, RefreshCw, Layers, AlertTriangle, Ban } from 'lucide-react';
 import type { ChainPreviewFrame, ChainPreviewStep } from '../hooks/useChainPreview';
 
 /** VapourSynth's _ColorRange, as words. */
@@ -43,6 +43,8 @@ interface PreviewStepRailProps {
   /** The frame on screen, for its levels and its tagging. */
   frame?: ChainPreviewFrame | null;
   frameSize: { width: number; height: number } | null;
+  showClipping?: boolean;
+  onToggleClipping?: () => void;
   onSelect: (index: number) => void;
   onReload: () => void;
 }
@@ -55,6 +57,8 @@ export const PreviewStepRail = memo<PreviewStepRailProps>(({
   bakedFromStep = null,
   frame = null,
   frameSize,
+  showClipping = false,
+  onToggleClipping,
   onSelect,
   onReload,
 }: PreviewStepRailProps) => {
@@ -179,6 +183,22 @@ Source: ${frame.source.format ?? 'unknown format'}, range ${
             <AlertTriangle className="w-3 h-3" />
             range?
           </span>
+        )}
+
+        {onToggleClipping && (
+          <button
+            onClick={onToggleClipping}
+            aria-pressed={showClipping}
+            title="Stripe the pixels sitting on the clip point — red at the top, blue at the bottom. Follows the grade as you drag it."
+            className={`inline-flex items-center gap-1 h-[18px] px-1.5 rounded border font-sans transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
+              showClipping
+                ? 'border-accent-500/50 bg-accent-500/12 text-accent-300'
+                : 'border-ink-750 text-ink-500 hover:text-ink-300'
+            }`}
+          >
+            <Ban className="w-3 h-3" />
+            Clip
+          </button>
         )}
 
         {/* Luma floor and ceiling: the number you would otherwise be
