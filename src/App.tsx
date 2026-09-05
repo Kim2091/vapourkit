@@ -753,6 +753,7 @@ function App() {
     numStreams,
     segment,
     previewWidth: 1280,
+    liveParameterFilterId: activeFilterEditorId,
     onError: (message) => addConsoleLog(`Preview: ${message}`),
   });
 
@@ -761,6 +762,7 @@ function App() {
     open: openChainPreview,
     close: closeChainPreview,
     seek: seekChainPreview,
+    select: selectChainStep,
   } = chainPreview;
 
   const handleToggleChainPreview = useCallback(() => {
@@ -1010,6 +1012,42 @@ function App() {
       ? `step ${position + 1} of ${enabled.length} · after ${previousName}`
       : `step ${position + 1} of ${enabled.length} · from the source`;
   }, [activeFilterEditor, colorGrade.editor, filters]);
+
+  // With a grade step open, park the session on the step BELOW it. That frame
+  // is the picture entering the grade, and the shader applies the grade to it
+  // on the GPU — so a trackball drag costs a draw call, not a script reload.
+  // Selecting the grade's own output would show the values that were baked
+  // into the script when it loaded, which is exactly the stale picture.
+  const gradeUpstreamOutput = useMemo(() => {
+    if (!colorGrade.editor || !activeFilterEditor) return null;
+    const enabled = filters.filter(filter => filter.enabled).sort((a, b) => a.order - b.order);
+    const position = enabled.findIndex(filter => filter.id === activeFilterEditor.id);
+    // Output 0 is the source, so the filter at position p produces output
+    // p + 1 and receives output p.
+    return position < 0 ? null : position;
+  }, [colorGrade.editor, activeFilterEditor, filters]);
+
+  const lastChainStep = chainPreview.steps.length
+    ? chainPreview.steps[chainPreview.steps.length - 1].index
+    : null;
+
+  // Only act on a transition, so a manual step choice is not yanked back.
+  const gradeUpstreamRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!chainPreviewOpen) {
+      gradeUpstreamRef.current = gradeUpstreamOutput;
+      return;
+    }
+    const previous = gradeUpstreamRef.current;
+    gradeUpstreamRef.current = gradeUpstreamOutput;
+
+    if (gradeUpstreamOutput !== null) {
+      if (gradeUpstreamOutput !== previous) selectChainStep(gradeUpstreamOutput);
+    } else if (previous !== null && lastChainStep !== null) {
+      // The grade closed, so show the whole chain again.
+      selectChainStep(lastChainStep);
+    }
+  }, [chainPreviewOpen, gradeUpstreamOutput, lastChainStep, selectChainStep]);
 
   useEffect(() => {
     if (!activeFilterEditorId) return;

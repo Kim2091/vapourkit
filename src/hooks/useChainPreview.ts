@@ -39,6 +39,17 @@ interface UseChainPreviewOptions {
   segment: SegmentSelection;
   /** Width to render at. The session downscales; it never upscales. */
   previewWidth: number;
+  /**
+   * The filter whose values are being dragged right now, if any.
+   *
+   * Its parameters are left out of the chain key. A grade is applied to the
+   * picture by the shader while the session sits on the step below it, so the
+   * frames the session is serving do not depend on those values — and treating
+   * every trackball delta as a chain change would make grading a reload loop.
+   * The moment the editor closes it rejoins the key, so a changed grade does
+   * ask for the reload that makes it real.
+   */
+  liveParameterFilterId?: string | null;
   onError?: (message: string) => void;
 }
 
@@ -97,7 +108,7 @@ function chainKey(options: UseChainPreviewOptions): string {
       m: f.modelPath,
       b: f.backend,
       s: f.numStreams,
-      v: f.parameters,
+      v: f.id === options.liveParameterFilterId ? undefined : f.parameters,
     }));
 
   return JSON.stringify({

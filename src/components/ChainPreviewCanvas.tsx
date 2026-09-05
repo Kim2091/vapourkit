@@ -10,15 +10,30 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { GradeRenderer } from '../utils/gradeRenderer';
+import { GRADE_NEUTRAL, type GradeValues } from '../utils/colorGrade';
 import type { ChainPreviewFrame } from '../hooks/useChainPreview';
 
 interface ChainPreviewCanvasProps {
   frame: ChainPreviewFrame | null;
+  /**
+   * Live grade to shade the frame with, when a grade step is open.
+   *
+   * The session is parked on the step below the grade, so this texture is the
+   * picture entering it — and the shader is generated from the same model as
+   * the emitted Python, so shading it here is the grade, not an impression of
+   * one. That is what makes a trackball drag cost a draw call instead of a
+   * script reload.
+   */
+  gradeValues?: GradeValues | null;
+  /** True while the hold-for-before key is down. */
+  holdingBefore?: boolean;
   onRendererError?: (message: string) => void;
 }
 
 export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
   frame,
+  gradeValues = null,
+  holdingBefore = false,
   onRendererError,
 }: ChainPreviewCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -57,14 +72,22 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
     };
   }, [onRendererError, generation]);
 
-  // Neutral values: this canvas shows the step as rendered. Grading a step
-  // happens in the grading overlay, on the frame entering it.
+  // Upload only when the frame itself changes. A drag fires far faster than
+  // frames arrive, and re-uploading a texture per trackball delta would spend
+  // the whole budget moving bytes that did not change.
   useEffect(() => {
     const renderer = rendererRef.current;
     if (!renderer || !frame) return;
     renderer.setFrameBuffer(frame.pixels, frame.width, frame.height);
-    renderer.renderNeutral();
   }, [frame, generation]);
+
+  // Draw whenever the frame or the grade changes. With no grade step open this
+  // is one neutral pass, which is the step exactly as it renders.
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer || !frame) return;
+    renderer.render(holdingBefore || !gradeValues ? GRADE_NEUTRAL : gradeValues);
+  }, [frame, gradeValues, holdingBefore, generation]);
 
   if (failed) {
     return (

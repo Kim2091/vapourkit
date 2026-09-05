@@ -250,7 +250,20 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
             label="Preview hidden — click to reveal"
           >
             <div className="relative w-full h-full flex items-center justify-center">
-              <ChainPreviewCanvas frame={chainFrame} />
+              {/* With a grade step open the session sits on the step below it,
+                  so this texture is the picture entering the grade and the
+                  shader can apply it live. No round trip, real pixels. */}
+              <ChainPreviewCanvas
+                frame={chainFrame}
+                gradeValues={gradePreview ? gradePreview.values : null}
+                holdingBefore={gradePreview?.holdingBefore ?? false}
+              />
+              {gradePreview && (
+                <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 h-[22px] px-2 rounded border border-accent-500/40 bg-ink-950/85 backdrop-blur-sm text-[10.5px] font-medium text-accent-300 pointer-events-none">
+                  <Palette className="w-3 h-3" />
+                  {gradePreview.holdingBefore ? 'Before' : 'Live grade'}
+                </span>
+              )}
             </div>
           </PrivacyVeil>
         ) : previewFrame ? (
