@@ -27,7 +27,7 @@ interface ColorGradeOverlayProps {
 }
 
 /** Where an object-contain image actually sits inside its box. */
-function containBox(
+export function containBox(
   container: { width: number; height: number },
   frame: { width: number; height: number },
 ) {

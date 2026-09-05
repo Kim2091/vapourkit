@@ -7,10 +7,11 @@
 // It reuses GradeRenderer rather than adding a second WebGL context. Browsers
 // cap how many exist at once, and the grading overlay already owns one.
 
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { GradeRenderer } from '../utils/gradeRenderer';
 import { GRADE_NEUTRAL, type GradeValues } from '../utils/colorGrade';
+import { containBox, type CompareMode } from './ColorGradeOverlay';
 import type { ChainPreviewFrame } from '../hooks/useChainPreview';
 
 interface ChainPreviewCanvasProps {
@@ -27,6 +28,9 @@ interface ChainPreviewCanvasProps {
   gradeValues?: GradeValues | null;
   /** True while the hold-for-before key is down. */
   holdingBefore?: boolean;
+  /** Wipe compares across the frame; after shows the graded picture in full. */
+  mode?: CompareMode;
+  stepLabel?: string;
   onRendererError?: (message: string) => void;
 }
 
@@ -34,12 +38,27 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
   frame,
   gradeValues = null,
   holdingBefore = false,
+  mode = 'after',
+  stepLabel = '',
   onRendererError,
 }: ChainPreviewCanvasProps) => {
+  const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GradeRenderer | null>(null);
   const [failed, setFailed] = useState(false);
   const [generation, setGeneration] = useState(0);
+  const [bounds, setBounds] = useState({ width: 0, height: 0 });
+  const [wipe, setWipe] = useState(0.5);
+
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!element) return;
+    const update = () => setBounds({ width: element.clientWidth, height: element.clientHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -81,13 +100,35 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
     renderer.setFrameBuffer(frame.pixels, frame.width, frame.height);
   }, [frame, generation]);
 
-  // Draw whenever the frame or the grade changes. With no grade step open this
-  // is one neutral pass, which is the step exactly as it renders.
+  // How much of the width shows the ungraded frame. Holding pushes it to the
+  // whole picture; "after" pulls it off entirely.
+  const before = !gradeValues ? 1 : holdingBefore ? 1 : mode === 'wipe' ? wipe : 0;
+
   useEffect(() => {
     const renderer = rendererRef.current;
     if (!renderer || !frame) return;
-    renderer.render(holdingBefore || !gradeValues ? GRADE_NEUTRAL : gradeValues);
-  }, [frame, gradeValues, holdingBefore, generation]);
+    renderer.renderWipe(gradeValues ?? GRADE_NEUTRAL, before);
+  }, [frame, gradeValues, before, generation]);
+
+  const box = containBox(bounds, frame ? { width: frame.width, height: frame.height } : { width: 0, height: 0 });
+
+  const onWipeDown = useCallback((event: React.MouseEvent) => {
+    if (mode !== 'wipe' || !gradeValues || !box) return;
+    event.preventDefault();
+    const move = (clientX: number) => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setWipe(Math.min(1, Math.max(0, (clientX - rect.left - box.left) / box.width)));
+    };
+    move(event.clientX);
+    const onMove = (native: MouseEvent) => move(native.clientX);
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [mode, gradeValues, box]);
 
   if (failed) {
     return (
@@ -98,11 +139,52 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
     );
   }
 
+  const showDivider = Boolean(box) && mode === 'wipe' && Boolean(gradeValues) && !holdingBefore;
+
   return (
-    <canvas
-      ref={canvasRef}
-      className="rounded-lg shadow-lg"
-      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-    />
+    <div ref={rootRef} className="absolute inset-0" onMouseDown={onWipeDown}>
+      <canvas
+        ref={canvasRef}
+        className="absolute block rounded-lg shadow-lg"
+        style={{
+          left: box?.left ?? 0,
+          top: box?.top ?? 0,
+          width: box?.width ?? 0,
+          height: box?.height ?? 0,
+          visibility: box ? 'visible' : 'hidden',
+        }}
+      />
+
+      {showDivider && box && (
+        <span
+          aria-hidden="true"
+          className="absolute w-px bg-white/85 cursor-ew-resize"
+          style={{ left: box.left + box.width * wipe, top: box.top, height: box.height }}
+        >
+          <span className="absolute top-1/2 left-1/2 w-4 h-4 -mt-2 -ml-2 rounded-full border border-white bg-ink-950/40" />
+        </span>
+      )}
+
+      {box && gradeValues && (
+        <>
+          {before > 0.02 && (
+            <span
+              className="absolute font-display text-[10px] font-semibold uppercase tracking-[0.09em] px-1.5 py-0.5 rounded bg-ink-950/85 text-ink-300 pointer-events-none"
+              style={{ left: box.left + 6, bottom: bounds.height - box.top - box.height + 6 }}
+            >
+              {holdingBefore || !stepLabel ? 'Before' : `Before · ${stepLabel}`}
+            </span>
+          )}
+          {before < 0.98 && (
+            <span
+              className="absolute font-display text-[10px] font-semibold uppercase tracking-[0.09em] px-1.5 py-0.5 rounded bg-ink-950/85 text-accent-300 pointer-events-none"
+              style={{ right: bounds.width - box.left - box.width + 6, bottom: bounds.height - box.top - box.height + 6 }}
+            >
+              After · this grade
+            </span>
+          )}
+        </>
+      )}
+    </div>
   );
 });

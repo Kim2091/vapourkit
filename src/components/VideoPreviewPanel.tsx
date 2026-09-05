@@ -279,13 +279,9 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 frame={chainFrame}
                 gradeValues={gradeIsLive ? gradePreview!.values : null}
                 holdingBefore={gradeIsLive && gradePreview!.holdingBefore}
+                mode={gradePreview?.mode}
+                stepLabel={gradePreview?.stepLabel}
               />
-              {gradeIsLive && (
-                <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 h-[22px] px-2 rounded border border-accent-500/40 bg-ink-950/85 backdrop-blur-sm text-[10.5px] font-medium text-accent-300 pointer-events-none">
-                  <Palette className="w-3 h-3" />
-                  {gradePreview!.holdingBefore ? 'Before' : 'Live grade'}
-                </span>
-              )}
             </div>
           </PrivacyVeil>
         ) : previewFrame ? (

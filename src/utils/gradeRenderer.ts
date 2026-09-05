@@ -166,6 +166,35 @@ export class GradeRenderer {
   }
 
   /**
+   * Before on the left of `split`, after on the right, in one canvas.
+   *
+   * A scissor test rather than a second canvas: the comparison has to be the
+   * same pixels in the same place, and two contexts to show one frame is a
+   * cost browsers cap. Both halves read the same texture, so the divider costs
+   * a second draw call and nothing else.
+   *
+   * `split` is the fraction of the width showing the ungraded frame — 0 is
+   * fully graded, 1 is fully "before".
+   */
+  renderWipe(values: GradeValues, split: number): void {
+    if (this.isLost || this.size.width === 0) return;
+    const gl = this.gl;
+    const { width, height } = this.size;
+    const boundary = Math.round(Math.min(1, Math.max(0, split)) * width);
+
+    gl.enable(gl.SCISSOR_TEST);
+    if (boundary > 0) {
+      gl.scissor(0, 0, boundary, height);
+      this.render(GRADE_NEUTRAL);
+    }
+    if (boundary < width) {
+      gl.scissor(boundary, 0, width - boundary, height);
+      this.render(values);
+    }
+    gl.disable(gl.SCISSOR_TEST);
+  }
+
+  /**
    * Releases the GPU objects but deliberately does NOT call
    * WEBGL_lose_context.loseContext(). A canvas returns the same context object
    * forever, so losing it poisons the element: any later renderer on that
