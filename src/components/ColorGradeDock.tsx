@@ -151,7 +151,17 @@ const formatScalar = (spec: ScalarSpec, value: number) => {
   return spec.suffix ? `${signed}${spec.suffix}` : signed;
 };
 
-/** A tone control: label, bar, and a value you can scrub. */
+/** How much slower the bar moves while shift is held. */
+const FINE = 0.2;
+
+/**
+ * A tone control: label, bar, and a value you can scrub or type.
+ *
+ * The bar is absolute — the handle sits under the cursor, and a click puts it
+ * where you clicked. It used to be a relative drag scaled to a fixed 200px,
+ * which meant the handle tracked the cursor only on a bar that happened to be
+ * exactly 200px wide, and never landed where you pressed.
+ */
 const ToneSlider = memo<{
   spec: ScalarSpec;
   value: number;
@@ -160,22 +170,59 @@ const ToneSlider = memo<{
   onCommit: () => void;
   onReset: () => void;
 }>(({ spec, value, disabled, onChange, onCommit, onReset }) => {
-  const fraction = (value - spec.min) / (spec.max - spec.min);
-  const neutral = (GRADE_NEUTRAL[spec.name] as number - spec.min) / (spec.max - spec.min);
+  const trackRef = useRef<HTMLDivElement>(null);
+  /** Non-null only while the value is being typed. */
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const span = spec.max - spec.min;
+  const fraction = (value - spec.min) / span;
+  const neutral = (GRADE_NEUTRAL[spec.name] as number - spec.min) / span;
+
+  const clampStep = useCallback((raw: number) => {
+    const stepped = Math.round(raw / spec.step) * spec.step;
+    return Math.min(spec.max, Math.max(spec.min, stepped));
+  }, [spec.step, spec.min, spec.max]);
 
   const begin = (event: React.MouseEvent) => {
     if (disabled) return;
     event.preventDefault();
-    const startX = event.clientX;
-    const origin = value;
-    const span = spec.max - spec.min;
+
+    const rect = () => trackRef.current?.getBoundingClientRect() ?? null;
+    const valueAt = (clientX: number, box: DOMRect) =>
+      spec.min + ((clientX - box.left) / box.width) * span;
+    const xFor = (v: number, box: DOMRect) =>
+      box.left + ((v - spec.min) / span) * box.width;
+
+    const first = rect();
+    if (!first || first.width === 0) return;
+
+    let current = clampStep(valueAt(event.clientX, first));
+    onChange(current);
+
+    // Distance between the cursor and the handle's own position. Zero while
+    // tracking directly; re-derived when leaving fine mode so the handle does
+    // not jump back under the cursor after a slow adjustment.
+    let offset = 0;
+    let fine: { x: number; value: number } | null = null;
 
     const onMove = (move: MouseEvent) => {
-      const scale = move.shiftKey ? 0.1 : 1;
-      const next = origin + ((move.clientX - startX) / 200) * span * scale;
-      const stepped = Math.round(next / spec.step) * spec.step;
-      onChange(Math.min(spec.max, Math.max(spec.min, stepped)));
+      const box = rect();
+      if (!box || box.width === 0) return;
+
+      if (move.shiftKey && !fine) {
+        fine = { x: move.clientX, value: current };
+      } else if (!move.shiftKey && fine) {
+        fine = null;
+        offset = move.clientX - xFor(current, box);
+      }
+
+      current = fine
+        ? clampStep(fine.value + ((move.clientX - fine.x) / box.width) * span * FINE)
+        : clampStep(valueAt(move.clientX - offset, box));
+
+      onChange(current);
     };
+
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
@@ -183,6 +230,16 @@ const ToneSlider = memo<{
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+  };
+
+  const commitDraft = () => {
+    if (draft === null) return;
+    // Tolerate what the readout shows being typed back: a sign, a suffix.
+    const parsed = parseFloat(draft.replace(/[^0-9.+-]/g, ''));
+    setDraft(null);
+    if (Number.isNaN(parsed)) return;
+    onChange(clampStep(parsed));
+    onCommit();
   };
 
   return (
@@ -193,8 +250,6 @@ const ToneSlider = memo<{
       aria-valuenow={Number(value.toFixed(spec.precision))}
       aria-valuemin={spec.min}
       aria-valuemax={spec.max}
-      onMouseDown={begin}
-      onDoubleClick={onReset}
       onKeyDown={(event) => {
         if (disabled) return;
         const step = spec.step * (event.shiftKey ? 1 : 10);
@@ -208,23 +263,63 @@ const ToneSlider = memo<{
           onCommit();
         }
       }}
-      title={`${spec.label} — drag to change, double-click to reset`}
       className={`grid grid-cols-[64px_1fr_46px] items-center gap-2 rounded-sm
         focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500
-        ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-ew-resize'}`}
+        ${disabled ? 'opacity-40' : ''}`}
     >
       <span className="text-ink-400 truncate" style={{ fontSize: GRADE_TYPE.label }}>{spec.label}</span>
-      <span className="h-[4px] rounded-sm bg-ink-800 relative block">
-        <span aria-hidden="true" className="absolute -top-[2px] w-px h-[8px] bg-ink-700" style={{ left: `${neutral * 100}%` }} />
-        <span
-          aria-hidden="true"
-          className="absolute -top-[3px] w-[10px] h-[10px] rounded-full bg-accent-500 border border-ink-950"
-          style={{ left: `calc(${Math.min(1, Math.max(0, fraction)) * 100}% - 5px)` }}
-        />
-      </span>
-      <span className="font-mono tabular-nums text-ink-300 text-right" style={{ fontSize: GRADE_TYPE.value }}>
-        {formatScalar(spec, value)}
-      </span>
+
+      <div
+        ref={trackRef}
+        onMouseDown={begin}
+        onDoubleClick={onReset}
+        title={`${spec.label} — drag to change, shift to fine-tune, double-click to reset`}
+        className={`relative block ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
+      >
+        <span className="h-[4px] rounded-sm bg-ink-800 relative block">
+          <span aria-hidden="true" className="absolute -top-[2px] w-px h-[8px] bg-ink-700" style={{ left: `${neutral * 100}%` }} />
+          <span
+            aria-hidden="true"
+            className="absolute -top-[3px] w-[10px] h-[10px] rounded-full bg-accent-500 border border-ink-950"
+            style={{ left: `calc(${Math.min(1, Math.max(0, fraction)) * 100}% - 5px)` }}
+          />
+        </span>
+        {/* A 4px target is a pixel-hunt for a control that gets dragged all
+            day. This grows the hit area without growing the row: the dock's
+            heights are constants modelled on toneRowHeight(), so padding here
+            would push every tone row past the floor they assume. */}
+        <span aria-hidden="true" className="absolute inset-x-0 -inset-y-[6px]" />
+      </div>
+
+      <input
+        type="text"
+        inputMode="decimal"
+        disabled={disabled}
+        aria-label={`${spec.label} value`}
+        value={draft ?? formatScalar(spec, value)}
+        onChange={(event) => setDraft(event.target.value)}
+        onFocus={(event) => {
+          setDraft(value.toFixed(spec.precision));
+          event.currentTarget.select();
+        }}
+        onBlur={commitDraft}
+        // The row above is a slider listening for arrows and double-clicks.
+        // Typing here must reach the caret, not the value.
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === 'Enter') event.currentTarget.blur();
+          if (event.key === 'Escape') {
+            setDraft(null);
+            event.currentTarget.blur();
+          }
+        }}
+        onDoubleClick={(event) => event.stopPropagation()}
+        className="w-full bg-transparent border border-transparent rounded-sm px-[2px]
+          font-mono tabular-nums text-ink-300 text-right
+          hover:border-ink-750 focus:border-accent-500 focus:bg-ink-900 focus:text-ink-100
+          focus:outline-none disabled:cursor-not-allowed transition-colors"
+        style={{ fontSize: GRADE_TYPE.value }}
+      />
     </div>
   );
 });
