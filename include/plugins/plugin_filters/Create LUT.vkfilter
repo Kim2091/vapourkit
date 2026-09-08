@@ -1,0 +1,35 @@
+name = "Create LUT"
+category = [ "Color Modification", "Utility" ]
+description = "Remembers the colour of the picture at this point. It changes nothing itself: a Load LUT step below it puts this colour back after something has changed it, and the colour work above it can be saved as a .cube for use elsewhere."
+code = """
+# Create LUT does nothing to the picture, on purpose.
+#
+# It marks a place in the chain and remembers the colour there. A Load LUT
+# step further down, pointed at this one, puts that colour back; the table it
+# needs is made in the app, where the model of what a grade does actually
+# lives, and written beside the workflow. Nothing about that is work for the
+# render to repeat, so at render time this step is a no-op and the frames pass
+# through untouched.
+#
+# It still takes a position in the chain, and the position is the point.
+pass"""
+
+[variables.size]
+type = "number"
+default = 33
+description = "Entries per axis when the colour work above this step is saved as a file. 17, 33 or 65."
+
+[variables.frames]
+type = "number"
+default = 5
+description = "How many frames to measure from when saving, if a step above this one cannot be evaluated and the table has to be fitted to real pixels."
+
+[editor]
+type = "createLut"
+
+[editor.variables]
+size = "size"
+frames = "frames"
+
+[metadata]
+createdAt = "2026-09-07T00:00:00.000Z"

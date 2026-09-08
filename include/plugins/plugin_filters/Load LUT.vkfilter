@@ -1,0 +1,237 @@
+name = "Load LUT"
+category = [ "Color Modification" ]
+description = "Applies a 3D colour lookup table. Pointed at a Create LUT step above it, it puts back the colour the picture had there — press Generate and the table is made from whatever sits between the two. Or apply a .cube from disk. Uses the timecube plugin; without it a slower fallback runs, which costs about 2GB more memory at 4K."
+code = """
+# Applies a 3D LUT, preferring the timecube plugin and falling back to one
+# built out of akarin.Expr when it is absent.
+#
+# timecube is the right tool and setup installs it from PyPI on both
+# platforms: one node, a table that costs 400KB whatever the resolution, and
+# native SIMD. The fallback is for an install that predates it, or one where
+# the wheel could not be fetched — a slow look beats a broken one.
+#
+# Both paths agree to 1.2e-7. timecube's interp=1 is tetrahedral and is
+# deliberately left alone, because taking it would make the render depend on
+# which plugin happened to be installed.
+#
+# The fallback is worth understanding before relying on it. akarin.Expr can
+# read a pixel at a computed coordinate, so the table travels as a companion
+# clip tiled one size x size block per blue slice, k blocks across, and the
+# expression takes eight taps out of it per pixel. It is correct to 5e-7
+# against src/utils/lut.ts sampleLut(), but the companion clips are the size
+# of the picture and the plane split doubles the node count, so measured it
+# roughly doubles pipeline memory: +537MB at 1080p and +2.1GB at 4K, where it
+# also drops throughput from 69 to 10 fps. Fine for 1080p, painful for 4K.
+
+lut_path = {{lut_path}}
+strength = {{strength}}
+
+def _check_lut_path(path):
+    # Reached with an empty path whenever someone picks Apply LUT out of the
+    # filter list rather than importing one, and with a stale path whenever a
+    # LUT is moved. Both are ordinary, so both say so rather than surfacing a
+    # traceback from open() — or, worse, from inside the plugin.
+    import os
+    if not path:
+        raise ValueError("Load LUT has no table yet. Point it at a Create LUT step above it and press Generate, or pick a .cube file.")
+    if not os.path.isfile(path):
+        raise ValueError("Load LUT cannot find " + str(path) + " any more.")
+
+def _is_number(text):
+    try:
+        float(text)
+        return True
+    except ValueError:
+        return False
+
+def _read_cube(path):
+    size = None
+    dmin = [0.0, 0.0, 0.0]
+    dmax = [1.0, 1.0, 1.0]
+    rows = []
+    with open(path, "r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            line = line.split("#")[0].strip()
+            if not line:
+                continue
+            fields = line.split()
+            head = fields[0].upper()
+            if head == "LUT_3D_SIZE":
+                size = int(fields[1])
+            elif head == "LUT_1D_SIZE":
+                raise ValueError(
+                    "That is a 1D cube. Importing it through the grading dock "
+                    "lifts it onto a 3D lattice; the timecube plugin also reads "
+                    "1D directly, but this fallback path does not.")
+            elif head == "DOMAIN_MIN":
+                dmin = [float(v) for v in fields[1:4]]
+            elif head == "DOMAIN_MAX":
+                dmax = [float(v) for v in fields[1:4]]
+            elif not _is_number(fields[0]):
+                # TITLE, and anything else a .cube may legally carry that this
+                # reader has no use for. Skipped rather than pushed at float(),
+                # which is what turned a LUT_3D_INPUT_RANGE line - or any junk
+                # file - into a traceback instead of a message.
+                continue
+            elif len(fields) < 3:
+                raise ValueError("A table row needs three values; found %d." % len(fields))
+            else:
+                rows.append((float(fields[0]), float(fields[1]), float(fields[2])))
+    if size is None:
+        raise ValueError("No LUT_3D_SIZE in " + str(path) + " - that is not a 3D .cube.")
+    if size < 2 or size > 256:
+        raise ValueError("LUT_3D_SIZE %d is outside the 2..256 a cube allows." % size)
+    if len(rows) != size ** 3:
+        raise ValueError("LUT_3D_SIZE %d needs %d rows, found %d." % (size, size ** 3, len(rows)))
+    # .cube runs red fastest. Indexed here as [channel][blue][green][red].
+    lat = np.zeros((3, size, size, size), dtype=np.float32)
+    at = 0
+    for _b in range(size):
+        for _g in range(size):
+            for _r in range(size):
+                row = rows[at]
+                at += 1
+                lat[0, _b, _g, _r] = row[0]
+                lat[1, _b, _g, _r] = row[1]
+                lat[2, _b, _g, _r] = row[2]
+    return size, lat, dmin, dmax
+
+def _lf(v):
+    return "{:.8f}".format(float(v))
+
+def _lut_expr(size, k, dmin, dmax):
+    n1 = size - 1
+    parts = []
+    for i, src in enumerate(("x", "y", "z")):
+        parts.append("{s} {mn} - {sp} / 0 max 1 min {n1} * i{i}!".format(
+            s=src, mn=_lf(dmin[i]), sp=_lf(max(1e-9, dmax[i] - dmin[i])), n1=n1, i=i))
+    for i in range(3):
+        parts.append("i{i}@ floor l{i}! l{i}@ 1 + {n1} min h{i}! i{i}@ l{i}@ - f{i}!".format(i=i, n1=n1))
+    tap = 0
+    for bz in ("l2", "h2"):
+        for gy in ("l1", "h1"):
+            for rx in ("l0", "h0"):
+                parts.append(
+                    "{bz}@ {k} % {n} * {rx}@ + {bz}@ {k} / trunc {n} * {gy}@ + a[] t{tap}!".format(
+                        bz=bz, gy=gy, rx=rx, k=k, n=size, tap=tap))
+                tap += 1
+    for i in range(4):
+        parts.append("t{a}@ 1 f0@ - * t{b}@ f0@ * + p{i}!".format(a=i * 2, b=i * 2 + 1, i=i))
+    parts.append("p0@ 1 f1@ - * p1@ f1@ * + q0!")
+    parts.append("p2@ 1 f1@ - * p3@ f1@ * + q1!")
+    parts.append("q0@ 1 f2@ - * q1@ f2@ * +")
+    return " ".join(parts)
+
+strength = min(1.0, max(0.0, float(strength)))
+
+# No table yet, in the preview, is the one case that passes through. The
+# preview is where a restore table is measured from - the frames on either
+# side of whatever changed the colour come from this very session - so
+# refusing to open until the table exists would make the table impossible to
+# make. Only here: a render with no table still stops.
+# Read through globals() rather than as a bare name: the flag exists only
+# in a preview script, and a render has to see its absence rather than a
+# NameError.
+_previewing_without_table = (not lut_path) and bool(globals().get("VK_PREVIEW", False))
+if strength > 0.0 and not _previewing_without_table:
+    _check_lut_path(lut_path)
+
+    _source_format = clip.format.id
+    _source_is_rgb = clip.format.color_family == vs.RGB
+    if _source_is_rgb:
+        _rgb = core.resize.Bicubic(clip, format=vs.RGBS)
+    else:
+        _rgb = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s="709")
+
+    if hasattr(core, "timecube"):
+        # One node, and a table that costs the same at 4K as at 480p.
+        _looked = core.timecube.Cube(_rgb, cube=lut_path)
+    elif hasattr(core, "akarin"):
+        import numpy as np
+
+        _size, _lat, _dmin, _dmax = _read_cube(lut_path)
+
+        _k = max(1, min(_size, _rgb.width // _size))
+        _tile_rows = -(-_size // _k)
+        _pad_w = max(0, _k * _size - _rgb.width)
+        _pad_h = max(0, _tile_rows * _size - _rgb.height)
+        _work = _rgb
+        if _pad_w or _pad_h:
+            _work = core.std.AddBorders(_work, right=_pad_w, bottom=_pad_h)
+        _cw, _ch = _work.width, _work.height
+
+        def _table_clip(channel):
+            img = np.zeros((_ch, _cw), dtype=np.float32)
+            for _b in range(_size):
+                _ty, _tx = divmod(_b, _k)
+                img[_ty * _size:(_ty + 1) * _size, _tx * _size:(_tx + 1) * _size] = _lat[channel, _b]
+            base = core.std.BlankClip(width=_cw, height=_ch, format=vs.GRAYS, length=1, color=0.0)
+            def _fill(n, f, d=img):
+                fo = f.copy()
+                np.copyto(np.asarray(fo[0]), d)
+                return fo
+            # Built once and looped, so the table is not rebuilt per frame.
+            return core.std.Loop(core.std.ModifyFrame(base, base, _fill), times=_work.num_frames)
+
+        _planes = [core.std.ShufflePlanes(_work, i, vs.GRAY) for i in range(3)]
+        _expr = _lut_expr(_size, _k, _dmin, _dmax)
+        _out = [core.akarin.Expr(_planes + [_table_clip(c)], _expr) for c in range(3)]
+        _looked = core.std.ShufflePlanes(_out, [0, 0, 0], vs.RGB)
+        if _pad_w or _pad_h:
+            _looked = core.std.Crop(_looked, right=_pad_w, bottom=_pad_h)
+    else:
+        raise RuntimeError(
+            "Load LUT needs either the timecube or the akarin plugin, and neither is installed.")
+
+    # One mix for both paths, so strength means the same thing either way.
+    if strength < 1.0:
+        _looked = core.std.Merge(_rgb, _looked, weight=strength)
+
+    if _source_is_rgb:
+        clip = core.resize.Bicubic(_looked, format=_source_format)
+    else:
+        clip = core.resize.Bicubic(_looked, format=_source_format, matrix_s="709")"""
+
+[variables.source_id]
+type = "string"
+default = ""
+description = "The Create LUT step whose colour this puts back, by id. Held as an id rather than a position so that adding or reordering a step cannot silently repoint it. Empty means the table below is a file chosen by hand."
+
+[variables.lut_path]
+type = "string"
+default = ""
+description = "The 3D .cube actually applied. Written by the app when this step generates, or when a file is picked; .3dl and odd domains are normalised into one of these on the way in."
+
+[variables.strength]
+type = "number"
+default = 1.0
+description = "How much of the look to apply, 0 to 1. Below 1 the result is mixed back with the ungraded picture."
+
+[variables.size]
+type = "number"
+default = 33
+description = "Entries per axis of a generated table. 17, 33 or 65."
+
+[variables.frames]
+type = "number"
+default = 5
+description = "How many frames to measure from, when a step between this and the Create LUT cannot be evaluated and the table has to be fitted to real pixels."
+
+[variables.generated_key]
+type = "string"
+default = ""
+description = "What sat between this and the Create LUT when the table was generated. Compared against the chain now, so the step can say when the table no longer describes it. Written by the app; not meant to be typed in."
+
+[editor]
+type = "lutSource"
+label = "Table"
+
+[editor.variables]
+source = "source_id"
+path = "lut_path"
+size = "size"
+frames = "frames"
+generatedKey = "generated_key"
+
+[metadata]
+createdAt = "2026-09-04T00:00:00.000Z"
