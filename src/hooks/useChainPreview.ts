@@ -59,6 +59,15 @@ interface UseChainPreviewOptions {
   onError?: (message: string) => void;
 }
 
+/** One frame number, as the two steps of a pair render it. */
+export interface StepSample {
+  n: number;
+  /** The step being corrected. */
+  from: ChainPreviewFrame;
+  /** The step being matched to. */
+  to: ChainPreviewFrame;
+}
+
 export interface UseChainPreviewResult {
   isOpen: boolean;
   isOpening: boolean;
@@ -68,6 +77,30 @@ export interface UseChainPreviewResult {
   steps: ChainPreviewStep[];
   selected: number;
   frame: ChainPreviewFrame | null;
+  /**
+   * The output pinned as the "before" side of a split, or null for the
+   * selected step's own picture — which is the classic before/after.
+   *
+   * Pinning another step turns the comparison from "what did this grade do"
+   * into "does this match that", which is the one you want when you are
+   * grading a step to sit alongside the source rather than to look good on
+   * its own.
+   */
+  reference: number | null;
+  /** That step's frame, at the same frame number. */
+  referenceFrame: ChainPreviewFrame | null;
+  setReference: (index: number | null) => void;
+  /**
+   * The same frames as two steps render them, for measuring the colour
+   * between them.
+   *
+   * Both sides come back at the same requested width, which is what makes the
+   * pixels comparable at all: the session downscales every output to it, so a
+   * 2x model's picture and the source arrive on the same grid and pixel n is
+   * the same part of the picture in both. Rejects rather than guesses if the
+   * two are shaped differently, which is what a crop between them looks like.
+   */
+  samplePair: (correctedIndex: number, targetIndex: number, frameNumbers: number[]) => Promise<StepSample[]>;
   error: string | null;
   open: () => Promise<void>;
   /** Stops an open in flight. Safe to call when nothing is opening. */
@@ -76,6 +109,9 @@ export interface UseChainPreviewResult {
   select: (index: number) => void;
   seek: (n: number) => void;
 }
+
+/** Cache key for a reference picture: which output, and which frame of it. */
+const referenceKey = (output: number, n: number) => `${output}:${n}`;
 
 /** The basename of a model path, without its extension. */
 function modelLabel(modelPath: string): string {
@@ -86,8 +122,13 @@ function modelLabel(modelPath: string): string {
 /**
  * Names the steps the generator will emit, in the same order it emits them:
  * output 0 is the source, then one per enabled filter by ascending order.
+ *
+ * Exported because the numbering is not the preview's private business: a
+ * Load LUT names the Create LUT it puts back by the step that marker sits
+ * before, and it has to be able to do that with no session open — the labels
+ * have to agree either way.
  */
-function stepLabels(filters: Filter[]): string[] {
+export function stepLabels(filters: Filter[]): string[] {
   const enabled = filters.filter(f => f.enabled).sort((a, b) => a.order - b.order);
   return [
     'Source',
@@ -144,7 +185,17 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
   const [isStale, setIsStale] = useState(false);
   const [outputs, setOutputs] = useState<PreviewOutput[]>([]);
   const [selected, setSelected] = useState(0);
+  /** For callbacks that must not be rebuilt every time the step changes. */
+  const selectedRef = useRef(0);
+  selectedRef.current = selected;
   const [frame, setFrame] = useState<ChainPreviewFrame | null>(null);
+  const [reference, setReferenceState] = useState<number | null>(null);
+  const [referenceFrame, setReferenceFrame] = useState<ChainPreviewFrame | null>(null);
+  /** Read inside pump, which must not be rebuilt on every reference change. */
+  const referenceRef = useRef<number | null>(null);
+  referenceRef.current = reference;
+  /** What referenceFrame currently holds, so a re-seek is not a re-fetch. */
+  const referenceHeld = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // One request in flight, one pending, newest wins. A seek fires far faster
@@ -209,6 +260,42 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
         setError(null);
       } else if (result.error) {
         fail(result.error);
+      }
+
+      // The reference, after the picture the user is actually working on, so
+      // it fills in behind rather than delaying it. It is fetched by borrowing
+      // the session's selection and putting it straight back — the session
+      // renders whichever output is selected, and there is only one of it.
+      //
+      // Cached on (output, frame): the reference cannot change while a grade
+      // is dragged, because the grade is a shader and the session is not
+      // re-rendering anything. So this costs two round trips on a seek and
+      // nothing at all on the path that matters.
+      const ref = referenceRef.current;
+      const wanted = ref === null || ref === next.index ? null : referenceKey(ref, next.n);
+      if (wanted === null) {
+        referenceHeld.current = null;
+        setReferenceFrame(null);
+      } else if (referenceHeld.current !== wanted) {
+        const picked = await window.electronAPI.previewSelect(ref!);
+        if (picked.success) {
+          const refResult = await window.electronAPI.previewFrame(next.n, previewWidth);
+          if (refResult.success && refResult.data) {
+            referenceHeld.current = wanted;
+            setReferenceFrame({
+              pixels: refResult.data,
+              width: refResult.width!,
+              height: refResult.height!,
+              n: refResult.n!,
+              output: refResult.output!,
+              levels: refResult.levels ?? null,
+              source: refResult.source ?? null,
+            });
+          }
+        }
+        // Put the selection back whatever happened, or every later frame
+        // would come from the reference step.
+        await window.electronAPI.previewSelect(next.index);
       }
     } catch (caught) {
       fail(caught instanceof Error ? caught.message : String(caught));
@@ -290,6 +377,9 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     setIsStale(false);
     setOutputs([]);
     setFrame(null);
+    setReferenceState(null);
+    setReferenceFrame(null);
+    referenceHeld.current = null;
     setError(null);
     openKey.current = null;
     try {
@@ -313,6 +403,94 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       })
       .catch(caught => fail(caught instanceof Error ? caught.message : String(caught)));
   }, [isOpen, request, fail]);
+
+  /**
+   * Take the session over for a moment.
+   *
+   * There is one session and it renders whichever output is selected, so
+   * sampling a pair has to borrow it — the same borrow the reference fetch
+   * makes, held for longer. Waiting rather than barging matters: a frame
+   * arriving for the wrong output would be painted as the step on screen.
+   */
+  const claimSession = useCallback(async (): Promise<boolean> => {
+    for (let attempt = 0; attempt < 200 && inFlight.current; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    if (inFlight.current) return false;
+    inFlight.current = true;
+    return true;
+  }, []);
+
+  const samplePair = useCallback(async (
+    correctedIndex: number,
+    targetIndex: number,
+    frameNumbers: number[],
+  ): Promise<StepSample[]> => {
+    if (!isOpen) throw new Error('The preview is not open, so there is nothing to measure.');
+    if (correctedIndex === targetIndex) throw new Error('Those are the same step.');
+
+    // A queued seek is about to be overtaken anyway, and letting it run after
+    // the borrow would repaint from whichever output was selected last.
+    queued.current = null;
+    if (!await claimSession()) {
+      throw new Error('The preview is still rendering. Try again in a moment.');
+    }
+    setIsRendering(true);
+
+    const grab = async (index: number, n: number): Promise<ChainPreviewFrame> => {
+      const picked = await window.electronAPI.previewSelect(index);
+      if (!picked.success) throw new Error(picked.error ?? `Could not select step ${index}`);
+      const result = await window.electronAPI.previewFrame(n, previewWidth);
+      if (!result.success || !result.data) {
+        throw new Error(result.error ?? `Could not render frame ${n} of step ${index}`);
+      }
+      return {
+        pixels: result.data,
+        width: result.width!,
+        height: result.height!,
+        n: result.n!,
+        output: result.output!,
+        levels: result.levels ?? null,
+        source: result.source ?? null,
+      };
+    };
+
+    try {
+      const samples: StepSample[] = [];
+      for (const n of frameNumbers) {
+        const from = await grab(correctedIndex, n);
+        const to = await grab(targetIndex, n);
+        if (from.width !== to.width || from.height !== to.height) {
+          throw new Error(
+            `Those two steps are ${from.width}×${from.height} and ${to.width}×${to.height} at the same width, `
+            + 'so their pixels do not line up — something between them crops or changes the shape of the picture.',
+          );
+        }
+        samples.push({ n, from, to });
+      }
+      return samples;
+    } finally {
+      // Put the selection back whatever happened, or every later frame would
+      // come from whichever step was sampled last.
+      await window.electronAPI.previewSelect(selectedRef.current).catch(() => {});
+      inFlight.current = false;
+      setIsRendering(false);
+      if (queued.current) void pump();
+    }
+  }, [isOpen, claimSession, previewWidth, pump]);
+
+  const setReference = useCallback((index: number | null) => {
+    setReferenceState(index);
+    if (index === null) {
+      referenceHeld.current = null;
+      setReferenceFrame(null);
+      return;
+    }
+    // The held key belongs to the old reference, so drop it and ask again for
+    // the frame already on screen.
+    referenceHeld.current = null;
+    if (isOpen) request(playhead.current, selectedRef.current);
+  }, [isOpen, request]);
 
   const seek = useCallback((n: number) => {
     playhead.current = n;
@@ -341,6 +519,10 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     steps,
     selected,
     frame,
+    reference,
+    referenceFrame,
+    setReference,
+    samplePair,
     error,
     open,
     cancel,

@@ -90,6 +90,27 @@ afterAll(async () => {
   await fs.remove(testRoot);
 });
 
+describe('the preview flag filter code reads', () => {
+  it('is declared in a preview script and nowhere else', async () => {
+    // A Load LUT step with no table yet passes the picture through in the
+    // preview, because the table is measured from the frames on either side of
+    // it in that very session — a step that refused to open until the table
+    // existed would make the table impossible to make. That behaviour hangs
+    // entirely off this one line being emitted, and a flag the filter reads
+    // but nothing writes fails silently: the deadlock simply comes back.
+    const preview = await generate([aiFilter(0, 'C:\\models\\2x_TestModel_fp16.onnx')], true);
+    expect(preview).toContain('VK_PREVIEW = True');
+
+    const render = await generate([aiFilter(0, 'C:\\models\\2x_TestModel_fp16.onnx')], false);
+    expect(render).not.toContain('VK_PREVIEW');
+  });
+
+  it('is declared before the filter chain that reads it', async () => {
+    const preview = await generate([aiFilter(0, 'C:\\models\\2x_TestModel_fp16.onnx')], true);
+    expect(preview.indexOf('VK_PREVIEW = True')).toBeLessThan(preview.indexOf('_vk_set_output'));
+  });
+});
+
 describe('generateScript preview outputs (vs-view)', () => {
   it('registers the source clip as output 0 even with a single stage', async () => {
     const script = await generate([aiFilter(0, 'C:\\models\\2x_TestModel_fp16.onnx')]);

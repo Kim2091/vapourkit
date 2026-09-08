@@ -38,6 +38,9 @@ export class GradeRenderer {
   private gl: WebGLRenderingContext;
   private program: WebGLProgram;
   private texture: WebGLTexture;
+  /** A second picture for the left of the split. Built only if one is set. */
+  private reference: WebGLTexture | null = null;
+  private hasReference = false;
   private buffer: WebGLBuffer;
   private locations: Record<string, WebGLUniformLocation | null> = {};
   private size = { width: 0, height: 0 };
@@ -179,12 +182,56 @@ export class GradeRenderer {
   }
 
   /**
+   * A reference picture for the left of the split.
+   *
+   * Normally both halves of a comparison are the same frame, graded and not.
+   * Pinning another step of the chain as the "before" makes them two different
+   * pictures — which is what grading to match a reference is: you are not
+   * asking "what did I change", you are asking "does this look like that".
+   *
+   * Deliberately does not touch `size` or the canvas. The quad samples 0..1,
+   * so a 720p reference stretches to fill a 1440p canvas and the two stay
+   * registered — they are the same content at different scales, which is
+   * exactly what an upscaling step produces. A step that changes the aspect
+   * ratio rather than the scale (a crop) would stretch rather than letterbox;
+   * showing both at the same size is still the more useful answer there.
+   */
+  setReferenceBuffer(pixels: Uint8Array, width: number, height: number): void {
+    if (this.isLost) return;
+    const gl = this.gl;
+    if (!this.reference) {
+      const texture = gl.createTexture();
+      if (!texture) return;
+      this.reference = texture;
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.reference);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, pixels);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    this.hasReference = true;
+  }
+
+  /** Back to comparing the frame against itself. */
+  clearReference(): void {
+    this.hasReference = false;
+  }
+
+  /**
    * Before on the left of `split`, after on the right, in one canvas.
    *
    * A scissor test rather than a second canvas: the comparison has to be the
    * same pixels in the same place, and two contexts to show one frame is a
-   * cost browsers cap. Both halves read the same texture, so the divider costs
-   * a second draw call and nothing else.
+   * cost browsers cap. Without a reference both halves read the same texture,
+   * so the divider costs a second draw call and nothing else; with one, the
+   * left half swaps the binding and costs a texture bind on top of that.
    *
    * `split` is the fraction of the width showing the ungraded frame — 0 is
    * fully graded, 1 is fully "before".
@@ -198,7 +245,16 @@ export class GradeRenderer {
     gl.enable(gl.SCISSOR_TEST);
     if (boundary > 0) {
       gl.scissor(0, 0, boundary, height);
-      this.render(GRADE_NEUTRAL);
+      // The reference is another step's output, so it is shown as it renders.
+      // Grading it would be grading the thing you are matching towards.
+      if (this.hasReference && this.reference) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.reference);
+        this.render(GRADE_NEUTRAL);
+        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+      } else {
+        this.render(GRADE_NEUTRAL);
+      }
     }
     if (boundary < width) {
       gl.scissor(boundary, 0, width - boundary, height);
@@ -222,6 +278,7 @@ export class GradeRenderer {
     const gl = this.gl;
     if (gl.isContextLost()) return;
     gl.deleteTexture(this.texture);
+    if (this.reference) gl.deleteTexture(this.reference);
     gl.deleteBuffer(this.buffer);
     gl.deleteProgram(this.program);
   }

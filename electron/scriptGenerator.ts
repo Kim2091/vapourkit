@@ -226,6 +226,13 @@ export class VapourSynthScriptGenerator {
     // always register the unprocessed (but trimmed) input as output 0, so a
     // single-stage workflow still has a "before" clip to compare against.
     if (config.generatePreviewOutputs) {
+      // A flag the filter code can read, for the few steps that have to
+      // behave differently while a look is still being built. A Load LUT
+      // with no table is the case that matters: the table is measured from
+      // the frames on either side of it in this very session, so a step that
+      // refused to open until the table existed would make the table
+      // impossible to make. A render has no such excuse and still stops.
+      filterCode += 'VK_PREVIEW = True\n';
       filterCode += '# Preview outputs (named tabs in vs-view)\n';
       filterCode += 'try:\n';
       filterCode += '    from vsview import set_output as _vk_set_output\n';

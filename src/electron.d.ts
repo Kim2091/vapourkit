@@ -588,7 +588,46 @@ export interface ColorGradeFilterEditor {
   };
 }
 
-export type FilterEditor = CropFilterEditor | ColorGradeFilterEditor;
+/**
+ * A Create LUT step. It remembers the colour where it sits and holds nothing
+ * about any table but how finely the colour work above it is sampled when
+ * that is saved as a file.
+ */
+export interface CreateLutFilterEditor {
+  type: 'createLut';
+  label?: string;
+  variables: {
+    size: string;
+    frames: string;
+  };
+}
+
+/**
+ * A Load LUT step's table, and how it was made.
+ *
+ * `source` is the Create LUT whose colour this puts back and `path` is the
+ * file actually applied. The path is what the Python reads — a step id means
+ * nothing to VapourSynth — and the app writes it when the step generates,
+ * with `generatedKey` recording what sat between the two so the step can
+ * say when the chain has moved out from under its table.
+ */
+export interface LutSourceFilterEditor {
+  type: 'lutSource';
+  label?: string;
+  variables: {
+    source: string;
+    path: string;
+    size: string;
+    frames: string;
+    generatedKey: string;
+  };
+}
+
+export type FilterEditor =
+  | CropFilterEditor
+  | ColorGradeFilterEditor
+  | CreateLutFilterEditor
+  | LutSourceFilterEditor;
 
 export interface SegmentSelection {
   enabled: boolean;

@@ -43,9 +43,13 @@ import { VideoPreviewPanel } from './components/VideoPreviewPanel';
 import { ColorGradeDock, GRADE_COMPACT_BELOW, GRADE_DOCK_HEIGHT, GRADE_DOCK_COMPACT_HEIGHT } from './components/ColorGradeDock';
 import { solveScopeColumnWidth, clampScopeColumnWidth } from './components/GradeScopeColumn';
 import { gradeBasePx } from './components/gradeType';
-import { bakeGradeToLut, writeLut, writeCube, parseLut, to3d, type LutFormat } from './utils/lut';
-import { solveBlackPoint } from './utils/colorGrade';
-import type { CompareMode } from './components/ColorGradeOverlay';
+import { writeCube, parseLut, to3d } from './utils/lut';
+import { solveBlackPoint, solveWhitePoint, solveNeutral, autoBalance } from './utils/colorGrade';
+import { useLutSteps } from './hooks/useLutSteps';
+import type { LutPanelActions } from './components/DynamicFilterPanel';
+import type { CompareMode, PickMode } from './components/ColorGradeOverlay';
+import type { ViewerControls } from './components/PreviewStepRail';
+import type { ToolRailControls } from './components/GradeToolRail';
 import type { ScopeKind } from './components/GradeScopes';
 import { useColorGrade } from './hooks/useColorGrade';
 import { useChainPreview } from './hooks/useChainPreview';
@@ -824,6 +828,7 @@ function App() {
     }
 
     setActiveFilterEditorId(filter.id);
+
     const frameNumber = playheadFrame ?? 0;
     try {
       // Always use an unprocessed source frame. A processed preview might have
@@ -856,10 +861,16 @@ function App() {
     filter: activeFilterEditor,
     onParametersChange: handleFilterParametersChange,
   });
-  const [gradeCompareMode, setGradeCompareMode] = useState<CompareMode>('wipe');
+  const [gradeCompareMode, setGradeCompareMode] = useState<CompareMode>('split');
   const [holdingBefore, setHoldingBefore] = useState(false);
   const [scopeSample, setScopeSample] = useState<Float32Array | null>(null);
   const [dockScope, setDockScope] = useState<ScopeKind>('parade');
+  // The grading tools live in the dock, but their state lives here: the dock
+  // and the viewer overlay both read it, and it has to survive the dock
+  // remounting as the layout solver moves the tools between column and row.
+  const [pickMode, setPickMode] = useState<PickMode>(null);
+  const [showClipping, setShowClipping] = useState(false);
+  const [toolsAvailable, setToolsAvailable] = useState({ canPick: false, canShowClipping: false });
   const [windowHeight, setWindowHeight] = useState(() => window.innerHeight);
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
 
@@ -922,65 +933,58 @@ function App() {
     return solveScopeColumnWidth(gradePaneWidth, pictureHeight, aspect);
   }, [colorGrade.editor, scopeColumnOverride, gradePaneWidth, windowHeight, cropSourceSize]);
 
-  // Export bakes the grade over a lattice and writes it; import is the other
-  // direction and cannot be, because a LUT is an arbitrary transform and the
-  // trackballs are not. So an imported table arrives as its own filter step
-  // rather than as grade values, which is also what lets it sit anywhere in
-  // the chain like everything else.
-  const handleExportLut = useCallback(async (size: number) => {
-    if (!colorGrade.editor) return;
-    const suggested = `${(currentWorkflow || 'Grade').replace(/[\/:*?"<>|]/g, '_')}.cube`;
-    const target = await window.electronAPI.selectLutFile('save', suggested);
-    if (!target) return;
-    const format: LutFormat = target.toLowerCase().endsWith('.3dl') ? '3dl' : 'cube';
-    try {
-      const baked = bakeGradeToLut(colorGrade.values, size, currentWorkflow || 'Vapourkit grade');
-      const written = await window.electronAPI.writeLutFile(target, writeLut(baked, format));
-      if (!written.success) {
-        notify.error('LUT not written', written.error);
-        return;
-      }
-      notify.success('LUT exported', `${size}x${size}x${size} .${format} written.`);
-    } catch (error) {
-      notify.error('LUT not written', getErrorMessage(error));
-    }
-  }, [colorGrade.editor, colorGrade.values, currentWorkflow]);
-
-  const handleImportLut = useCallback(async () => {
-    const template = filterTemplates.find(t => t.name === 'Apply LUT');
-    if (!template) {
-      notify.error('Apply LUT is missing', 'The Apply LUT filter template is not installed.');
-      return;
-    }
+  // Making a table is a step in the chain, not a gesture over it: a Create LUT
+  // remembers the colour where it sits, and a Load LUT below it makes the
+  // table that puts that colour back. Import is the other direction and
+  // cannot be a step's own doing, because a LUT is an arbitrary transform and
+  // the trackballs are not — so an imported table arrives as a Load LUT step,
+  // which is also what lets it sit anywhere in the chain like everything else.
+  /**
+   * Pick a table off disk and keep a normalised copy beside the app's data.
+   *
+   * The parse happens here rather than in the main process so this tested
+   * parser is the only one, and so its "line 4: ..." reaches the person who
+   * has to fix the file. A 1D table is lifted onto a lattice; .3dl and
+   * declared domains are folded away, leaving one plain shape for the render.
+   */
+  const handlePickLutFile = useCallback(async (): Promise<{ path: string; title: string } | null> => {
     const source = await window.electronAPI.selectLutFile('open');
-    if (!source) return;
+    if (!source) return null;
 
     const read = await window.electronAPI.readLutFile(source);
     if (!read.success) {
-      notify.error('LUT not imported', read.error);
-      return;
+      notify.error('LUT not read', read.error);
+      return null;
     }
 
     let normalised: string;
     let title: string;
     try {
-      // Parsed here rather than in the main process so this tested parser is
-      // the only one, and so its "line 4: ..." reaches the person who has to
-      // fix the file. A 1D table is lifted onto a lattice; .3dl and declared
-      // domains are folded away, leaving one plain shape for the render.
       const parsed = to3d(parseLut(read.text, read.name));
       title = parsed.title || read.name.replace(/\.[^.]+$/, '');
       normalised = writeCube(parsed, title);
     } catch (error) {
       notify.error('That LUT could not be read', getErrorMessage(error));
-      return;
+      return null;
     }
 
     const installed = await window.electronAPI.installLut(read.name, normalised);
     if (!installed.success) {
-      notify.error('LUT not imported', installed.error);
+      notify.error('LUT not read', installed.error);
+      return null;
+    }
+    return { path: installed.path, title };
+  }, []);
+
+  const handleImportLut = useCallback(async () => {
+    const template = filterTemplates.find(t => t.name === 'Load LUT');
+    if (!template) {
+      notify.error('Load LUT is missing', 'The Load LUT filter template is not installed.');
       return;
     }
+    const installed = await handlePickLutFile();
+    if (!installed) return;
+    const title = installed.title;
 
     const defaults = Object.entries(template.variables ?? {}).reduce<Record<string, string | number | boolean>>(
       (values, [name, variable]) => {
@@ -992,7 +996,7 @@ function App() {
       id: `filter-${Date.now()}`,
       enabled: true,
       filterType: 'custom',
-      preset: 'Apply LUT',
+      preset: 'Load LUT',
       code: template.code,
       category: template.category,
       parameters: { ...defaults, lut_path: installed.path },
@@ -1008,8 +1012,32 @@ function App() {
       ...filters.slice(0, at + 1), step, ...filters.slice(at + 1),
     ];
     handleSetFilters(next.map((filter, index) => ({ ...filter, order: index })));
-    notify.success('LUT imported', `"${title}" added to the chain as an Apply LUT step.`);
+    notify.success('LUT imported', `"${title}" added to the chain as a Load LUT step.`);
   }, [activeFilterEditorId, filterTemplates, filters, handleSetFilters]);
+
+  // The tables the chain's LUT steps ask for. Its own hook because it owns
+  // two engines and a job per step, and App is long enough already. The
+  // filter panel gets one object, so a memo'd panel is not re-rendered by a
+  // fresh closure every time App is.
+  const lutSteps = useLutSteps({
+    filters,
+    setFilters: handleSetFilters,
+    videoInfo,
+    segment,
+    playheadFrame,
+    currentWorkflow,
+    samplePair: chainPreview.samplePair,
+    previewOpen: chainPreview.isOpen,
+    addConsoleLog,
+  });
+  const lutPanel = useMemo<LutPanelActions>(() => ({
+    pickFile: async () => (await handlePickLutFile())?.path ?? null,
+    restore: lutSteps.restore,
+    bake: lutSteps.bake,
+    clear: lutSteps.clear,
+    jobs: lutSteps.jobs,
+    previewOpen: chainPreview.isOpen,
+  }), [handlePickLutFile, lutSteps, chainPreview.isOpen]);
 
   const gradeStepLabel = useMemo(() => {
     if (!colorGrade.editor || !activeFilterEditor) return '';
@@ -1029,29 +1057,159 @@ function App() {
   // on the GPU — so a trackball drag costs a draw call, not a script reload.
   // Selecting the grade's own output would show the values that were baked
   // into the script when it loaded, which is exactly the stale picture.
-  // Click something that should be black; lift is solved per channel to put it
-  // there. It targets the primaries ramp, so contrast and brightness still do
-  // what they were set to afterwards — which is what a black point means.
-  const handlePickBlack = useCallback((sample: [number, number, number]) => {
-    const solved = solveBlackPoint(colorGrade.values, sample);
+  // Both pickers solve the primaries ramp, not the final pixel, so contrast,
+  // gamma and brightness still do what they were set to afterwards — which is
+  // what a black or white point means in Resolve too.
+  const handlePick = useCallback((sample: [number, number, number]) => {
+    const wanted = pickMode;
+    // One solve per arming, so a stray second click cannot re-solve against
+    // the picture the first one just changed.
+    setPickMode(null);
+    if (!wanted) return;
+
+    if (wanted === 'black') {
+      const solved = solveBlackPoint(colorGrade.values, sample);
+      if (!solved) {
+        notify.warning(
+          'Too bright for a black point',
+          'That pixel is too far up the range to sit at black. Pick something in the shadows.',
+        );
+        return;
+      }
+      colorGrade.apply(solved.values);
+      if (solved.clamped) {
+        notify.info(
+          'Black point set, partly',
+          'The colour cast in those shadows is stronger than the lift ball can correct on its own.',
+        );
+      } else {
+        addConsoleLog('Black point set from the picture');
+      }
+      return;
+    }
+
+    if (wanted === 'white') {
+      const solved = solveWhitePoint(colorGrade.values, sample);
+      if (!solved) {
+        notify.warning(
+          'Too dark for a white point',
+          'That pixel is too far down the range to sit at white. Pick something in the highlights.',
+        );
+        return;
+      }
+      colorGrade.apply(solved.values);
+      if (solved.clamped) {
+        notify.info(
+          'White point set, partly',
+          'The colour cast in those highlights is stronger than the gain ball can correct on its own.',
+        );
+      } else {
+        addConsoleLog('White point set from the picture');
+      }
+      return;
+    }
+
+    // Neutral is the odd one out: it writes the two tone sliders rather than a
+    // ball, because temperature and tint are where a colour cast is stored.
+    const solved = solveNeutral(colorGrade.values, sample);
     if (!solved) {
       notify.warning(
-        'Too bright for a black point',
-        'That pixel is too far up the range to sit at black. Pick something in the shadows.',
+        'Nothing to balance there',
+        'That pixel sits too near black or white to carry a cast. Pick something in the midtones.',
+      );
+      return;
+    }
+    colorGrade.apply(solved.values);
+    if (solved.clamped) {
+      notify.info(
+        'Balanced, partly',
+        'That cast runs further than temperature and tint reach. What is left is not a white balance error.',
+      );
+    } else {
+      addConsoleLog(
+        `Neutral picked — ${solved.values.temperature.toFixed(0)}K, tint ${solved.values.tint.toFixed(1)}`,
+      );
+    }
+  }, [pickMode, colorGrade, addConsoleLog]);
+
+  // Reads the two ends off the scope sample — the same 240px buffer the scopes
+  // already grade, so this costs no extra readback — and solves lift and gain
+  // together against them.
+  const handleAutoBalance = useCallback(() => {
+    const solved = autoBalance(colorGrade.values, scopeSample);
+    if (!solved) {
+      notify.warning(
+        'Nothing to balance',
+        'This frame has no usable range to read a black and a white off. Try a frame with more in it.',
       );
       return;
     }
 
     colorGrade.apply(solved.values);
-    if (solved.clamped) {
+    if (!solved.solved.black || !solved.solved.white) {
+      // Half an answer is still worth having, but saying so is the difference
+      // between a tool that missed and a tool that looks broken.
+      const end = solved.solved.black ? 'black' : 'white';
       notify.info(
-        'Black point set, partly',
-        'The colour cast in those shadows is stronger than the lift ball can correct on its own.',
+        `Only the ${end} point was set`,
+        'The picture does not reach far enough the other way for both ends to be solved.',
+      );
+    } else if (solved.clamped) {
+      notify.info(
+        'Balanced, partly',
+        'The cast in this frame is stronger than the lift and gain balls can correct on their own.',
       );
     } else {
-      addConsoleLog('Black point set from the picture');
+      addConsoleLog('Auto balance set the black and white points from the frame');
     }
-  }, [colorGrade, addConsoleLog]);
+  }, [colorGrade, scopeSample, addConsoleLog]);
+
+  // The panel reports on every frame change, so this only stores an answer
+  // that actually changed — otherwise a new object each time would re-render
+  // the whole grading surface behind every preview frame.
+  const handleToolAvailability = useCallback((next: { canPick: boolean; canShowClipping: boolean }) => {
+    setToolsAvailable(current =>
+      current.canPick === next.canPick && current.canShowClipping === next.canShowClipping
+        ? current
+        : next);
+  }, []);
+
+  // A picker armed against a picture it can no longer be used on is a click
+  // that will never land, so the panel's answer disarms it.
+  useEffect(() => {
+    if (!toolsAvailable.canPick) setPickMode(null);
+  }, [toolsAvailable.canPick]);
+
+  // Two groups, not one, because they are two kinds of thing. The viewer
+  // controls change how the picture is shown and ride the step rail above it;
+  // the tool rail changes what a click on the picture does. Auto balance is
+  // neither — it is a command, and it goes to the dock header beside Reset all.
+  const viewerControls = useMemo<ViewerControls>(() => ({
+    compareMode: gradeCompareMode,
+    onCompareModeChange: setGradeCompareMode,
+    holdingBefore,
+    showClipping,
+    onShowClippingChange: setShowClipping,
+    canShowClipping: toolsAvailable.canShowClipping,
+    // Only a session can offer a choice: without one there is a single frame,
+    // and the only "before" available is that frame ungraded.
+    reference: chainPreview.isOpen
+      ? {
+          steps: chainPreview.steps.map(step => ({ index: step.index, label: step.label })),
+          pinned: chainPreview.reference,
+          onPin: chainPreview.setReference,
+        }
+      : null,
+  }), [
+    gradeCompareMode, holdingBefore, showClipping, toolsAvailable.canShowClipping,
+    chainPreview.isOpen, chainPreview.steps, chainPreview.reference, chainPreview.setReference,
+  ]);
+
+  const toolRail = useMemo<ToolRailControls>(() => ({
+    pickMode,
+    onPickModeChange: setPickMode,
+    canPick: toolsAvailable.canPick,
+  }), [pickMode, toolsAvailable.canPick]);
 
   const gradeUpstreamOutput = useMemo(() => {
     if (!colorGrade.editor || !activeFilterEditor) return null;
@@ -1300,8 +1458,12 @@ function App() {
                       mode: gradeCompareMode,
                       holdingBefore,
                       stepLabel: gradeStepLabel,
-                      onModeChange: setGradeCompareMode,
-                      onPickBlack: handlePickBlack,
+                      pickMode,
+                      showClipping,
+                      viewer: viewerControls,
+                      toolRail,
+                      onPick: handlePick,
+                      onAvailabilityChange: handleToolAvailability,
                     } : null}
                     onFrameSampled={setScopeSample}
                     scopeSample={scopeSample}
@@ -1317,6 +1479,10 @@ function App() {
                       isRendering: chainPreview.isRendering,
                       isStale: chainPreview.isStale,
                       liveGradeStep: gradeUpstreamOutput,
+                      referenceFrame: chainPreview.referenceFrame,
+                      referenceLabel: chainPreview.reference === null
+                        ? null
+                        : chainPreview.steps.find(s => s.index === chainPreview.reference)?.label ?? null,
                       // The grade's own output and everything above it were
                       // built with the values the script loaded with.
                       bakedFromStep: gradeUpstreamOutput === null ? null : gradeUpstreamOutput + 1,
@@ -1335,7 +1501,8 @@ function App() {
                       disabled={isProcessing}
                       dockScope={dockScope}
                       onDockScopeChange={setDockScope}
-                      onExportLut={handleExportLut}
+                      onAutoBalance={handleAutoBalance}
+                      canAutoBalance={scopeSample !== null}
                       onImportLut={handleImportLut}
                       onChange={colorGrade.setValues}
                       onCommit={colorGrade.commit}
@@ -1431,6 +1598,7 @@ function App() {
                     onSaveTemplate={saveTemplate}
                     onDeleteTemplate={deleteTemplate}
                     onOpenFilterEditor={handleOpenFilterEditor}
+                    lut={lutPanel}
                   />
 
                   {/* Output Settings */}

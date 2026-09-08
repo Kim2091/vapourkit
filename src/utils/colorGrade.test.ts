@@ -19,6 +19,11 @@ import {
   LUMA_B,
   type GradeValues,
   solveBlackPoint,
+  solveWhitePoint,
+  solveRamp,
+  solveNeutral,
+  framePoints,
+  autoBalance,
 } from './colorGrade';
 import type { ColorGradeFilterEditor } from '../electron.d';
 
@@ -203,6 +208,338 @@ describe('the black point solver', () => {
     // The lift needed runs away to negative infinity as the sample approaches
     // white, so answering at all would be answering with nonsense.
     expect(solveBlackPoint(GRADE_NEUTRAL, [0.9, 0.9, 0.9])).toBeNull();
+  });
+});
+
+
+describe('the white point solver', () => {
+  // The mirror of the black point fixture. Downstream of the ramp the grade is
+  // neutral, so a ramp landing the pixel on 1 lands the pixel on 1: pow(1) is
+  // 1, contrast about any pivot leaves nothing to move once the channels agree,
+  // and a white pixel has no chroma for hue or saturation to turn.
+  const base = {
+    ...GRADE_NEUTRAL,
+    lift: { r: 0.01, g: 0, b: -0.008, m: 0.02 },
+    offset: { r: 0.004, g: 0, b: -0.002, m: 0.01 },
+    temperature: 500,
+    tint: -8,
+  };
+
+  it('puts the sampled pixel on white, cast and all', () => {
+    const sample: [number, number, number] = [0.86, 0.9, 0.81];
+
+    const solved = solveWhitePoint(base, sample);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.clamped).toBe(false);
+    gradePixel(sample, solved!.values).forEach(v => expect(v).toBeCloseTo(1, 6));
+  });
+
+  it('leaves an already-white pixel alone', () => {
+    const solved = solveWhitePoint(GRADE_NEUTRAL, [1, 1, 1]);
+
+    expect(solved).not.toBeNull();
+    const { r, g, b, m } = solved!.values.gain;
+    [r, g, b, m].forEach(v => expect(v).toBeCloseTo(1, 9));
+  });
+
+  it('keeps the temperature the grader set', () => {
+    // White balance is a per-channel gain too. The picker solving through it
+    // rather than over it is what lets a warm grade stay warm after a pick.
+    const warm = { ...GRADE_NEUTRAL, temperature: 2000, tint: 15 };
+    const solved = solveWhitePoint(warm, [0.8, 0.78, 0.75]);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.values.temperature).toBe(2000);
+    expect(solved!.values.tint).toBe(15);
+    gradePixel([0.8, 0.78, 0.75], solved!.values).forEach(v => expect(v).toBeCloseTo(1, 6));
+  });
+
+  it('keeps the puck on the disc, and says when it had to', () => {
+    const solved = solveWhitePoint(GRADE_NEUTRAL, [0.95, 0.3, 0.28]);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.clamped).toBe(true);
+
+    const puck = ballToPuck('gain', solved!.values.gain);
+    expect(Math.hypot(puck.x, puck.y)).toBeLessThanOrEqual(1 + 1e-9);
+  });
+
+  it('refuses a pixel too dark to be a white point', () => {
+    // The gain needed runs away to infinity as the sample approaches black.
+    expect(solveWhitePoint(GRADE_NEUTRAL, [0.1, 0.1, 0.1])).toBeNull();
+  });
+});
+
+
+describe('the neutral picker', () => {
+  /** How far the three channels are from agreeing, after the whole grade. */
+  const spread = (rgb: readonly [number, number, number], values: GradeValues) => {
+    const out = gradePixel(rgb, values);
+    return Math.max(...out) - Math.min(...out);
+  };
+
+  it('makes a warm pixel grey, and says so in temperature', () => {
+    const sample: [number, number, number] = [0.5, 0.45, 0.4];
+
+    const solved = solveNeutral(GRADE_NEUTRAL, sample);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.clamped).toBe(false);
+    expect(spread(sample, solved!.values)).toBeLessThan(1e-6);
+    // Warm in, so the correction cools: negative temperature.
+    expect(solved!.values.temperature).toBeLessThan(0);
+  });
+
+  it('makes a green pixel grey through tint', () => {
+    const sample: [number, number, number] = [0.44, 0.5, 0.44];
+
+    const solved = solveNeutral(GRADE_NEUTRAL, sample);
+
+    expect(solved).not.toBeNull();
+    expect(spread(sample, solved!.values)).toBeLessThan(1e-6);
+    expect(solved!.values.tint).toBeLessThan(0);
+  });
+
+  it('accounts for a lift that already carries a cast', () => {
+    // The order that matters in practice: pick a black point, which puts a
+    // cast in lift, then pick a neutral. Solving against the ramp rather than
+    // against the raw sample is what makes the second pick land.
+    const afterBlack = solveBlackPoint(GRADE_NEUTRAL, [0.06, 0.05, 0.075])!.values;
+    expect(afterBlack.lift.r).not.toBeCloseTo(afterBlack.lift.b, 6);
+
+    const sample: [number, number, number] = [0.52, 0.48, 0.46];
+    const solved = solveNeutral(afterBlack, sample);
+
+    expect(solved).not.toBeNull();
+    expect(spread(sample, solved!.values)).toBeLessThan(1e-6);
+  });
+
+  it('leaves the balls alone — it is the two sliders that hold a cast', () => {
+    const base = { ...GRADE_NEUTRAL, gain: { r: 1.04, g: 1, b: 0.97, m: 1.1 } };
+    const solved = solveNeutral(base, [0.5, 0.47, 0.44]);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.values.gain).toEqual(base.gain);
+    expect(solved!.values.lift).toEqual(base.lift);
+    expect(spread([0.5, 0.47, 0.44], solved!.values)).toBeLessThan(1e-6);
+  });
+
+  it('says when the cast is stronger than the sliders reach', () => {
+    // Temperature tops out at a 20% channel swing; this asks for far more.
+    const solved = solveNeutral(GRADE_NEUTRAL, [0.7, 0.5, 0.25]);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.clamped).toBe(true);
+    expect(Math.abs(solved!.values.temperature)).toBeLessThanOrEqual(4000);
+    expect(Math.abs(solved!.values.tint)).toBeLessThanOrEqual(100);
+  });
+
+  it('refuses a pixel with no cast information in it', () => {
+    // At either end the channels are held together by the clamps, not by the
+    // balance, so the answer would be read off the clamp.
+    expect(solveNeutral(GRADE_NEUTRAL, [0.01, 0.01, 0.02])).toBeNull();
+    expect(solveNeutral(GRADE_NEUTRAL, [0.99, 0.98, 0.99])).toBeNull();
+  });
+});
+describe('reading the two ends off a frame', () => {
+  /** A scope sample: width, height, then RGB triples, as sampleFrame emits. */
+  const frame = (
+    width: number,
+    height: number,
+    pixel: (x: number, y: number) => [number, number, number],
+  ) => {
+    const out = new Float32Array(width * height * 3 + 2);
+    out[0] = width;
+    out[1] = height;
+    let o = 2;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const [r, g, b] = pixel(x, y);
+        out[o++] = r;
+        out[o++] = g;
+        out[o++] = b;
+      }
+    }
+    return out;
+  };
+
+  it('finds the dark and bright ends of a plain ramp', () => {
+    // A horizontal ramp from 0.2 to 0.8, so the tails are known.
+    const points = framePoints(frame(64, 64, x => {
+      const v = 0.2 + (x / 63) * 0.6;
+      return [v, v, v];
+    }));
+
+    expect(points).not.toBeNull();
+    expect(points!.black[0]).toBeCloseTo(0.2, 1);
+    expect(points!.white[0]).toBeCloseTo(0.8, 1);
+  });
+
+  it('ignores letterbox bars', () => {
+    // This is the case that decides whether auto balance is usable at all:
+    // a matte border is exact black, so untrimmed it is the darkest tail of
+    // every letterboxed frame and the black end would never move.
+    const bars = 12;
+    const withBars = frame(64, 64, (x, y) => {
+      if (y < bars || y >= 64 - bars) return [0, 0, 0];
+      const v = 0.3 + (x / 63) * 0.5;
+      return [v, v, v];
+    });
+
+    const points = framePoints(withBars);
+
+    expect(points).not.toBeNull();
+    // The picture's own floor, not the matte's.
+    expect(points!.black[0]).toBeGreaterThan(0.25);
+    expect(points!.black[0]).toBeCloseTo(0.3, 1);
+  });
+
+  it('ignores pillarbox bars too', () => {
+    const points = framePoints(frame(64, 64, (x, y) => {
+      if (x < 10 || x >= 54) return [0, 0, 0];
+      const v = 0.3 + (y / 63) * 0.5;
+      return [v, v, v];
+    }));
+
+    expect(points).not.toBeNull();
+    expect(points!.black[0]).toBeGreaterThan(0.25);
+  });
+
+  it('declines a frame with no picture in it', () => {
+    expect(framePoints(frame(32, 32, () => [0, 0, 0]))).toBeNull();
+  });
+
+  it('declines a sample it cannot trust', () => {
+    expect(framePoints(null)).toBeNull();
+    expect(framePoints(new Float32Array([0, 0]))).toBeNull();
+    // A header promising more pixels than the buffer holds.
+    const short = new Float32Array(20);
+    short[0] = 64;
+    short[1] = 64;
+    expect(framePoints(short)).toBeNull();
+  });
+});
+
+describe('auto balance', () => {
+  const frame = (
+    width: number,
+    height: number,
+    pixel: (x: number, y: number) => [number, number, number],
+  ) => {
+    const out = new Float32Array(width * height * 3 + 2);
+    out[0] = width;
+    out[1] = height;
+    let o = 2;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const [r, g, b] = pixel(x, y);
+        out[o++] = r;
+        out[o++] = g;
+        out[o++] = b;
+      }
+    }
+    return out;
+  };
+
+  /** A washed-out, blue-cast picture: floor at 0.12, ceiling at 0.7. */
+  const flat = frame(64, 64, x => {
+    const v = 0.12 + (x / 63) * 0.58;
+    return [v * 0.94, v, Math.min(1, v * 1.1)];
+  });
+
+  it('takes both ends to the full range', () => {
+    const solved = autoBalance(GRADE_NEUTRAL, flat);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.solved).toEqual({ black: true, white: true });
+
+    const points = framePoints(flat)!;
+    gradePixel(points.black, solved!.values).forEach(v => expect(v).toBeCloseTo(0, 4));
+    gradePixel(points.white, solved!.values).forEach(v => expect(v).toBeCloseTo(1, 4));
+  });
+
+  it('beats running the two pickers in sequence, in either order', () => {
+    // The reason solveRamp exists. Lift and gain share one ramp, so each
+    // picker solves against the other as it stands: black-then-white moves
+    // the black that was just set, and white-then-black moves the white.
+    // Neither sequence lands both ends; the joint solve lands both.
+    const points = framePoints(flat)!;
+    const joint = autoBalance(GRADE_NEUTRAL, flat)!;
+
+    const blackFirst = solveWhitePoint(
+      solveBlackPoint(GRADE_NEUTRAL, points.black)!.values, points.white,
+    )!;
+    const whiteFirst = solveBlackPoint(
+      solveWhitePoint(GRADE_NEUTRAL, points.white)!.values, points.black,
+    )!;
+
+    const missBy = (values: GradeValues) =>
+      Math.abs(gradePixel(points.black, values)[1] - 0)
+      + Math.abs(gradePixel(points.white, values)[1] - 1);
+
+    expect(missBy(joint.values)).toBeLessThan(1e-4);
+    expect(missBy(blackFirst.values)).toBeGreaterThan(missBy(joint.values));
+    expect(missBy(whiteFirst.values)).toBeGreaterThan(missBy(joint.values));
+  });
+
+  it('holds both ends through a cast, not just the level', () => {
+    // A green-lit, blue-crushed frame: the two ends disagree about which way
+    // the cast runs, which is exactly what a per-channel solve is for.
+    const cast = frame(64, 64, x => {
+      const v = x / 63;
+      return [0.1 + v * 0.6, 0.16 + v * 0.68, 0.05 + v * 0.5];
+    });
+    const points = framePoints(cast)!;
+    const solved = autoBalance(GRADE_NEUTRAL, cast)!;
+
+    expect(solved.solved).toEqual({ black: true, white: true });
+    gradePixel(points.black, solved.values).forEach(v => expect(v).toBeCloseTo(0, 4));
+    gradePixel(points.white, solved.values).forEach(v => expect(v).toBeCloseTo(1, 4));
+  });
+
+  it('declines a frame too flat to solve, rather than answering with nonsense', () => {
+    // Ends a tenth apart need a slope of 10 — past every control it would
+    // have to be stored in. solveRamp stands down and the pickers take over.
+    const points = framePoints(frame(64, 64, x => {
+      const v = 0.4 + (x / 63) * 0.1;
+      return [v, v, v];
+    }))!;
+
+    expect(solveRamp(GRADE_NEUTRAL, points.black, points.white)).toBeNull();
+  });
+
+  it('sets the end it can when the picture only offers one', () => {
+    // Nothing below 0.8: there is no black to find, but there is a white.
+    const bright = frame(64, 64, x => {
+      const v = 0.8 + (x / 63) * 0.15;
+      return [v, v, v];
+    });
+
+    const solved = autoBalance(GRADE_NEUTRAL, bright);
+
+    expect(solved).not.toBeNull();
+    expect(solved!.solved.black).toBe(false);
+    expect(solved!.solved.white).toBe(true);
+    expect(solved!.values.lift).toEqual(GRADE_NEUTRAL.lift);
+  });
+
+  it('declines a frame it cannot read', () => {
+    expect(autoBalance(GRADE_NEUTRAL, null)).toBeNull();
+  });
+
+  it('stays well inside a frame budget on a full-size scope sample', () => {
+    // The scope sample is 240px wide; this is the real size the button runs
+    // on. It is a one-shot on click, not on the drag path, but a grader who
+    // clicks it should not watch the window stall.
+    const full = frame(240, 135, (x, y) => {
+      const v = ((x * 7 + y * 13) % 100) / 120;
+      return [v, v * 0.98, v * 1.02];
+    });
+
+    const started = performance.now();
+    expect(autoBalance(GRADE_NEUTRAL, full)).not.toBeNull();
+    expect(performance.now() - started).toBeLessThan(100);
   });
 });
 

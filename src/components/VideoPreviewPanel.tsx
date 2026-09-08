@@ -1,10 +1,11 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Video, Loader2, XCircle, FolderOpen, GitCompare, Crop, X, Palette, Ban, Pipette } from 'lucide-react';
+import { Video, Loader2, XCircle, FolderOpen, GitCompare, Crop, X, Palette } from 'lucide-react';
 import { PrivacyVeil } from './PrivacyVeil';
 import { CropEditorOverlay } from './CropEditorOverlay';
-import { ColorGradeOverlay, type CompareMode } from './ColorGradeOverlay';
+import { ColorGradeOverlay, type CompareMode, type PickMode } from './ColorGradeOverlay';
 import { GradeScopeColumn } from './GradeScopeColumn';
-import { PreviewStepRail } from './PreviewStepRail';
+import { PreviewStepRail, type ViewerControls } from './PreviewStepRail';
+import { GradeToolRail, GradeToolHint, useToolShortcuts, type ToolRailControls } from './GradeToolRail';
 import { ChainPreviewCanvas } from './ChainPreviewCanvas';
 import { sampleFrame, sampleBuffer } from '../utils/gradeRenderer';
 import type { GradeValues } from '../utils/colorGrade';
@@ -24,6 +25,9 @@ export interface ChainPreview {
    * upstream step would be shown wearing a grade that is not applied to it.
    */
   liveGradeStep: number | null;
+  /** Another step's picture, pinned as the left of the split. */
+  referenceFrame: ChainPreviewFrame | null;
+  referenceLabel: string | null;
   /**
    * First step carrying a grade baked in at load. While the dock is open,
    * this step and everything after it show stale values, so they are offered
@@ -34,21 +38,32 @@ export interface ChainPreview {
   onReload: () => void;
 }
 
-/** Everything the preview needs to show an open grade step. */
+/**
+ * Everything the preview needs to show an open grade step.
+ *
+ * The tool state arrives rather than living here. It used to be panel-local,
+ * because the buttons were in this panel's title bar; they are in the grading
+ * dock now, and both surfaces have to agree about what is armed. What stays
+ * here is the part only this panel can answer — whether the picture on screen
+ * is one the tools can act on — which it reports back through
+ * onAvailabilityChange.
+ */
 export interface GradePreview {
   values: GradeValues;
   mode: CompareMode;
   holdingBefore: boolean;
   stepLabel: string;
-  onModeChange: (mode: CompareMode) => void;
-  /** Solve this grade's lift so a sampled pixel becomes the black point. */
-  onPickBlack?: (sample: [number, number, number]) => void;
+  /** Which picker is armed, if any. */
+  pickMode: PickMode;
+  showClipping: boolean;
+  /** The view controls, handed to the step rail above the picture. */
+  viewer: ViewerControls;
+  /** The modal tools, handed to the rail beside it. */
+  toolRail: ToolRailControls;
+  /** A patch sampled from the picture entering this grade. */
+  onPick?: (sample: [number, number, number]) => void;
+  onAvailabilityChange?: (available: { canPick: boolean; canShowClipping: boolean }) => void;
 }
-
-const COMPARE_MODES: { id: CompareMode; label: string; title: string }[] = [
-  { id: 'wipe', label: 'Wipe', title: 'Drag the divider to compare across the frame' },
-  { id: 'after', label: 'After', title: 'Show the graded frame in full' },
-];
 
 interface VideoPreviewPanelProps {
   previewFrame: string | null;
@@ -83,7 +98,12 @@ interface VideoPreviewPanelProps {
   gradeBasePx?: number;
   /** Set while a preview session is open, so the panel shows the chain. */
   chainPreview?: ChainPreview | null;
+  /** Bake everything up to a step into a table. Right-click a step. */
 }
+
+/** The step rail takes these unconditionally; with no session there is
+    nothing to select and nothing to reload. */
+const noop = () => {};
 
 export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   previewFrame,
@@ -113,10 +133,9 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   const previewImageRef = useRef<HTMLImageElement>(null);
   const [previewImageSize, setPreviewImageSize] = useState<{ width: number; height: number } | null>(null);
   const [resizingScopes, setResizingScopes] = useState(false);
-  // Panel-local: it is a way of looking at the picture, not part of the grade,
-  // and it should hold while stepping between steps and frames.
-  const [showClipping, setShowClipping] = useState(false);
-  const [picking, setPicking] = useState(false);
+  const showClipping = gradePreview?.showClipping ?? false;
+  const picking = gradePreview?.pickMode != null;
+  useToolShortcuts(gradePreview?.toolRail ?? null);
   const cropEditor = activeFilterEditor?.editor?.type === 'crop' ? activeFilterEditor.editor : null;
 
   // Dragging left widens the column, so the delta is subtracted. The parent
@@ -181,14 +200,16 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   // session that is only true on the step feeding the grade; outside one the
   // <img> is that picture by definition.
   const canPickBlack = Boolean(
-    gradePreview?.onPickBlack && (chainFrame ? gradeIsLive : previewFrame),
+    gradePreview?.onPick && (chainFrame ? gradeIsLive : previewFrame),
   );
 
-  // Disarmed the moment it stops being offered — otherwise closing the dock or
-  // stepping off the grade's input leaves a click armed with no way to see it.
+  // Reported up rather than acted on here: the buttons are in the dock, and it
+  // is the dock that has to grey them out and App that has to disarm a picker
+  // when the picture stops being one it can be used on.
+  const onAvailabilityChange = gradePreview?.onAvailabilityChange;
   useEffect(() => {
-    if (!canPickBlack) setPicking(false);
-  }, [canPickBlack]);
+    onAvailabilityChange?.({ canPick: canPickBlack, canShowClipping });
+  }, [onAvailabilityChange, canPickBlack, canShowClipping]);
 
   useEffect(() => {
     if (!chainFrame || !onFrameSampled) return;
@@ -208,62 +229,10 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
             </span>
           )}
           {gradePreview && (
-            <>
-              <span className="inline-flex items-center gap-1 h-5 px-1.5 rounded border border-accent-500/40 bg-accent-500/10 text-[10px] font-semibold uppercase tracking-[0.08em] text-accent-300 truncate flex-shrink-0">
-                <Palette className="w-3 h-3 flex-shrink-0" />
-                Grade
-              </span>
-              <div className="flex rounded border border-ink-750 overflow-hidden flex-shrink-0">
-                {COMPARE_MODES.map(mode => (
-                  <button
-                    key={mode.id}
-                    onClick={() => gradePreview.onModeChange(mode.id)}
-                    aria-pressed={gradePreview.mode === mode.id}
-                    title={mode.title}
-                    className={`px-1.5 h-[18px] text-[10px] border-r border-ink-750 last:border-r-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
-                      gradePreview.mode === mode.id ? 'bg-accent-500/16 text-accent-300' : 'text-ink-500 hover:text-ink-300'
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-              <span className={`text-[10px] whitespace-nowrap flex-shrink-0 ${gradePreview.holdingBefore ? 'text-accent-300' : 'text-ink-600'}`}>
-                Hold <kbd className="font-mono">B</kbd> for before
-              </span>
-            </>
-          )}
-          {/* Grading tools, not chain tools: they belong to the picture, so
-              they stay put whether or not a preview session is open. */}
-          {canPickBlack && (
-            <button
-              onClick={() => setPicking(value => !value)}
-              aria-pressed={picking}
-              title="Click something that should be black, and lift is solved per channel to put it there — level and colour cast in one go."
-              className={`inline-flex items-center gap-1 h-[18px] px-1.5 rounded border text-[10px] whitespace-nowrap flex-shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
-                picking
-                  ? 'border-accent-500/50 bg-accent-500/12 text-accent-300'
-                  : 'border-ink-750 text-ink-500 hover:text-ink-300'
-              }`}
-            >
-              <Pipette className="w-3 h-3" />
-              {picking ? 'Pick a black' : 'Black point'}
-            </button>
-          )}
-          {canShowClipping && (
-            <button
-              onClick={() => setShowClipping(value => !value)}
-              aria-pressed={showClipping}
-              title="Stripe the pixels sitting on the clip point — red at the top, blue at the bottom. Follows the grade as you drag it."
-              className={`inline-flex items-center gap-1 h-[18px] px-1.5 rounded border text-[10px] whitespace-nowrap flex-shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500 ${
-                showClipping
-                  ? 'border-accent-500/50 bg-accent-500/12 text-accent-300'
-                  : 'border-ink-750 text-ink-500 hover:text-ink-300'
-              }`}
-            >
-              <Ban className="w-3 h-3" />
-              Clip
-            </button>
+            <span className="inline-flex items-center gap-1 h-5 px-1.5 rounded border border-accent-500/40 bg-accent-500/10 text-[10px] font-semibold uppercase tracking-[0.08em] text-accent-300 truncate flex-shrink-0">
+              <Palette className="w-3 h-3 flex-shrink-0" />
+              Grade
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1.5 self-center">
@@ -308,20 +277,25 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
           )}
         </div>
       </div>
-      {chainPreview && (
+      {(chainPreview || gradePreview) && (
         <PreviewStepRail
-          steps={chainPreview.steps}
-          selected={chainPreview.selected}
-          isRendering={chainPreview.isRendering}
-          isStale={chainPreview.isStale}
-          bakedFromStep={chainPreview.bakedFromStep}
+          viewer={gradePreview?.viewer ?? null}
+          steps={chainPreview?.steps ?? []}
+          selected={chainPreview?.selected ?? -1}
+          isRendering={chainPreview?.isRendering ?? false}
+          isStale={chainPreview?.isStale ?? false}
+          bakedFromStep={chainPreview?.bakedFromStep ?? null}
           frame={chainFrame}
           frameSize={chainFrame ? { width: chainFrame.width, height: chainFrame.height } : null}
-          onSelect={chainPreview.onSelect}
-          onReload={chainPreview.onReload}
+          onSelect={chainPreview?.onSelect ?? noop}
+          onReload={chainPreview?.onReload ?? noop}
         />
       )}
       <div className="flex-1 flex min-h-0 min-w-0">
+      {gradePreview && (
+        <GradeToolRail tools={gradePreview.toolRail} disabled={isProcessing} />
+      )}
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
       <div className="flex-1 flex items-center justify-center p-3 min-h-0 min-w-0 overflow-auto">
         {chainFrame ? (
           <PrivacyVeil
@@ -338,14 +312,11 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 gradeValues={gradeIsLive ? gradePreview!.values : null}
                 holdingBefore={gradeIsLive && gradePreview!.holdingBefore}
                 mode={gradePreview?.mode}
+                referenceFrame={chainPreview?.referenceFrame ?? null}
+                referenceLabel={chainPreview?.referenceLabel ?? null}
                 showClipping={showClipping}
                 picking={picking}
-                onPick={(sample) => {
-                  gradePreview?.onPickBlack?.(sample);
-                  // One pick per arming, so a stray second click cannot
-                  // silently re-solve against the picture it just changed.
-                  setPicking(false);
-                }}
+                onPick={(sample) => gradePreview?.onPick?.(sample)}
                 stepLabel={gradePreview?.stepLabel}
               />
             </div>
@@ -376,11 +347,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                   stepLabel={gradePreview.stepLabel}
                   showClipping={showClipping}
                   picking={picking}
-                  onPick={(sample) => {
-                    gradePreview.onPickBlack?.(sample);
-                    // One pick per arming, as on the session path.
-                    setPicking(false);
-                  }}
+                  onPick={(sample) => gradePreview.onPick?.(sample)}
                 />
               )}
               {cropEditor && activeFilterEditor && (
@@ -441,6 +408,11 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
             <p className="text-[12.5px]">Preview will appear here during processing</p>
           </div>
         )}
+      </div>
+
+      {/* Photoshop's options bar: what the armed tool wants from you. Always
+          present, so arming one does not shove the picture up the pane. */}
+      {gradePreview && <GradeToolHint tools={gradePreview.toolRail} />}
       </div>
 
       {/* Scopes, beside the picture rather than under it. A 16:9 picture is

@@ -103,6 +103,21 @@ describe('scopes in the column beside the viewer', () => {
   });
 });
 
+
+describe('the scope never costs a tone column', () => {
+  it('leaves the tone grid the width for the columns it can fill', () => {
+    // Found while a tools column was briefly taking 200px of this dock: the
+    // scope would take everything down to TONE_COLUMN_MIN, dropping tone to a
+    // single column and the dock to its taller height — 16px off the picture,
+    // spent on a scope 70px wider than it needed to be.
+    for (const window of [1200, 1440, 1600, 1920, 2560]) {
+      const layout = solveDockLayout(dockWidth(window), true);
+      expect(layout.toneColumns).toBeGreaterThanOrEqual(2);
+    }
+    expect(solveDockLayout(dockWidth(1200), true).height).toBe(GRADE_DOCK_COMPACT_HEIGHT);
+  });
+});
+
 describe('the dock is tall enough for what it chose to show', () => {
   it('never picks a layout that overflows its own height', () => {
     // The readout under a ball wraps to two rows, which is taller than the

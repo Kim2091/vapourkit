@@ -385,6 +385,78 @@ export function bakeGradeToLut(values: GradeValues, size: number, title?: string
 }
 
 /**
+ * One colour operation, as a function on a pixel.
+ *
+ * Everything the chain baker composes reduces to this. Kept as a plain
+ * function rather than a tagged union so the baker never has to know which
+ * kind of filter it came from.
+ */
+export type ColorOperation = (rgb: readonly [number, number, number]) => [number, number, number];
+
+/** A step the bake had to leave out, and why, so it can be reported. */
+export interface SkippedStep {
+  label: string;
+  reason: string;
+}
+
+export interface ChainBake {
+  lut: Lut;
+  /** Steps that were composed into the table, in order. */
+  captured: string[];
+  /** Steps that could not be, in order. */
+  skipped: SkippedStep[];
+}
+
+/**
+ * Bake everything a stage of the chain does to colour into one table.
+ *
+ * Resolve's "Generate 3D LUT" on a clip, for any step of the chain rather than
+ * for one grade: walk the lattice through every colour operation up to that
+ * step and write down where each entry lands.
+ *
+ * The lattice is walked once per cell through the whole stack rather than once
+ * per operation, so nothing is resampled between operations and the only
+ * interpolation error in the result is the one the chosen size implies.
+ *
+ * What this cannot capture is anything that is not a function of one pixel.
+ * A sharpener, a denoiser or an upscaler reads a pixel's neighbours, so there
+ * is no table that describes it — and a table that quietly left it out would
+ * be a table that lies. Those steps come back in `skipped`, named, for the
+ * caller to put in front of the user rather than swallow.
+ */
+export function bakeChainToLut(
+  operations: { label: string; apply: ColorOperation }[],
+  skipped: SkippedStep[],
+  size: number,
+  title?: string,
+): ChainBake {
+  if (!Number.isInteger(size) || size < 2 || size > MAX_3D_SIZE) {
+    throw new Error(`${size} is not a usable cube size`);
+  }
+
+  const data = new Float32Array(size * size * size * 3);
+  const step = 1 / (size - 1);
+  for (let b = 0; b < size; b++) {
+    for (let g = 0; g < size; g++) {
+      for (let r = 0; r < size; r++) {
+        let pixel: [number, number, number] = [r * step, g * step, b * step];
+        for (const operation of operations) pixel = operation.apply(pixel);
+        const at = lutIndex(size, r, g, b);
+        data[at] = pixel[0];
+        data[at + 1] = pixel[1];
+        data[at + 2] = pixel[2];
+      }
+    }
+  }
+
+  return {
+    lut: { kind: '3d', size, data, domainMin: [0, 0, 0], domainMax: [1, 1, 1], title },
+    captured: operations.map(operation => operation.label),
+    skipped,
+  };
+}
+
+/**
  * Resample any table onto a 3D lattice. A 1D cube is a perfectly ordinary
  * thing to be handed and the filter that applies these is 3D-only, so import
  * lifts one rather than refusing it — a 1D table is just a 3D one that

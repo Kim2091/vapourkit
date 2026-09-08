@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { BackendId, ModelFile, ColorimetrySettings, FilterTemplate, VideoInfo, Filter } from '../electron.d';
-import { DynamicFilterPanel } from './DynamicFilterPanel';
+import { DynamicFilterPanel, type LutPanelActions } from './DynamicFilterPanel';
 import { ColorimetryPanel } from './ColorimetryPanel';
 
 interface ModelSelectionPanelProps {
@@ -20,6 +20,7 @@ interface ModelSelectionPanelProps {
   onSaveTemplate?: (template: FilterTemplate) => Promise<boolean>;
   onDeleteTemplate?: (name: string) => Promise<boolean>;
   onOpenFilterEditor?: (filter: Filter) => void;
+  lut?: LutPanelActions;
 }
 
 export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
@@ -39,6 +40,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
   onImportClick,
   onModelsUpdated,
   onOpenFilterEditor,
+  lut,
 }: ModelSelectionPanelProps) => {
   return (
     <>
@@ -68,6 +70,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         onImportClick={onImportClick}
         onModelsUpdated={onModelsUpdated}
         onOpenFilterEditor={onOpenFilterEditor}
+        lut={lut}
       />
     </>
   );

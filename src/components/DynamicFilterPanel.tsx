@@ -7,6 +7,8 @@ import { Section, SectionButton } from './Section';
 import { FilterSelectorModal } from './FilterSelectorModal';
 import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
+import { CreateLutCard, LoadLutCard } from './LutStepCards';
+import type { LutJob } from '../hooks/useLutSteps';
 
 interface DynamicFilterPanelProps {
   title?: string;
@@ -30,7 +32,37 @@ interface DynamicFilterPanelProps {
   onModelsUpdated?: () => Promise<void>;
   /** Opens a visual editor declared by the selected .vkfilter template. */
   onOpenFilterEditor?: (filter: Filter) => void;
+  /** What the chain's LUT steps can do, and the state of doing it. */
+  lut?: LutPanelActions;
 }
+
+/**
+ * Everything a Create LUT or Load LUT card needs from the app, in one object.
+ *
+ * `pickFile` installs a table from disk and returns where it landed, or null
+ * if the pick was cancelled or the file could not be read. The rest is the
+ * generator: one job per step id, so two Load LUT steps can each show their
+ * own outcome.
+ */
+export interface LutPanelActions {
+  pickFile: () => Promise<string | null>;
+  restore: (loadId: string) => void;
+  bake: (markerId: string) => void;
+  clear: (id: string) => void;
+  jobs: Record<string, LutJob>;
+  previewOpen: boolean;
+}
+
+/** What the generic editor button says, per editor kind. */
+const EDITOR_TITLES: Record<string, string> = {
+  colorGrade: 'Open the grading dock',
+  crop: 'Open visual crop editor',
+};
+
+const EDITOR_LABELS: Record<string, string> = {
+  colorGrade: 'Open grade',
+  crop: 'Edit crop',
+};
 
 function defaultsForVariables(template: FilterTemplate | undefined): NonNullable<Filter['parameters']> | undefined {
   if (!template?.variables) return undefined;
@@ -72,6 +104,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   onImportClick,
   onModelsUpdated,
   onOpenFilterEditor,
+  lut,
 }: DynamicFilterPanelProps) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -305,6 +338,35 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     onFiltersChange(updatedFilters);
   };
 
+  /**
+   * Add the Load LUT that puts a Create LUT's colour back.
+   *
+   * At the end of the chain, already pointed at the marker, because the one
+   * thing known about where it belongs is "below whatever changes the
+   * colour" — and the end is the only position that is certainly that.
+   * Expanded, so the card saying what to do next is the next thing seen.
+   */
+  const handleAddLoader = (markerId: string) => {
+    const template = filterTemplates.find(t => t.name === 'Load LUT');
+    if (!template) return;
+    const step: Filter = {
+      id: `filter-${Date.now()}`,
+      enabled: true,
+      filterType: 'custom',
+      preset: template.name,
+      code: template.code,
+      category: template.category,
+      parameters: { ...defaultsForVariables(template), source_id: markerId },
+      variables: template.variables,
+      editor: template.editor,
+      order: pendingFilters.length,
+    };
+    const updatedFilters = [...pendingFilters, step];
+    setPendingFilters(updatedFilters);
+    onFiltersChange(updatedFilters);
+    setExpandedFilters(prev => new Set([...prev, step.id]));
+  };
+
   const handleCodeChange = (id: string, code: string) => {
     const updatedFilters = pendingFilters.map(f =>
       f.id === id ? { ...f, code } : f
@@ -319,7 +381,17 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     }
   };
 
-  const handleFilterParameterChange = (filterId: string, name: string, value: NonNullable<Filter['parameters']>[string]) => {
+  /**
+   * Write several of a filter's parameters at once.
+   *
+   * Plural on purpose. Every update here is built from the `pendingFilters` of
+   * the render it was created in, so two single-parameter calls in one handler
+   * both start from the same snapshot and the second silently discards the
+   * first. That is not hypothetical: choosing a table for a Load LUT step sets
+   * the step it follows and the file that step produced, and done as two calls
+   * the choice appeared to do nothing at all.
+   */
+  const handleFilterParametersChange = (filterId: string, changes: NonNullable<Filter['parameters']>) => {
     const updatedFilters = pendingFilters.map(filter => {
       if (filter.id !== filterId) return filter;
       const template = filterTemplates.find(candidate => candidate.name === filter.preset);
@@ -328,7 +400,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
         parameters: {
           ...defaultsForVariables(template),
           ...filter.parameters,
-          [name]: value,
+          ...changes,
         },
         variables: filter.variables ?? template?.variables,
         editor: filter.editor ?? template?.editor,
@@ -336,6 +408,10 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     });
     setPendingFilters(updatedFilters);
     onFiltersChange(updatedFilters);
+  };
+
+  const handleFilterParameterChange = (filterId: string, name: string, value: NonNullable<Filter['parameters']>[string]) => {
+    handleFilterParametersChange(filterId, { [name]: value });
   };
 
   const handleOpenInteractiveEditor = (filter: Filter, selectedTemplate?: FilterTemplate) => {
@@ -939,19 +1015,47 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                         {/* A .vkfilter opts into a visual editor with [editor]
                             metadata. The button is intentionally generic here;
                             the preview surface selects the matching editor type. */}
-                        {interactiveEditor && onOpenFilterEditor && (
+                        {/* The two LUT steps live entirely in their cards.
+                            Neither has a surface to open: a Create LUT has
+                            nothing to set, and a Load LUT's one choice is a
+                            dropdown. Generating happens here too, beside the
+                            step it is for. */}
+                        {interactiveEditor?.type === 'lutSource' && lut ? (
+                          <LoadLutCard
+                            filter={filter}
+                            filters={pendingFilters}
+                            disabled={isProcessing}
+                            job={lut.jobs[filter.id]}
+                            previewOpen={lut.previewOpen}
+                            onChoose={(source, path) => {
+                              // A new source means the old table is not for
+                              // it, whatever it was. Both go, in one update.
+                              lut.clear(filter.id);
+                              handleFilterParametersChange(filter.id, { source_id: source, lut_path: path, generated_key: '' });
+                            }}
+                            onPickFile={lut.pickFile}
+                            onGenerate={() => lut.restore(filter.id)}
+                          />
+                        ) : interactiveEditor?.type === 'createLut' && lut ? (
+                          <CreateLutCard
+                            filter={filter}
+                            filters={pendingFilters}
+                            disabled={isProcessing}
+                            job={lut.jobs[filter.id]}
+                            previewOpen={lut.previewOpen}
+                            canAddLoader={filterTemplates.some(t => t.name === 'Load LUT')}
+                            onAddLoader={() => handleAddLoader(filter.id)}
+                            onBake={() => lut.bake(filter.id)}
+                          />
+                        ) : interactiveEditor && onOpenFilterEditor && interactiveEditor.type in EDITOR_LABELS && (
                           <button
                             onClick={() => handleOpenInteractiveEditor(filter, selectedTemplate)}
                             disabled={isProcessing}
                             className="w-full h-7 px-2 rounded inline-flex items-center justify-center gap-1.5 text-[11.5px] font-semibold bg-accent-500/10 border border-accent-500/40 text-accent-300 hover:bg-accent-500/20 hover:border-accent-500/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={interactiveEditor.label
-                              || (interactiveEditor.type === 'colorGrade' ? 'Open the grading dock' : 'Open visual crop editor')}
+                            title={interactiveEditor.label || EDITOR_TITLES[interactiveEditor.type]}
                           >
-                            {interactiveEditor.type === 'colorGrade'
-                              ? <Palette className="w-3.5 h-3.5" />
-                              : <Crop className="w-3.5 h-3.5" />}
-                            {interactiveEditor.label
-                              || (interactiveEditor.type === 'colorGrade' ? 'Open grade' : 'Edit crop')}
+                            {interactiveEditor.type === 'colorGrade' ? <Palette className="w-3.5 h-3.5" /> : <Crop className="w-3.5 h-3.5" />}
+                            {interactiveEditor.label || EDITOR_LABELS[interactiveEditor.type]}
                           </button>
                         )}
 

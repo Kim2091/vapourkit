@@ -10,16 +10,22 @@
 // sliders be crushed. That crushing is what a 16:9 window used to do — seven
 // tone controls behind a horizontal scrollbar in a 140px column.
 //
+// A fourth block briefly lived here: a "Tools" column holding the pickers, the
+// compare modes and the clip toggle. It is gone, and the width it was taking
+// with it. Those were three unlike kinds of control sharing a heading that
+// described none of them — the modal tools went to the rail beside the picture,
+// the view toggles to the step rail above it, and the one command among them,
+// Auto balance, to this dock's header, where the whole-grade commands live.
+//
 // Height follows the same rule in reverse: the dock asks for the height its
 // chosen layout needs, so a one-column tone list gets the rows to show all
 // seven at once instead of scrolling two of them out of sight.
 
 import { memo, useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { RotateCcw, Save, Gauge, Upload, Download } from 'lucide-react';
+import { RotateCcw, Save, Gauge, Upload, Zap } from 'lucide-react';
 import { Trackball, readoutColumns, trackballColumnWidth } from './Trackball';
 import { GRADE_TYPE, gradeBasePx } from './gradeType';
 import { Scope, SCOPE_LABELS, type ScopeKind } from './GradeScopes';
-import { LUT_SIZES } from '../utils/lut';
 import {
   BALL_SPECS,
   SCALAR_SPECS,
@@ -50,25 +56,20 @@ interface ColorGradeDockProps {
   disabled?: boolean;
   dockScope: ScopeKind;
   onDockScopeChange: (kind: ScopeKind) => void;
+  /** Read both ends off the frame and solve lift and gain against them. A
+      command like Reset all, so it sits with Reset all. */
+  onAutoBalance: () => void;
+  /** False until a frame has been sampled to read those ends off. */
+  canAutoBalance: boolean;
   onChange: (values: GradeValues) => void;
   onCommit: () => void;
   onApply: (values: GradeValues) => void;
   onSaveTemplate?: () => void;
-  /** Bake this grade to a lookup table at the chosen lattice size. */
-  onExportLut?: (size: number) => void;
   /** Bring a table in as its own step in the chain. */
   onImportLut?: () => void;
 }
 
 const DOCK_SCOPES: ScopeKind[] = ['parade', 'waveform', 'vectorscope', 'histogram'];
-
-/** What a size costs, measured: peak error against the grade itself, on a
-    typical look, at 8-bit code values. See src/utils/lut.test.ts. */
-const LUT_SIZE_NOTE: Record<number, string> = {
-  17: 'small file',
-  33: 'standard',
-  65: 'closest match',
-};
 
 /** Gap between balls, and the primaries block's own horizontal padding. */
 const BALL_GAP = 14;
@@ -124,16 +125,26 @@ export function solveDockLayout(width: number, compact: boolean, scopesInColumn 
     ? (width < 820 ? 48 : 56)
     : (width < 1100 ? 68 : 84);
   const primaries = trackballColumnWidth(ballSize, basePx) * 4 + BALL_GAP * 3 + BLOCK_PADDING;
-  const forTools = Math.max(0, width - primaries - 2);
+  const remaining = Math.max(0, width - primaries - 2);
 
-  const wanted = forTools >= 1060 ? 380 : forTools >= 720 ? 360 : forTools >= 440 ? 260 : 200;
-  // The scope is the block that yields, all the way to leaving: the tone grid
-  // keeping one readable column outranks it. It also leaves outright when the
-  // column beside the viewer has the scopes, which is the arrangement with the
-  // height to show four of them at once.
-  const room = forTools - TONE_COLUMN_MIN;
-  const scopeWidth = scopesInColumn || room < SCOPE_MIN ? 0 : Math.min(wanted, room);
-  const forTone = forTools - scopeWidth;
+  const wanted = remaining >= 1060 ? 380 : remaining >= 720 ? 360 : remaining >= 440 ? 260 : 200;
+  // The scope is the block that yields next, all the way to leaving: the tone
+  // grid keeping one readable column outranks it. It also leaves outright when
+  // the column beside the viewer has the scopes, which is the arrangement with
+  // the height to show four of them at once.
+  const room = remaining - TONE_COLUMN_MIN;
+  // What the scope takes is capped at what the tone grid can spare and still
+  // fill the column count below. A scope 70px wider is a slightly better scope;
+  // a second tone column is three fewer rows and a shorter dock, which is
+  // picture height back — so the tone grid's thresholds outrank the scope's
+  // appetite, and it takes the remainder rather than everything it would like.
+  const toneTarget = remaining >= 660 + SCOPE_MIN
+    ? 660
+    : remaining >= 360 + SCOPE_MIN ? 360 : TONE_COLUMN_MIN;
+  const scopeWidth = scopesInColumn || room < SCOPE_MIN
+    ? 0
+    : Math.min(wanted, Math.max(SCOPE_MIN, remaining - toneTarget));
+  const forTone = remaining - scopeWidth;
   const toneColumns = forTone >= 660 ? 3 : forTone >= 360 ? 2 : 1;
 
   const height = compact
@@ -333,14 +344,14 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
   disabled = false,
   dockScope,
   onDockScopeChange,
+  onAutoBalance,
+  canAutoBalance,
   onChange,
   onCommit,
   onApply,
   onSaveTemplate,
-  onExportLut,
   onImportLut,
 }: ColorGradeDockProps) => {
-  const [lutMenuOpen, setLutMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -364,7 +375,8 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
     onChange({ ...values, [name]: value });
   }, [onChange, values]);
 
-  const { ballSize, scopeWidth, toneColumns, height, basePx } = solveDockLayout(width, compact, scopesInColumn);
+  const { ballSize, scopeWidth, toneColumns, height, basePx } =
+    solveDockLayout(width, compact, scopesInColumn);
 
   return (
     <div
@@ -375,11 +387,15 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
       <div className="h-7 flex-shrink-0 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800">
         <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          {/* "Color wheels" named the block that used to be the whole dock.
+              The tone grid and the scope are here too, and a panel whose
+              heading describes one of its columns is a panel you have to have
+              read to navigate. */}
           <span
             className="font-display font-semibold uppercase tracking-[0.14em] text-ink-100 whitespace-nowrap"
             style={{ fontSize: GRADE_TYPE.title }}
           >
-            Color wheels
+            Grade
           </span>
           <span className="text-ink-500 truncate" style={{ fontSize: GRADE_TYPE.label }}>{stepLabel}</span>
         </div>
@@ -397,59 +413,23 @@ export const ColorGradeDock = memo<ColorGradeDockProps>(({
               Import LUT
             </button>
           )}
-          {onExportLut && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setLutMenuOpen(open => !open)}
-                disabled={disabled}
-                aria-expanded={lutMenuOpen}
-                aria-haspopup="menu"
-                title="Bake this grade into a lookup table"
-                style={{ fontSize: GRADE_TYPE.button }}
-                className="h-[21px] px-2 rounded inline-flex items-center gap-1.5 font-medium bg-ink-850 border border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-              >
-                <Download className="w-3 h-3" />
-                Export LUT
-              </button>
-              {lutMenuOpen && (
-                <>
-                  {/* Clicking anywhere else closes it, including the button. */}
-                  <span
-                    className="fixed inset-0 z-40"
-                    aria-hidden="true"
-                    onClick={() => setLutMenuOpen(false)}
-                  />
-                  <div
-                    role="menu"
-                    className="absolute right-0 top-[23px] z-50 w-[188px] rounded border border-ink-750 bg-ink-900 shadow-lg overflow-hidden"
-                  >
-                    <span
-                      className="block px-2 pt-1.5 pb-1 text-ink-600"
-                      style={{ fontSize: GRADE_TYPE.hint }}
-                    >
-                      Lattice size
-                    </span>
-                    {LUT_SIZES.map(size => (
-                      <button
-                        key={size}
-                        type="button"
-                        role="menuitem"
-                        onClick={() => { setLutMenuOpen(false); onExportLut(size); }}
-                        style={{ fontSize: GRADE_TYPE.button }}
-                        className="w-full px-2 py-1 flex items-center justify-between gap-2 text-left text-ink-300 hover:bg-ink-850 hover:text-ink-100 transition-colors focus-visible:outline-none focus-visible:bg-ink-850"
-                      >
-                        <span className="font-mono tabular-nums">{size}</span>
-                        <span className="text-ink-600" style={{ fontSize: GRADE_TYPE.hint }}>
-                          {LUT_SIZE_NOTE[size]}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          {/* The two whole-grade commands, together: one sets everything from
+              the picture, the other clears everything. Auto balance was in the
+              tools column, where it was the only thing in it that did not need
+              a click on the picture to do its work. */}
+          <button
+            type="button"
+            onClick={onAutoBalance}
+            disabled={disabled || !canAutoBalance}
+            title={canAutoBalance
+              ? 'Read the darkest and brightest ends off the frame and solve lift and gain together, so both land at once. Letterbox bars are ignored.'
+              : 'No sampled frame to read the two ends off'}
+            style={{ fontSize: GRADE_TYPE.button }}
+            className="h-[21px] px-2 rounded inline-flex items-center gap-1.5 font-medium bg-ink-850 border border-ink-750 text-ink-400 hover:text-ink-200 hover:border-ink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          >
+            <Zap className="w-3 h-3" />
+            Auto balance
+          </button>
           <button
             type="button"
             onClick={() => onApply(GRADE_NEUTRAL)}

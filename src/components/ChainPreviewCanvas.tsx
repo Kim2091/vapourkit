@@ -28,6 +28,10 @@ interface ChainPreviewCanvasProps {
   gradeValues?: GradeValues | null;
   /** True while the hold-for-before key is down. */
   holdingBefore?: boolean;
+  /** Another step's picture for the left of the split, if one is pinned. */
+  referenceFrame?: ChainPreviewFrame | null;
+  /** What to call it on the stamp. */
+  referenceLabel?: string | null;
   /** Wipe compares across the frame; after shows the graded picture in full. */
   mode?: CompareMode;
   /** Stripe the pixels sitting on either clamp. */
@@ -43,6 +47,8 @@ interface ChainPreviewCanvasProps {
 export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
   frame,
   gradeValues = null,
+  referenceFrame = null,
+  referenceLabel = null,
   holdingBefore = false,
   mode = 'after',
   showClipping = false,
@@ -109,16 +115,30 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
     renderer.setFrameBuffer(frame.pixels, frame.width, frame.height);
   }, [frame, generation]);
 
+  // The pinned step's picture, on its own upload schedule: it changes when the
+  // pin moves or the playhead does, not when the selected step does.
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    if (referenceFrame) {
+      renderer.setReferenceBuffer(referenceFrame.pixels, referenceFrame.width, referenceFrame.height);
+    } else {
+      renderer.clearReference();
+    }
+  }, [referenceFrame, generation]);
+
   // How much of the width shows the ungraded frame. Holding pushes it to the
   // whole picture; "after" pulls it off entirely.
-  const before = !gradeValues ? 1 : holdingBefore ? 1 : mode === 'wipe' ? wipe : 0;
+  const before = !gradeValues || holdingBefore || mode === 'before'
+    ? 1
+    : mode === 'split' ? wipe : 0;
 
   useEffect(() => {
     const renderer = rendererRef.current;
     if (!renderer || !frame) return;
     renderer.setClipMarks(showClipping);
     renderer.renderWipe(gradeValues ?? GRADE_NEUTRAL, before);
-  }, [frame, gradeValues, before, showClipping, generation]);
+  }, [frame, referenceFrame, gradeValues, before, showClipping, generation]);
 
   const box = containBox(bounds, frame ? { width: frame.width, height: frame.height } : { width: 0, height: 0 });
 
@@ -158,7 +178,7 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
     return [r / count / 255, g / count / 255, b / count / 255];
   }, [frame, box]);
 
-  const onWipeDown = useCallback((event: React.MouseEvent) => {
+  const onPictureDown = useCallback((event: React.MouseEvent) => {
     if (picking) {
       const sample = samplePatch(event.clientX, event.clientY);
       if (sample) {
@@ -167,7 +187,7 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
       }
       return;
     }
-    if (mode !== 'wipe' || !gradeValues || !box) return;
+    if (mode !== 'split' || !gradeValues || !box) return;
     event.preventDefault();
     const move = (clientX: number) => {
       const rect = rootRef.current?.getBoundingClientRect();
@@ -193,13 +213,13 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
     );
   }
 
-  const showDivider = Boolean(box) && mode === 'wipe' && Boolean(gradeValues) && !holdingBefore;
+  const showDivider = Boolean(box) && mode === 'split' && Boolean(gradeValues) && !holdingBefore;
 
   return (
     <div
       ref={rootRef}
       className={`absolute inset-0 ${picking ? 'cursor-crosshair' : ''}`}
-      onMouseDown={onWipeDown}
+      onMouseDown={onPictureDown}
     >
       <canvas
         ref={canvasRef}
@@ -230,7 +250,9 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
               className="absolute font-display text-[10px] font-semibold uppercase tracking-[0.09em] px-1.5 py-0.5 rounded bg-ink-950/85 text-ink-300 pointer-events-none"
               style={{ left: box.left + 6, bottom: bounds.height - box.top - box.height + 6 }}
             >
-              {holdingBefore || !stepLabel ? 'Before' : `Before · ${stepLabel}`}
+              {referenceLabel
+                ? `Reference · ${referenceLabel}`
+                : holdingBefore || !stepLabel ? 'Before' : `Before · ${stepLabel}`}
             </span>
           )}
           {before < 0.98 && (

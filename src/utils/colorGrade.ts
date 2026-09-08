@@ -336,6 +336,372 @@ export function solveBlackPoint(
   };
 }
 
+export interface WhitePointSolution {
+  values: GradeValues;
+  /** True when the answer had to be trimmed to what the controls can express. */
+  clamped: boolean;
+}
+
+/**
+ * The gain that puts a sampled pixel on the white point.
+ *
+ * The mirror of solveBlackPoint across the same ramp. With
+ * out = (x + offset) * (gain - lift) + lift and u = x + offset, asking for
+ * out = 1 gives gain = lift + (1 - lift) / u. Solved per channel, so it takes
+ * the cast out of the highlights as well as setting the level.
+ *
+ * It reads lift as it stands, which is why auto balance solves black first:
+ * the two controls share one ramp, and the white end has to be told where the
+ * black end ended up. Solved the other way round, the highlights stay where
+ * the old lift put them.
+ *
+ * The stored ball is what is left after white balance and the master, because
+ * temperature and tint are already per-channel gains and are the grader's to
+ * set, not the picker's to overwrite.
+ *
+ * Returns null when the pixel cannot be a white point: as u approaches black
+ * the gain needed runs away to infinity.
+ */
+export function solveWhitePoint(
+  values: GradeValues,
+  sample: readonly [number, number, number],
+): WhitePointSolution | null {
+  const terms = channelTerms(values);
+  const white = whiteBalance(values.temperature, values.tint);
+  const names = ['r', 'g', 'b'] as const;
+  const needed: number[] = [];
+
+  for (let i = 0; i < 3; i++) {
+    const name = names[i];
+    const u = sample[i] + terms.offset[name];
+    // Below about a quarter the solution grows faster than the control can
+    // follow, and the pixel was never a plausible white anyway.
+    if (!Number.isFinite(u) || u < 0.25) return null;
+    const total = terms.lift[name] + (1 - terms.lift[name]) / u;
+    if (!Number.isFinite(total) || total <= 0) return null;
+    needed.push(total / white[name]);
+  }
+
+  // Gain is multiplicative, so its channel values sit around 1 and the master
+  // multiplies them: the mean carries the level, the spread carries the cast.
+  const master = (needed[0] + needed[1] + needed[2]) / 3;
+  if (!(master > 0)) return null;
+  let deltas = needed.map(value => value / master - 1);
+
+  let clamped = false;
+  const puck = deltasToPuck(
+    deltas[0] / MULTIPLY_RANGE,
+    deltas[1] / MULTIPLY_RANGE,
+    deltas[2] / MULTIPLY_RANGE,
+  );
+  const radius = Math.hypot(puck.x, puck.y);
+  if (radius > 1) {
+    // Keep the direction of the cast correction and give up some of its size,
+    // rather than storing a puck position the disc cannot show.
+    deltas = deltas.map(value => value / radius);
+    clamped = true;
+  }
+
+  const boundedMaster = clamp(master, MASTER_RANGE.gain.min, MASTER_RANGE.gain.max);
+  if (boundedMaster !== master) clamped = true;
+
+  return {
+    values: {
+      ...values,
+      gain: { r: 1 + deltas[0], g: 1 + deltas[1], b: 1 + deltas[2], m: boundedMaster },
+    },
+    clamped,
+  };
+}
+
+
+export interface NeutralSolution {
+  values: GradeValues;
+  /** True when the cast was stronger than temperature and tint can express. */
+  clamped: boolean;
+}
+
+/**
+ * The temperature and tint that make a sampled pixel grey.
+ *
+ * The other two pickers each solve one ball; this one solves the two tone
+ * sliders, because that is what a colour cast is stored in. It is the picker
+ * with the least freedom: temperature and tint are two numbers against three
+ * channels, which is exactly right — they can take out a cast that runs along
+ * the warm/cool and green/magenta axes, and nothing else. A cast that does not
+ * run along them is not a white balance error.
+ *
+ * Fold the ramp for one channel with the white balance left symbolic. With
+ * u = x + offset, c = gain.channel * gain.master and L the folded lift,
+ *
+ *   out = u * (c * w - L) + L  =  (u * c) * w  +  L * (1 - u)  =  A * w + B
+ *
+ * so each output is linear in its own white balance gain. whiteBalance() puts
+ * those gains at (1 + t, 1 + n, 1 - t), and asking for out_r = out_g = out_b
+ * gives two equations in t and n:
+ *
+ *   t = (A_b + B_b - A_r - B_r) / (A_r + A_b)
+ *   n = (A_r * (1 + t) + B_r - B_g) / A_g - 1
+ *
+ * Exact, and it accounts for a lift that already carries a cast of its own —
+ * which it will, if a black point was picked first.
+ *
+ * Returns null for a pixel with no cast information in it: at either end of
+ * the range the channels are held together by the clamps, not by the balance.
+ */
+export function solveNeutral(
+  values: GradeValues,
+  sample: readonly [number, number, number],
+): NeutralSolution | null {
+  const terms = channelTerms(values);
+  const names = ['r', 'g', 'b'] as const;
+  const A: number[] = [];
+  const B: number[] = [];
+
+  for (let i = 0; i < 3; i++) {
+    const name = names[i];
+    const u = sample[i] + terms.offset[name];
+    // Near black there is nothing to balance, and near white the answer is
+    // whatever the clamp decided. Neither is a grey card.
+    if (!Number.isFinite(u) || u < 0.05 || u > 0.95) return null;
+    // terms.gain already has white balance folded in, so take it back out:
+    // it is the unknown here, not an input.
+    const c = terms.gain[name] / whiteBalance(values.temperature, values.tint)[name];
+    A.push(u * c);
+    B.push(terms.lift[name] * (1 - u));
+  }
+
+  if (!(A[0] + A[2] > 0) || !(A[1] > 0)) return null;
+
+  const t = (A[2] + B[2] - A[0] - B[0]) / (A[0] + A[2]);
+  const n = (A[0] * (1 + t) + B[0] - B[1]) / A[1] - 1;
+  if (!Number.isFinite(t) || !Number.isFinite(n)) return null;
+
+  const temperature = (t / WHITE_RANGE) * TEMPERATURE_SPAN;
+  const tint = (n / WHITE_RANGE) * TINT_SPAN;
+  const boundedTemp = clamp(temperature, -TEMPERATURE_SPAN, TEMPERATURE_SPAN);
+  const boundedTint = clamp(tint, -TINT_SPAN, TINT_SPAN);
+
+  return {
+    values: { ...values, temperature: boundedTemp, tint: boundedTint },
+    clamped: boundedTemp !== temperature || boundedTint !== tint,
+  };
+}
+/* ------------------------------------------------------------------ */
+/* Reading the two ends off the picture                                */
+/* ------------------------------------------------------------------ */
+
+/** Share of the picture each tail is averaged over. */
+const TAIL_FRACTION = 0.005;
+/** Nothing this dark across a whole row or column is picture; it is matte. */
+const MATTE_LUMA = 0.02;
+/** Below this many pixels of picture the tails are noise, not a distribution. */
+const MIN_PICTURE_PIXELS = 64;
+
+export interface FramePoints {
+  /** Mean colour of the darkest tail, ignoring letterbox and pillarbox. */
+  black: [number, number, number];
+  /** Mean colour of the brightest tail. */
+  white: [number, number, number];
+}
+
+/**
+ * The darkest and brightest ends of a frame, as colours.
+ *
+ * Takes the scope sample — the same 240px-wide RGB buffer the scopes grade, of
+ * the picture entering this grade — so auto balance costs no extra readback.
+ *
+ * The matte trim is not a nicety. A letterboxed frame is bordered by exact
+ * black, so the darkest half a percent of it is the bars every time, and an
+ * auto balance reading them would answer "already black" for every frame that
+ * has them, which is most film. Rows and columns holding no pixel above
+ * MATTE_LUMA are dropped before the tails are taken.
+ *
+ * Tails are averaged rather than read at a single percentile, so one hot pixel
+ * or one dead one cannot set the point on its own.
+ */
+export function framePoints(sample: Float32Array | null): FramePoints | null {
+  if (!sample || sample.length < 5) return null;
+  const width = Math.round(sample[0]);
+  const height = Math.round(sample[1]);
+  if (!(width > 0) || !(height > 0) || sample.length < 2 + width * height * 3) return null;
+
+  // Luma once, up front: the trim, the sort and the tails all read it, and at
+  // 240x135 it is a 130KB array and about a millisecond.
+  const luma = new Float32Array(width * height);
+  for (let i = 0; i < luma.length; i++) {
+    const o = 2 + i * 3;
+    luma[i] = LUMA_R * sample[o] + LUMA_G * sample[o + 1] + LUMA_B * sample[o + 2];
+  }
+
+  const rowIsPicture = (y: number) => {
+    for (let x = 0; x < width; x++) if (luma[y * width + x] > MATTE_LUMA) return true;
+    return false;
+  };
+  const columnIsPicture = (x: number) => {
+    for (let y = 0; y < height; y++) if (luma[y * width + x] > MATTE_LUMA) return true;
+    return false;
+  };
+
+  let top = 0;
+  let bottom = height - 1;
+  while (top <= bottom && !rowIsPicture(top)) top++;
+  while (bottom > top && !rowIsPicture(bottom)) bottom--;
+  let left = 0;
+  let right = width - 1;
+  while (left <= right && !columnIsPicture(left)) left++;
+  while (right > left && !columnIsPicture(right)) right--;
+  if (top > bottom || left > right) return null; // a frame that is all matte
+
+  const count = (bottom - top + 1) * (right - left + 1);
+  if (count < MIN_PICTURE_PIXELS) return null;
+
+  const order = new Uint32Array(count);
+  let n = 0;
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) order[n++] = y * width + x;
+  }
+  // A comparator sort of ~32k entries, once, on a button press. It is not on
+  // the drag path, so it does not need to be a histogram.
+  order.sort((a, b) => luma[a] - luma[b]);
+
+  const tail = Math.max(1, Math.round(count * TAIL_FRACTION));
+  const mean = (from: number): [number, number, number] => {
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    for (let i = from; i < from + tail; i++) {
+      const o = 2 + order[i] * 3;
+      r += sample[o];
+      g += sample[o + 1];
+      b += sample[o + 2];
+    }
+    return [r / tail, g / tail, b / tail];
+  };
+
+  return { black: mean(0), white: mean(count - tail) };
+}
+
+export interface AutoBalanceSolution {
+  values: GradeValues;
+  clamped: boolean;
+  /** Which ends the picture actually gave an answer for. */
+  solved: { black: boolean; white: boolean };
+}
+
+/**
+ * Lift and gain solved together, so both ends land where they were asked to.
+ *
+ * The two pickers each solve one control against the other as it stands, which
+ * is what a picker should do. Running them in sequence does not give you both
+ * ends, though, because they share one ramp: solving gain for white moves the
+ * black the lift solve had just placed, and solving lift afterwards moves the
+ * white back. There is no order that fixes it — the system has to be solved as
+ * a system.
+ *
+ * Per channel, with u = x + offset, the ramp out = u * (G - L) + L must satisfy
+ *
+ *   u_black * (G - L) + L = 0        G - L = 1 / (u_white - u_black)
+ *   u_white * (G - L) + L = 1   =>   L     = -u_black / (u_white - u_black)
+ *
+ * which is exact, and needs only that the two ends are far enough apart for the
+ * answer to sit inside the controls.
+ */
+export function solveRamp(
+  values: GradeValues,
+  black: readonly [number, number, number],
+  white: readonly [number, number, number],
+): { values: GradeValues; clamped: boolean } | null {
+  const terms = channelTerms(values);
+  const balance = whiteBalance(values.temperature, values.tint);
+  const names = ['r', 'g', 'b'] as const;
+  const lifts: number[] = [];
+  const gains: number[] = [];
+
+  for (let i = 0; i < 3; i++) {
+    const name = names[i];
+    const low = black[i] + terms.offset[name];
+    const high = white[i] + terms.offset[name];
+    const span = high - low;
+    // A slope of 1/span, so a quarter of the range is already a gain of 4 —
+    // the top of the master's travel. Flatter than that and the answer is
+    // outside every control it would have to be stored in.
+    if (!Number.isFinite(span) || span < 0.25) return null;
+
+    const lift = -low / span;
+    const gain = lift + 1 / span;
+    if (!Number.isFinite(lift) || !Number.isFinite(gain) || gain <= 0) return null;
+    lifts.push(lift);
+    gains.push(gain / balance[name]);
+  }
+
+  // Both balls split the same way: the master carries the level and the puck
+  // carries the cast. Lift is additive so its channels sum to zero around the
+  // master; gain is multiplicative so its channels average to one.
+  const liftMaster = (lifts[0] + lifts[1] + lifts[2]) / 3;
+  const gainMaster = (gains[0] + gains[1] + gains[2]) / 3;
+  if (!(gainMaster > 0)) return null;
+
+  let liftDeltas = lifts.map(value => value - liftMaster);
+  let gainDeltas = gains.map(value => value / gainMaster - 1);
+  let clamped = false;
+
+  const trim = (deltas: number[], range: number) => {
+    const puck = deltasToPuck(deltas[0] / range, deltas[1] / range, deltas[2] / range);
+    const radius = Math.hypot(puck.x, puck.y);
+    if (radius <= 1) return deltas;
+    clamped = true;
+    return deltas.map(value => value / radius);
+  };
+  liftDeltas = trim(liftDeltas, LIFT_RANGE);
+  gainDeltas = trim(gainDeltas, MULTIPLY_RANGE);
+
+  const boundedLift = clamp(liftMaster, MASTER_RANGE.lift.min, MASTER_RANGE.lift.max);
+  const boundedGain = clamp(gainMaster, MASTER_RANGE.gain.min, MASTER_RANGE.gain.max);
+  if (boundedLift !== liftMaster || boundedGain !== gainMaster) clamped = true;
+
+  return {
+    values: {
+      ...values,
+      lift: { r: liftDeltas[0], g: liftDeltas[1], b: liftDeltas[2], m: boundedLift },
+      gain: { r: 1 + gainDeltas[0], g: 1 + gainDeltas[1], b: 1 + gainDeltas[2], m: boundedGain },
+    },
+    clamped,
+  };
+}
+
+/**
+ * Both ends of the ramp, read off the frame and set at once.
+ *
+ * The joint solve is the answer whenever the picture has two ends far enough
+ * apart to have one. A picture that does not — all shadow, all highlight, or
+ * flat enough that the slope between them is outside the controls — still has
+ * one end worth setting, so it falls back to the pickers and says which end it
+ * managed. Null only when the frame gave neither.
+ */
+export function autoBalance(
+  values: GradeValues,
+  sample: Float32Array | null,
+): AutoBalanceSolution | null {
+  const points = framePoints(sample);
+  if (!points) return null;
+
+  const both = solveRamp(values, points.black, points.white);
+  if (both) {
+    return { values: both.values, clamped: both.clamped, solved: { black: true, white: true } };
+  }
+
+  const black = solveBlackPoint(values, points.black);
+  const white = solveWhitePoint(black?.values ?? values, points.white);
+  if (!black && !white) return null;
+
+  return {
+    values: white?.values ?? black!.values,
+    clamped: Boolean(black?.clamped || white?.clamped),
+    solved: { black: Boolean(black), white: Boolean(white) },
+  };
+}
+
 /** A neutral grade emits no VapourSynth stage and needs no shader pass. */
 export function isNeutralGrade(values: GradeValues): boolean {
   const ballsNeutral = BALL_SPECS.every(({ name }) => {

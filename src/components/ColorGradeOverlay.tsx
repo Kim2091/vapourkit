@@ -12,7 +12,27 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GradeRenderer } from '../utils/gradeRenderer';
 import { GRADE_NEUTRAL, type GradeValues } from '../utils/colorGrade';
 
-export type CompareMode = 'wipe' | 'after' | 'split';
+/**
+ * Which of the two pictures the viewer is showing.
+ *
+ * These were 'wipe' | 'after' (plus a 'split' that nothing ever set). "Wipe"
+ * named the divider you drag — the mechanism — rather than the view you are
+ * in, and the pair had three states while offering two: the third, the
+ * ungraded picture in full, was reachable only by reading a hint and holding a
+ * key. All three are states now, and holding B is a shortcut to one of them
+ * rather than the only door to it.
+ */
+export type CompareMode = 'before' | 'split' | 'after';
+
+/**
+ * Which end of the ramp the next click on the picture sets, or null for none.
+ *
+ * All three pickers behave identically as far as the picture is concerned —
+ * arm, take a patch, hand it up — so the overlay is told only whether one is
+ * armed. Which one it is belongs to the grade, and is resolved where the
+ * sample lands. null is the compare tool: the divider takes the drag.
+ */
+export type PickMode = 'black' | 'white' | 'neutral' | null;
 
 interface ColorGradeOverlayProps {
   /** The element showing the ungraded frame; its box is what we cover. */
@@ -223,7 +243,7 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
     return [r / count / 255, g / count / 255, b / count / 255];
   }, [imageRef, box]);
 
-  const onWipeDown = (event: React.MouseEvent) => {
+  const onPictureDown = (event: React.MouseEvent) => {
     if (picking) {
       const sample = samplePatch(event.clientX, event.clientY);
       if (sample) {
@@ -232,7 +252,7 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
       }
       return;
     }
-    if (mode !== 'wipe' || !box) return;
+    if (mode !== 'split' || !box) return;
     event.preventDefault();
     const move = (pointer: { clientX: number }) => {
       const rect = rootRef.current?.getBoundingClientRect();
@@ -254,7 +274,7 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
   // before is on the left and after on the right — which is what the stamps
   // say. "after" pulls the divider to the left edge; holding pushes it off
   // the right, leaving the untouched <img> showing through.
-  const hidden = holdingBefore ? 1 : mode === 'wipe' ? wipe : 0;
+  const hidden = holdingBefore || mode === 'before' ? 1 : mode === 'split' ? wipe : 0;
 
   // The canvas is mounted unconditionally. Returning early before it exists
   // left canvasRef null on the one pass the renderer effect runs, so the
@@ -263,7 +283,7 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
     <div
       ref={rootRef}
       className={`absolute inset-0 ${picking ? 'cursor-crosshair' : ''}`}
-      onMouseDown={onWipeDown}
+      onMouseDown={onPictureDown}
     >
       <div
         className="absolute overflow-hidden"
@@ -301,7 +321,7 @@ export const ColorGradeOverlay = memo<ColorGradeOverlayProps>(({
         </div>
       )}
 
-      {box && mode === 'wipe' && !holdingBefore && (
+      {box && mode === 'split' && !holdingBefore && (
         <span
           aria-hidden="true"
           className="absolute w-px bg-white/85 cursor-ew-resize"
