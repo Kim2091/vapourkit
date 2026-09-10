@@ -14,10 +14,9 @@ import { VSVIEW_MIN_VERSION } from './constants';
 import type { GpuVendor } from './gpuDetection';
 import { getProvider, type BackendId } from './providers/registry';
 
-/** PEP 503 name normalization: lowercase, underscores mapped to dashes. */
-export function normalizePackageName(name: string): string {
-  return name.trim().toLowerCase().replace(/_/g, '-');
-}
+import { normalizePackageName } from './packageNames';
+
+export { normalizePackageName };
 
 /** Normalized distribution name of a pip requirement spec ("vsjetpack[full]>=1" → "vsjetpack"). */
 function distNameOf(spec: string): string {

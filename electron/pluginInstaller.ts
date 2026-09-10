@@ -18,6 +18,11 @@ import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
 import { detectGpuVendor } from './gpuDetection';
 import {
+  brokenProjectNames,
+  inspectPythonEnvironment,
+  repairPythonEnvironment,
+} from './pythonEnvIntegrity';
+import {
   computeVendorPurge,
   evaluateInstallState,
   getBackendPipPackages,
@@ -351,6 +356,42 @@ export class PluginInstaller {
     });
   }
 
+  /**
+   * Clears anything in site-packages that would make the install below fail or
+   * silently do nothing, and reports what it found.
+   *
+   * pip aborts an entire invocation when a single installed distribution
+   * cannot be read — it will not replace files it has no RECORD for — so one
+   * interrupted install blocks every later one until the rubble is cleared.
+   * Non-fatal by design: if a directory cannot be deleted, the install still
+   * runs and pip gets to produce the real error.
+   */
+  private async repairEnvironmentIntegrity(): Promise<void> {
+    const report = await inspectPythonEnvironment(PATHS.SITE_PACKAGES);
+    if (report.problems.length === 0 && report.staleDirectories.length === 0) {
+      return;
+    }
+
+    for (const problem of report.problems) {
+      logger.warn(`Damaged package ${problem.project}: ${problem.detail} (${problem.directory})`);
+    }
+    for (const directory of report.staleDirectories) {
+      logger.warn(`Leftover directory from an interrupted uninstall: ${directory}`);
+    }
+
+    this.sendProgress({
+      type: 'installing',
+      progress: 0,
+      message: 'Clearing a previously interrupted install...'
+    });
+
+    const { removed, failed } = await repairPythonEnvironment(PATHS.SITE_PACKAGES, report);
+    logger.info(`Cleared ${removed.length} damaged package director${removed.length === 1 ? 'y' : 'ies'} before installing`);
+    for (const failure of failed) {
+      logger.warn(`Could not clear ${failure.directory}; pip may fail on it: ${failure.error}`);
+    }
+  }
+
   private hasHealthyTorchRuntime(): Promise<boolean> {
     // torchgen is part of the official torch wheel, not the unrelated PyPI
     // distribution with the same name. Import both so a partial extraction is
@@ -489,6 +530,10 @@ export class PluginInstaller {
       });
 
       logger.info('Starting plugin dependency installation...');
+
+      // Runs before any pip install: an unreadable dist-info aborts pip
+      // outright, so nothing below can succeed until it is cleared.
+      await this.repairEnvironmentIntegrity();
 
       // Step 0: Ensure setuptools and wheel are installed (0-3% progress)
       logger.info('=== Step 0: Ensuring setuptools and wheel are installed ===');
@@ -775,15 +820,13 @@ export class PluginInstaller {
     const foundPackages = packagesToCheck.filter(name => installedNames.has(name));
     const missingNames = packagesToCheck.filter(name => !installedNames.has(name));
 
-    // Distribution metadata alone is insufficient for PyTorch: torchgen is a
-    // directory inside the torch wheel and therefore never appears in `pip
-    // list`. Treat its missing package file as an incomplete install so the
-    // Plugins UI offers the repair path above without paying the cost of a
-    // full torch import on every status check.
-    const torchRuntimeHealthy = await fs.pathExists(
-      path.join(PATHS.SITE_PACKAGES, 'torchgen', '__init__.py')
-    );
-    const runtimeProblems = torchRuntimeHealthy ? [] : ['torch-runtime'];
+    // Distribution metadata alone is insufficient: `pip list` reports what a
+    // dist-info claims, so a half-finished install still reads as present. The
+    // structural scan catches those — a wheel whose files never arrived, or
+    // whose metadata pip can no longer read — for every package rather than
+    // just torch, and costs file lookups rather than a Python import.
+    const integrity = await inspectPythonEnvironment(PATHS.SITE_PACKAGES);
+    const runtimeProblems = brokenProjectNames(integrity);
 
     const state = evaluateInstallState(
       vendor,
@@ -805,8 +848,8 @@ export class PluginInstaller {
     if (missingNames.length > 0) {
       logger.info(`Missing packages: ${missingNames.join(', ')}`);
     }
-    if (!torchRuntimeHealthy) {
-      logger.info('PyTorch runtime is incomplete (torchgen package files are missing)');
+    for (const problem of integrity.problems) {
+      logger.info(`Damaged package ${problem.project}: ${problem.detail}`);
     }
 
     return { installed: state.installed, packages: foundPackages };
