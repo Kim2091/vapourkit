@@ -1,0 +1,55 @@
+name = "Wavelet Color Fix from Step"
+code = """
+# Full Docs: https://github.com/pifroggi/vs_colorfix?tab=readme-ov-file#wavelet-color-fix
+#
+# The same wavelet colour fix as Wavelet Color Fix. What differs is where the
+# reference comes from.
+#
+# The original reads original_clip, a name bound once near the top of the
+# generated script. Pointing it anywhere else meant inserting a Move Original
+# Clip Reference step whose whole job was to rebind that one name, which made
+# the reference a thing you set somewhere else in the list and then had to
+# remember. This one names the step it wants, on its own card, by id. The app
+# writes that step's picture into VK_STAGES as the script is built and the
+# line below reads it back out, so several steps can match against different
+# places at once and reordering the chain cannot silently repoint any of them.
+#
+# vs_colorfix resizes the reference to match, so matching against a step from
+# below an upscaler is fine. It does insist on the same frame count: a step
+# between here and the reference that adds or drops frames will be refused by
+# name rather than fixed up.
+
+wavelets     = 4       # Higher is a more global color fix, lower is more local.
+backend      = "auto"  # "cpu", "tensorrt", "directml", "ncnn", or "auto" to use Vapourkit's global setting.
+num_streams  = 2       # Number of parallel GPU streams.
+gpu_id       = 0       # The GPU to use.
+
+reference    = {{stage:source_id}}
+
+
+import vs_colorfix
+backend = backend.lower()
+backend = VK_BACKEND if backend == "auto" else backend
+float_format = clip.format.replace(sample_type=vs.FLOAT, bits_per_sample=16).id
+reference_float = core.resize.Bilinear(reference, format=float_format)
+clip_float = core.resize.Point(clip, format=float_format)
+clip_float = vs_colorfix.wavelet(clip_float, reference_float, wavelets=wavelets, backend=backend, num_streams=num_streams, gpu_id=gpu_id)
+clip = core.resize.Point(clip_float, format=clip.format.id)"""
+category = [ "Color Modification" ]
+description = "Corrects a colour shift by matching the picture to the colour it had at a step you pick, rather than always to the untouched source."
+
+[variables.source_id]
+type = "string"
+default = ""
+hidden = true
+description = "The step whose colour this matches against, by id. Held as an id rather than a position so that adding or reordering a step cannot silently repoint it. Empty means the source, before any filter. Set by the dropdown on the card."
+
+[editor]
+type = "stageSource"
+label = "Match the colour of"
+
+[editor.variables]
+source = "source_id"
+
+[metadata]
+createdAt = "2026-09-08T00:00:00.000Z"

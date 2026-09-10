@@ -161,7 +161,7 @@ export const LoadLutCard = memo<LoadLutCardProps>(({
       >
         <option value="">Nothing chosen</option>
         {(offered.length > 0 || chosenElsewhere) && (
-          <optgroup label="Put back the colour remembered by a Create LUT step">
+          <optgroup label="From a Create LUT step above">
             {offered.map(marker => (
               <option key={marker.id} value={marker.id}>
                 Restore the colour at step {stepNumber(filters, marker.id)}, {markerPlace(filters, marker.id)}
@@ -177,14 +177,14 @@ export const LoadLutCard = memo<LoadLutCardProps>(({
         {link.state === 'missing' && (
           <option value={sourceId}>A Create LUT step that is no longer in the chain</option>
         )}
-        <optgroup label="Or apply a table from anywhere">
+        <optgroup label="From a file">
           <option value="__file">A .cube file on disk…</option>
         </optgroup>
       </select>
 
       {link.state === 'none' && !path && (
         <p className={`${PROSE} text-ink-600`}>
-          Pick a Create LUT step above this one to put its colour back here, or a .cube file to apply.
+          Point this at a Create LUT above it, or pick a .cube file.
         </p>
       )}
       {link.state === 'none' && path && (
@@ -208,10 +208,6 @@ export const LoadLutCard = memo<LoadLutCardProps>(({
       )}
       {link.state === 'ready' && (
         <>
-          <p className={`${PROSE} text-ink-400`}>
-            Turns the colour arriving here back into what it was at step {link.number},{' '}
-            {link.place}.
-          </p>
           {link.method.kind === 'nothing' ? (
             <p className={`${PROSE} text-warn-300`}>
               Nothing sits between this and step {link.number}, so there is nothing to put back.
@@ -291,6 +287,10 @@ interface CreateLutCardProps {
  * settings and no surface to open. Two things follow from where it sits: a
  * Load LUT below can put this colour back, and the colour work above it can
  * be saved as a file. The second only appears when there is something above.
+ *
+ * Both were once section headings. Two uppercase headings over two one-line
+ * sections read as more structure than there is, so a hairline separates them
+ * instead and the buttons name their own actions.
  */
 export const CreateLutCard = memo<CreateLutCardProps>(({
   filter, filters, disabled, job, previewOpen, canAddLoader, onAddLoader, onBake,
@@ -305,15 +305,14 @@ export const CreateLutCard = memo<CreateLutCardProps>(({
   return (
     <div className={BOX}>
       <p className={`${PROSE} text-ink-300`}>
-        Remembers the colour of the picture here, {place}. It changes nothing itself.
+        Remembers the colour here, {place}. It changes nothing itself.
       </p>
 
-      <div className="space-y-1 pt-0.5">
-        <span className={HEADING}>Put that colour back later</span>
+      <div className="space-y-1">
         <p className={`${PROSE} text-ink-500`}>
           {restoredBy.length > 0
-            ? `Load LUT at step ${list(restoredBy.map(loader => String(stepNumber(filters, loader.id))))} puts it back.`
-            : 'A Load LUT step below whatever changes the colour, pointed at this step, puts it back.'}
+            ? `Put back by Load LUT at step ${list(restoredBy.map(loader => String(stepNumber(filters, loader.id))))}.`
+            : 'A Load LUT below whatever changes the colour, pointed here, puts it back.'}
         </p>
         {canAddLoader && (
           <button
@@ -324,16 +323,15 @@ export const CreateLutCard = memo<CreateLutCardProps>(({
             title="Adds a Load LUT at the end of the chain, already pointed at this step. Drag it to wherever the colour should come back."
           >
             <Plus className="w-3 h-3" />
-            Add a Load LUT that restores this
+            Add a Load LUT
           </button>
         )}
       </div>
 
       {span !== null && span.method.kind !== 'nothing' && (
-        <div className="space-y-1 pt-0.5">
-          <span className={HEADING}>Save the colour work above as a file</span>
+        <div className="space-y-1 pt-1.5 border-t border-ink-850">
           <p className={`${PROSE} text-ink-500`}>
-            Everything the chain does to colour before this step, as a .cube for other footage or
+            The colour work above this step can also be saved as a .cube, for other footage or
             other software.
           </p>
           <Method method={span.method} previewOpen={previewOpen} />

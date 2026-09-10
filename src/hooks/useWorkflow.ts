@@ -5,6 +5,7 @@ import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
 import { isBackendId, normalizeBackendForCurrentPlatform } from '../utils/backends';
 import { notify } from '../utils/notifications';
+import { remapStepReferences } from '../utils/stepReferences';
 
 interface ImportWorkflowModalState {
   isOpen: boolean;
@@ -183,6 +184,11 @@ export function useWorkflow({
       // Track missing models to alert the user
       const missingModels: string[] = [];
 
+      // A step that names another step does it by id, and every filter here is
+      // about to be given a new one. Kept as the ids are handed out so the
+      // references can be moved across with them.
+      const movedIds = new Map<string, string>();
+
       const workflowFilters: Filter[] = workflow.filters.map((wf, index) => {
         let resolvedModelPath = wf.modelPath;
         
@@ -197,8 +203,11 @@ export function useWorkflow({
           }
         }
 
+        const id = `filter-${Date.now()}-${index}`;
+        if (wf.id) movedIds.set(wf.id, id);
+
         return {
-          id: `filter-${Date.now()}-${index}`,
+          id,
           enabled: wf.enabled,
           filterType: wf.filterType || 'custom',
           preset: wf.filterType === 'aiModel' ? 'AI Model' : wf.name,
@@ -214,7 +223,7 @@ export function useWorkflow({
           editor: wf.editor,
         };
       });
-      setFilters(workflowFilters);
+      setFilters(remapStepReferences(workflowFilters, movedIds));
 
       // Apply encoding settings if present
       if (workflow.encodingSettings) {
@@ -363,6 +372,9 @@ export function useWorkflow({
           const category = matchedTemplate?.category ?? filter.category;
 
           return {
+            // Exported so a step naming another step still names it after the
+            // import gives everything fresh ids. Never read as an id itself.
+            id: filter.id,
             name: filter.filterType === 'aiModel' ? 'AI Model' : (filter.preset || `Filter ${index + 1}`),
             code: filter.code || '',
             description: undefined,

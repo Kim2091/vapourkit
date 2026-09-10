@@ -17,6 +17,25 @@ function pyString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+/**
+ * One step naming another step's picture: `{{stage:source_id}}`, where
+ * `source_id` is a variable of that filter holding the target step's id.
+ *
+ * Until now a filter could reach outside its own input in exactly one way —
+ * the name `original_clip`, bound once near the top of the script — and moving
+ * that binding took a step of its own whose entire job was `original_clip =
+ * clip`. One name, one binding, and a marker in the list to move it.
+ *
+ * The reference is an id and not a position because a position is a claim that
+ * stops being true the moment anything above it moves. An id either names a
+ * step in the chain or it does not, and every way it can stop naming one is
+ * answered below by a message rather than by a KeyError.
+ */
+const STAGE_REFERENCE = /\{\{\s*stage\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
+/** The dict a referenced step's picture is written into, as the script runs. */
+const STAGES = 'VK_STAGES';
+
 export interface Filter {
   id: string;
   enabled: boolean;
@@ -37,6 +56,8 @@ export interface Filter {
     type?: 'number' | 'string' | 'boolean';
     default?: string | number | boolean;
     description?: string;
+    /** App-written: substituted into the code, never offered as a control. */
+    hidden?: boolean;
   }>;
 }
 
@@ -98,11 +119,17 @@ export class VapourSynthScriptGenerator {
    * Replaces values explicitly declared by a .vkfilter's [variables] table.
    * Keeping this scoped to declarations means ordinary Python braces and
    * accidental template-like text remain untouched.
+   *
+   * Stage references go first and are not declarations in the same sense: the
+   * declared variable holds a step id, and what lands in the Python is the
+   * clip that step produced. They cannot collide with the plain form below,
+   * which has no colon in it.
    */
-  private renderCustomFilterCode(filter: Filter): string {
-    if (!filter.variables) return filter.code.trim();
+  private renderCustomFilterCode(filter: Filter, stage: (variable: string) => string): string {
+    const code = filter.code.trim().replace(STAGE_REFERENCE, (_match, key: string) => stage(key));
+    if (!filter.variables) return code;
 
-    return filter.code.trim().replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (match, key: string) => {
+    return code.replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (match, key: string) => {
       const declaration = filter.variables?.[key];
       if (!declaration) return match;
 
@@ -112,6 +139,67 @@ export class VapourSynthScriptGenerator {
       if (typeof value === 'string') return pyString(value);
       return match;
     });
+  }
+
+  /** The step id a filter's stage reference names, or '' for the source. */
+  private stageIdOf(filter: Filter, variable: string): string {
+    const value = filter.parameters?.[variable] ?? filter.variables?.[variable]?.default;
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  /** Every step id some enabled filter names. Nothing else is worth keeping. */
+  private referencedStageIds(enabledFilters: Filter[]): Set<string> {
+    const wanted = new Set<string>();
+    for (const filter of enabledFilters) {
+      if (filter.filterType !== 'custom') continue;
+      for (const [, variable] of filter.code.matchAll(STAGE_REFERENCE)) {
+        const id = this.stageIdOf(filter, variable);
+        if (id) wanted.add(id);
+      }
+    }
+    return wanted;
+  }
+
+  /**
+   * What one stage reference becomes in the emitted Python.
+   *
+   * `emitted` is the set of steps that have already written their picture into
+   * VK_STAGES *in this script*, which is the only thing that makes a reference
+   * safe — not "the target is enabled", not "the target is above". A step with
+   * no model chosen and a custom step with an empty body both sit in the chain
+   * and emit nothing, and a reference to either would otherwise be a KeyError
+   * with no name attached to it.
+   *
+   * Everything that is not safe becomes a call that raises. The generator is
+   * the only place that knows which of the four ways it went wrong, so it is
+   * the only place that can say so.
+   */
+  private renderStageReference(
+    filter: Filter,
+    variable: string,
+    emitted: Set<string>,
+    allFilters: Filter[],
+  ): string {
+    const id = this.stageIdOf(filter, variable);
+    if (!id) return 'original_clip';
+    if (emitted.has(id)) return `${STAGES}[${pyString(id)}]`;
+
+    const here = filter.preset || 'A custom filter';
+    const target = allFilters.find(candidate => candidate.id === id);
+    if (!target) {
+      return `vk_stage_missing(${pyString(`${here} reads the picture from a step that is no longer in the chain.`)})`;
+    }
+
+    const at = [...allFilters].sort((a, b) => a.order - b.order).findIndex(f => f.id === id) + 1;
+    const named = `step ${at}, ${target.preset || 'a custom filter'}`;
+    const why = target.id === filter.id
+      ? 'itself'
+      : !target.enabled
+        ? `${named}, which is turned off`
+        : target.order >= filter.order
+          ? `${named}, which comes after it — a step can only read the picture from one above it`
+          : `${named}, which produces no picture of its own`;
+    return `vk_stage_missing(${pyString(`${here} reads the picture from ${why}.`)})`;
   }
 
   /**
@@ -242,6 +330,18 @@ export class VapourSynthScriptGenerator {
       filterCode += '_vk_set_output(original_clip, 0, "Source")\n\n';
     }
 
+    // Only steps somebody names are kept. Every kept clip is a node the chain
+    // above it has to be able to produce a second time, so a script that held
+    // on to all of them would make every chain pay for a feature only some use.
+    const wantedStages = this.referencedStageIds(enabledFilters);
+    const emittedStages = new Set<string>();
+    if (wantedStages.size > 0) {
+      filterCode += '# Pictures kept for a step below that reads them\n';
+      filterCode += `${STAGES} = {}\n`;
+      filterCode += 'def vk_stage_missing(message):\n';
+      filterCode += '    raise ValueError(message)\n\n';
+    }
+
     let previewOutputIndex = 0;
 
     for (let i = 0; i < enabledFilters.length; i++) {
@@ -264,8 +364,20 @@ export class VapourSynthScriptGenerator {
       } else if (filter.filterType === 'custom' && filter.code.trim()) {
         // Insert custom filter code
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';
-        filterCode += this.renderCustomFilterCode(filter) + '\n\n';
+        filterCode += this.renderCustomFilterCode(
+          filter,
+          variable => this.renderStageReference(filter, variable, emittedStages, filters),
+        ) + '\n\n';
         stageLabel = filter.preset || 'Custom Filter';
+      }
+
+      // Kept after the step's own code, so what is stored is what the step
+      // produced. `emittedStages` is written here and nowhere else, which is
+      // what lets a step further down resolve on having actually seen the line
+      // rather than on a second opinion about whether it would be emitted.
+      if (stageLabel !== null && wantedStages.has(filter.id)) {
+        filterCode += `${STAGES}[${pyString(filter.id)}] = clip\n\n`;
+        emittedStages.add(filter.id);
       }
 
       // Register an output after each stage that actually emitted code

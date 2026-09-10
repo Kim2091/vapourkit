@@ -546,6 +546,16 @@ export interface FilterVariable {
   type?: 'number' | 'string' | 'boolean';
   default?: FilterParameterValue;
   description?: string;
+  /**
+   * Declared for the generator, not for a person to type.
+   *
+   * A step id, a path the file picker wrote, a fingerprint the app compares
+   * against — the value is the app's to keep, and offering it as a text box
+   * only lets someone edit a working step into a broken one. It stays in
+   * [variables] because the generated code still substitutes it; it just does
+   * not appear as a control.
+   */
+  hidden?: boolean;
 }
 
 export type FilterVariables = Record<string, FilterVariable>;
@@ -623,11 +633,33 @@ export interface LutSourceFilterEditor {
   };
 }
 
+/**
+ * A step that reads the picture from another step of the chain.
+ *
+ * `source` names the variable holding that step's filter id; empty means the
+ * source, before anything. An id rather than a position, because a position
+ * stops being true the moment something above it moves — and the emitted
+ * Python answers every way an id can stop naming a usable step by message
+ * rather than by a KeyError.
+ *
+ * Deliberately one variable and nothing else. The reference is the whole of
+ * what this editor knows; what a filter does with the clip it gets back is
+ * the filter's own business.
+ */
+export interface StageSourceFilterEditor {
+  type: 'stageSource';
+  label?: string;
+  variables: {
+    source: string;
+  };
+}
+
 export type FilterEditor =
   | CropFilterEditor
   | ColorGradeFilterEditor
   | CreateLutFilterEditor
-  | LutSourceFilterEditor;
+  | LutSourceFilterEditor
+  | StageSourceFilterEditor;
 
 export interface SegmentSelection {
   enabled: boolean;
@@ -662,6 +694,12 @@ export interface WorkflowData {
   name: string;
   version: string;
   filters: {
+    /**
+     * The filter's id at the time of export, carried only so that a step
+     * naming another step still names it once the import hands out new ones.
+     * Optional: workflows written before references existed have none.
+     */
+    id?: string;
     name: string;
     code: string;
     description?: string;

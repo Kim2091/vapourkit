@@ -120,6 +120,19 @@ function modelLabel(modelPath: string): string {
 }
 
 /**
+ * What one step is called, wherever it sits.
+ *
+ * Split out of stepLabels because a step can need naming while it is disabled
+ * — a reference pointed at a step that has since been turned off has to say
+ * which step that was — and stepLabels only indexes the enabled ones.
+ */
+export function stepLabel(filter: Filter): string {
+  return filter.filterType === 'aiModel' && filter.modelPath
+    ? modelLabel(filter.modelPath)
+    : filter.preset || 'Custom filter';
+}
+
+/**
  * Names the steps the generator will emit, in the same order it emits them:
  * output 0 is the source, then one per enabled filter by ascending order.
  *
@@ -130,14 +143,7 @@ function modelLabel(modelPath: string): string {
  */
 export function stepLabels(filters: Filter[]): string[] {
   const enabled = filters.filter(f => f.enabled).sort((a, b) => a.order - b.order);
-  return [
-    'Source',
-    ...enabled.map(filter =>
-      filter.filterType === 'aiModel' && filter.modelPath
-        ? modelLabel(filter.modelPath)
-        : filter.preset || 'Custom filter',
-    ),
-  ];
+  return ['Source', ...enabled.map(stepLabel)];
 }
 
 /**

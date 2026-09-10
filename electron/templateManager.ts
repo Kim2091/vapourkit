@@ -14,6 +14,8 @@ export interface FilterTemplate {
     type?: 'number' | 'string' | 'boolean';
     default?: string | number | boolean;
     description?: string;
+    /** App-written: substituted into the code, never offered as a control. */
+    hidden?: boolean;
   }>;
   editor?: {
     type: 'crop';

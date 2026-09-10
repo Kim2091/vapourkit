@@ -122,6 +122,7 @@ export const LINUX_PLUGIN_FILTERS = {
     'Undistort _TensorRT_.vkfilter',    // vs_undistort + existing CPU/TensorRT fallback
     'Untile.vkfilter',                  // vs_tiletools
     'Wavelet Color Fix.vkfilter',       // vs_colorfix + NCNN
+    'Wavelet Color Fix from Step.vkfilter', // vs_colorfix + NCNN
   ],
 
   // The app extracts these Python scripts from extra_scripts.7z and installs
@@ -137,7 +138,7 @@ export const LINUX_PLUGIN_FILTERS = {
  * Nightly builds can share an Electron app version, so appVersion alone cannot
  * tell an existing installation that its bundled catalog needs reconciliation.
  */
-export const LINUX_PLUGIN_FILTER_CATALOG_REVISION = 2;
+export const LINUX_PLUGIN_FILTER_CATALOG_REVISION = 3;
 
 const LINUX_PLUGIN_FILTER_SET = new Set<string>(Object.values(LINUX_PLUGIN_FILTERS).flat());
 

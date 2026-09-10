@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import * as TOML from '@iarna/toml';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs-extra';
@@ -351,5 +352,183 @@ describe('inference backend selection', () => {
     expect(script).toContain('VK_BACKEND = "tensorrt"');
     expect(script).toContain('VK_BUILD_ENV = {}');
     expect(script).not.toContain('"COMSPEC"');
+  });
+});
+
+describe('a step that reads the picture from another step', () => {
+  const reader = (order: number, sourceId: string, preset = 'Wavelet Color Fix from Step'): Filter => {
+    const filter = customFilter(order, preset, 'reference = {{stage:source_id}}\nclip = fix(clip, reference)');
+    filter.id = `reader-${order}`;
+    filter.variables = { source_id: { type: 'string', default: '' } };
+    filter.parameters = { source_id: sourceId };
+    return filter;
+  };
+
+  it('keeps the named step and reads it back out of the same dict', async () => {
+    const script = await generate([
+      customFilter(0, 'CAS Sharpen'),
+      aiFilter(1, 'C:\\models\\4x-AnimeSharp.engine'),
+      reader(2, 'custom-0'),
+    ], false);
+
+    expect(script).toContain('VK_STAGES["custom-0"] = clip');
+    expect(script).toContain('reference = VK_STAGES["custom-0"]');
+    expect(script.indexOf('VK_STAGES["custom-0"] = clip'))
+      .toBeLessThan(script.indexOf('reference = VK_STAGES["custom-0"]'));
+  });
+
+  it('keeps only the steps somebody named', async () => {
+    const script = await generate([
+      customFilter(0, 'CAS Sharpen'),
+      aiFilter(1, 'C:\\models\\4x-AnimeSharp.engine'),
+      reader(2, 'ai-1'),
+    ], false);
+
+    expect(script).toContain('VK_STAGES["ai-1"] = clip');
+    expect(script).not.toContain('VK_STAGES["custom-0"]');
+  });
+
+  it('emits nothing about stages when no step names one', async () => {
+    const script = await generate([customFilter(0, 'CAS Sharpen')], false);
+
+    expect(script).not.toContain('VK_STAGES');
+    expect(script).not.toContain('vk_stage_missing');
+  });
+
+  it('reads the source when nothing is named, which is what the old one always did', async () => {
+    const script = await generate([customFilter(0, 'CAS Sharpen'), reader(1, '')], false);
+
+    expect(script).toContain('reference = original_clip');
+    expect(script).not.toContain('VK_STAGES');
+  });
+
+  it('says so by name when the named step is gone', async () => {
+    const script = await generate([customFilter(0, 'CAS Sharpen'), reader(1, 'deleted-step')], false);
+
+    expect(script).toContain(
+      'vk_stage_missing("Wavelet Color Fix from Step reads the picture from a step that is no longer in the chain.")',
+    );
+    expect(script).toContain('def vk_stage_missing(message):');
+  });
+
+  it('says so by name when the named step is turned off', async () => {
+    const off = customFilter(0, 'CAS Sharpen');
+    off.enabled = false;
+    const script = await generate([off, reader(1, 'custom-0')], false);
+
+    expect(script).toContain(
+      'vk_stage_missing("Wavelet Color Fix from Step reads the picture from step 1, CAS Sharpen, which is turned off.")',
+    );
+  });
+
+  it('says so by name when the named step is below the one reading it', async () => {
+    const script = await generate([reader(0, 'custom-1'), customFilter(1, 'CAS Sharpen')], false);
+
+    expect(script).toContain('which comes after it');
+    expect(script).toContain('step 2, CAS Sharpen');
+  });
+
+  it('refuses a step naming itself', async () => {
+    const script = await generate([reader(0, 'reader-0')], false);
+
+    expect(script).toContain(
+      'vk_stage_missing("Wavelet Color Fix from Step reads the picture from itself.")',
+    );
+  });
+
+  it('refuses a step that sits in the chain but produces no picture', async () => {
+    // An AI step with no model chosen, and a custom step with an empty body,
+    // both emit no code at all. Neither is in the dict, so a reference to one
+    // has to be answered here rather than as a KeyError with no name on it.
+    const modelless: Filter = { ...aiFilter(0, ''), modelPath: undefined };
+    const script = await generate([modelless, reader(1, 'ai-0')], false);
+
+    expect(script).toContain('step 1, AI Model, which produces no picture of its own');
+  });
+
+  it('keeps a stage for the render as well as the preview', async () => {
+    const chain = [customFilter(0, 'CAS Sharpen'), reader(1, 'custom-0')];
+
+    expect(await generate(chain, true)).toContain('VK_STAGES["custom-0"] = clip');
+    expect(await generate(chain, false)).toContain('VK_STAGES["custom-0"] = clip');
+  });
+
+  it('takes the stage from after the trim, so both clips are the same length', async () => {
+    const generator = new VapourSynthScriptGenerator('win32');
+    const scriptPath = await generator.generateScript({
+      inputVideo: 'C:\\videos\\input.mkv',
+      enginePath: '',
+      pluginsPath: 'C:\\plugins',
+      filters: [customFilter(0, 'CAS Sharpen'), reader(1, 'custom-0')],
+      segment: { enabled: true, startFrame: 100, endFrame: 200 },
+    });
+    const script = await fs.readFile(scriptPath, 'utf-8');
+    await fs.remove(scriptPath);
+
+    expect(script.indexOf('core.std.Trim(clip, first=100'))
+      .toBeLessThan(script.indexOf('VK_STAGES["custom-0"] = clip'));
+  });
+
+  it('leaves an ordinary declared variable alone', async () => {
+    const filter = reader(0, '');
+    filter.code = 'reference = {{stage:source_id}}\nwho = {{source_id}}';
+    const script = await generate([filter], false);
+
+    expect(script).toContain('reference = original_clip');
+    expect(script).toContain('who = ""');
+  });
+});
+
+describe('the shipped filter that reads another step', () => {
+  /** The real .vkfilter, because the placeholder in it is half of the contract. */
+  const template = () => {
+    const raw = fs.readFileSync(
+      path.join(__dirname, '..', 'include', 'plugins', 'plugin_filters', 'Wavelet Color Fix from Step.vkfilter'),
+      'utf-8',
+    );
+    return TOML.parse(raw) as unknown as {
+      name: string;
+      code: string;
+      variables: Filter['variables'];
+      editor: { variables: { source: string } };
+    };
+  };
+
+  const step = (order: number, sourceId: string): Filter => {
+    const tpl = template();
+    return {
+      id: `fix-${order}`,
+      enabled: true,
+      filterType: 'custom',
+      preset: tpl.name,
+      code: tpl.code,
+      order,
+      variables: tpl.variables,
+      parameters: { [tpl.editor.variables.source]: sourceId },
+    };
+  };
+
+  it('hands vs_colorfix the named step rather than original_clip', async () => {
+    const script = await generate([customFilter(0, 'CAS Sharpen'), step(1, 'custom-0')], false);
+
+    expect(script).toContain('reference    = VK_STAGES["custom-0"]');
+    expect(script).toContain('vs_colorfix.wavelet(clip_float, reference_float');
+  });
+
+  it('leaves the older filter of the same name reading original_clip', async () => {
+    // The whole point of a second filter is that the first one still works the
+    // way it always did, off a name bound at the top of the template.
+    const original = customFilter(0, 'Wavelet Color Fix', 'x = vs_colorfix.wavelet(clip, original_clip)');
+    const script = await generate([original, step(1, '')], false);
+
+    expect(script).toContain('vs_colorfix.wavelet(clip, original_clip)');
+    expect(script).toContain('reference    = original_clip');
+  });
+
+  it('renders no leftover placeholder in either mode', async () => {
+    for (const preview of [true, false]) {
+      const script = await generate([customFilter(0, 'CAS Sharpen'), step(1, 'custom-0')], preview);
+      expect(script).not.toContain('{{');
+    }
   });
 });

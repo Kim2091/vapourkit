@@ -8,6 +8,7 @@ import { FilterSelectorModal } from './FilterSelectorModal';
 import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
 import { CreateLutCard, LoadLutCard } from './LutStepCards';
+import { StageSourceCard } from './StageSourceCard';
 import type { LutJob } from '../hooks/useLutSteps';
 
 interface DynamicFilterPanelProps {
@@ -728,7 +729,12 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
           const isAIModel = filter.filterType === 'aiModel';
           const isNewlyDuplicated = newlyDuplicatedId === filter.id;
           const interactiveEditor = filter.editor ?? selectedTemplate?.editor;
-          const exposedVariables = filter.variables ?? selectedTemplate?.variables;
+          const declaredVariables = filter.variables ?? selectedTemplate?.variables;
+          // Only the ones a person sets. A step id, a generated path or a
+          // fingerprint is the app's to keep, and a text box holding it is an
+          // invitation to break a step that was working.
+          const exposedVariables = Object.entries(declaredVariables ?? {})
+            .filter(([, variable]) => !variable.hidden);
 
           // Opens the save-as-template form, pre-filled from the selected
           // template so "save" over an existing one keeps its name and category.
@@ -1019,7 +1025,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             Neither has a surface to open: a Create LUT has
                             nothing to set, and a Load LUT's one choice is a
                             dropdown. Generating happens here too, beside the
-                            step it is for. */}
+                            step it is for. So does a stage reference, which is
+                            a dropdown and nothing else. */}
                         {interactiveEditor?.type === 'lutSource' && lut ? (
                           <LoadLutCard
                             filter={filter}
@@ -1047,6 +1054,17 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             onAddLoader={() => handleAddLoader(filter.id)}
                             onBake={() => lut.bake(filter.id)}
                           />
+                        ) : interactiveEditor?.type === 'stageSource' ? (
+                          <StageSourceCard
+                            filter={filter}
+                            filters={pendingFilters}
+                            variable={interactiveEditor.variables.source}
+                            label={interactiveEditor.label}
+                            disabled={isProcessing}
+                            onChoose={(source) => handleFilterParameterChange(
+                              filter.id, interactiveEditor.variables.source, source,
+                            )}
+                          />
                         ) : interactiveEditor && onOpenFilterEditor && interactiveEditor.type in EDITOR_LABELS && (
                           <button
                             onClick={() => handleOpenInteractiveEditor(filter, selectedTemplate)}
@@ -1063,9 +1081,9 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             normal filter panel too: the visual editor is an
                             accelerator, while values remain inspectable and
                             editable in a saved .vkfilter configuration. */}
-                        {exposedVariables && Object.keys(exposedVariables).length > 0 && (
+                        {exposedVariables.length > 0 && (
                           <div className="grid grid-cols-2 gap-1.5 rounded-md border border-ink-800 bg-ink-950/40 p-2">
-                            {Object.entries(exposedVariables).map(([name, variable]) => {
+                            {exposedVariables.map(([name, variable]) => {
                               const value = filter.parameters?.[name] ?? variable.default ?? '';
                               return (
                                 <label key={name} className="min-w-0" title={variable.description}>

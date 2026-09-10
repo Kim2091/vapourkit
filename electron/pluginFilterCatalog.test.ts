@@ -80,6 +80,7 @@ describe('plugin filter catalog policy', () => {
       'Undistort _Pytorch_.vkfilter',
       'Undistort _TensorRT_.vkfilter',
       'Wavelet Color Fix.vkfilter',
+      'Wavelet Color Fix from Step.vkfilter',
     ];
 
     for (const filename of configurableFilters) {
@@ -94,6 +95,14 @@ describe('plugin filter catalog policy', () => {
 
     const wavelet = fs.readFileSync(path.join(filtersDir, 'Wavelet Color Fix.vkfilter'), 'utf8');
     expect(wavelet).toContain('backend = VK_BACKEND if backend == "auto" else backend');
+
+    // The stage-referencing twin differs from the original in one line, and
+    // only that line. If it ever drifts on backend handling it stops being a
+    // second version of the same filter and becomes a second filter.
+    const fromStep = fs.readFileSync(path.join(filtersDir, 'Wavelet Color Fix from Step.vkfilter'), 'utf8');
+    expect(fromStep).toContain('backend = VK_BACKEND if backend == "auto" else backend');
+    expect(fromStep).toContain('reference    = {{stage:source_id}}');
+    expect(fromStep).toContain('type = "stageSource"');
 
     const temporalFix = fs.readFileSync(path.join(filtersDir, 'TemporalFix _AI_.vkfilter'), 'utf8');
     expect(temporalFix).toContain('("tensorrt" if VK_BACKEND == "tensorrt" else "cpu")');

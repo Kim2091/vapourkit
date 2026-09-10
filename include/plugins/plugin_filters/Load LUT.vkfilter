@@ -1,6 +1,6 @@
 name = "Load LUT"
 category = [ "Color Modification" ]
-description = "Applies a 3D colour lookup table. Pointed at a Create LUT step above it, it puts back the colour the picture had there — press Generate and the table is made from whatever sits between the two. Or apply a .cube from disk. Uses the timecube plugin; without it a slower fallback runs, which costs about 2GB more memory at 4K."
+description = "Applies a 3D colour lookup table: one generated from a Create LUT step above it, to put that colour back, or a .cube file from disk."
 code = """
 # Applies a 3D LUT, preferring the timecube plugin and falling back to one
 # built out of akarin.Expr when it is absent.
@@ -195,11 +195,13 @@ if strength > 0.0 and not _previewing_without_table:
 [variables.source_id]
 type = "string"
 default = ""
+hidden = true
 description = "The Create LUT step whose colour this puts back, by id. Held as an id rather than a position so that adding or reordering a step cannot silently repoint it. Empty means the table below is a file chosen by hand."
 
 [variables.lut_path]
 type = "string"
 default = ""
+hidden = true
 description = "The 3D .cube actually applied. Written by the app when this step generates, or when a file is picked; .3dl and odd domains are normalised into one of these on the way in."
 
 [variables.strength]
@@ -220,7 +222,8 @@ description = "How many frames to measure from, when a step between this and the
 [variables.generated_key]
 type = "string"
 default = ""
-description = "What sat between this and the Create LUT when the table was generated. Compared against the chain now, so the step can say when the table no longer describes it. Written by the app; not meant to be typed in."
+hidden = true
+description = "What sat between this and the Create LUT when the table was generated. Compared against the chain now, so the step can say when the table no longer describes it."
 
 [editor]
 type = "lutSource"

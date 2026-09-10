@@ -1,6 +1,6 @@
 name = "Create LUT"
 category = [ "Color Modification", "Utility" ]
-description = "Remembers the colour of the picture at this point. It changes nothing itself: a Load LUT step below it puts this colour back after something has changed it, and the colour work above it can be saved as a .cube for use elsewhere."
+description = "Marks a place in the chain and remembers the colour there, changing nothing itself. A Load LUT below puts that colour back; the colour work above can be saved as a .cube."
 code = """
 # Create LUT does nothing to the picture, on purpose.
 #
