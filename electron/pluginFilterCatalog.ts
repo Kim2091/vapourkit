@@ -108,7 +108,7 @@ export const LINUX_PLUGIN_FILTERS = {
   // Explicit PyPI dependencies installed by getPypiPackages().
   pypi: [
     'Average Color Fix.vkfilter',       // vs_colorfix
-    'Crop.vkfilter',                    // vs_tiletools
+    'Crop.vkfilter',                    // vs_tiletools (auto path)
     'DPIR Denoise_Deblock.vkfilter',    // vapoursynth-mlrt-ncnn
     'FGrain.vkfilter',                  // vs_grain
     'Modulus.vkfilter',                 // vs_tiletools

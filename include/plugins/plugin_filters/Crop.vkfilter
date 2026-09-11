@@ -10,29 +10,38 @@ top    = {{crop_top}}
 bottom = {{crop_bottom}}
 
 
-clip = core.std.Crop(clip, left=left, right=right, top=top, bottom=bottom)"""
+if any((left, right, top, bottom)):
+    clip = core.std.Crop(clip, left=left, right=right, top=top, bottom=bottom)
+else:
+    # Nothing set by hand, so take off whatever Pad or Modulus put on above,
+    # rescaled if the clip was resized in between. The props only exist when
+    # something actually padded, and vs_tiletools.crop raises without them, so
+    # a chain that was never padded passes straight through.
+    import vs_tiletools
+    if "tiletools_padprops" in clip.get_frame(0).props:
+        clip = vs_tiletools.crop(clip)"""
 category = [ "Padding/Cropping" ]
-description = "Crops a clip by the specified pixel amount."
+description = "Crops a clip by the specified pixel amount, or removes padding added by Pad or Modulus when left at zero."
 
 [variables.crop_left]
 type = "number"
 default = 0
-description = "Pixels removed from the left edge."
+description = "Pixels removed from the left edge. Leave every edge at 0 to remove padding automatically."
 
 [variables.crop_right]
 type = "number"
 default = 0
-description = "Pixels removed from the right edge."
+description = "Pixels removed from the right edge. Leave every edge at 0 to remove padding automatically."
 
 [variables.crop_top]
 type = "number"
 default = 0
-description = "Pixels removed from the top edge."
+description = "Pixels removed from the top edge. Leave every edge at 0 to remove padding automatically."
 
 [variables.crop_bottom]
 type = "number"
 default = 0
-description = "Pixels removed from the bottom edge."
+description = "Pixels removed from the bottom edge. Leave every edge at 0 to remove padding automatically."
 
 [editor]
 type = "crop"

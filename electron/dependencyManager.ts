@@ -39,17 +39,6 @@ interface ComponentConfig {
   extractTo: string;
 }
 
-const LEGACY_CROP_CODE = `# Full Docs: https://www.vapoursynth.com/doc/functions/video/crop_cropabs.html#std.Crop
-
-# Set crop amounts here:
-left   = 0
-right  = 0
-top    = 0
-bottom = 0
-
-
-clip = core.std.Crop(clip, left=left, right=right, top=top, bottom=bottom)`;
-
 export class DependencyManager {
   private mainWindow: BrowserWindow | null;
   private modelExtractor: ModelExtractor;
@@ -638,20 +627,44 @@ export class DependencyManager {
   }
 
   /**
+   * Bundled Crop bodies that later releases replaced, by sha256 of the code
+   * with line endings normalized and trimmed.
+   *
+   * Crop shipped as vs_tiletools auto-crop until 2.0.0, lost it when the
+   * template was rewritten onto core std.Crop, and has it back now for the
+   * all-zero case. An install seeded during either of those releases is still
+   * carrying a Crop that silently does nothing when nothing is set.
+   */
+  private static readonly SUPERSEDED_CROP_CODE = new Set([
+    // vs_tiletools, but passing all four zeros, which is its manual mode. The
+    // comment above it promised auto-crop; the arguments prevented it.
+    '31c8ecddb66c63494f7aa0b22773f80b0662f2c85cbbb575f1274c5c7d619844',
+    // 2.0.0: the arguments dropped, so auto-crop worked — and raised on any
+    // chain with nothing above it to have done the padding.
+    '6be48f6f8ef228f95ca3d75cf57503ee5a951b7a212fb629925b9565337124df',
+    // The first std.Crop rewrite: plain numbers, no public variables, no editor.
+    'e0784187435aa7907c329baaa409bb2e17d93e07be43aa78ead6deafaa9ea8d6',
+    // The same maths, with the visual editor's {{crop_*}} variables added.
+    '849c96a9fc7975ade2890f127d4e484617ccc86297588451a6edb210e98c04da',
+  ]);
+
+  /**
    * Filter templates normally preserve user edits across upgrades. Crop is the
-   * one safe exception: replace only the exact pre-editor bundled template so
-   * existing installs gain its new public variables and visual editor without
-   * touching any customized Crop template.
+   * one safe exception: replace a body byte-for-byte identical to one we
+   * shipped, so an existing install picks up the visual editor and the
+   * restored auto-crop. A customized Crop never matches, and is left alone.
    */
   private async upgradeLegacyCropTemplate(sourcePath: string, destPath: string): Promise<boolean> {
     try {
-      const content = await fs.readFile(destPath, 'utf-8');
-      const template = TOML.parse(content) as { name?: string; code?: string; editor?: unknown };
-      const code = template.code?.replace(/\r\n?/g, '\n').trim();
-      if (template.name !== 'Crop' || template.editor || code !== LEGACY_CROP_CODE) return false;
+      const template = TOML.parse(await fs.readFile(destPath, 'utf-8')) as { name?: string; code?: string };
+      if (template.name !== 'Crop' || !template.code) return false;
+
+      const code = template.code.replace(/\r\n?/g, '\n').trim();
+      const digest = crypto.createHash('sha256').update(code).digest('hex');
+      if (!DependencyManager.SUPERSEDED_CROP_CODE.has(digest)) return false;
 
       await fs.copy(sourcePath, destPath, { overwrite: true });
-      logger.dependency('Upgraded the unmodified Crop template with visual-editor metadata');
+      logger.dependency('Updated the unmodified Crop template to the current bundled version');
       return true;
     } catch (error) {
       logger.warn('Could not inspect the existing Crop template for upgrade:', error);
@@ -722,8 +735,55 @@ export class DependencyManager {
         }
       }
     }
-    
+
+    await this.removeRetiredTemplates();
     logger.dependency('Filter templates copied');
+  }
+
+  /**
+   * Templates a later release folded into another filter, with the sha256 of
+   * every body ever shipped under that name.
+   *
+   * Nothing else removes a template a user already has: seeding only copies
+   * what is absent, so a retired filter would sit in the list forever, doing
+   * the same job as the one that replaced it. A user's own edit never matches
+   * a shipped digest and is kept, becoming a custom template.
+   *
+   * Chains are unaffected either way — a saved step carries its own copy of the
+   * code, so one built on a retired template keeps working untouched.
+   */
+  private static readonly RETIRED_TEMPLATES: ReadonlyArray<{
+    file: string;
+    shipped: ReadonlySet<string>;
+    reason: string;
+  }> = [
+    {
+      file: 'Crop _auto_.vkfilter',
+      // The only body it ever had, from the release that split it out of Crop.
+      shipped: new Set(['ba5a851bbdc067320b1217b9750684834be3e8c01efb98af4279a28462ca863e']),
+      reason: 'Crop removes Pad and Modulus padding again when every edge is 0',
+    },
+  ];
+
+  private async removeRetiredTemplates(): Promise<void> {
+    for (const retired of DependencyManager.RETIRED_TEMPLATES) {
+      const destPath = path.join(PATHS.FILTER_TEMPLATES, retired.file);
+      try {
+        if (!await fs.pathExists(destPath)) continue;
+
+        const template = TOML.parse(await fs.readFile(destPath, 'utf-8')) as { code?: string };
+        if (!template.code) continue;
+
+        const code = template.code.replace(/\r\n?/g, '\n').trim();
+        const digest = crypto.createHash('sha256').update(code).digest('hex');
+        if (!retired.shipped.has(digest)) continue;
+
+        await fs.remove(destPath);
+        logger.dependency(`Removed the retired ${retired.file} template: ${retired.reason}`);
+      } catch (error) {
+        logger.warn(`Could not inspect ${retired.file} for retirement:`, error);
+      }
+    }
   }
 
   private async initializeUserConfig(): Promise<void> {
