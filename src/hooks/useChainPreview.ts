@@ -18,6 +18,7 @@ import type {
   SegmentSelection,
   VideoInfo,
 } from '../electron.d';
+import { toOutputFrame } from '../utils/previewFrameMap';
 
 export interface ChainPreviewStep extends PreviewOutput {
   /** What to call this step in the rail. */
@@ -190,6 +191,18 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
   const [isRendering, setIsRendering] = useState(false);
   const [isStale, setIsStale] = useState(false);
   const [outputs, setOutputs] = useState<PreviewOutput[]>([]);
+  /**
+   * Read by the fetch callbacks, which need the clip lengths to turn a
+   * timeline position into a frame of the output they are asking for.
+   */
+  const outputsRef = useRef<PreviewOutput[]>([]);
+  outputsRef.current = outputs;
+  /**
+   * The segment the open script was generated with. It trims at the head of
+   * the chain, so output 0 starts at its in point while the scrubber keeps
+   * counting from the start of the file.
+   */
+  const openSegment = useRef<SegmentSelection | null>(null);
   const [selected, setSelected] = useState(0);
   /** For callbacks that must not be rebuilt every time the step changes. */
   const selectedRef = useRef(0);
@@ -209,6 +222,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
   // painting.
   const inFlight = useRef(false);
   const queued = useRef<{ n: number; index: number } | null>(null);
+  /** Source-space frame, the same space the scrubber and the segment use. */
   const playhead = useRef(0);
 
   // Snapshot of the open editor's parameters, held for as long as it is open.
@@ -243,6 +257,15 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     onError?.(message);
   }, [onError]);
 
+  /**
+   * A timeline frame, as the frame of `index`'s own clip that shows the same
+   * moment. Every previewFrame call goes through this.
+   */
+  const frameFor = useCallback((index: number, timelineFrame: number) => {
+    const trim = openSegment.current?.enabled ? openSegment.current.startFrame : 0;
+    return toOutputFrame(outputsRef.current, index, timelineFrame - trim);
+  }, []);
+
   const pump = useCallback(async () => {
     if (inFlight.current) return;
     const next = queued.current;
@@ -252,7 +275,10 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     setIsRendering(true);
 
     try {
-      const result = await window.electronAPI.previewFrame(next.n, previewWidth);
+      const result = await window.electronAPI.previewFrame(
+        frameFor(next.index, next.n),
+        previewWidth,
+      );
       if (result.success && result.data) {
         setFrame({
           pixels: result.data,
@@ -285,7 +311,13 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       } else if (referenceHeld.current !== wanted) {
         const picked = await window.electronAPI.previewSelect(ref!);
         if (picked.success) {
-          const refResult = await window.electronAPI.previewFrame(next.n, previewWidth);
+          // Mapped for the reference's own clip, not the selected one: a
+          // step either side of a deinterlacer counts frames differently, and
+          // a comparison of two different moments is not a comparison.
+          const refResult = await window.electronAPI.previewFrame(
+            frameFor(ref!, next.n),
+            previewWidth,
+          );
           if (refResult.success && refResult.data) {
             referenceHeld.current = wanted;
             setReferenceFrame({
@@ -310,7 +342,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       setIsRendering(false);
       if (queued.current) void pump();
     }
-  }, [previewWidth, fail]);
+  }, [previewWidth, fail, frameFor]);
 
   const request = useCallback((n: number, index: number) => {
     playhead.current = n;
@@ -344,6 +376,10 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       }
 
       const last = result.outputs[result.outputs.length - 1];
+      // Before the request below, which runs ahead of the render that would
+      // otherwise put these in the ref.
+      outputsRef.current = result.outputs;
+      openSegment.current = options.segment;
       setOutputs(result.outputs);
       setSelected(last.index);
       setIsOpen(true);
@@ -382,6 +418,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     setIsOpen(false);
     setIsStale(false);
     setOutputs([]);
+    openSegment.current = null;
     setFrame(null);
     setReferenceState(null);
     setReferenceFrame(null);
@@ -446,7 +483,10 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     const grab = async (index: number, n: number): Promise<ChainPreviewFrame> => {
       const picked = await window.electronAPI.previewSelect(index);
       if (!picked.success) throw new Error(picked.error ?? `Could not select step ${index}`);
-      const result = await window.electronAPI.previewFrame(n, previewWidth);
+      const result = await window.electronAPI.previewFrame(
+        frameFor(index, n),
+        previewWidth,
+      );
       if (!result.success || !result.data) {
         throw new Error(result.error ?? `Could not render frame ${n} of step ${index}`);
       }
@@ -483,7 +523,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       setIsRendering(false);
       if (queued.current) void pump();
     }
-  }, [isOpen, claimSession, previewWidth, pump]);
+  }, [isOpen, claimSession, previewWidth, pump, frameFor]);
 
   const setReference = useCallback((index: number | null) => {
     setReferenceState(index);
