@@ -11,11 +11,11 @@ from vsdenoise.mvtools.presets import MVToolsPreset
 from vsaa.deinterlacers import NNEDI3
 
 clip = (
-    QTempGaussMC(
-        clip,
-        input_type=QTempGaussMC.InputType.INTERLACE,
-        tff=True,
-    )
+    # QTempGaussMC's constructor takes no clip/input_type anymore - it only
+    # configures per-stage settings (InputType is gone; interlaced vs.
+    # progressive is now inferred from the clip / the deinterlace() tff arg).
+    # The clip and field order now go to deinterlace() at the end of the chain.
+    QTempGaussMC()
     .prefilter(
         tr=2,
         sc_threshold=0.1,
@@ -93,7 +93,7 @@ clip = (
         blur_args=None,
         mask_args={"ml": 4},
     )
-    .deinterlace()
+    .deinterlace(clip, tff=True)
 )
 
 original_clip = clip"""

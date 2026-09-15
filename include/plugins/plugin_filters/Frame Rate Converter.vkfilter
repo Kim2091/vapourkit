@@ -5,9 +5,39 @@ code = """
 # From hybrid_filters/FrameRateConverter.py
 import sys
 sys.path.insert(0, r'hybrid_filters')
+
+# FrameRateConverter.py does `import havsfunc as havs`. The vs-scripts bundle
+# ships the real havsfunc source, but under the name havsfunc_org.py (its own
+# `import havsfunc` would just re-import itself), so the plain name never
+# resolves. Register the real module under the name it's looked up by; its
+# own imports (mvsfunc, vsutil) need the same shims as elsewhere in this pack.
+import types as _pytypes
+if 'vsutil' not in sys.modules:
+    import vstools as _vst
+    _u = _pytypes.ModuleType('vsutil')
+    for _n in ('depth', 'fallback', 'get_y', 'join', 'plane', 'scale_value', 'get_depth', 'get_w', 'split', 'iterate'):
+        setattr(_u, _n, getattr(_vst, _n))
+    _u.Dither = _vst.DitherType
+    _t = _pytypes.ModuleType('vsutil.types')
+    _t.Dither = _vst.DitherType
+    class _Range(int):
+        LIMITED, FULL = 0, 1
+    _t.Range = _Range
+    _t.resolve_enum = lambda enum, value, name, fn=None: None if value is None else enum(value)
+    _u.types = _t
+    sys.modules['vsutil'] = _u
+if 'mvsfunc' not in sys.modules:
+    from vstools import depth as _depth
+    _mvf = _pytypes.ModuleType('mvsfunc')
+    _mvf.Depth = _depth
+    sys.modules['mvsfunc'] = _mvf
+if 'havsfunc' not in sys.modules:
+    import havsfunc_org as _havs
+    sys.modules['havsfunc'] = _havs
+
 from FrameRateConverter import FrameRateConverter
 
-clip = FrameRateConverter(clip, NewNum=60, NewDen=1, Preset='normal')"""
+clip = FrameRateConverter(clip, newNum=60, newDen=1, preset='normal')"""
 description = "Increases frame rate with interpolation and fine artifact removal"
 
 [metadata]

@@ -3,11 +3,14 @@ category = "Masking"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/morpho/
 
-from vsmasktools import inflate
+from vsmasktools import Morpho
 
-# Inflate a mask (expand followed by inpand)
+# "Inflate" here means the classic expand-then-inpand (morphological closing),
+# not the Morpho.inflate() averaging filter of the same name (that's a
+# different, unrelated operation std.Inflate always was). Morpho.closing is
+# the direct replacement: dilation followed by erosion.
 iterations = 2
-clip = inflate(clip, iterations=iterations)"""
+clip = Morpho.closing(clip, iterations=iterations)"""
 description = "Inflates a mask by expanding then inpanding to smooth edges"
 
 [metadata]

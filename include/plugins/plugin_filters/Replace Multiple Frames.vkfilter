@@ -7,7 +7,15 @@ import sys
 sys.path.insert(0, r'hybrid_filters')
 from ReplaceMultipleFrames import ReplaceMultipleFrames
 
-rmf = ReplaceMultipleFrames(clip, intervals=[[100, 105], [200, 210]], method='SVP', debug=False)
+# Each interval must be at most 10 frames long (validate_intervals enforces
+# this); the default example's second interval was 11 frames and always
+# raised, on any clip.
+# method='SVP' (the script's own default) hardcodes core.svp1, a proprietary
+# plugin this pipeline never installs, and additionally requires YUV420P8
+# input while this pipeline runs 16-bit - it would still fail per-interval
+# even with a valid interval. method='MV' uses mvtools (already a dependency
+# here) instead and has no such restriction.
+rmf = ReplaceMultipleFrames(clip, intervals=[[100, 105], [200, 209]], method='MV', debug=False)
 clip = rmf.out"""
 description = "Replaces specified frame intervals with interpolated frames"
 

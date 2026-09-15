@@ -3,11 +3,14 @@ category = "Masking"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/morpho/
 
-from vsmasktools import deflate
+from vsmasktools import Morpho
 
-# Deflate a mask (inpand followed by expand)
+# "Deflate" here means the classic inpand-then-expand (morphological opening),
+# not the Morpho.deflate() averaging filter of the same name (that's a
+# different, unrelated operation std.Deflate always was). Morpho.opening is
+# the direct replacement: erosion followed by dilation.
 iterations = 2
-clip = deflate(clip, iterations=iterations)"""
+clip = Morpho.opening(clip, iterations=iterations)"""
 description = "Deflates a mask by inpanding then expanding to remove small details"
 
 [metadata]

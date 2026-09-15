@@ -3,11 +3,12 @@ category = "Masking"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/morpho/
 
-from vsmasktools import inpand
+from vsmasktools import Morpho
 
-# Inpand (erode) a mask
+# Inpand (erode) a mask. inpand() moved onto Morpho and now takes explicit
+# horizontal/vertical iteration counts instead of a single "iterations".
 iterations = 2
-clip = inpand(clip, iterations=iterations)"""
+clip = Morpho.inpand(clip, sw=iterations, sh=iterations)"""
 description = "Inpands (erodes) a mask by shrinking bright regions"
 
 [metadata]

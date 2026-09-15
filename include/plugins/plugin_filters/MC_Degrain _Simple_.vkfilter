@@ -13,7 +13,7 @@ clip = mc_degrain(
     tr=2,
     thsad=400,
     blksize=16,
-    overlap=2,
+    overlap_div=2,  # was "overlap"
     preset=MVToolsPreset.HQ_SAD
 )"""
 description = "Motion Compensated Degrain - temporal denoising with motion compensation"

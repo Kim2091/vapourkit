@@ -3,11 +3,12 @@ category = "Masking"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/morpho/
 
-from vsmasktools import expand
+from vsmasktools import Morpho
 
-# Expand (dilate) a mask
+# Expand (dilate) a mask. expand() moved onto Morpho and now takes explicit
+# horizontal/vertical iteration counts instead of a single "iterations".
 iterations = 2
-clip = expand(clip, iterations=iterations)"""
+clip = Morpho.expand(clip, sw=iterations, sh=iterations)"""
 description = "Expands (dilates) a mask by growing bright regions"
 
 [metadata]

@@ -2,12 +2,39 @@ name = "Add Duplicates"
 category = ["Hybrid", "Frame Manipulation"]
 code = """
 # Add duplicate frames when temporal difference is below threshold
-# From hybrid_filters/AddDuplicates.py
-import sys
-sys.path.insert(0, r'hybrid_filters')
-from AddDuplicates import addDup
+# From hybrid_filters/AddDuplicates.py, reimplemented: the bundled addDup()
+# trims to frame index clip.num_frames (core.std.Trim(clip, 1, clip.num_frames))
+# and clip.std.Trim(clip, 0, 1) for a single first frame, both off-by-one -
+# valid frame indices only go up to num_frames - 1, and Trim's end index is
+# inclusive. This always raises, on any clip, not just the synthetic test one.
 
-clip = addDup(clip, thresh=0.3, debug=False)"""
+def _adding_dup(clip, insert_at):
+    if insert_at <= 0 or insert_at >= clip.num_frames:
+        return clip
+    pre = core.std.Trim(clip, 0, insert_at - 1)
+    dup = core.std.Trim(clip, insert_at - 1, insert_at - 1)
+    post = core.std.Trim(clip, insert_at + 1, None)
+    return core.std.Splice([pre, dup, post], mismatch=True)
+
+
+def _add_dup(clip, thresh=0.3):
+    prev = core.std.Trim(clip, 0, clip.num_frames - 2)  # frames 0..N-2
+    curr = core.std.Trim(clip, 1, clip.num_frames - 1)  # frames 1..N-1
+    diffclip = core.std.PlaneStats(curr, prev)
+
+    def select_func(n, f):
+        diff = f.props['PlaneStatsDiff']
+        if diff > thresh:
+            return clip.std.SetFrameProps(_DupApplied=False, _Diff=diff)
+        modified = _adding_dup(clip, n + 1)  # n+1 because diffclip starts from frame 1
+        return modified.std.SetFrameProps(_DupApplied=True, _Diff=diff)
+
+    result = core.std.FrameEval(curr, select_func, prop_src=diffclip)
+    first_frame = core.std.Trim(clip, 0, 0).std.SetFrameProps(_DupApplied=False, _Diff=1.0)
+    return core.std.Splice([first_frame, result], mismatch=True)
+
+
+clip = _add_dup(clip, thresh=0.3)"""
 description = "Detects frames with low temporal difference and duplicates the previous frame if below threshold"
 
 [metadata]

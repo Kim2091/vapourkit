@@ -6,8 +6,14 @@ code = """
 import sys
 sys.path.insert(0, r'hybrid_filters')
 from decrawl import LUTDeCrawl
+from vstools import depth
 
-clip = LUTDeCrawl(clip, ythresh=10, cthresh=10, maxdiff=50, scnchg=25, usemaxdiff=True)"""
+# LUTDeCrawl only accepts 8-10 bit YUV, but the pipeline always hands filter
+# steps 16-bit YUV. Drop to 8-bit for the filter (dot crawl is an analog
+# capture artifact, historically 8-bit source anyway) and restore afterward.
+src_depth = clip.format.bits_per_sample
+clip = LUTDeCrawl(depth(clip, 8), ythresh=10, cthresh=10, maxdiff=50, scnchg=25, usemaxdiff=True)
+clip = depth(clip, src_depth)"""
 description = "Removes dot crawl artifacts from video"
 
 [metadata]

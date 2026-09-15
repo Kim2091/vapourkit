@@ -5,10 +5,12 @@ code = """
 
 from vsmasktools import luma_mask
 
-# Create a mask based on luma values
-lthr = 0  # Low threshold
-hthr = 65535  # High threshold
-clip = luma_mask(clip, lthr=lthr, hthr=hthr)"""
+# Create a mask based on luma values.
+# Thresholds are now normalized 0.0-1.0 (32-bit float scale) instead of raw
+# pixel values, so they no longer depend on the working bit depth.
+thr_lo = 0.0  # Low threshold (black)
+thr_hi = 1.0  # High threshold (white)
+clip = luma_mask(clip, thr_lo=thr_lo, thr_hi=thr_hi)"""
 description = "Creates a mask based on luma/brightness values in the clip"
 
 [metadata]

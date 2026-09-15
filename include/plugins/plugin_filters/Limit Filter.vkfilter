@@ -3,17 +3,18 @@ category = "Limiting"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/limit/
 
-from vsrgtools import limit_filter
+from vstools import vs, core
 
-# Limit the difference between filtered and original clip
+# vsrgtools no longer wraps this; call the native vszip plugin it used to
+# delegate to. LimitFilter(flt, src, ref, dark_thr, bright_thr, elast, planes)
 original = clip
 # filtered = your_filter(clip)
 # Limit how much the filter can change from original
-thr = 1.0  # Threshold for limiting
+thr = 1.0  # Threshold for limiting (applied to both dark and bright diffs)
 elast = 2.0  # Elasticity
-# clip = limit_filter(filtered, original, thr=thr, elast=elast)
+# clip = core.vszip.LimitFilter(filtered, original, dark_thr=thr, bright_thr=thr, elast=elast)
 
-clip = limit_filter(clip, clip, thr=thr, elast=elast)"""
+clip = core.vszip.LimitFilter(clip, clip, dark_thr=thr, bright_thr=thr, elast=elast)"""
 description = "Limits the difference between a filtered clip and its original to prevent over-filtering"
 
 [metadata]

@@ -5,6 +5,26 @@ code = """
 # From hybrid_filters/dehalo.py
 import sys
 sys.path.insert(0, r'hybrid_filters')
+
+# This bundled script still imports the old, deprecated `vsutil` package
+# (superseded by vstools, which does not ship it). Shim it from vstools so
+# the script can load without a separate PyPI dependency.
+import types as _pytypes
+if 'vsutil' not in sys.modules:
+    import vstools as _vst
+    _u = _pytypes.ModuleType('vsutil')
+    for _n in ('depth', 'fallback', 'get_y', 'join', 'plane', 'scale_value', 'get_depth', 'get_w', 'split', 'iterate'):
+        setattr(_u, _n, getattr(_vst, _n))
+    _u.Dither = _vst.DitherType
+    _t = _pytypes.ModuleType('vsutil.types')
+    _t.Dither = _vst.DitherType
+    class _Range(int):
+        LIMITED, FULL = 0, 1
+    _t.Range = _Range
+    _t.resolve_enum = lambda enum, value, name, fn=None: None if value is None else enum(value)
+    _u.types = _t
+    sys.modules['vsutil'] = _u
+
 from dehalo import DeHalo_alpha
 
 clip = DeHalo_alpha(clip, rx=2.0, ry=2.0, darkstr=1.0, brightstr=1.0, lowsens=50.0, highsens=50.0, ss=1.5)"""

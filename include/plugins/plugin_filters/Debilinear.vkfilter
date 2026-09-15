@@ -2,12 +2,15 @@ name = "Debilinear"
 category = ["Hybrid", "Unresize"]
 code = """
 # Reverse bilinear upscaling
-# From hybrid_filters/descale.py
-import sys
-sys.path.insert(0, r'hybrid_filters')
-from descale import Debilinear
+# The bundled descale.py wrapper calls a dispatcher (core.descale.Descale)
+# that no longer exists on the native descale plugin. vskernels wraps the
+# named descale entry points natively and handles YUV chroma automatically.
+from vskernels import Bilinear
+from vstools import depth
 
-clip = Debilinear(clip, width=1280, height=720, yuv444=False, gray=False)"""
+src_depth = clip.format.bits_per_sample
+clip = Bilinear().descale(depth(clip, 32), width=1280, height=720)
+clip = depth(clip, src_depth)"""
 description = "Reverses bilinear upscaling to restore original resolution"
 
 [metadata]

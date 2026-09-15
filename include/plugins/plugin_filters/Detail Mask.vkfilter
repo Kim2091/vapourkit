@@ -6,9 +6,10 @@ code = """
 from vsmasktools import detail_mask
 
 # Create a mask highlighting detailed areas
+# rxsigma was folded into a single sigma control upstream; there is no
+# separate "rx" pass anymore.
 sigma = 1.0
-rxsigma = 1.0
-clip = detail_mask(clip, sigma=sigma, rxsigma=rxsigma)"""
+clip = detail_mask(clip, sigma=sigma)"""
 description = "Creates a mask highlighting detailed/textured areas in the clip"
 
 [metadata]

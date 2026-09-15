@@ -2,12 +2,15 @@ name = "Temporal Median"
 category = "Temporal Smoothing"
 code = """
 # Temporal median filter (removes outliers)
+# The standalone tmedian plugin is gone; vsrgtools.median_blur() reaches the
+# same zsmooth.TemporalMedian in its ConvMode.TEMPORAL mode.
 
-from vstools import vs, core
+from vsrgtools import median_blur
+from vstools import ConvMode
 
 radius = 1  # Temporal radius (frames before/after)
 
-clip = core.tmedian.TemporalMedian(clip, radius=radius)"""
+clip = median_blur(clip, radius=radius, mode=ConvMode.TEMPORAL)"""
 description = "Applies temporal median filtering to remove outlier frames/pixels"
 
 [metadata]

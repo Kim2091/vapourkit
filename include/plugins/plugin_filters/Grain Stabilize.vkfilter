@@ -2,11 +2,12 @@ name = "Grain Stabilize"
 category = ["Grain"]
 code = """
 # Stabilize grain (make it less flickery)
+# The rgvs plugin is gone; vsrgtools.remove_grain() wraps the zsmooth replacement.
 
-from vstools import vs, core
+from vsrgtools import remove_grain
 
 # Temporal smoothing of grain
-clip = core.rgvs.RemoveGrain(clip, mode=19)"""
+clip = remove_grain(clip, mode=19)"""
 description = "Stabilizes film grain to reduce temporal flickering"
 
 [metadata]

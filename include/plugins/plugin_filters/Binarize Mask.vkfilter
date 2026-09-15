@@ -3,11 +3,13 @@ category = "Masking"
 code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/utils/
 
-from vsmasktools import binarize
+from vsmasktools import Morpho
 
-# Binarize a mask to pure black and white
+# Binarize a mask to pure black and white.
+# binarize() moved onto the Morpho class; binarize_mask() is the variant meant
+# for mask clips (every plane shares one value range).
 thr = 32768  # Threshold (middle value for 16-bit)
-clip = binarize(clip, thr=thr)"""
+clip = Morpho.binarize_mask(clip, midthr=thr)"""
 description = "Converts a mask to pure black and white based on threshold"
 
 [metadata]

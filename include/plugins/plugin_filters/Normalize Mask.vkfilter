@@ -1,12 +1,23 @@
 name = "Normalize Mask"
 category = "Masking"
 code = """
-# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsmasktools/utils/
+# Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsexprtools/
 
-from vsmasktools import normalize_mask
+from vsexprtools import norm_expr
 
-# Normalize a mask to full range
-clip = normalize_mask(clip)"""
+# vsmasktools.normalize_mask used to do this; it now conforms a mask spec to a
+# reference clip's format and range instead, which is a different job and not
+# the one this filter is named after. Stretching to full range is a couple of
+# lines, so it is done here rather than renaming the filter to match whatever
+# upstream moved on to.
+#
+# PlaneStats gives the floor and ceiling per frame, so the stretch follows the
+# picture rather than assuming a range. The `1 max` guards a flat frame, where
+# max - min is zero and the division would otherwise be by nothing.
+clip = norm_expr(
+    core.std.PlaneStats(clip),
+    "x x.PlaneStatsMin - x.PlaneStatsMax x.PlaneStatsMin - 1 max / range_max *",
+)"""
 description = "Normalizes a mask to use the full value range (stretches contrast)"
 
 [metadata]
