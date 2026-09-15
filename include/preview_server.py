@@ -14,7 +14,9 @@ to fix.
 
 Protocol
 --------
-stdin   one JSON object per line, each with a "cmd" and a "seq".
+stdin   one JSON object per line, each with a "cmd" and a "seq". Read on its
+        own thread, so a command lands during a slow frame rather than behind
+        it — that is what makes a stop mid-playback take milliseconds.
 stdout  binary only. Every reply is
 
             uint32 big-endian header length
@@ -24,16 +26,33 @@ stdout  binary only. Every reply is
         Anything that is not a reply goes to stderr, and stdout is put into
         binary mode on Windows, because a stray print or a CRLF translation in
         the middle of a frame corrupts every frame after it.
+
+Playback
+--------
+`play` starts a stream: frames are pushed as `pframe` replies, unasked, until
+the credit granted runs out. The renderer returns a credit per frame it
+consumes, which is the whole of the flow control — out of credit, this process
+blocks on the command queue and the chain goes idle. Frames are requested
+ahead through `get_frame_async` so decode, filtering and packing overlap.
+
+A `pframe` carries no levels and no frame props. Both cost milliseconds per
+frame and answer questions nobody can read at playing speed; pausing re-asks
+for the frame through `frame`, which brings them back.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import queue
 import struct
 import sys
+import threading
+import time
 import traceback
 import types
+from collections import deque
+from concurrent.futures import TimeoutError as FutureTimeout
 
 # stdout is the binary channel and nothing else. Take the real buffer now, then
 # point sys.stdout at stderr so that a print() anywhere — ours, a plugin's, or
@@ -97,6 +116,9 @@ class PreviewSession:
         self._preview_nodes: dict[tuple[int, int], vs.VideoNode] = {}
         self._buffer: "np.ndarray | None" = None
         self._buffer_shape: tuple[int, int] | None = None
+        # The one playback stream, if any. A `play` replaces whatever was
+        # running, so there is never more than one.
+        self.stream: "Stream | None" = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -150,6 +172,7 @@ class PreviewSession:
         }
 
     def close(self) -> None:
+        self.stream = None
         self.outputs = {}
         self._preview_nodes = {}
         self._source_props = {}
@@ -193,8 +216,8 @@ class PreviewSession:
         n = max(0, min(n, node.num_frames - 1))
 
         # One frame, so there is nothing to pipeline: get_frame and
-        # get_frame_async cost the same here. The prefetch ring that makes
-        # async worth 2.3x arrives with playback.
+        # get_frame_async cost the same here. Playback is where the overlap
+        # pays, and it has its own ring in Stream.
         frame = node.get_frame(n)
         height, frame_width = node.height, node.width
 
@@ -275,6 +298,132 @@ class PreviewSession:
         self._source_props[index] = resolved
         return resolved
 
+    # -- playback ----------------------------------------------------------
+
+    def _ring_depth(self, index: int, requested: "int | None") -> int:
+        """
+        How many frames to keep in flight, as a memory budget.
+
+        Every outstanding request pins one frame at every node feeding it, so
+        the cost of depth is the whole upstream graph, not one picture. The
+        enabled outputs are a fair stand-in for those nodes: they are exactly
+        the points the chain was cut at.
+        """
+        per_frame = 0
+        for i, clip in self.outputs.items():
+            if i > index:
+                continue
+            fmt = clip.format
+            if fmt is None:
+                continue
+            for plane in range(fmt.num_planes):
+                pw = clip.width >> (fmt.subsampling_w if plane else 0)
+                ph = clip.height >> (fmt.subsampling_h if plane else 0)
+                per_frame += pw * ph * fmt.bytes_per_sample
+
+        # Enough to keep every worker thread fed, then whatever memory allows.
+        ceiling = min(PREFETCH_CEILING, max(MIN_PREFETCH, core.num_threads))
+        affordable = ceiling if per_frame <= 0 else int(
+            (PREFETCH_BUDGET_MB * 1024 * 1024) // per_frame
+        )
+        depth = max(MIN_PREFETCH, min(ceiling, affordable))
+        if requested:
+            depth = min(depth, max(1, int(requested)))
+        return depth
+
+    def play(self, ident: int, index: int, start: int, width: int,
+             credits: int, prefetch: "int | None" = None) -> dict:
+        if index not in self.outputs:
+            raise KeyError(f"No output {index}; have {sorted(self.outputs)}")
+
+        node = self._preview_node(index, width)
+        start = max(0, min(int(start), node.num_frames - 1))
+        depth = self._ring_depth(index, prefetch)
+
+        # Replaces whatever was running. The old ring's futures are dropped
+        # rather than awaited: VapourSynth finishes them into its own cache,
+        # where a seek back over the same frames will find them.
+        self.stream = Stream(ident, index, node, start, depth, max(0, int(credits)))
+        return {"stream": ident, "prefetch": depth, "from": start}
+
+    def stop_stream(self, ident: int) -> "int | None":
+        stream = self.stream
+        if stream is None or stream.id != ident:
+            return None
+        self.stream = None
+        return stream.last_emitted
+
+    def add_credit(self, ident: int, count: int) -> None:
+        stream = self.stream
+        if stream is not None and stream.id == ident:
+            stream.credits += max(0, int(count))
+
+    def stream_ready(self) -> bool:
+        """
+        True when there is work to push. False means block on the command
+        queue — which is what out-of-credit looks like, and it costs nothing.
+        """
+        return self.stream is not None and self.stream.credits > 0
+
+    def pump(self) -> None:
+        """
+        Emit at most one frame, or give up quickly so a command can be read.
+
+        Never blocks for long: the caller polls the command queue between
+        calls, and that is what lets a stop land in milliseconds on a chain
+        taking a second a frame.
+        """
+        stream = self.stream
+        if stream is None:
+            return
+
+        if not stream.ring:
+            if stream.exhausted:
+                self.stream = None
+                reply({"type": "end", "stream": stream.id, "n": stream.last_emitted})
+            else:
+                stream.fill()
+            return
+
+        n, future = stream.ring[0]
+        started = time.monotonic()
+        try:
+            frame = future.result(timeout=PUMP_POLL_SECONDS)
+        except FutureTimeout:
+            # Still rendering. The time still counts against the chain.
+            stream.waited += time.monotonic() - started
+            return
+        except Exception as error:  # noqa: BLE001 - report and end the stream
+            traceback.print_exc(file=sys.stderr)
+            self.stream = None
+            reply({
+                "type": "error",
+                "stream": stream.id,
+                "n": n,
+                "error": f"{type(error).__name__}: {error}",
+            })
+            return
+
+        stream.waited += time.monotonic() - started
+        stream.waits += 1
+        stream.ring.popleft()
+        stream.fill()
+
+        width = stream.node.width
+        height = stream.node.height
+        payload = self._pack(frame, width, height)
+        stream.last_emitted = n
+        stream.credits -= 1
+        reply({
+            "type": "pframe",
+            "stream": stream.id,
+            "n": n,
+            "output": stream.output,
+            "width": width,
+            "height": height,
+            "bytes": len(payload),
+        }, payload)
+
     def _pack(self, frame: vs.VideoFrame, width: int, height: int) -> memoryview:
         """
         Planar RGB24 out of VapourSynth, packed RGB24 into one reused buffer.
@@ -295,6 +444,64 @@ class PreviewSession:
             self._buffer[:, :, plane] = np.asarray(frame[plane])
 
         return memoryview(self._buffer).cast("B")
+
+
+# Depth is what makes playback fast, and it is close to linear until the core
+# runs out of threads to spend. Measured on a 720x480 chain with a heavy blur,
+# pushing as fast as the pipe would take it:
+#
+#     depth  1  ->   210 fps
+#     depth  2  ->   350 fps
+#     depth  4  ->   637 fps
+#     depth  8  ->  1079 fps
+#
+# So the ceiling belongs at the number of threads the core will actually use,
+# not at some small constant. What bounds it instead is memory: every request
+# in flight pins a frame at every node feeding it, and those frames are
+# refcounted, so they sit outside `max_cache_size` rather than inside it. An
+# over-deep ring does not crash — it evicts the source filter's own cache and
+# makes the next seek cold — but it is still real memory, so the budget below
+# is what decides depth on a chain with big intermediate formats.
+PREFETCH_BUDGET_MB = 512
+# Absolute ceiling, whatever the thread count. Past this the ring stops buying
+# throughput and starts costing seek latency, because a switch waits for the
+# frames already requested.
+PREFETCH_CEILING = 32
+MIN_PREFETCH = 2
+# How long to sit on a frame before going back to look for a command. Short
+# enough that a stop or a step switch feels immediate on a slow chain.
+PUMP_POLL_SECONDS = 0.02
+
+
+class Stream:
+    """One run of consecutive frames from one output, requested ahead."""
+
+    def __init__(self, ident: int, output: int, node: "vs.VideoNode", start: int,
+                 prefetch: int, credits: int) -> None:
+        self.id = ident
+        self.output = output
+        self.node = node
+        self.next_n = start
+        self.prefetch = prefetch
+        self.credits = credits
+        self.ring: "deque[tuple[int, object]]" = deque()
+        self.last_emitted: int | None = None
+        self.waited = 0.0
+        self.waits = 0
+        self.fill()
+
+    def fill(self) -> None:
+        while len(self.ring) < self.prefetch and self.next_n < self.node.num_frames:
+            self.ring.append((self.next_n, self.node.get_frame_async(self.next_n)))
+            self.next_n += 1
+
+    @property
+    def exhausted(self) -> bool:
+        return not self.ring and self.next_n >= self.node.num_frames
+
+    @property
+    def mean_wait(self) -> float:
+        return self.waited / self.waits if self.waits else 0.0
 
 
 def _spread(plane) -> dict:
@@ -328,19 +535,50 @@ def reply(header: dict, payload: memoryview | bytes = b"") -> None:
     _out.flush()
 
 
-def main() -> int:
-    session = PreviewSession()
+def _read_commands(commands: "queue.Queue") -> None:
+    """
+    stdin, on its own thread.
 
-    # readline() rather than `for line in ...`, so a command is acted on the
-    # moment its newline arrives instead of whenever an iterator's read-ahead
-    # happens to fill.
+    readline() rather than `for line in ...`, so a command is acted on the
+    moment its newline arrives instead of whenever an iterator's read-ahead
+    happens to fill. On a thread because the main loop cannot afford to sit in
+    a blocking read while a stream has frames to push — and, the other way
+    round, a stop must not queue behind a frame that takes a second to render.
+    """
     while True:
         line = sys.stdin.buffer.readline()
         if not line:
-            break
+            commands.put(None)
+            return
         line = line.strip()
-        if not line:
-            continue
+        if line:
+            commands.put(line)
+
+
+def main() -> int:
+    session = PreviewSession()
+    commands: "queue.Queue" = queue.Queue()
+    threading.Thread(
+        target=_read_commands, args=(commands,), daemon=True, name="vk-preview-stdin"
+    ).start()
+
+    while True:
+        if session.stream_ready():
+            # Commands win over frames: a stop, a seek or a step switch must
+            # not wait behind the picture it is about to make irrelevant.
+            try:
+                line = commands.get_nowait()
+            except queue.Empty:
+                session.pump()
+                continue
+        else:
+            # No stream, or no credit. Blocking here IS the backpressure: the
+            # renderer has not consumed what it was sent, so nothing is
+            # rendered and nothing is spent until it does.
+            line = commands.get()
+
+        if line is None:
+            break
 
         try:
             command = json.loads(line)
@@ -369,6 +607,35 @@ def main() -> int:
                     int(command.get("width", 0)),
                 )
                 reply({**header, "seq": seq}, payload)
+
+            elif name == "play":
+                result = session.play(
+                    int(command["stream"]),
+                    int(command["output"]),
+                    int(command.get("from", 0)),
+                    int(command.get("width", 0)),
+                    int(command.get("credits", 0)),
+                    command.get("prefetch"),
+                )
+                reply({"type": "ok", "seq": seq, **result})
+
+            elif name == "stop":
+                ident = int(command["stream"])
+                reply({
+                    "type": "ok",
+                    "seq": seq,
+                    "stream": ident,
+                    "n": session.stop_stream(ident),
+                })
+
+            elif name == "credit":
+                # Flow control, not a request: no seq, no reply. Replying
+                # would put one message per frame back on the return path,
+                # which is the cost the push model exists to remove.
+                session.add_credit(
+                    int(command["stream"]),
+                    int(command.get("count", 1)),
+                )
 
             elif name == "ping":
                 reply({"type": "ok", "seq": seq})

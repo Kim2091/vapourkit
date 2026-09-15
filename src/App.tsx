@@ -735,6 +735,9 @@ function App() {
       // it gets the toast. The console keeps every phase.
       if (phase === 'open') notify.error('Inspect could not open', message);
     },
+    // Throttled inside the hook, so this is a few updates a second rather
+    // than one per frame.
+    onPlayhead: setPlayheadFrame,
   });
 
   const {
@@ -1453,6 +1456,8 @@ function App() {
                       frame: chainPreview.frame,
                       isRendering: chainPreview.isRendering,
                       isStale: chainPreview.isStale,
+                      isPlaying: chainPreview.playback.isPlaying,
+                      frameSource: chainPreview.playback,
                       liveGradeStep: gradeUpstreamOutput,
                       referenceFrame: chainPreview.referenceFrame,
                       referenceLabel: chainPreview.reference === null
@@ -1492,6 +1497,13 @@ function App() {
                     playhead={playheadFrame}
                     onSegmentChange={handleSegmentChange}
                     onSeekFrame={handleSeekFrame}
+                    playback={chainPreview.isOpen ? {
+                      isPlaying: chainPreview.playback.isPlaying,
+                      targetFps: chainPreview.playback.targetFps,
+                      achievedFps: chainPreview.playback.achievedFps,
+                      behind: chainPreview.playback.behind,
+                      onToggle: chainPreview.playback.toggle,
+                    } : null}
                   />
 
                   <ConsoleDrawer

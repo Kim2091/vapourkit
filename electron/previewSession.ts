@@ -8,6 +8,12 @@
 // Replies carry the sequence number of the request that caused them, so a
 // reply that arrives after the caller has moved on is discarded rather than
 // mistaken for the answer to a later question.
+//
+// Playback frames are the exception: they are pushed, not requested, so they
+// carry a stream id instead of a seq and are routed to `onStream` rather than
+// to a waiter. Everything the server writes still goes down one pipe in
+// order, which is what lets a stop be trusted — after its reply, no further
+// frame of that stream can be in flight.
 
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
@@ -51,6 +57,32 @@ export interface PreviewSourceProps {
   transfer: number | null;
   primaries: number | null;
   format: string | null;
+}
+
+/** A pushed playback frame, or the end of a stream. */
+export type StreamEvent =
+  | {
+      type: 'pframe';
+      stream: number;
+      n: number;
+      output: number;
+      width: number;
+      height: number;
+      data: Buffer;
+    }
+  | { type: 'end'; stream: number; n: number | null }
+  | { type: 'error'; stream: number; n: number; error: string };
+
+export interface PlayOptions {
+  /** Caller-assigned id, echoed on every frame so stale ones can be dropped. */
+  stream: number;
+  output: number;
+  /** First frame, in the output's own numbering. */
+  from: number;
+  width: number;
+  /** Frames the server may send before it must wait for more credit. */
+  credits: number;
+  prefetch?: number;
 }
 
 export interface PreviewFrame {
@@ -165,6 +197,16 @@ export class PreviewSession {
   /** The steps the open script exposes, in output order. */
   outputs: PreviewOutput[] = [];
 
+  /**
+   * Where pushed playback frames go. Set by whoever owns the port they are
+   * forwarded to; unset means playback frames are dropped, which is the right
+   * behaviour for a session nobody is playing.
+   */
+  onStream?: (event: StreamEvent) => void;
+
+  /** Injected so the protocol can be tested against a fake child. */
+  constructor(private readonly spawner: typeof spawn = spawn) {}
+
   get isRunning(): boolean {
     return this.child !== null;
   }
@@ -189,7 +231,7 @@ export class PreviewSession {
 
     // -u so stderr reaches the log promptly; stdout is flushed explicitly by
     // the server after every reply.
-    const child = spawn(
+    const child = this.spawner(
       PATHS.PYTHON,
       ['-u', serverPath],
       createWorkloadSpawnOptions({
@@ -210,6 +252,9 @@ export class PreviewSession {
       this.failAllPending(new Error(`Preview session exited (${this.exitReason})`));
       this.child = null;
       this.reader = null;
+      // A dead session has no stream. Clearing the sink stops a late chunk
+      // already in the reader from being forwarded to a port being closed.
+      this.onStream = undefined;
     });
     child.on('error', error => {
       this.failAllPending(new Error(`Preview session failed to start: ${error.message}`));
@@ -253,11 +298,45 @@ export class PreviewSession {
     };
   }
 
+  // -- playback ----------------------------------------------------------
+
+  /**
+   * Starts pushing frames from `output`, beginning at `from`.
+   *
+   * Replaces whatever stream was running. Frames arrive on `onStream` and
+   * stop after `credits` of them until `credit` grants more.
+   */
+  async play(options: PlayOptions): Promise<{ stream: number; prefetch: number; from: number }> {
+    const { header } = await this.send({ cmd: 'play', ...options });
+    return {
+      stream: header.stream,
+      prefetch: header.prefetch,
+      from: header.from,
+    };
+  }
+
+  /** Stops `stream` and reports the last frame it emitted. */
+  async stop(stream: number): Promise<number | null> {
+    const { header } = await this.send({ cmd: 'stop', stream });
+    return header.n ?? null;
+  }
+
+  /**
+   * Grants room for `count` more frames.
+   *
+   * Deliberately not a request: a reply per frame consumed would put the
+   * round trip back on the path that the push model exists to remove.
+   */
+  credit(stream: number, count: number): void {
+    this.post({ cmd: 'credit', stream, count });
+  }
+
   dispose(): void {
     const child = this.child;
     this.child = null;
     this.reader = null;
     this.outputs = [];
+    this.onStream = undefined;
     this.failAllPending(new Error('Preview session closed'));
 
     if (!child) return;
@@ -297,7 +376,20 @@ export class PreviewSession {
     });
   }
 
+  /** Write a command that expects no reply. */
+  private post(command: Record<string, unknown>): void {
+    const child = this.child;
+    if (!child?.stdin) return;
+    try {
+      child.stdin.write(JSON.stringify(command) + '\n');
+    } catch {
+      // Broken pipe: the session is going away and the credit is moot.
+    }
+  }
+
   private onReply(reply: Reply): void {
+    if (this.routeStreamEvent(reply)) return;
+
     const seq: number = reply.header.seq ?? -1;
     const waiter = this.pending.get(seq);
     if (!waiter) {
@@ -313,6 +405,53 @@ export class PreviewSession {
       return;
     }
     waiter.resolve(reply);
+  }
+
+  /**
+   * Pushed frames have a stream id and no seq, so they belong to the sink
+   * rather than to the pending map. Returns true when it handled the reply.
+   */
+  private routeStreamEvent(reply: Reply): boolean {
+    const { header, payload } = reply;
+    const type = header.type;
+    const stream = header.stream;
+    if (typeof stream !== 'number') return false;
+    if (type !== 'pframe' && type !== 'end' && type !== 'error') return false;
+    // play and stop both echo the stream on an `ok` that a caller is waiting
+    // for; only these three are pushed.
+    if (header.seq !== undefined) return false;
+
+    const sink = this.onStream;
+    if (!sink) {
+      logger.debug(`[preview] no stream sink; dropped ${type} for stream ${stream}`);
+      return true;
+    }
+
+    if (type === 'pframe') {
+      if (!payload) {
+        logger.debug('[preview] pframe carried no pixels');
+        return true;
+      }
+      sink({
+        type: 'pframe',
+        stream,
+        n: header.n,
+        output: header.output,
+        width: header.width,
+        height: header.height,
+        data: payload,
+      });
+    } else if (type === 'end') {
+      sink({ type: 'end', stream, n: header.n ?? null });
+    } else {
+      sink({
+        type: 'error',
+        stream,
+        n: header.n ?? -1,
+        error: String(header.error ?? 'Unknown playback error'),
+      });
+    }
+    return true;
   }
 
   private failAllPending(error: Error): void {

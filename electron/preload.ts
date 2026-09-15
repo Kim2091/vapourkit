@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   previewFrame: (n: number, width: number) => ipcRenderer.invoke('preview-frame', n, width),
   previewCancel: () => ipcRenderer.invoke('preview-cancel'),
   previewClose: () => ipcRenderer.invoke('preview-close'),
+  previewPlay: (options: {
+    stream: number; output: number; from: number; width: number;
+    credits: number; prefetch?: number;
+  }) => ipcRenderer.invoke('preview-play', options),
+  previewStop: (stream: number) => ipcRenderer.invoke('preview-stop', stream),
   getFilePathFromFile: (file: File) => webUtils.getPathForFile(file),
   
   // Model operations
@@ -243,4 +248,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('vsmlrt-update-progress', listener);
     return () => ipcRenderer.removeListener('vsmlrt-update-progress', listener);
   },
+});
+
+// Preload is the one main-process file that runs in a renderer, and the
+// electron tsconfig has no DOM lib — deliberately, so nothing else in main
+// can reach for a browser global by accident. Declaring the one method used
+// here keeps that guard in place.
+declare const window: {
+  postMessage(message: unknown, targetOrigin: string, transfer?: unknown[]): void;
+};
+
+// The playback port, handed to the page rather than to the bridge.
+//
+// contextBridge cannot carry a MessagePort, and routing frames through it as
+// plain callbacks would copy every one into the main world. window.postMessage
+// with a transfer list is the documented way across, and it is the only copy
+// this path avoids — the main-to-renderer hop clones either way.
+//
+// Nothing is validated here on purpose: this is a relay. src/utils/previewPort
+// checks the source, the channel and the token before it takes the port.
+ipcRenderer.on('preview-port', (event, message: { token: string }) => {
+  window.postMessage({ channel: 'vk-preview-port', token: message?.token }, '*', event.ports);
 });

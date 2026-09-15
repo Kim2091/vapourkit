@@ -15,17 +15,47 @@ import type {
   PreviewLevels,
   PreviewOutput,
   PreviewSourceProps,
+  PreviewStreamMessage,
   SegmentSelection,
   VideoInfo,
 } from '../electron.d';
-import { toOutputFrame } from '../utils/previewFrameMap';
+import { toOutputFrame, toSourceFrame, outputFps } from '../utils/previewFrameMap';
+import { previewPorts } from '../utils/previewPort';
+import { PlaybackPacer, type PlaybackStats } from '../utils/previewPlayback';
 
 /** What the session was doing when it failed. */
 export type ChainPreviewErrorPhase = 'open' | 'render' | 'select';
 
+export interface ChainPreviewPlayback {
+  isPlaying: boolean;
+  /** The rate the selected step should run at. */
+  targetFps: number;
+  /** What the chain actually managed, once it has shown a few frames. */
+  achievedFps: number | null;
+  /** Sustained under target: the chain is the limit, not the clock. */
+  behind: boolean;
+  play: () => void;
+  pause: () => Promise<void>;
+  toggle: () => void;
+  /**
+   * Playing frames go straight to the canvas, not through React state.
+   *
+   * At 60 frames a second a setState per frame would re-render the whole app
+   * tree sixty times a second to change one texture. The canvas subscribes
+   * here and uploads; React hears about the playhead a few times a second
+   * instead.
+   */
+  subscribe: (listener: (frame: ChainPreviewFrame) => void) => () => void;
+}
+
 export interface ChainPreviewStep extends PreviewOutput {
   /** What to call this step in the rail. */
   label: string;
+}
+
+/** A delivered frame, with the stream id the pacer routes on. */
+interface PacedChainFrame extends ChainPreviewFrame {
+  stream: number;
 }
 
 export interface ChainPreviewFrame {
@@ -67,6 +97,12 @@ interface UseChainPreviewOptions {
    * rail and the stale picture to say so.
    */
   onError?: (message: string, phase: ChainPreviewErrorPhase) => void;
+  /**
+   * Where the picture on screen sits, in source frames. Called while playing
+   * at a few times a second rather than per frame — it drives the scrubber
+   * marker, and React does not need to hear about all sixty.
+   */
+  onPlayhead?: (sourceFrame: number) => void;
 }
 
 /** One frame number, as the two steps of a pair render it. */
@@ -118,7 +154,23 @@ export interface UseChainPreviewResult {
   close: () => Promise<void>;
   select: (index: number) => void;
   seek: (n: number) => void;
+  playback: ChainPreviewPlayback;
 }
+
+/**
+ * Frames the server may send before it waits to be told they were used.
+ *
+ * This paces emission, not rendering: the server's ring refills the moment a
+ * frame leaves it, so the chain runs at full width from the first frame
+ * whatever this is. What the window buys is slack against jitter — each
+ * credit is a renderer-to-main-to-python round trip, and at 59.94 one is owed
+ * every 16.7 ms. Eight is enough to ride out a slow round trip without making
+ * a seek throw away much work.
+ */
+const PLAY_CREDITS = 8;
+
+/** How often the playhead reaches React while playing. */
+const PLAYHEAD_REPORT_MS = 66;
 
 /** Cache key for a reference picture: which output, and which frame of it. */
 const referenceKey = (output: number, n: number) => `${output}:${n}`;
@@ -193,7 +245,7 @@ function chainKey(options: UseChainPreviewOptions, liveParameters: string | null
 }
 
 export function useChainPreview(options: UseChainPreviewOptions): UseChainPreviewResult {
-  const { videoInfo, filters, previewWidth, onError } = options;
+  const { videoInfo, filters, previewWidth, onError, onPlayhead } = options;
 
   const [isOpen, setIsOpen] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
@@ -233,6 +285,28 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
   const queued = useRef<{ n: number; index: number } | null>(null);
   /** Source-space frame, the same space the scrubber and the segment use. */
   const playhead = useRef(0);
+
+  // -- playback ----------------------------------------------------------
+  const [isPlaying, setIsPlaying] = useState(false);
+  const isPlayingRef = useRef(false);
+  isPlayingRef.current = isPlaying;
+  const [stats, setStats] = useState<PlaybackStats | null>(null);
+
+  const portRef = useRef<MessagePort | null>(null);
+  const pacerRef = useRef<PlaybackPacer<PacedChainFrame> | null>(null);
+  const streamId = useRef(0);
+  /**
+   * Where playback has reached, in source space and unrounded.
+   *
+   * Kept as a float because a step can have twice the frames: rounding here
+   * and converting back would lose up to a frame on every switch, so a walk
+   * across a bob deinterlacer would drift backwards a frame at a time.
+   */
+  const timeline = useRef(0);
+  const frameListeners = useRef(new Set<(frame: ChainPreviewFrame) => void>());
+  /** Shape of the last painted frame, so a resize reaches React exactly once. */
+  const lastShape = useRef<string | null>(null);
+  const lastPlayheadReport = useRef(0);
 
   // Snapshot of the open editor's parameters, held for as long as it is open.
   const frozenLive = useRef<{ id: string; json: string } | null>(null);
@@ -359,6 +433,163 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     void pump();
   }, [pump]);
 
+
+  // -- playback ----------------------------------------------------------
+
+  /** The rate `index` should run at, which is not the source rate. */
+  const targetFpsFor = useCallback((index: number) => (
+    outputFps(outputsRef.current, index, videoInfo?.fps || 24)
+  ), [videoInfo?.fps]);
+
+  /**
+   * Paint one frame.
+   *
+   * Straight to the listeners, not through setState: a re-render per frame
+   * would put the whole tree through React sixty times a second to change one
+   * texture. React is told the shape once per stream, so the canvas can size
+   * itself, and the playhead a few times a second.
+   */
+  const emitFrame = useCallback((frame: PacedChainFrame) => {
+    const trim = openSegment.current?.enabled ? openSegment.current.startFrame : 0;
+    timeline.current = toSourceFrame(outputsRef.current, frame.output, frame.n) + trim;
+    playhead.current = Math.round(timeline.current);
+
+    for (const listener of frameListeners.current) listener(frame);
+
+    const shape = `${frame.width}x${frame.height}`;
+    if (lastShape.current !== shape) {
+      lastShape.current = shape;
+      setFrame(frame);
+    }
+
+    const now = performance.now();
+    if (now - lastPlayheadReport.current >= PLAYHEAD_REPORT_MS) {
+      lastPlayheadReport.current = now;
+      onPlayhead?.(playhead.current);
+    }
+  }, [onPlayhead]);
+
+  /**
+   * Back to a paused picture.
+   *
+   * The re-request is the point: a pframe carries no levels and no frame
+   * props, because computing them per frame costs more than the frame does
+   * and answers a question nobody can read at playing speed. Pausing asks for
+   * the frame properly, which brings the scopes and the pinned reference back
+   * in one go.
+   */
+  const settleAfterPlayback = useCallback(() => {
+    setIsPlaying(false);
+    setStats(null);
+    lastShape.current = null;
+    onPlayhead?.(playhead.current);
+    request(playhead.current, selectedRef.current);
+  }, [request, onPlayhead]);
+
+  const startStream = useCallback(async (index: number, sourceFrame: number) => {
+    const port = portRef.current;
+    const pacer = pacerRef.current;
+    if (!port || !pacer) return;
+
+    const stream = ++streamId.current;
+    timeline.current = sourceFrame;
+
+    // Started before the request goes out: the server can push its first
+    // frames before the acknowledgement gets back here, and a pacer that is
+    // not listening yet would drop them.
+    pacer.start(stream, targetFpsFor(index), {
+      onPresent: emitFrame,
+      onCredit: (count) => port.postMessage({ type: 'credit', stream, count }),
+      onStats: setStats,
+      onEnd: () => settleAfterPlayback(),
+    });
+    // A queued single-frame request would repaint over the stream.
+    queued.current = null;
+
+    const result = await window.electronAPI.previewPlay({
+      stream,
+      output: index,
+      from: frameFor(index, sourceFrame),
+      width: previewWidth,
+      credits: PLAY_CREDITS,
+    });
+
+    if (!result.success && streamId.current === stream) {
+      pacer.stop();
+      setIsPlaying(false);
+      fail(result.error ?? 'Could not start playback', 'render');
+    }
+  }, [targetFpsFor, emitFrame, settleAfterPlayback, frameFor, previewWidth, fail]);
+
+  const pause = useCallback(async () => {
+    const pacer = pacerRef.current;
+    if (!pacer || !isPlayingRef.current) return;
+    const stream = pacer.currentStream;
+    pacer.stop();
+    settleAfterPlayback();
+    if (stream >= 0) {
+      await window.electronAPI.previewStop(stream).catch(() => {});
+    }
+  }, [settleAfterPlayback]);
+
+  const play = useCallback(() => {
+    if (!portRef.current || isPlayingRef.current) return;
+    const trim = openSegment.current?.enabled ? openSegment.current.startFrame : 0;
+    const total = outputsRef.current.find(output => output.index === 0)?.frames ?? 0;
+    // Pressing play on the last frame starts over rather than doing nothing.
+    const atEnd = total > 0 && playhead.current >= trim + total - 1;
+    setIsPlaying(true);
+    void startStream(selectedRef.current, atEnd ? trim : playhead.current);
+  }, [startStream]);
+
+  const togglePlayback = useCallback(() => {
+    if (isPlayingRef.current) void pause();
+    else play();
+  }, [pause, play]);
+
+  const subscribeFrames = useCallback((listener: (frame: ChainPreviewFrame) => void) => {
+    frameListeners.current.add(listener);
+    return () => { frameListeners.current.delete(listener); };
+  }, []);
+
+  /** Everything the port delivers, routed by stream id inside the pacer. */
+  const onPortMessage = useCallback((event: MessageEvent) => {
+    const pacer = pacerRef.current;
+    if (!pacer) return;
+    const message = event.data as PreviewStreamMessage;
+
+    if (message.type === 'pframe') {
+      pacer.push({
+        stream: message.stream,
+        n: message.n,
+        output: message.output,
+        width: message.width,
+        height: message.height,
+        pixels: message.data,
+        levels: null,
+        source: null,
+      });
+      return;
+    }
+    if (message.type === 'end') {
+      pacer.end(message.stream);
+      return;
+    }
+    pacer.stop();
+    setIsPlaying(false);
+    fail(message.error, 'render');
+  }, [fail]);
+
+  /** Drop the channel without asking the server anything. */
+  const teardownPlayback = useCallback(() => {
+    pacerRef.current?.stop();
+    portRef.current?.close();
+    portRef.current = null;
+    setIsPlaying(false);
+    setStats(null);
+    lastShape.current = null;
+  }, []);
+
   const open = useCallback(async () => {
     if (!videoInfo || isOpening) return;
     const token = ++openToken.current;
@@ -390,6 +621,28 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       outputsRef.current = result.outputs;
       openSegment.current = options.segment;
       setOutputs(result.outputs);
+
+      // The playback channel. Taken now rather than on the first play so a
+      // session that cannot stream says so while the user is still looking at
+      // the thing they asked to open.
+      teardownPlayback();
+      if (result.token) {
+        try {
+          const port = await previewPorts().await(result.token);
+          if (token !== openToken.current) {
+            port.close();
+            return;
+          }
+          port.onmessage = onPortMessage;
+          port.start();
+          portRef.current = port;
+          pacerRef.current = pacerRef.current ?? new PlaybackPacer<PacedChainFrame>();
+        } catch (caught) {
+          // Not fatal: single frames and scrubbing still work without it.
+          const message = caught instanceof Error ? caught.message : String(caught);
+          console.warn('Chain preview opened without playback:', message);
+        }
+      }
       setSelected(last.index);
       setIsOpen(true);
       setIsStale(false);
@@ -407,11 +660,13 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     // `key` is read for the staleness marker, not to re-run this callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoInfo, filters, options.selectedModel, options.defaultBackend,
-      options.numStreams, options.segment, isOpening, fail, request, key]);
+      options.numStreams, options.segment, isOpening, fail, request, key,
+      onPortMessage, teardownPlayback]);
 
   const cancel = useCallback(async () => {
     openToken.current++;
     queued.current = null;
+    teardownPlayback();
     setIsOpening(false);
     setError(null);
     try {
@@ -419,11 +674,12 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     } catch {
       // Nothing to stop, or it is already stopping.
     }
-  }, []);
+  }, [teardownPlayback]);
 
   const close = useCallback(async () => {
     openToken.current++;
     queued.current = null;
+    teardownPlayback();
     setIsOpen(false);
     setIsStale(false);
     setOutputs([]);
@@ -439,7 +695,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     } catch {
       // The session is going away regardless.
     }
-  }, []);
+  }, [teardownPlayback]);
 
   const select = useCallback((index: number) => {
     if (!isOpen) return;
@@ -451,10 +707,17 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
           fail(result.error ?? 'Could not select that step', 'select');
           return;
         }
+        if (isPlayingRef.current) {
+          // Carry on from the same moment, not the same frame number: the
+          // new step may count frames at twice the rate. The float timeline
+          // is what makes the wall-clock position survive the switch.
+          void startStream(index, timeline.current);
+          return;
+        }
         request(playhead.current, index);
       })
       .catch(caught => fail(caught instanceof Error ? caught.message : String(caught), 'select'));
-  }, [isOpen, request, fail]);
+  }, [isOpen, request, fail, startStream]);
 
   /**
    * Take the session over for a moment.
@@ -480,6 +743,10 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
   ): Promise<StepSample[]> => {
     if (!isOpen) throw new Error('The preview is not open, so there is nothing to measure.');
     if (correctedIndex === targetIndex) throw new Error('Those are the same step.');
+
+    // Measuring needs the chain still: the two grabs must be the same moment,
+    // and a running stream is also competing for the session.
+    if (isPlayingRef.current) await pause();
 
     // A queued seek is about to be overtaken anyway, and letting it run after
     // the borrow would repaint from whichever output was selected last.
@@ -532,7 +799,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       setIsRendering(false);
       if (queued.current) void pump();
     }
-  }, [isOpen, claimSession, previewWidth, pump, frameFor]);
+  }, [isOpen, claimSession, previewWidth, pump, frameFor, pause]);
 
   const setReference = useCallback((index: number | null) => {
     setReferenceState(index);
@@ -542,15 +809,21 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       return;
     }
     // The held key belongs to the old reference, so drop it and ask again for
-    // the frame already on screen.
+    // the frame already on screen. Not while playing: a frozen reference beside
+    // a moving picture compares two different moments, so the canvas is shown
+    // none until the pause fetch brings one back.
     referenceHeld.current = null;
-    if (isOpen) request(playhead.current, selectedRef.current);
+    if (isOpen && !isPlayingRef.current) request(playhead.current, selectedRef.current);
   }, [isOpen, request]);
 
   const seek = useCallback((n: number) => {
     playhead.current = n;
-    if (isOpen) request(n, selected);
-  }, [isOpen, request, selected]);
+    timeline.current = n;
+    if (!isOpen) return;
+    // Seeking while playing keeps playing, from there.
+    if (isPlayingRef.current) void startStream(selected, n);
+    else request(n, selected);
+  }, [isOpen, request, selected, startStream]);
 
   // The chain moved under an open session. Stop rather than keep serving
   // frames from a script that no longer describes the filter list.
@@ -558,11 +831,15 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     if (!isOpen || openKey.current === null || openKey.current === key) return;
     setIsStale(true);
     queued.current = null;
+    teardownPlayback();
     void window.electronAPI.previewClose().catch(() => {});
-  }, [key, isOpen]);
+  }, [key, isOpen, teardownPlayback]);
 
   // A session holds a decoder and its cache. Never leave one behind.
   useEffect(() => () => {
+    pacerRef.current?.stop();
+    portRef.current?.close();
+    portRef.current = null;
     void window.electronAPI.previewClose().catch(() => {});
   }, []);
 
@@ -584,5 +861,15 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     close,
     select,
     seek,
+    playback: {
+      isPlaying,
+      targetFps: stats?.targetFps ?? 0,
+      achievedFps: stats?.achievedFps ?? null,
+      behind: stats?.behind ?? false,
+      play,
+      pause,
+      toggle: togglePlayback,
+      subscribe: subscribeFrames,
+    },
   };
 }

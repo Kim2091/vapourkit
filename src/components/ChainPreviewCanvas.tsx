@@ -17,6 +17,14 @@ import type { ChainPreviewFrame } from '../hooks/useChainPreview';
 interface ChainPreviewCanvasProps {
   frame: ChainPreviewFrame | null;
   /**
+   * Playing frames, which arrive without passing through React.
+   *
+   * Sixty setStates a second to swap one texture would put the whole tree
+   * through React sixty times a second. Subscribing here means a frame costs
+   * an upload and a draw, and nothing else.
+   */
+  frameSource?: { subscribe: (listener: (frame: ChainPreviewFrame) => void) => () => void } | null;
+  /**
    * Live grade to shade the frame with, when a grade step is open.
    *
    * The session is parked on the step below the grade, so this texture is the
@@ -46,6 +54,7 @@ interface ChainPreviewCanvasProps {
 
 export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
   frame,
+  frameSource = null,
   gradeValues = null,
   referenceFrame = null,
   referenceLabel = null,
@@ -139,6 +148,25 @@ export const ChainPreviewCanvas = memo<ChainPreviewCanvasProps>(({
     renderer.setClipMarks(showClipping);
     renderer.renderWipe(gradeValues ?? GRADE_NEUTRAL, before);
   }, [frame, referenceFrame, gradeValues, before, showClipping, generation]);
+
+  // The grade values a playing frame should be drawn with, read at draw time
+  // rather than closed over: the subscription outlives any one trackball
+  // position, and a grade dragged during playback has to reach the shader
+  // without re-subscribing per delta.
+  const live = useRef({ gradeValues, before, showClipping });
+  live.current = { gradeValues, before, showClipping };
+
+  useEffect(() => {
+    if (!frameSource) return;
+    return frameSource.subscribe(playing => {
+      const renderer = rendererRef.current;
+      if (!renderer) return;
+      const { gradeValues: values, before: side, showClipping: marks } = live.current;
+      renderer.setFrameBuffer(playing.pixels, playing.width, playing.height);
+      renderer.setClipMarks(marks);
+      renderer.renderWipe(values ?? GRADE_NEUTRAL, side);
+    });
+  }, [frameSource, generation]);
 
   const box = containBox(bounds, frame ? { width: frame.width, height: frame.height } : { width: 0, height: 0 });
 

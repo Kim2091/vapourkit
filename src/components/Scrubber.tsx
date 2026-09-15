@@ -7,7 +7,7 @@
 // type for precision.
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Scissors, RotateCcw, Crosshair } from 'lucide-react';
+import { Scissors, RotateCcw, Crosshair, Play, Pause } from 'lucide-react';
 import type { VideoInfo, SegmentSelection } from '../electron.d';
 
 interface ScrubberProps {
@@ -18,6 +18,19 @@ interface ScrubberProps {
   playhead: number | null;
   onSegmentChange: (segment: SegmentSelection) => void;
   onSeekFrame?: (frame: number) => void;
+  /**
+   * Transport for the chain preview, when one is open.
+   *
+   * It belongs here rather than on the step rail: this is the timeline, and
+   * play is a statement about the timeline. The rail says which picture.
+   */
+  playback?: {
+    isPlaying: boolean;
+    targetFps: number;
+    achievedFps: number | null;
+    behind: boolean;
+    onToggle: () => void;
+  } | null;
 }
 
 export function frameToTimecode(frame: number, fps: number): string {
@@ -50,6 +63,7 @@ export const Scrubber = memo<ScrubberProps>(({
   playhead,
   onSegmentChange,
   onSeekFrame,
+  playback = null,
 }: ScrubberProps) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<Handle>(null);
@@ -112,6 +126,25 @@ export const Scrubber = memo<ScrubberProps>(({
     };
   }, [showPopover]);
 
+  // Space is the transport key everywhere, so it is worth taking globally —
+  // but a focused button already fires its click on Space, and a text field
+  // needs its spaces. Without both guards one press toggles twice.
+  const onToggle = playback?.onToggle;
+  useEffect(() => {
+    if (!onToggle) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+      if (target?.isContentEditable) return;
+      e.preventDefault();
+      onToggle();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onToggle]);
+
   const handleTrackClick = (e: React.MouseEvent) => {
     if (!hasVideo || isProcessing) return;
     onSeekFrame?.(frameFromClientX(e.clientX));
@@ -147,6 +180,21 @@ export const Scrubber = memo<ScrubberProps>(({
 
   return (
     <div className="h-10 flex-shrink-0 flex items-center gap-2.5 px-3 bg-ink-900 border-t border-ink-800 relative">
+      {playback && (
+        <button
+          onClick={playback.onToggle}
+          disabled={!hasVideo || isProcessing}
+          className="w-[26px] h-[26px] flex-shrink-0 rounded-md grid place-items-center border border-ink-750 bg-ink-850 text-ink-300 hover:text-ink-100 hover:border-ink-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          title={playback.isPlaying ? 'Pause — or press Space' : 'Play this step — or press Space'}
+          aria-label={playback.isPlaying ? 'Pause' : 'Play'}
+          aria-pressed={playback.isPlaying}
+        >
+          {playback.isPlaying
+            ? <Pause className="w-3.5 h-3.5" />
+            : <Play className="w-3.5 h-3.5" />}
+        </button>
+      )}
+
       <span className="text-[11px] font-mono tabular-nums text-ink-500 flex-shrink-0 w-[52px]">
         {segment.enabled ? frameToTimecode(inFrame, fps) : '00:00:00'}
       </span>
@@ -203,6 +251,21 @@ export const Scrubber = memo<ScrubberProps>(({
       <span className="text-[11px] font-mono tabular-nums text-ink-500 flex-shrink-0 w-[52px] text-right">
         {frameToTimecode(segment.enabled ? outFrame : totalFrames, fps)}
       </span>
+
+      {playback?.isPlaying && playback.targetFps > 0 && (
+        <span
+          className={`text-[11px] font-mono tabular-nums flex-shrink-0 ${
+            playback.behind ? 'text-warn-400' : 'text-ink-500'
+          }`}
+          title={playback.behind
+            ? 'The chain is rendering slower than this step plays. Every frame is still shown, in order — the clock is what slipped, not the picture.'
+            : 'Playing at the rate this step runs at'}
+        >
+          {playback.behind && playback.achievedFps !== null
+            ? `${playback.achievedFps.toFixed(1)} / ${playback.targetFps.toFixed(2)}`
+            : playback.targetFps.toFixed(2)}
+        </span>
+      )}
 
       <div className="relative flex-shrink-0" ref={popoverRef}>
         <button

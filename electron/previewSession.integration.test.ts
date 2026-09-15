@@ -119,4 +119,76 @@ describe.skipIf(!configured)('preview session, end to end', () => {
     session.dispose();
     await fs.remove(scriptPath);
   }, 120000);
+
+  it('streams frames under credit, and stops promptly', async () => {
+    const clip = process.env.VK_SMOKE_CLIP!;
+    const outDir = process.env.VK_SMOKE_DIR!;
+    await fs.ensureDir(outDir);
+
+    const generator = new VapourSynthScriptGenerator();
+    const scriptPath = await generator.generateScript({
+      inputVideo: clip,
+      enginePath: '',
+      pluginsPath: path.join(repo, 'data', 'vapoursynth-portable', 'Lib',
+                             'site-packages', 'vapoursynth', 'plugins'),
+      defaultBackend: 'tensorrt',
+      useFp32: false,
+      modelType: 'image' as const,
+      upscalingEnabled: false,
+      colorimetry: {},
+      filters: [],
+      numStreams: 2,
+      outputFormat: 'vs.YUV420P8',
+      generatePreviewOutputs: true,
+    } as any);
+
+    const session = new PreviewSession();
+    await session.start();
+    const outputs = await session.open(scriptPath, 1000);
+    const last = outputs[outputs.length - 1];
+
+    const received: number[] = [];
+    let ended = false;
+    session.onStream = event => {
+      if (event.type === 'pframe') received.push(event.n);
+      if (event.type === 'end') ended = true;
+    };
+
+    // Credit is the whole of the flow control: three granted, three delivered,
+    // and then nothing until more is given.
+    await session.play({ stream: 1, output: last.index, from: 100, width: 1280, credits: 3 });
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    expect(received).toEqual([100, 101, 102]);
+
+    session.credit(1, 2);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    expect(received).toEqual([100, 101, 102, 103, 104]);
+
+    // A stop has to beat the frame being rendered, not queue behind it.
+    const before = Date.now();
+    const lastFrame = await session.stop(1);
+    const stopMs = Date.now() - before;
+    console.log(`stop replied in ${stopMs} ms at frame ${lastFrame}`);
+    expect(stopMs).toBeLessThan(1000);
+    expect(ended).toBe(false);
+
+    // Push throughput, against the pull ceiling the first test prints.
+    await session.play({ stream: 2, output: last.index, from: 200, width: 1280, credits: 64 });
+    const started = Date.now();
+    let streamed = 0;
+    session.onStream = event => {
+      if (event.type !== 'pframe') return;
+      streamed += 1;
+      // Keep the window open, the way the pacer does on every present.
+      session.credit(2, 1);
+    };
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    const fps = streamed / ((Date.now() - started) / 1000);
+    console.log(`push: ${streamed} frames, ${fps.toFixed(1)} fps at 1280 wide`);
+    expect(streamed).toBeGreaterThan(0);
+
+    await session.stop(2);
+    session.dispose();
+    await fs.remove(scriptPath);
+  }, 120000);
 });

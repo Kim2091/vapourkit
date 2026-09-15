@@ -25,6 +25,12 @@ export interface ChainPreview {
    * upstream step would be shown wearing a grade that is not applied to it.
    */
   liveGradeStep: number | null;
+  /** True while frames are streaming rather than being asked for one by one. */
+  isPlaying: boolean;
+  /** Where playing frames come from, bypassing React. */
+  frameSource: {
+    subscribe: (listener: (frame: ChainPreviewFrame) => void) => () => void;
+  } | null;
   /** Another step's picture, pinned as the left of the split. */
   referenceFrame: ChainPreviewFrame | null;
   referenceLabel: string | null;
@@ -199,8 +205,13 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   // The picker solves this grade's lift from the picture entering it. In a
   // session that is only true on the step feeding the grade; outside one the
   // <img> is that picture by definition.
+  // Not while playing: the picker samples React's frame, which during playback
+  // is only whatever was last pushed through state for sizing — so it would
+  // solve a lift from a frame that is no longer on screen.
   const canPickBlack = Boolean(
-    gradePreview?.onPick && (chainFrame ? gradeIsLive : previewFrame),
+    gradePreview?.onPick
+    && !chainPreview?.isPlaying
+    && (chainFrame ? gradeIsLive : previewFrame),
   );
 
   // Reported up rather than acted on here: the buttons are in the dock, and it
@@ -312,8 +323,11 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 gradeValues={gradeIsLive ? gradePreview!.values : null}
                 holdingBefore={gradeIsLive && gradePreview!.holdingBefore}
                 mode={gradePreview?.mode}
-                referenceFrame={chainPreview?.referenceFrame ?? null}
-                referenceLabel={chainPreview?.referenceLabel ?? null}
+                frameSource={chainPreview?.frameSource ?? null}
+                // A frozen reference beside a moving picture is a comparison
+                // of two different moments, so it sits out playback.
+                referenceFrame={chainPreview?.isPlaying ? null : chainPreview?.referenceFrame ?? null}
+                referenceLabel={chainPreview?.isPlaying ? null : chainPreview?.referenceLabel ?? null}
                 showClipping={showClipping}
                 picking={picking}
                 onPick={(sample) => gradePreview?.onPick?.(sample)}

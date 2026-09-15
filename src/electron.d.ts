@@ -36,12 +36,28 @@ export interface ElectronAPI {
     filters?: Filter[],
     numStreams?: number,
     segment?: SegmentSelection
-  ) => Promise<{ success: boolean; error?: string; cancelled?: boolean; outputs?: PreviewOutput[] }>;
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    cancelled?: boolean;
+    outputs?: PreviewOutput[];
+    /** Names the playback port this open handed over. */
+    token?: string;
+  }>;
   previewSelect: (index: number) => Promise<{ success: boolean; error?: string }>;
   previewFrame: (n: number, width: number) => Promise<PreviewFrameResult>;
   /** Stops an open in flight, including a preflight sitting in an engine build. */
   previewCancel: () => Promise<{ success: boolean; cancelled: boolean }>;
   previewClose: () => Promise<{ success: boolean }>;
+  /** Starts pushing frames down the playback port. */
+  previewPlay: (options: PreviewPlayOptions) => Promise<{
+    success: boolean;
+    error?: string;
+    stream?: number;
+    prefetch?: number;
+    from?: number;
+  }>;
+  previewStop: (stream: number) => Promise<{ success: boolean; error?: string; n?: number | null }>;
   getOutputResolution: (
     videoPath: string,
     modelPath: string | null,
@@ -277,6 +293,32 @@ export interface SetupProgress {
 }
 
 /** One selectable step of the chain, as the open script exposes it. */
+export interface PreviewPlayOptions {
+  /** Caller-assigned id, echoed on every frame so stale ones can be dropped. */
+  stream: number;
+  output: number;
+  /** First frame, in the output's own numbering. */
+  from: number;
+  width: number;
+  /** Frames the server may send before it waits for more credit. */
+  credits: number;
+  prefetch?: number;
+}
+
+/** What arrives on the playback port. */
+export type PreviewStreamMessage =
+  | {
+      type: 'pframe';
+      stream: number;
+      n: number;
+      output: number;
+      width: number;
+      height: number;
+      data: Uint8Array;
+    }
+  | { type: 'end'; stream: number; n: number | null }
+  | { type: 'error'; stream: number; n: number; error: string };
+
 export interface PreviewOutput {
   /** Script output index: 0 is the source, then one per enabled filter. */
   index: number;

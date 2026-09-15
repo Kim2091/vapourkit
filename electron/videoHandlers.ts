@@ -1,7 +1,8 @@
-import { ipcMain, BrowserWindow, shell } from 'electron';
+import { ipcMain, BrowserWindow, shell, MessageChannelMain, type MessagePortMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as os from 'os';
+import { randomUUID } from 'crypto';
 import { spawn } from 'child_process';
 import { logger } from './logger';
 import { PATHS } from './constants';
@@ -31,6 +32,26 @@ let infoExecutor: UpscaleExecutor | null = null;
 let activeQueueItemLogger: QueueItemLogger | null = null;
 let previewSession: PreviewSession | null = null;
 let previewScriptPath: string | null = null;
+
+/**
+ * The renderer end of the playback channel.
+ *
+ * Frames are pushed down this rather than returned from one `invoke` per
+ * frame. A port does not make the pixels cheaper to move — main and renderer
+ * are separate processes, and Electron only transfers ports, never buffers —
+ * but it removes the per-frame promise, and, because preload hands it to the
+ * main world, the one copy that crossing contextBridge would have added.
+ */
+let previewPort: MessagePortMain | null = null;
+
+/** Names the port for the open that created it, so a stale one is ignored. */
+let previewPortToken: string | null = null;
+
+function closePreviewPort(): void {
+  previewPort?.close();
+  previewPort = null;
+  previewPortToken = null;
+}
 
 /**
  * Bumped by every open and by every cancel.
@@ -73,6 +94,7 @@ export function cancelAllVideoProcessing(): void {
     previewSession.dispose();
     previewSession = null;
   }
+  closePreviewPort();
 }
 
 /**
@@ -668,8 +690,40 @@ export function registerVideoHandlers(
       previewSession = session;
       previewScriptPath = scriptPath;
 
+      // The playback channel. Created here rather than on first play so the
+      // renderer has it before the user can press anything, and so its `close`
+      // is the signal that the renderer went away — a reload mid-playback
+      // would otherwise leave python rendering into a pipe nobody reads.
+      closePreviewPort();
+      const { port1, port2 } = new MessageChannelMain();
+      const portToken = randomUUID();
+      previewPort = port1;
+      previewPortToken = portToken;
+
+      port1.on('message', messageEvent => {
+        const data = messageEvent.data as { type?: string; stream?: number; count?: number };
+        if (data?.type === 'credit' && typeof data.stream === 'number') {
+          session.credit(data.stream, Number(data.count) || 1);
+        }
+      });
+      port1.on('close', () => {
+        if (previewPortToken !== portToken) return;
+        previewPort = null;
+        previewPortToken = null;
+      });
+      port1.start();
+
+      session.onStream = streamEvent => {
+        if (previewPortToken !== portToken) return;
+        previewPort?.postMessage(streamEvent);
+      };
+
+      // postMessage rather than an invoke result: the port itself can only
+      // travel this way, and preload re-posts it into the main world.
+      event.sender.postMessage('preview-port', { token: portToken }, [port2]);
+
       logger.info(`Preview session open with ${outputs.length} steps`);
-      return { success: true, outputs };
+      return { success: true, outputs, token: portToken };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error('Error opening preview session:', error);
@@ -682,6 +736,7 @@ export function registerVideoHandlers(
     // Invalidates any open still in flight, so it tears itself down instead
     // of installing a session after the user asked to stop.
     previewOpenToken++;
+    closePreviewPort();
 
     if (infoExecutor) {
       infoExecutor.cancelInfoExtraction();
@@ -697,6 +752,41 @@ export function registerVideoHandlers(
     }
     return { success: true, cancelled: true };
   });
+
+  handleValidated(
+    'preview-play',
+    z.object({
+      stream: z.number().int().nonnegative(),
+      output: z.number().int().nonnegative(),
+      from: z.number().int().nonnegative(),
+      width: z.number().int().nonnegative(),
+      credits: z.number().int().positive().max(64),
+      prefetch: z.number().int().positive().max(16).optional(),
+    }),
+    async (options) => {
+      if (!previewSession) return { success: false, error: 'No preview session is open' };
+      if (!previewPort) return { success: false, error: 'The preview session has no playback channel' };
+      try {
+        const started = await previewSession.play(options);
+        return { success: true, ...started };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
+
+  handleValidated(
+    'preview-stop',
+    z.number().int().nonnegative(),
+    async (stream) => {
+      if (!previewSession) return { success: true, n: null };
+      try {
+        return { success: true, n: await previewSession.stop(stream) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
 
   ipcMain.handle('preview-select', async (event, index: number) => {
     if (!previewSession) return { success: false, error: 'No preview session is open' };
@@ -732,6 +822,7 @@ export function registerVideoHandlers(
 
   ipcMain.handle('preview-close', async () => {
     previewOpenToken++;
+    closePreviewPort();
     if (previewSession) {
       previewSession.dispose();
       previewSession = null;

@@ -274,13 +274,26 @@ export class DependencyManager {
       const needsCatalogSync = needsLinuxPluginFilterCatalogSync(
         configManager.getLinuxPluginFilterCatalogRevision(),
       );
-      if (storedVersion !== currentVersion || needsCatalogSync) {
+      // In development the version never changes, so an edit to
+      // include/preview_server.py would never reach data/config/, which is
+      // the copy previewSession.ts actually spawns. Every protocol change
+      // would silently run against the old server.
+      const devNeedsConfigSync = !app.isPackaged;
+      if (storedVersion !== currentVersion || needsCatalogSync || devNeedsConfigSync) {
         const reason = storedVersion !== currentVersion
           ? `App version changed: ${storedVersion || 'none'} → ${currentVersion}`
-          : `Linux filter catalog revision changed to ${LINUX_PLUGIN_FILTER_CATALOG_REVISION}`;
+          : needsCatalogSync
+            ? `Linux filter catalog revision changed to ${LINUX_PLUGIN_FILTER_CATALOG_REVISION}`
+            : 'Development build — re-syncing generated config files';
         logger.dependency(`${reason} — updating bundled files`);
         try {
-          await this.updateBundledFiles();
+          // A dev run only needs the generated config files; copying filter
+          // templates on every launch would be wasted work.
+          if (storedVersion === currentVersion && !needsCatalogSync) {
+            await this.syncGeneratedConfigFiles(getBundledBasePath());
+          } else {
+            await this.updateBundledFiles();
+          }
           if (storedVersion !== currentVersion) {
             await configManager.setAppVersion(currentVersion);
           }

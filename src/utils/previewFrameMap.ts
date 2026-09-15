@@ -35,3 +35,49 @@ export function toOutputFrame(
 
   return Math.min(target.frames - 1, Math.max(0, scaled));
 }
+
+/**
+ * The inverse: a frame of `index`'s clip, back in source space.
+ *
+ * Returned unrounded. Playback walks the timeline through this on every
+ * presented frame, and rounding here would let a 2x step's odd frames floor
+ * onto the same source frame twice — the playhead would advance in stutters
+ * and a step switch would lose up to a frame each time. Callers round only
+ * when they need an integer.
+ */
+export function toSourceFrame(
+  outputs: PreviewOutput[],
+  index: number,
+  outputFrame: number,
+): number {
+  const target = outputs.find(output => output.index === index);
+  if (!target || target.frames <= 0) return Math.max(0, outputFrame);
+
+  const base = outputs.find(output => output.index === 0) ?? outputs[0];
+  if (!base || base.frames <= 0 || base.frames === target.frames) {
+    return Math.max(0, outputFrame);
+  }
+  return Math.max(0, outputFrame * (base.frames / target.frames));
+}
+
+/**
+ * The rate to play `index` at.
+ *
+ * Its own fps when the clip reports one. A variable-rate node reports 0/1, and
+ * there the honest estimate is the source rate scaled by how many frames this
+ * output has: a step that doubled the frames doubled the rate.
+ */
+export function outputFps(
+  outputs: PreviewOutput[],
+  index: number,
+  sourceFps: number,
+): number {
+  const target = outputs.find(output => output.index === index);
+  if (!target) return sourceFps;
+
+  if (target.fpsNum > 0 && target.fpsDen > 0) return target.fpsNum / target.fpsDen;
+
+  const base = outputs.find(output => output.index === 0) ?? outputs[0];
+  if (!base || base.frames <= 0 || target.frames <= 0) return sourceFps;
+  return sourceFps * (target.frames / base.frames);
+}
