@@ -80,8 +80,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   startUpscale: (videoPath: string, modelPath: string, outputPath: string, defaultBackend?: string, upscalingEnabled?: boolean, filters?: any, upscalePosition?: number, numStreams?: number, segment?: any, benchmarkMode?: boolean) =>
     ipcRenderer.invoke('start-upscale', videoPath, modelPath, outputPath, defaultBackend, upscalingEnabled, filters, upscalePosition, numStreams, segment, benchmarkMode),
-  previewSegment: (videoPath: string, modelPath: string | null, defaultBackend?: string, upscalingEnabled?: boolean, filters?: any, numStreams?: number, startFrame?: number, endFrame?: number) =>
-    ipcRenderer.invoke('preview-segment', videoPath, modelPath, defaultBackend, upscalingEnabled, filters, numStreams, startFrame, endFrame),
   cancelUpscale: () => ipcRenderer.invoke('cancel-upscale'),
   killUpscale: () => ipcRenderer.invoke('kill-upscale'),
   onUpscaleProgress: (callback: (progress: any) => void) => {

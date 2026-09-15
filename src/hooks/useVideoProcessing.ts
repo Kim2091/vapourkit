@@ -140,8 +140,7 @@ export function useVideoProcessing({
           }
           pendingPreviewFrameRef.current = null;
 
-          // Only auto-load video if we're in a real processing session (not preview)
-          // Preview handles its own video loading via handlePreviewSegment
+          // Only auto-load video if we're in a real processing session.
           if (isProcessingRef.current) {
             setIsProcessing(false);
             setPreviewFrame(null);
@@ -155,6 +154,11 @@ export function useVideoProcessing({
         } else if (progress.type === 'error') {
           setIsProcessing(false);
           setIsStopping(false);
+          // The status chip is a progress readout, not an error log: leaving
+          // the message there strands a failure in a one-line truncated pill
+          // that nothing ever clears. The toast is what carries it.
+          setUpscaleProgress(null);
+          notify.error('Processing failed', progress.message);
         }
       }
     });

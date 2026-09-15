@@ -27,7 +27,6 @@ import {
 } from './videoCompare';
 
 let upscaleExecutor: UpscaleExecutor | null = null;
-let previewExecutor: UpscaleExecutor | null = null;
 let infoExecutor: UpscaleExecutor | null = null;
 let activeQueueItemLogger: QueueItemLogger | null = null;
 let previewSession: PreviewSession | null = null;
@@ -65,11 +64,6 @@ export function cancelAllVideoProcessing(): void {
     upscaleExecutor.cancelInfoExtraction();
     upscaleExecutor.kill();
     upscaleExecutor = null;
-  }
-  if (previewExecutor) {
-    previewExecutor.cancelInfoExtraction();
-    previewExecutor.kill();
-    previewExecutor = null;
   }
   if (infoExecutor) {
     infoExecutor.cancelInfoExtraction();
@@ -301,12 +295,6 @@ export function registerVideoHandlers(
         upscaleExecutor.kill();
         upscaleExecutor = null;
       }
-      if (previewExecutor) {
-        qlog('Canceling previous preview executor before starting new processing');
-        previewExecutor.cancelInfoExtraction();
-        previewExecutor.kill();
-        previewExecutor = null;
-      }
       
       qlog('Starting processing');
       qlog(`Input: ${videoPath}`);
@@ -415,7 +403,7 @@ export function registerVideoHandlers(
         mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
 
         qlog('Starting execution');
-        await executor.execute(scriptPath, outputPath, videoPath, totalFrames, false, segment?.enabled ? segment : undefined, fps, benchmarkMode);
+        await executor.execute(scriptPath, outputPath, videoPath, totalFrames, segment?.enabled ? segment : undefined, fps, benchmarkMode);
 
         // Cleanup
         qlog('Cleaning up script file');
@@ -753,110 +741,6 @@ export function registerVideoHandlers(
       previewScriptPath = null;
     }
     return { success: true };
-  });
-
-  // Preview segment handler - processes a short segment and opens it in the default video player
-  ipcMain.handle('preview-segment', async (
-    event,
-    videoPath: string,
-    modelPath: string | null,
-    defaultBackend?: string,
-    upscalingEnabled?: boolean,
-    filters?: any[],
-    numStreams?: number,
-    startFrame?: number,
-    endFrame?: number
-  ) => {
-    return await withLogSeparator(async () => {
-      logger.upscale('Starting segment preview');
-      logger.upscale(`Input: ${videoPath}`);
-      logger.upscale(`Preview frames: ${startFrame ?? 0} to ${endFrame ?? 'auto'}`);
-      
-      // Cancel any pending info extraction or previous preview
-      if (infoExecutor) {
-        infoExecutor.cancelInfoExtraction();
-        infoExecutor = null;
-      }
-      if (previewExecutor) {
-        logger.upscale('Canceling previous preview executor');
-        previewExecutor.cancelInfoExtraction();
-        previewExecutor.kill();
-        previewExecutor = null;
-      }
-      
-      try {
-        // Create temporary preview output path
-        const timestamp = Date.now();
-        const previewPath = path.join(os.tmpdir(), `vapourkit_preview_${timestamp}.mkv`);
-        
-        // Create segment config for preview
-        const previewSegment = {
-          enabled: true,
-          startFrame: startFrame ?? 0,
-          endFrame: endFrame ?? -1
-        };
-        
-        const config = createScriptConfig(
-          videoPath,
-          modelPath,
-          dependencyManager,
-          defaultBackend,
-          upscalingEnabled,
-          filters,
-          numStreams,
-          previewSegment
-        );
-        
-        const scriptPath = await scriptGenerator.generateScript(config);
-        logger.upscale(`Preview script generated: ${scriptPath}`);
-        
-        // Get video metadata for fps (needed for audio segment trimming)
-        const videoMetadata = await extractVideoMetadata(videoPath);
-        const fps = videoMetadata.fps || 24;
-        logger.upscale(`Input video fps: ${fps}`);
-        
-        // Initialize executor for preview
-        const vspipePath = dependencyManager.getVSPipePath();
-        const pythonPath = dependencyManager.getPythonExecutablePath();
-        const executor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
-        previewExecutor = executor;
-
-        // Stream indexing progress and re-check the module slot before executing —
-        // start-upscale and a subsequent preview-segment both null the previous
-        // previewExecutor mid-flight.
-        let lastIndexPct = -1;
-        const totalFrames = await executor.getFrameCount(scriptPath, (pct) => {
-          if (pct !== lastIndexPct) {
-            lastIndexPct = pct;
-            logger.upscale(`Preview indexing source: ${pct}%`);
-          }
-          mainWindow?.webContents.send('video-index-progress', { percentage: pct, complete: false });
-        });
-        logger.upscale(`Preview frames to process: ${totalFrames}`);
-
-        if (previewExecutor !== executor) {
-          logger.upscale('Preview canceled before execution started');
-          mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
-          return { success: false, error: 'Canceled' };
-        }
-        mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
-
-        // Execute preview (previewMode=true to skip subtitles for MKV compatibility)
-        await executor.execute(scriptPath, previewPath, videoPath, totalFrames, true, previewSegment, fps);
-        
-        // Cleanup script
-        await scriptGenerator.cleanupScript(scriptPath);
-        previewExecutor = null;
-        
-        logger.upscale('Preview completed successfully');
-        return { success: true, previewPath };
-      } catch (error) {
-        previewExecutor = null;
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        logger.error('Preview failed:', errorMsg);
-        return { success: false, error: errorMsg };
-      }
-    });
   });
 
   // Extract embedded thumbnail from video file

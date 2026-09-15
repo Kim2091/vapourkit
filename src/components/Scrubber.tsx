@@ -7,7 +7,7 @@
 // type for precision.
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Scissors, RotateCcw, Crosshair, Play } from 'lucide-react';
+import { Scissors, RotateCcw, Crosshair } from 'lucide-react';
 import type { VideoInfo, SegmentSelection } from '../electron.d';
 
 interface ScrubberProps {
@@ -18,8 +18,6 @@ interface ScrubberProps {
   playhead: number | null;
   onSegmentChange: (segment: SegmentSelection) => void;
   onSeekFrame?: (frame: number) => void;
-  /** Renders a short preview of the selection — carried over from the old panel. */
-  onPreviewSegment?: (startFrame: number, endFrame: number) => void;
 }
 
 export function frameToTimecode(frame: number, fps: number): string {
@@ -52,7 +50,6 @@ export const Scrubber = memo<ScrubberProps>(({
   playhead,
   onSegmentChange,
   onSeekFrame,
-  onPreviewSegment,
 }: ScrubberProps) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<Handle>(null);
@@ -255,18 +252,6 @@ export const Scrubber = memo<ScrubberProps>(({
                 </label>
               ))}
             </div>
-
-            {onPreviewSegment && (
-              <button
-                onClick={() => onPreviewSegment(inFrame, outFrame)}
-                disabled={isProcessing}
-                className="w-full h-[24px] mt-2 rounded inline-flex items-center justify-center gap-1.5 text-[11px] font-medium bg-ink-800 border border-ink-750 text-ink-300 hover:text-ink-100 hover:border-ink-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="Render a short preview of this selection"
-              >
-                <Play className="w-3 h-3" />
-                Preview selection
-              </button>
-            )}
 
             <div className="flex items-center gap-2 mt-2 text-[10px] font-mono tabular-nums text-ink-400">
               <span>{selectedFrames.toLocaleString()} frames</span>

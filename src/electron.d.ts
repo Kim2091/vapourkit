@@ -92,16 +92,6 @@ export interface ElectronAPI {
     segment?: SegmentSelection,
     benchmarkMode?: boolean
   ) => Promise<UpscaleResult>;
-  previewSegment: (
-    videoPath: string,
-    modelPath: string | null,
-    defaultBackend?: BackendId,
-    upscalingEnabled?: boolean,
-    filters?: Filter[],
-    numStreams?: number,
-    startFrame?: number,
-    endFrame?: number
-  ) => Promise<{ success: boolean; previewPath?: string; error?: string }>;
   cancelUpscale: () => Promise<{ success: boolean }>;
   killUpscale: () => Promise<{ success: boolean }>;
   onUpscaleProgress: (callback: (progress: UpscaleProgress) => void) => () => void;

@@ -20,6 +20,9 @@ import type {
 } from '../electron.d';
 import { toOutputFrame } from '../utils/previewFrameMap';
 
+/** What the session was doing when it failed. */
+export type ChainPreviewErrorPhase = 'open' | 'render' | 'select';
+
 export interface ChainPreviewStep extends PreviewOutput {
   /** What to call this step in the rail. */
   label: string;
@@ -57,7 +60,13 @@ interface UseChainPreviewOptions {
    * ask for the reload that makes it real.
    */
   liveParameterFilterId?: string | null;
-  onError?: (message: string) => void;
+  /**
+   * `phase` is what the failure was in the middle of. Opening is the one the
+   * user is waiting on with nothing on screen yet, so it is the one that has
+   * earned an interruption; a frame that fails mid-session already has the
+   * rail and the stale picture to say so.
+   */
+  onError?: (message: string, phase: ChainPreviewErrorPhase) => void;
 }
 
 /** One frame number, as the two steps of a pair render it. */
@@ -252,9 +261,9 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
     [outputs, labels],
   );
 
-  const fail = useCallback((message: string) => {
+  const fail = useCallback((message: string, phase: ChainPreviewErrorPhase) => {
     setError(message);
-    onError?.(message);
+    onError?.(message, phase);
   }, [onError]);
 
   /**
@@ -291,7 +300,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
         });
         setError(null);
       } else if (result.error) {
-        fail(result.error);
+        fail(result.error, 'render');
       }
 
       // The reference, after the picture the user is actually working on, so
@@ -336,7 +345,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
         await window.electronAPI.previewSelect(next.index);
       }
     } catch (caught) {
-      fail(caught instanceof Error ? caught.message : String(caught));
+      fail(caught instanceof Error ? caught.message : String(caught), 'render');
     } finally {
       inFlight.current = false;
       setIsRendering(false);
@@ -371,7 +380,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
 
       if (!result.success || !result.outputs) {
         // A cancel is not a failure; it does not belong in the console.
-        if (!result.cancelled) fail(result.error ?? 'Could not open the preview session');
+        if (!result.cancelled) fail(result.error ?? 'Could not open the preview session', 'open');
         return;
       }
 
@@ -390,7 +399,7 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       request(playhead.current, last.index);
     } catch (caught) {
       if (token === openToken.current) {
-        fail(caught instanceof Error ? caught.message : String(caught));
+        fail(caught instanceof Error ? caught.message : String(caught), 'open');
       }
     } finally {
       if (token === openToken.current) setIsOpening(false);
@@ -439,12 +448,12 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       .previewSelect(index)
       .then(result => {
         if (!result.success) {
-          fail(result.error ?? 'Could not select that step');
+          fail(result.error ?? 'Could not select that step', 'select');
           return;
         }
         request(playhead.current, index);
       })
-      .catch(caught => fail(caught instanceof Error ? caught.message : String(caught)));
+      .catch(caught => fail(caught instanceof Error ? caught.message : String(caught), 'select'));
   }, [isOpen, request, fail]);
 
   /**

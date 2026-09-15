@@ -139,7 +139,7 @@ export class UpscaleExecutor {
     return this.vsInfoExtractor.getOutputInfo(scriptPath);
   }
 
-  async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0, previewMode: boolean = false, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<void> {
+  async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
         this.logExecutionStart(scriptPath, inputPath, outputPath, totalFrames);
@@ -162,7 +162,7 @@ export class UpscaleExecutor {
 
         // Spawn processes
         const vspipe = this.spawnVspipe(scriptPath, env, isRawVideo);
-        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, previewMode, segment, fps, benchmarkMode);
+        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, segment, fps, benchmarkMode);
         const ffmpeg = this.spawnFFmpeg(ffmpegArgs);
 
         this.setupProcessPiping(vspipe, ffmpeg);
@@ -282,7 +282,7 @@ export class UpscaleExecutor {
     }));
   }
 
-  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, previewMode: boolean = false, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<string[]> {
+  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<string[]> {
     if (benchmarkMode) {
       logger.upscale('Building FFmpeg command for BENCHMARK MODE (null output)');
       const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
@@ -369,13 +369,11 @@ export class UpscaleExecutor {
       ffmpegArgs.push('-c:a', 'copy');
     }
 
-    // Map all subtitle streams from input (skip in preview mode - MP4 doesn't support SRT subtitles)
-    if (metadata.hasSubtitles && !previewMode) {
+    // Map all subtitle streams from input
+    if (metadata.hasSubtitles) {
       logger.upscale(`Mapping ${metadata.subtitleStreams} subtitle stream(s)`);
       ffmpegArgs.push('-map', '1:s?');
       ffmpegArgs.push('-c:s', 'copy');
-    } else if (metadata.hasSubtitles && previewMode) {
-      logger.upscale(`Skipping ${metadata.subtitleStreams} subtitle stream(s) in preview mode (MP4 compatibility)`);
     }
 
     // Add video encoding settings

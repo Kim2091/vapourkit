@@ -632,36 +632,6 @@ function App() {
     }
   }, [addConsoleLog]);
 
-  const handlePreviewSegment = useCallback(async (startFrame: number, endFrame: number) => {
-    if (!videoInfo) return;
-    
-    const previewSeconds = Math.ceil((endFrame - startFrame) / (videoInfo.fps || 24));
-    addConsoleLog(`Starting ${previewSeconds}-second preview from frame ${startFrame}...`);
-    try {
-      const result = await window.electronAPI.previewSegment(
-        videoInfo.path,
-        selectedModel,
-        defaultBackend,
-        true,
-        filters,
-        numStreams,
-        startFrame,
-        endFrame
-      );
-      
-      if (result.success && result.previewPath) {
-        addConsoleLog(`Preview complete: ${result.previewPath}`);
-        // Load the preview into the built-in video player
-        setCompletedVideoPath(result.previewPath);
-        await loadCompletedVideo(result.previewPath);
-      } else {
-        addConsoleLog(`Preview failed: ${result.error}`);
-      }
-    } catch (error) {
-      addConsoleLog(`Preview error: ${getErrorMessage(error)}`);
-    }
-  }, [videoInfo, selectedModel, defaultBackend, filters, numStreams, addConsoleLog, loadCompletedVideo, setCompletedVideoPath]);
-
   // Launch vs-view with current workflow
   const handleLaunchPreviewer = useCallback(async () => {
     if (!videoInfo || isLaunchingPreviewer) return;
@@ -759,7 +729,12 @@ function App() {
     segment,
     previewWidth: 1280,
     liveParameterFilterId: activeFilterEditorId,
-    onError: (message) => addConsoleLog(`Preview: ${message}`),
+    onError: (message, phase) => {
+      addConsoleLog(`Preview: ${message}`);
+      // An open that fails leaves nothing on screen to carry the reason, so
+      // it gets the toast. The console keeps every phase.
+      if (phase === 'open') notify.error('Inspect could not open', message);
+    },
   });
 
   const {
@@ -1517,7 +1492,6 @@ function App() {
                     playhead={playheadFrame}
                     onSegmentChange={handleSegmentChange}
                     onSeekFrame={handleSeekFrame}
-                    onPreviewSegment={handlePreviewSegment}
                   />
 
                   <ConsoleDrawer
