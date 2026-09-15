@@ -71,7 +71,6 @@ export const LINUX_PLUGIN_FILTERS = {
     'Fast Line Darken.vkfilter',
     'FDoG Edge Mask.vkfilter',
     'Fine Dehalo.vkfilter',
-    'Fine Dehalo2.vkfilter',
     'Fine Sharp.vkfilter',
     'Flux Smooth.vkfilter',
     'FreyChen Edge Mask.vkfilter',
