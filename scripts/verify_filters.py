@@ -164,7 +164,14 @@ def check(path: Path, render: bool) -> dict:
             result.update(verdict="failed", why="no clip", detail="the code left no clip behind")
             return result
         if render:
-            out.get_frame(0)
+            # Not just frame 0. A filter that indexes around the playhead —
+            # anything comparing against the previous frame, or trimming, or
+            # splicing — is fine at the start and wrong at the end, and one
+            # frame from the front proves nothing about either edge.
+            last = out.num_frames - 1
+            for n in dict.fromkeys([0, 1, last // 2, last - 1, last]):
+                if 0 <= n <= last:
+                    out.get_frame(n)
     except BaseException as error:  # noqa: BLE001 - a filter may raise anything
         verdict, why = classify(error)
         result.update(
@@ -180,7 +187,8 @@ def check(path: Path, render: bool) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--render", action="store_true",
-                        help="pull a frame as well as building the graph")
+                        help="pull frames from both ends and the middle, as well "
+                             "as building the graph")
     parser.add_argument("--json", type=Path, help="write the full report here")
     parser.add_argument("--only", help="comma-separated filter names to check")
     args = parser.parse_args()

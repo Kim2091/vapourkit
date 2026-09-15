@@ -1,6 +1,7 @@
 {
   "Based AA.vkfilter": "model",
   "CQTGMC.vkfilter": "needs interlaced",
+  "DAA Anti-Aliasing.vkfilter": "needs interlaced",
   "DPIR Denoise_Deblock.vkfilter": "model",
   "Debicubic.vkfilter": "source shape",
   "Debilinear.vkfilter": "source shape",
@@ -14,6 +15,7 @@
   "Guided Filter.vkfilter": "source shape",
   "LGhost Deghost.vkfilter": "missing plugin or module",
   "Load LUT.vkfilter": "needs input",
+  "NNEDI3.vkfilter": "needs interlaced",
   "Oyster.vkfilter": "missing plugin or module",
   "QTGMC _New_.vkfilter": "needs interlaced",
   "QTGMC _Old_.vkfilter": "needs interlaced",

@@ -46,7 +46,10 @@ interface Result {
 
 function run(): Result[] {
   const out = path.join(os.tmpdir(), `vk-filters-${process.pid}.json`);
-  const result = spawnSync(python, [script, '--json', out], {
+  // --render, not just graph construction. A filter that indexes around the
+  // playhead builds fine and then fails at an edge; Add Duplicates did exactly
+  // that, and pulling only frame 0 called it healthy.
+  const result = spawnSync(python, [script, '--render', '--json', out], {
     cwd: repo,
     env: { ...process.env, PYTHONPATH: sitePackages },
     encoding: 'utf8',

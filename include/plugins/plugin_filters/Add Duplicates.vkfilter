@@ -1,40 +1,42 @@
 name = "Add Duplicates"
 category = ["Hybrid", "Frame Manipulation"]
 code = """
-# Add duplicate frames when temporal difference is below threshold
-# From hybrid_filters/AddDuplicates.py, reimplemented: the bundled addDup()
-# trims to frame index clip.num_frames (core.std.Trim(clip, 1, clip.num_frames))
-# and clip.std.Trim(clip, 0, 1) for a single first frame, both off-by-one -
-# valid frame indices only go up to num_frames - 1, and Trim's end index is
-# inclusive. This always raises, on any clip, not just the synthetic test one.
+# Detects a frame that barely differs from the one before it and shows that
+# previous frame in its place.
+#
+# The bundled AddDuplicates.py is not used. It trims to clip.num_frames, an
+# index one past the last frame, so it raised on every clip it was ever given;
+# and it built the replacement by splicing around the frame, which needs three
+# Trims and an edge case at each end for something that is one substitution.
+#
+# Here the comparison clip is the source delayed by one frame, so frame n of
+# it is frame n-1 of the source. PlaneStatsDiff against it is exactly "how
+# different is this frame from its predecessor", and the substitution is then
+# a choice between two clips of the same length, with no arithmetic on frame
+# indices and nothing to get wrong at the ends.
 
-def _adding_dup(clip, insert_at):
-    if insert_at <= 0 or insert_at >= clip.num_frames:
-        return clip
-    pre = core.std.Trim(clip, 0, insert_at - 1)
-    dup = core.std.Trim(clip, insert_at - 1, insert_at - 1)
-    post = core.std.Trim(clip, insert_at + 1, None)
-    return core.std.Splice([pre, dup, post], mismatch=True)
+thresh = 0.3   # PlaneStatsDiff below which a frame counts as a duplicate.
 
+if clip.format.color_family not in (vs.YUV, vs.GRAY):
+    raise ValueError("Add Duplicates only reads luma, so it needs a YUV or GRAY clip.")
 
-def _add_dup(clip, thresh=0.3):
-    prev = core.std.Trim(clip, 0, clip.num_frames - 2)  # frames 0..N-2
-    curr = core.std.Trim(clip, 1, clip.num_frames - 1)  # frames 1..N-1
-    diffclip = core.std.PlaneStats(curr, prev)
-
-    def select_func(n, f):
-        diff = f.props['PlaneStatsDiff']
-        if diff > thresh:
-            return clip.std.SetFrameProps(_DupApplied=False, _Diff=diff)
-        modified = _adding_dup(clip, n + 1)  # n+1 because diffclip starts from frame 1
-        return modified.std.SetFrameProps(_DupApplied=True, _Diff=diff)
-
-    result = core.std.FrameEval(curr, select_func, prop_src=diffclip)
-    first_frame = core.std.Trim(clip, 0, 0).std.SetFrameProps(_DupApplied=False, _Diff=1.0)
-    return core.std.Splice([first_frame, result], mismatch=True)
+# Held under its own name because the last line rebinds `clip`, and _pick is
+# called at render time: a closure over `clip` would by then be pointing at
+# the FrameEval node itself, and asking it for a frame asks it for a frame.
+_source = clip
+_previous = (_source[0] + _source)[:_source.num_frames]
+_diff = core.std.PlaneStats(_source, _previous)
 
 
-clip = _add_dup(clip, thresh=0.3)"""
+def _pick(n, f):
+    diff = f.props["PlaneStatsDiff"]
+    # Frame 0 has no predecessor, so it is never a duplicate of one.
+    if n == 0 or diff > thresh:
+        return _source.std.SetFrameProps(_DupApplied=False, _Diff=diff)
+    return _previous.std.SetFrameProps(_DupApplied=True, _Diff=diff)
+
+
+clip = core.std.FrameEval(_source, _pick, prop_src=_diff)"""
 description = "Detects frames with low temporal difference and duplicates the previous frame if below threshold"
 
 [metadata]

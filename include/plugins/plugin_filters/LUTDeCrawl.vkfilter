@@ -9,10 +9,11 @@ from decrawl import LUTDeCrawl
 from vstools import depth
 
 # LUTDeCrawl only accepts 8-10 bit YUV, but the pipeline always hands filter
-# steps 16-bit YUV. Drop to 8-bit for the filter (dot crawl is an analog
-# capture artifact, historically 8-bit source anyway) and restore afterward.
+# steps 16-bit YUV. 10 rather than 8: the round trip quantises the whole
+# picture, not just the dot crawl being removed, so it is worth taking the
+# most the filter will accept.
 src_depth = clip.format.bits_per_sample
-clip = LUTDeCrawl(depth(clip, 8), ythresh=10, cthresh=10, maxdiff=50, scnchg=25, usemaxdiff=True)
+clip = LUTDeCrawl(depth(clip, 10), ythresh=10, cthresh=10, maxdiff=50, scnchg=25, usemaxdiff=True)
 clip = depth(clip, src_depth)"""
 description = "Removes dot crawl artifacts from video"
 
