@@ -7,7 +7,12 @@ import sys
 sys.path.insert(0, r'hybrid_filters')
 from deband import GradFun3
 
-clip = GradFun3(clip, thr=0.35, radius=16, elast=3.0, mask=2, mode=2, ampo=1, ampn=0, pat=32, dyn=False, staticnoise=False, smode=2, thr_det=2 + round(max(thr - 0.35, 0) / 0.3), debug=False, plane=0, bits=None, dyn_resize=False)"""
+# thr_det is derived from thr, so thr has to be a name before the call rather
+# than only a keyword inside it — as a bare name in the argument list it was a
+# NameError every time, whatever the source.
+thr = 0.35
+
+clip = GradFun3(clip, thr=thr, radius=16, elast=3.0, mask=2, mode=2, ampo=1, ampn=0, pat=32, dyn=False, staticnoise=False, smode=2, thr_det=2 + round(max(thr - 0.35, 0) / 0.3), debug=False, planes=[0], bits=None)"""
 description = "Advanced debanding combined with resizers for better detail preservation"
 
 [metadata]
