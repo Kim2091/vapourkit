@@ -34,6 +34,9 @@ export interface ChainPreviewPlayback {
   achievedFps: number | null;
   /** Sustained under target: the chain is the limit, not the clock. */
   behind: boolean;
+  /** Run the clip — or the segment, when one is set — round again at the end. */
+  loop: boolean;
+  setLoop: (loop: boolean) => void;
   play: () => void;
   pause: () => Promise<void>;
   toggle: () => void;
@@ -288,9 +291,24 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
 
   // -- playback ----------------------------------------------------------
   const [isPlaying, setIsPlaying] = useState(false);
+  /**
+   * Authoritative, and deliberately not synced from the state at render time.
+   * Callers read this to decide what to do *next* — frame-stepping pauses and
+   * then seeks in the same tick, and a ref that waits for a render would have
+   * the seek restart the stream it just stopped.
+   */
   const isPlayingRef = useRef(false);
-  isPlayingRef.current = isPlaying;
+  const setPlaying = useCallback((playing: boolean) => {
+    isPlayingRef.current = playing;
+    setIsPlaying(playing);
+  }, []);
   const [stats, setStats] = useState<PlaybackStats | null>(null);
+  const [loop, setLoopState] = useState(false);
+  const loopRef = useRef(false);
+  const setLoop = useCallback((next: boolean) => {
+    loopRef.current = next;
+    setLoopState(next);
+  }, []);
 
   const portRef = useRef<MessagePort | null>(null);
   const pacerRef = useRef<PlaybackPacer<PacedChainFrame> | null>(null);
@@ -436,6 +454,17 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
 
   // -- playback ----------------------------------------------------------
 
+  /**
+   * Where playback begins, and where a loop returns to.
+   *
+   * The segment is trimmed at the head of the chain, so a trimmed clip's
+   * frame 0 is the in point — which is also why the end of the stream is the
+   * out point, and looping needs nothing more than starting over.
+   */
+  const inPoint = useCallback(() => (
+    openSegment.current?.enabled ? openSegment.current.startFrame : 0
+  ), []);
+
   /** The rate `index` should run at, which is not the source rate. */
   const targetFpsFor = useCallback((index: number) => (
     outputFps(outputsRef.current, index, videoInfo?.fps || 24)
@@ -479,12 +508,12 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
    * in one go.
    */
   const settleAfterPlayback = useCallback(() => {
-    setIsPlaying(false);
+    setPlaying(false);
     setStats(null);
     lastShape.current = null;
     onPlayhead?.(playhead.current);
     request(playhead.current, selectedRef.current);
-  }, [request, onPlayhead]);
+  }, [request, onPlayhead, setPlaying]);
 
   const startStream = useCallback(async (index: number, sourceFrame: number) => {
     const port = portRef.current;
@@ -501,7 +530,13 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       onPresent: emitFrame,
       onCredit: (count) => port.postMessage({ type: 'credit', stream, count }),
       onStats: setStats,
-      onEnd: () => settleAfterPlayback(),
+      onEnd: () => {
+        // Read from the ref, not from a captured value: the toggle can be
+        // flipped in the middle of a run and should take effect at this end,
+        // not the next one.
+        if (loopRef.current && isPlayingRef.current) void startStreamRef.current(index, inPoint());
+        else settleAfterPlayback();
+      },
     });
     // A queued single-frame request would repaint over the stream.
     queued.current = null;
@@ -516,10 +551,14 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
 
     if (!result.success && streamId.current === stream) {
       pacer.stop();
-      setIsPlaying(false);
+      setPlaying(false);
       fail(result.error ?? 'Could not start playback', 'render');
     }
-  }, [targetFpsFor, emitFrame, settleAfterPlayback, frameFor, previewWidth, fail]);
+  }, [targetFpsFor, emitFrame, settleAfterPlayback, frameFor, previewWidth, fail,
+      setPlaying, inPoint]);
+
+  const startStreamRef = useRef(startStream);
+  startStreamRef.current = startStream;
 
   const pause = useCallback(async () => {
     const pacer = pacerRef.current;
@@ -534,13 +573,13 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
 
   const play = useCallback(() => {
     if (!portRef.current || isPlayingRef.current) return;
-    const trim = openSegment.current?.enabled ? openSegment.current.startFrame : 0;
+    const trim = inPoint();
     const total = outputsRef.current.find(output => output.index === 0)?.frames ?? 0;
     // Pressing play on the last frame starts over rather than doing nothing.
     const atEnd = total > 0 && playhead.current >= trim + total - 1;
-    setIsPlaying(true);
+    setPlaying(true);
     void startStream(selectedRef.current, atEnd ? trim : playhead.current);
-  }, [startStream]);
+  }, [startStream, setPlaying, inPoint]);
 
   const togglePlayback = useCallback(() => {
     if (isPlayingRef.current) void pause();
@@ -576,19 +615,19 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       return;
     }
     pacer.stop();
-    setIsPlaying(false);
+    setPlaying(false);
     fail(message.error, 'render');
-  }, [fail]);
+  }, [fail, setPlaying]);
 
   /** Drop the channel without asking the server anything. */
   const teardownPlayback = useCallback(() => {
     pacerRef.current?.stop();
     portRef.current?.close();
     portRef.current = null;
-    setIsPlaying(false);
+    setPlaying(false);
     setStats(null);
     lastShape.current = null;
-  }, []);
+  }, [setPlaying]);
 
   const open = useCallback(async () => {
     if (!videoInfo || isOpening) return;
@@ -866,6 +905,8 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
       targetFps: stats?.targetFps ?? 0,
       achievedFps: stats?.achievedFps ?? null,
       behind: stats?.behind ?? false,
+      loop,
+      setLoop,
       play,
       pause,
       toggle: togglePlayback,

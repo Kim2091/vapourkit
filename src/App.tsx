@@ -767,6 +767,32 @@ function App() {
   }, [isOpeningChainPreview, chainPreviewOpen, openChainPreview, closeChainPreview,
       cancelChainPreview, addConsoleLog]);
 
+  /**
+   * Play, opening the session first if there is not one.
+   *
+   * Playback needs the warm VapourSynth session that Inspect opens, but
+   * making the user press Inspect before they can press play is a rule about
+   * our plumbing, not about what they asked for. Pressing play opens it.
+   *
+   * The captured `play` stays valid across the await: everything it reads —
+   * the port, the outputs, the playhead, the selected step — lives in refs,
+   * and a failed or cancelled open leaves the port null so it does nothing.
+   */
+  const handleTogglePlayback = useCallback(() => {
+    if (chainPreview.playback.isPlaying) {
+      void chainPreview.playback.pause();
+      return;
+    }
+    if (chainPreviewOpen) {
+      chainPreview.playback.play();
+      return;
+    }
+    if (isOpeningChainPreview) return;
+    addConsoleLog('Opening the chain preview to play...');
+    void openChainPreview().then(() => chainPreview.playback.play());
+  }, [chainPreview.playback, chainPreviewOpen, isOpeningChainPreview,
+      openChainPreview, addConsoleLog]);
+
   const handleSeekFrame = useCallback(async (frameNumber: number) => {
     if (!videoInfo) return;
 
@@ -1497,13 +1523,21 @@ function App() {
                     playhead={playheadFrame}
                     onSegmentChange={handleSegmentChange}
                     onSeekFrame={handleSeekFrame}
-                    playback={chainPreview.isOpen ? {
+                    // Always present, disabled until there is something to
+                    // play. Withholding the transport until a video loads
+                    // left a hole where it belongs and shifted the whole bar
+                    // sideways the moment one arrived.
+                    playback={{
                       isPlaying: chainPreview.playback.isPlaying,
+                      isOpening: isOpeningChainPreview,
                       targetFps: chainPreview.playback.targetFps,
                       achievedFps: chainPreview.playback.achievedFps,
                       behind: chainPreview.playback.behind,
-                      onToggle: chainPreview.playback.toggle,
-                    } : null}
+                      onToggle: handleTogglePlayback,
+                      onPause: () => { void chainPreview.playback.pause(); },
+                      loop: chainPreview.playback.loop,
+                      onLoopChange: chainPreview.playback.setLoop,
+                    }}
                   />
 
                   <ConsoleDrawer
