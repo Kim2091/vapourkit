@@ -2,21 +2,26 @@ name = "DLSS Neural Uplift"
 category = ["Restoration", "Sharpening"]
 code = """
 # DLSS-NR ("Neural Uplift", the DLSS 5 generation) run as a 1:1 enhancement pass.
-# Requires: a Blackwell GPU (RTX 50-series), driver 570+, vsdlssnr.dll and nvngx_dlssnr.dll
+# Requires: an NVIDIA RTX GPU, driver 570+, vsdlssnr.dll and nvngx_dlssnr.dll
 # in the VapourSynth plugins folder. NVIDIA does not ship nvngx_dlssnr.dll with the driver.
+# The official DLL is included with NBA 2K27 and requires RTX 50 series.
+# RTX 20, 30, 40 and 50 series work with a patched DLL found elsewhere online.
+# Vapourkit does not provide patched DLLs.
 #
 # This is NOT an upscaler - the snippet pins its scaling ratio to 1.0 - so put it at the END
 # of the chain, after whatever changed the resolution.
 
-style           = 0     # 0-2. Style block baked into the weights; 0 is neutral.
-style_strength  = 1.0   # 0-1. How far the selected style is blended in. 0 makes style a no-op.
-intensity       = 1.0   # 0-1. Wet/dry blend of the enhanced image against the original.
-local_structure = 1.0   # Detail enhancement strength. Only used while auto_mask is on.
-skin_structure  = -1.0  # Skin-specific structure strength. -1 means "use local_structure".
-auto_mask       = 1     # Let the model derive its own protection mask rather than enhancing
+style           = {{style}}  # 0-2. Style block baked into the weights; 0 is neutral.
+working_scale   = {{working_scale}}  # 0.25-1.0. Try 0.75, then 0.5 for less model work.
+                        # Only the enhancement runs small; source detail and output size stay intact.
+style_strength  = {{style_strength}}  # 0-1. How far the selected style is blended in.
+intensity       = {{intensity}}       # 0-1. Wet/dry blend against the original.
+local_structure = {{local_structure}} # Detail enhancement strength; needs auto_mask.
+skin_structure  = {{skin_structure}}  # -1 means "use local_structure".
+auto_mask       = {{auto_mask}}  # Let the model derive its own protection mask rather than enhancing
                         # every pixel uniformly. Turning this off also disables both
                         # structure strengths, which are only applied through that mask.
-auto_motion     = 1     # Generate current->previous motion on the GPU when the D3D12 Video
+auto_motion     = {{auto_motion}}  # Generate current->previous motion on the GPU when the D3D12 Video
                         # estimator is available. A renderer-supplied motion clip still wins.
 
 # Colour space here is a correctness requirement, not a tuning choice. The model is LDR-clamped
@@ -63,8 +68,18 @@ to_srgb = dict(
 
 rgb = core.resize.Bicubic(clip, **to_srgb)
 
-rgb = core.dlssnr.Enhance(
-    rgb,
+if not 0.25 <= working_scale <= 1.0:
+    raise ValueError("DLSS Neural Uplift: working_scale must be between 0.25 and 1.0")
+
+nr_input = rgb
+if working_scale < 1.0:
+    # Round down to even dimensions for the automatic motion estimator, without enlarging tiny clips.
+    nr_width = min(rgb.width, max(2, int(rgb.width * working_scale) // 2 * 2))
+    nr_height = min(rgb.height, max(2, int(rgb.height * working_scale) // 2 * 2))
+    nr_input = core.resize.Bilinear(rgb, width=nr_width, height=nr_height)
+
+nr_output = core.dlssnr.Enhance(
+    nr_input,
     style=style,
     intensity=intensity,
     style_strength=style_strength,
@@ -73,6 +88,26 @@ rgb = core.dlssnr.Enhance(
     auto_mask=auto_mask,
     auto_motion=auto_motion,
 )
+
+if nr_input.width != rgb.width or nr_input.height != rgb.height:
+    # Matched residual: original + upsample(NR(small) - small).
+    # Bilinear is linear, so subtracting first saves a full-resolution resize and subtraction.
+    nr_delta = core.std.Expr([nr_output, nr_input], "x y -")
+    nr_delta = core.resize.Bilinear(nr_delta, width=rgb.width, height=rgb.height)
+    # One limit shared by R/G/B keeps the edit within SDR range without bending its direction.
+    # Plane rotations share storage and let one expression see all three colour channels.
+    # Fuse limiting and composition instead of writing several full-size intermediate frames.
+    nr_inputs = [core.std.ShufflePlanes(c, order, vs.RGB)
+                 for c in (rgb, nr_delta) for order in ([0, 1, 2], [1, 2, 0], [2, 0, 1])]
+    def nr_channel_limit(base, delta):
+        return (f"{delta} 0 > 1 {base} - {delta} 0.00000001 max / "
+                f"{delta} 0 < {base} 0 {delta} - 0.00000001 max / 1 ? ? 0 max 1 min")
+    nr_bound = (nr_channel_limit("x", "a") + " " + nr_channel_limit("y", "b") + " min "
+                + nr_channel_limit("z", "c") + " min")
+    nr_expr = core.akarin.Expr if hasattr(core, "akarin") else core.std.Expr
+    rgb = nr_expr(nr_inputs, nr_bound + " a * x + 0 max 1 min")
+else:
+    rgb = nr_output
 
 from_srgb = dict(
     format=src_format.id,
@@ -85,7 +120,47 @@ if not is_rgb:
     from_srgb["matrix"] = src_matrix
 
 clip = core.resize.Bicubic(rgb, **from_srgb)"""
-description = "NVIDIA DLSS 5 neural image enhancement (DLSS-NR) applied per frame at 1:1. Blackwell only."
+description = "DLSS neural image enhancement with adjustable processing resolution."
+
+[variables.working_scale]
+type = "number"
+default = 1.0
+description = "NR width/height scale, 0.25 to 1.0. Try 0.75 or 0.5 to reduce model work while keeping full-size source detail. 1.0 uses full resolution."
+
+[variables.style]
+type = "number"
+default = 0
+description = "Model style: 0, 1 or 2. 0 is neutral."
+
+[variables.style_strength]
+type = "number"
+default = 1.0
+description = "Style blend, 0 to 1. 0 disables the selected style's contribution."
+
+[variables.intensity]
+type = "number"
+default = 1.0
+description = "Enhancement blend, 0 to 1. 0 keeps the original image."
+
+[variables.local_structure]
+type = "number"
+default = 1.0
+description = "General detail enhancement strength. Only applies when auto_mask is enabled."
+
+[variables.skin_structure]
+type = "number"
+default = -1.0
+description = "Skin detail enhancement strength. -1 follows local_structure. Requires auto_mask."
+
+[variables.auto_mask]
+type = "boolean"
+default = true
+description = "Let the model build its protection mask. Disabling also disables local and skin structure strengths."
+
+[variables.auto_motion]
+type = "boolean"
+default = true
+description = "Estimate motion on the GPU when available. Disable to test the faster colour-only path."
 
 [metadata]
 createdAt = "2026-08-30T00:00:00.000Z"

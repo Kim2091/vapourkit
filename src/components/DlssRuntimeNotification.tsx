@@ -80,8 +80,8 @@ export const DlssRuntimeNotification = memo<DlssRuntimeNotificationProps>(({ fil
           DLSS Neural Uplift needs the DLSS 5 runtime before it can run
         </p>
         <p className="text-[12px] text-ink-400">
-          NVIDIA does not ship nvngx_dlssnr.dll with the driver — it comes with games that support
-          DLSS 5. Point Vapourkit at your copy and it will be installed for you.
+          Import nvngx_dlssnr.dll from NBA 2K27 for RTX 50 series. RTX 20–50 series work with a
+          patched DLL obtained elsewhere online; Vapourkit does not provide patched DLLs.
         </p>
       </div>
       <button

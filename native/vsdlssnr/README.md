@@ -30,9 +30,13 @@ for skin so faces are not over-sharpened by the general structure control.
 
 | | |
 |---|---|
-| GPU | Blackwell (RTX 50-series). The snippet explicitly rejects Turing through Ada with `Unsupported GPU architecture 0x%x, minimum required 0x1b0`. |
+| GPU | RTX 50-series with the official DLL; RTX 20, 30, 40 and 50 series with a patched DLL. The official DLL rejects Turing through Ada with `Unsupported GPU architecture 0x%x, minimum required 0x1b0`. |
 | Driver | 570 or newer |
-| `nvngx_dlssnr.dll` | **Not shipped with the driver.** Place it next to `vsdlssnr.dll`, or pass `snippet="C:/path/to/nvngx_dlssnr.dll"`. |
+| `nvngx_dlssnr.dll` | **Not shipped with the driver.** The official DLL is included with **NBA 2K27**. Place your copy next to `vsdlssnr.dll`, or pass `snippet="C:/path/to/nvngx_dlssnr.dll"`. |
+
+Patched DLLs supporting RTX 20–50 series can be found elsewhere online. **Vapourkit does not
+provide patched DLLs.** Import your own copy through the Plugins settings. The plugin source
+is available at [Kim2091/vsdlssnr](https://github.com/Kim2091/vsdlssnr).
 
 The snippet also enforces a caller-origin check: every export refuses with `FAIL_PlatformError`
 unless the call arrives from the driver's own `nvngx.dll`, and the driver does not know this
@@ -62,6 +66,40 @@ round trip for you.
 Note the staging texture is `DXGI_FORMAT_R16G16B16A16_FLOAT`, a plain float format rather than
 an `_SRGB`-typed one, on purpose: the curve lives in the *values*. An `_SRGB` view would have
 the hardware linearise on read, producing the inverse of the same bug.
+
+## Reduced-resolution NR in Vapourkit
+
+The bundled **DLSS Neural Uplift** filter exposes `working_scale` (0.25–1.0), defaulting to
+`1.0` for the original full-resolution path. Try `0.75` first, or `0.5` for a larger reduction
+in model work. These scale both dimensions: approximately 56% and 25% of the original pixels,
+respectively. Total processing speed also depends on resizing, composition and frame transfers.
+The expression uses Akarin when installed, with a standard VapourSynth fallback.
+
+This is an SDR adaptation of the matched-residual approach exposed by
+[DLSS5-Autopilot](https://github.com/Kizzuwatnaa/DLSS5-Autopilot) through
+[OptiScaler DLSSNR](https://github.com/Dagherbou/OptiScaler_DLSSNR). The filter downsamples the
+sRGB input, runs NR, and adds the difference between the enlarged result and enlarged model
+input to the original full-resolution image. A shared RGB limiter keeps the edit in 0–1.
+It preserves source detail when NR makes no change; it does not guarantee the same model
+result as full-resolution inference. Check faces, fine texture and moving edges when comparing.
+
+The implementation uses existing VapourSynth operations and the existing plugin DLL. It is
+a filter-template setting, not a new argument to `core.dlssnr.Enhance`. Automatic motion is
+computed at the model's working resolution. Output dimensions, format and colour tags retain
+the template's existing round trip. Existing saved filter steps need the updated template to
+expose this setting.
+
+An initial synthetic 4K check on an RTX 5080 Laptop GPU (automatic motion enabled, 8 warmup
+frames followed by 32 timed frames, four prefetched frames) measured about 17 fps at `1.0`,
+26 fps at `0.75`, and 31 fps at `0.5`. These are short blank-frame measurements, not a footage quality comparison
+or a general speed guarantee. Serial frame requests were slower at reduced resolution because
+the CPU reconstruction could not overlap other work; preview seeking may therefore be slower.
+
+Reconstruction regression checks, without requiring an NVIDIA runtime:
+
+```powershell
+data/vapoursynth-portable/python.exe native/vsdlssnr/tools/test_working_scale.py
+```
 
 ## Depth and motion vectors
 

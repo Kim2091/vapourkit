@@ -128,7 +128,8 @@ namespace vsdlssnr {
       }
     }
 
-    error = "No NVIDIA D3D12 adapter was found. DLSS-NR requires a Blackwell (RTX 50-series) GPU.";
+    error = "No NVIDIA D3D12 adapter was found. DLSS-NR requires an NVIDIA RTX GPU: RTX 50-series "
+            "with the official DLL, or RTX 20-50 series with a separately obtained patched DLL.";
     return false;
   }
 

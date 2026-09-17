@@ -184,6 +184,28 @@ describe('generateScript preview outputs (vs-view)', () => {
 });
 
 describe('declared vkfilter variables', () => {
+  it('renders the bundled NR working scale using the default or saved control value', async () => {
+    const template = TOML.parse(await fs.readFile(
+      path.join(process.cwd(), 'include/plugins/plugin_filters/DLSS Neural Uplift.vkfilter'), 'utf8',
+    )) as unknown as { name: string; code: string; variables: Filter['variables'] };
+    const filter = customFilter(0, template.name, template.code);
+    filter.variables = template.variables;
+    for (const scale of [undefined, 0.75, 0.5]) {
+      filter.parameters = scale === undefined ? undefined : { working_scale: scale };
+      const script = await generate([filter], false);
+      expect(script).toContain(`working_scale   = ${scale ?? 1}`);
+      expect(script).not.toContain('{{working_scale}}');
+      expect(script).not.toMatch(/\{\{(?:style|style_strength|intensity|local_structure|skin_structure|auto_mask|auto_motion)\}\}/);
+      expect(script).toContain('core.dlssnr.Enhance(');
+    }
+    filter.parameters = { style: 2, style_strength: 0.6, intensity: 0.7,
+      local_structure: 0.8, skin_structure: 0.4, auto_mask: false, auto_motion: false };
+    const configured = await generate([filter], false);
+    for (const [key, value] of Object.entries(filter.parameters)) {
+      expect(configured).toMatch(new RegExp(`${key}\\s*=\\s*${value === false ? 'False' : value}`));
+    }
+  });
+
   it('renders declared placeholders with persisted filter values', async () => {
     const filter = customFilter(
       0,

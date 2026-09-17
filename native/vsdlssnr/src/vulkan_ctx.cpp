@@ -315,7 +315,8 @@ namespace vsdlssnr {
     }
 
     error = shortfall.empty()
-              ? "No NVIDIA Vulkan device was found. DLSS-NR requires a Blackwell (RTX 50-series) GPU."
+              ? "No NVIDIA Vulkan device was found. DLSS-NR requires an NVIDIA RTX GPU: RTX 50-series "
+                "with the official DLL, or RTX 20-50 series with a separately obtained patched DLL."
               : ("No usable NVIDIA Vulkan device: " + shortfall);
     return false;
   }
