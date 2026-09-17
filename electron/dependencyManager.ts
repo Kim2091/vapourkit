@@ -8,11 +8,12 @@ import { ModelExtractor } from './modelExtractor';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
 import { logger } from './logger';
-import { PATHS, PYTHON_VERSION, IS_WINDOWS } from './constants';
+import { PATHS, PYTHON_VERSION, IS_WINDOWS, VAPOURSYNTH_PIP_SPEC, VAPOURSYNTH_VERSION } from './constants';
 import { runCommand, getBundledBasePath, resolveSupportedPythonCommand } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
 import { migrateLegacyPortableLayout } from './legacyCleanup';
+import { isNewerThanPin, readInstalledVapourSynthVersion } from './vapoursynthPin';
 import {
   hasPluginFilterTemplates,
   LINUX_PLUGIN_FILTER_CATALOG_REVISION,
@@ -191,7 +192,7 @@ export class DependencyManager {
     logger.dependency('Installing VapourSynth and BestSource from PyPI');
     await runCommand(PATHS.PYTHON, [
       '-m', 'pip', 'install', '--upgrade', '--no-warn-script-location',
-      'vapoursynth',
+      VAPOURSYNTH_PIP_SPEC,
       'vapoursynth-bestsource',
     ]);
 
@@ -203,6 +204,60 @@ export class DependencyManager {
     });
 
     logger.dependency('Python runtime setup completed');
+  }
+
+  /**
+   * Reinstalls the VapourSynth core at the pin when a newer one is found.
+   *
+   * Only NEWER is corrected. Older installs are the ones the `--upgrade` in
+   * setup already moves forward, and a core below the pin at least predates
+   * the ABI break the pin is guarding; a core above it is unverified ground.
+   *
+   * Non-fatal: a failed reinstall (offline, index down) logs and lets the app
+   * start on the core that is there rather than trapping it on the setup
+   * screen, and the check runs again next launch.
+   */
+  private async enforceVapourSynthPin(): Promise<void> {
+    let installed: string | null;
+    try {
+      installed = await readInstalledVapourSynthVersion(PATHS.SITE_PACKAGES);
+    } catch (error) {
+      logger.error('Could not read the installed VapourSynth version:', error);
+      return;
+    }
+
+    if (!installed) {
+      logger.dependency('VapourSynth version: unknown (no dist-info) — leaving it alone');
+      return;
+    }
+
+    logger.dependency(`VapourSynth version: ${installed} (pinned to ${VAPOURSYNTH_VERSION})`);
+    if (!isNewerThanPin(installed)) {
+      return;
+    }
+
+    const message = `Reinstalling VapourSynth ${VAPOURSYNTH_VERSION} (found ${installed})...`;
+    logger.dependency(message);
+    this.sendProgress({
+      type: 'python-setup',
+      component: 'VapourSynth',
+      progress: 50,
+      message,
+    });
+
+    try {
+      // `==` is not satisfied by the newer core, so pip uninstalls it and
+      // installs the pin — no --force-reinstall needed, and its dependencies
+      // stay where they are.
+      await runCommand(PATHS.PYTHON, [
+        '-m', 'pip', 'install', '--no-warn-script-location',
+        '--cache-dir', PATHS.PIP_CACHE,
+        VAPOURSYNTH_PIP_SPEC,
+      ]);
+      logger.dependency(`VapourSynth pinned back to ${VAPOURSYNTH_VERSION}`);
+    } catch (error) {
+      logger.error(`Failed to pin VapourSynth back to ${VAPOURSYNTH_VERSION}:`, error);
+    }
   }
 
   async checkDependencies(): Promise<boolean> {
@@ -230,6 +285,13 @@ export class DependencyManager {
     logger.dependency(`FFmpeg: ${ffmpegExists}`);
 
     const coreDepsPresent = vsExists && bsExists && pythonExists && videoCompareExists && ffmpegExists;
+
+    // The VapourSynth core is pinned. Put back any newer one BEFORE the rest of
+    // the launch healing runs, so nothing else starts against a core the
+    // shipped filters were never checked on.
+    if (coreDepsPresent) {
+      await this.enforceVapourSynthPin();
+    }
 
     // If core deps are healthy, silently extract any missing bundled ONNX models rather than
     // failing the health check and forcing the user through the full setup flow.

@@ -123,7 +123,10 @@ export const SetupScreen = memo<SetupScreenProps>(({
       <div className="min-h-screen bg-ink-950 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-accent-500 animate-spin mx-auto mb-4" />
-          <p className="text-lg text-ink-300">Checking dependencies...</p>
+          {/* The check can do repair work (pinning the VapourSynth core back,
+              for one), which takes long enough that a bare spinner reads as a
+              hang. Say what it is doing when it tells us. */}
+          <p className="text-lg text-ink-300">{setupProgress?.message ?? 'Checking dependencies...'}</p>
         </div>
       </div>
     );

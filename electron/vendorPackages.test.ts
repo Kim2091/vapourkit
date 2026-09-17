@@ -19,6 +19,7 @@ vi.mock('./logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+import { VAPOURSYNTH_PIP_SPEC } from './constants';
 import type { GpuVendor } from './gpuDetection';
 import {
   computeVendorPurge,
@@ -110,7 +111,11 @@ describe('getPypiPackages', () => {
   it('keeps the vendor-neutral packages for every vendor', () => {
     for (const vendor of ['nvidia', ...NON_NVIDIA] as GpuVendor[]) {
       const packages = getPypiPackages(vendor);
-      expect(packages).toContain('vapoursynth');
+      // Pinned, never bare: an unpinned name here would let the plugin
+      // install pull the core forward past the version the filters are
+      // verified against.
+      expect(packages).toContain(VAPOURSYNTH_PIP_SPEC);
+      expect(packages).not.toContain('vapoursynth');
       expect(packages).toContain('vs_temporalfix');
       expect(packages).toContain('vs_undistort');
       expect(packages).toContain('vs_grain');

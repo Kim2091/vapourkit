@@ -36,6 +36,8 @@
   - `vspipe.exe` and the core runtime now come from the VapourSynth wheel in `Lib\site-packages\vapoursynth`; plugins autoload from `Lib\site-packages\vapoursynth\plugins`
   - vsjetpack is no longer pinned to 1.1.0 (the old `vapoursynth==72` ABI pin is obsolete)
   - `vsview[full]` is installed with the main plugin step instead of a separate pinned install
+  - The VapourSynth core itself is pinned to R79 instead of tracking whatever pip resolves: every plugin wheel and bundled filter here is verified against that core, and the plugin ABI is exactly what moved between R72 and R79
+  - An install that already carries a newer core (installed before the pin, or dragged forward by another wheel's dependency) is put back to R79 at launch
 - TensorRT engine building now uses the TensorRT Python API instead of `trtexec` (the TensorRT pip wheels don't ship trtexec)
   - The Import Model dialog still accepts trtexec-style parameters; unsupported flags are ignored with a warning
 - Portable installs that reuse an existing `data` folder are migrated in place: the old portable runtime, `vs-plugins` folder, and bundled script modules that PyPI now provides are cleaned up during setup, and the Python environment is upgraded in place

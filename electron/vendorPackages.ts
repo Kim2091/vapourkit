@@ -10,7 +10,7 @@
 // Pure functions only — no electron API calls at call time, so the install,
 // check and uninstall paths can all share (and tests can exercise) them.
 
-import { VSVIEW_MIN_VERSION } from './constants';
+import { VAPOURSYNTH_PIP_SPEC, VSVIEW_MIN_VERSION } from './constants';
 import type { GpuVendor } from './gpuDetection';
 import { getProvider, type BackendId } from './providers/registry';
 
@@ -94,7 +94,7 @@ function getVsJetpackSpec(vendor: GpuVendor): string {
 export function getPypiPackages(vendor: GpuVendor): string[] {
   const isNvidia = vendor === 'nvidia';
   return [
-    'vapoursynth',
+    VAPOURSYNTH_PIP_SPEC,
     getVsJetpackSpec(vendor),
     `vsview[full]>=${VSVIEW_MIN_VERSION}`,
     'vs_temporalfix',

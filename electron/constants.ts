@@ -2,6 +2,14 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { app } from 'electron';
 
+// The core VapourSynth runtime, pinned rather than tracked. R79 is the API4-only
+// core every plugin wheel and bundled filter in this repo has been verified
+// against; letting pip pick up the next release on a user's machine would change
+// the runtime under a plugin set nobody has tested there yet. Bump this
+// deliberately, after re-checking the filters.
+export const VAPOURSYNTH_VERSION = '79';
+export const VAPOURSYNTH_PIP_SPEC = `vapoursynth==${VAPOURSYNTH_VERSION}`;
+
 // Current vapoursynth-mlrt-trt / vapoursynth-mlrt-ort PyPI version.
 // Update this when upgrading vs-mlrt; a change prompts users to rebuild engines.
 export const VS_MLRT_VERSION = '16.1';
