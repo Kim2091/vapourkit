@@ -4,7 +4,7 @@ code = """
 # Full Docs: https://github.com/dnjulek/vapoursynth-zip/wiki/ImageRead
 # Length is how long the image clip should be in frames.
 
-image_path = "path\\to\\image.png"
+image_path = r"path\\to\\image.png"
 length     = 100
 
 image = core.vszip.ImageRead(path=image_path)

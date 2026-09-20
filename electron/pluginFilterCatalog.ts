@@ -53,7 +53,6 @@ export const LINUX_PLUGIN_FILTERS = {
   vsjetpack: [
     'AA EEDI3.vkfilter',
     'AA SangNom.vkfilter',
-    'Based AA.vkfilter',
     'Bilateral.vkfilter',
     'Binarize Mask.vkfilter',
     'Blank Clip.vkfilter',

@@ -4,11 +4,18 @@ code = """
 # Full Docs: https://jaded-encoding-thaumaturgy.github.io/vs-jetpack/api/vsrgtools/blur/#vsrgtools.blur.guided_filter
 
 from vsrgtools import guided_filter
+from vstools import depth
 
 # Apply edge-preserving guided filter
 radius = 4
 thr = 0.01  # Threshold (epsilon)
-clip = guided_filter(clip, radius=radius, thr=thr)"""
+
+# guided_filter refuses an integer clip outright, and every source the app
+# hands a filter is integer, so convert around it and hand back the depth
+# that arrived — the same shape the descale templates use.
+src_depth = clip.format.bits_per_sample
+clip = guided_filter(depth(clip, 32), radius=radius, thr=thr)
+clip = depth(clip, src_depth)"""
 description = "Edge-preserving guided filter for smoothing while maintaining edges"
 
 [metadata]

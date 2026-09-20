@@ -117,7 +117,9 @@ describe('getPypiPackages', () => {
       expect(packages).toContain(VAPOURSYNTH_PIP_SPEC);
       expect(packages).not.toContain('vapoursynth');
       expect(packages).toContain('vs_temporalfix');
-      expect(packages).toContain('vs_undistort');
+      // Floored, not bare: 2.2.0 cannot build an Undistort TensorRT engine on a
+      // 50-series GPU, so an install sitting on it has to be moved forward.
+      expect(packages).toContain('vs_undistort>=2.3.1');
       expect(packages).toContain('vs_grain');
       expect(packages).toContain('vapoursynth-mvtools');
       expect(packages).toContain('positional-encodings');

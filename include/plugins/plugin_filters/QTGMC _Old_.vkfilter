@@ -27,6 +27,27 @@ if 'vsutil' not in sys.modules:
 
 from qtgmc import QTGMC
 
+# qtgmc.py binds core.eedi3m.EEDI3 before it has decided whether the preset
+# even uses EEDI3, so a missing eedi3m breaks every preset, 'Slower' included.
+# And it is missing by design: EEDI3m.dll is superseded by the eedi3vk2 wheel
+# (Vulkan) and removed at install. The script's detection only knows the older
+# `eedi3vk` spelling, so answer to that name and translate the one argument the
+# two plugins spell differently.
+import qtgmc as _qtgmc
+if not hasattr(_qtgmc.core, 'eedi3vk') and hasattr(core, 'eedi3vk2'):
+    class _Eedi3vk:
+        @staticmethod
+        def EEDI3(clip, device=None, **kwargs):
+            if device is not None and device >= 0:
+                kwargs['device_index'] = device
+            return core.eedi3vk2.EEDI3(clip, **kwargs)
+
+    class _CoreWithEedi3vk:
+        def __getattr__(self, name):
+            return _Eedi3vk if name == 'eedi3vk' else getattr(core, name)
+
+    _qtgmc.core = _CoreWithEedi3vk()
+
 clip = QTGMC(clip, Preset='Slower', FPSDivisor=1, TFF=None)"""
 description = "High-quality motion-compensated deinterlacing (QTGMC)"
 

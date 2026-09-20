@@ -98,7 +98,11 @@ export function getPypiPackages(vendor: GpuVendor): string[] {
     getVsJetpackSpec(vendor),
     `vsview[full]>=${VSVIEW_MIN_VERSION}`,
     'vs_temporalfix',
-    'vs_undistort',
+    // 2.3.0 removed num_streams and 2.3.x carries the workaround for 50-series
+    // GPUs on TensorRT 11.2: with bicubic on compute 12.x, 2.2.0 caps the build
+    // workspace at 6GB and no tactic fits, so the engine never builds. A floor
+    // rather than a bare name so an install still sitting on 2.2.0 is upgraded.
+    'vs_undistort>=2.3.1',
     'vs_grain',
     // Only a .dev release exists on PyPI so far; a bare name would not match it
     'vs_tiletools>=1.0.0.dev0',

@@ -10,17 +10,27 @@
 // The work is done by scripts/verify_filters.py, which is also runnable by
 // hand and is the better way to read the detail. This asserts on its report.
 //
-// About the baseline: a large part of the shipped catalog currently does not
-// build, mostly because a plugin is not installed or because an upstream
-// package renamed something. That is a real backlog, not something to hide,
-// so it is checked in as filterTemplates.baseline.json and this test is a
-// ratchet over it — a filter that newly breaks fails, and one that starts
-// working fails too, so the list shrinks as the backlog is paid down and can
-// never quietly grow.
+// About the baseline: what does not build is checked in as
+// filterTemplates.baseline.json, and this test is a ratchet over it — a filter
+// that newly breaks fails, and one that starts working fails too, so the list
+// shrinks as the backlog is paid down and can never quietly grow. It is empty
+// now: every shipped filter builds and renders. Keep it that way, or put the
+// file back with a reason next to it.
 //
 // The baseline reflects a complete local install. On a machine missing
 // optional plugins more filters will fail, and this test will say so; that is
 // working as intended, but it is why it is not part of the default run.
+//
+// A refusal only counts once the filter has been given what it asked for.
+// This used to excuse 21 filters as healthy — a deinterlacer declining
+// progressive input, a step with no LUT picked, a model not downloaded — and
+// each of those verdicts was reached at the filter's first gate, with the rest
+// of it unread. Answering them instead found ten filters that were fine all
+// along and four that were broken, QTGMC (Old) among them. So the verifier now
+// retries against an interlaced source, against an HD one, and with the
+// companion step or the real file the filter asked for, and nothing is
+// excused: every template either builds and renders, or is in the baseline.
+
 
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'child_process';
@@ -42,6 +52,11 @@ interface Result {
   verdict: 'ok' | 'skipped' | 'failed';
   why: string;
   detail: string;
+  // Which source the verdict was reached against. A filter that refuses
+  // progressive input is retried against an interlaced one rather than being
+  // taken at its word, because the refusal happens before the rest of the
+  // filter has run.
+  source: 'progressive' | 'interlaced';
 }
 
 function run(): Result[] {
@@ -68,14 +83,16 @@ function run(): Result[] {
 
 describe.skipIf(!enabled)('shipped filter templates, against a real core', () => {
   const results = enabled ? run() : [];
-  const named = (r: Result) => `${r.file} — ${r.why}: ${r.detail.slice(0, 160)}`;
+  const named = (r: Result) =>
+    `${r.file}${r.source === 'interlaced' ? ' (interlaced source)' : ''}`
+    + ` — ${r.why}: ${r.detail.slice(0, 160)}`;
 
   it('checked the whole catalog', () => {
     expect(results.length).toBeGreaterThan(100);
   });
 
-  // These three are faults in the template itself, so no install can excuse
-  // them and none is allowed even in the baseline.
+  // These are faults in the template itself, so no install can excuse them and
+  // none is allowed even in the baseline.
 
   it('has no template that fails to parse', () => {
     const bad = results.filter(r => r.why === 'unparseable');

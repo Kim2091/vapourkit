@@ -1,6 +1,18 @@
 # Changelog
 
 ## 2.0.0
+- Three filters that could never have run now do, and the check that missed them was the reason
+  - QTGMC (Old) failed on any preset: the bundled script binds `core.eedi3m.EEDI3` before it decides whether the preset uses EEDI3, and `EEDI3m.dll` is removed at install because the `eedi3vk2` wheel replaces it. The template now answers to the name the script looks for
+  - Guided Filter refused every real source: it takes float only, and every clip the app hands a filter is integer. It converts around it now
+  - Read Image's placeholder path was unescaped twice, once by TOML and once by Python, so it shipped containing a literal tab
+  - The filter check excused 21 filters as "refusing for a good reason" on the strength of their first gate, with the rest of each filter never run. It now answers the refusal instead - an interlaced source for a deinterlacer, an HD one for a descale, the companion step or a real file where one was wanted - and models and backends are set up the way a generated script sets them up. All 151 filters that remain build and render; nothing is excused, and the baseline of known-broken filters is empty
+- Removed three filters that could not run as shipped
+  - TFMBobN and TFMBobQ need the `tivtc` plugin, which has no PyPI or JET wheel and is not in the bundled archive
+  - Based AA needs ArtCNN models that no part of setup downloads. Its template had a second fault, now fixed in the file's history: it took float only, so it refused every real source. If ArtCNN is ever added to the model download alongside RIFE/DPIR, restore the filter and its `LINUX_PLUGIN_FILTERS` entry
+- Undistort works again on 50-series GPUs, and gets its temporal-window overlap control back
+  - On a 50-series card with `interpolation = "bicubic"`, vs_undistort 2.2.0 caps the TensorRT build workspace at 6GB, no tactic fits, and the engine never builds - so the filter failed at its own defaults however much VRAM the card had. Upstream 2.3.x lifts that cap for exactly this case and makes one engine dimension slightly dynamic; setup now asks for `vs_undistort>=2.3.1` so an install still on 2.2.0 is upgraded rather than left broken
+  - The TensorRT variant passed `num_streams`, which 2.3.0 removed - it raised the moment it was picked
+  - `window_overlap` exists again upstream and is exposed on both variants; it smooths the seam between temporal windows
 - Filters that build TensorRT engines at runtime no longer look like a frozen app
   - A banner names the engine being built, shows progress when the builder reports it, and explains that this is the first run at that resolution; it clears when the build ends, and on every cancel/crash path
   - Engine builds are kill-safe: the engine is written to a temp file and renamed into place, so force-closing mid-build can no longer leave a truncated engine that gets reused as a cache hit and permanently breaks the filter
