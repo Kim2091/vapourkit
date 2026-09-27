@@ -55,7 +55,8 @@ export interface TorchInstall {
 }
 
 /**
- * PyTorch is only needed by the bundled (non-PyPI) vs_deepdeinterlace scripts.
+ * PyTorch is only needed by the bundled (non-PyPI) vs_deepdeinterlace and
+ * vs_grainsynth scripts.
  * NVIDIA gets the CUDA wheels; every other vendor gets CPU wheels from the
  * default PyPI index — slow but importable, which keeps the bundled filter
  * templates working instead of silently breaking them.

@@ -4,7 +4,7 @@ import type { ScriptSourceManifestEntry } from './scriptSources';
 
 export const SCRIPT_SOURCE_MANIFEST: Readonly<Record<string, ScriptSourceManifestEntry>> = {
   "extra_scripts.7z": {
-    version: 'e4d6554cefa3922a4f05ac14dac19e75dd4a815145bace9bf6812b28a7b34cc0',
+    version: 'a5c1eb30214d02c1f0b839f3f9f225ff5c75e015e62b55954a947add159317f2',
     files: {
       "basic_resize.py": '6b68dc759707e553a6190192489684b65e1cc1edbcc3d06784f106533c7136d2',
       "upscale-script.py": 'f0448d030f9569017a72d192fc46b4537f2229aa64088ab9d728f3e378b0c984',
@@ -26,6 +26,10 @@ export const SCRIPT_SOURCE_MANIFEST: Readonly<Record<string, ScriptSourceManifes
       "vs_deepdeinterlace/RIFE_files/flownet_v4.19.pkl": '6f336b13f436897e697d07ccf79d3c04c2cee3a8c2cc51dcafe5b19b718bc957',
       "vs_deepdeinterlace/RIFE_files/warplayer.py": 'a87ba3511aa408387b7ef57d0c7046fac52db042c9fe60b5c11de7d98dd088bf',
       "vs_deepdeinterlace/__init__.py": '3166fba109581e0f838572b52d30e805183e419e7694066c6f42f4f792f8cdbc',
+      "vs_grainsynth/__init__.py": 'ea90376b4be6896216028a1e500b48c2ccbb35f4b74afb1f83e7247f13bddb6d',
+      "vs_grainsynth/arch.py": '1543972f52481e61d14cc7b9f4e84565aa7ca06c9a7b9fda804f7d1ec2f8b31a',
+      "vs_grainsynth/models/mega_v1.pth": '180eb5d6b3e806ff5f64ffa6490d59f2e924966ed31932713cb85fc5d8af829b',
+      "vs_grainsynth/models/real_v5.pth": 'c00e0120b4f394d75ff9d0e8134fdd9d855512b1f909abdd8afd6cdb76df0b86',
       "vsmlrt.py": '654199b7c5176e0a89d881e806a88fdcba2025c444a2f77a53f1c0bb2d608ebd',
     },
   },
