@@ -243,7 +243,12 @@ export interface ElectronAPI {
     Promise<{ success: true; path: string; name: string } | { success: false; error: string }>;
   
   // Plugin dependency operations
-  installPluginDependencies: () => Promise<InstallResult>;
+  /**
+   * `partial` (the default) installs what is missing and keeps every filter
+   * and script the user changed; `complete` reinstalls the plugin packages
+   * from scratch and puts every shipped filter and script back to stock.
+   */
+  installPluginDependencies: (mode?: 'partial' | 'complete') => Promise<InstallResult>;
   retrySetupPlugins: () => Promise<InstallResult>;
   uninstallPluginDependencies: () => Promise<InstallResult>;
   checkPluginDependencies: () => Promise<{ installed: boolean; packages: string[] }>;

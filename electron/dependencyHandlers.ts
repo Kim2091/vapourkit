@@ -107,10 +107,11 @@ export function registerDependencyHandlers(
   );
 
   // Plugin dependency handlers
-  ipcMain.handle('install-plugin-dependencies', async () => {
-    logger.info('Installing plugin dependencies');
+  ipcMain.handle('install-plugin-dependencies', async (_event, mode?: unknown) => {
+    const installMode = mode === 'complete' ? 'complete' : 'partial';
+    logger.info(`Installing plugin dependencies (${installMode})`);
     try {
-      const result = await pluginInstaller.installDependencies();
+      const result = await pluginInstaller.installDependencies(installMode);
       return result;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';

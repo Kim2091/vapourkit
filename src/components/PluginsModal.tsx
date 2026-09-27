@@ -11,6 +11,7 @@ import {
   Terminal,
   X,
   XCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { useConsoleLog } from '../hooks/useConsoleLog';
 import { ModalSectionHeader as SectionHeader } from './ModalSectionHeader';
@@ -139,8 +140,22 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
     }
   };
 
-  const handleInstallDependencies = () =>
-    startOperation(() => window.electronAPI.installPluginDependencies(), 'Installation failed');
+  // Which reinstall ran last, so Retry repeats it.
+  const [lastMode, setLastMode] = useState<'partial' | 'complete'>('partial');
+
+  const handleInstallDependencies = (mode: 'partial' | 'complete' = 'partial') => {
+    setLastMode(mode);
+    return startOperation(() => window.electronAPI.installPluginDependencies(mode), 'Installation failed');
+  };
+
+  const handleCompleteReinstall = () => {
+    if (!confirm(
+      'Complete reinstall?\n\n'
+      + 'Every plugin package is removed and downloaded again, and every built-in filter and script goes back to how Vapourkit ships it. '
+      + 'Filters and scripts you edited are backed up to data\\config first. Your own filters are not touched.',
+    )) return;
+    void handleInstallDependencies('complete');
+  };
 
   const handleUninstallDependencies = () =>
     startOperation(() => window.electronAPI.uninstallPluginDependencies(), 'Uninstallation failed');
@@ -157,7 +172,7 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
 
   const handleRetry = () => {
     setInstallError(null);
-    handleInstallDependencies();
+    void handleInstallDependencies(lastMode);
   };
 
   if (!show) return null;
@@ -238,18 +253,43 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
               </div>
             )}
 
+            {!isInstalling && !installError && isInstalled && (
+              <dl className="px-4 py-3 border-b border-ink-900 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1.5 text-[11px] leading-relaxed">
+                <dt className="font-semibold text-ink-300">Partial</dt>
+                <dd className="text-ink-400">
+                  Installs any package that is missing or out of date, and any built-in filter that is missing. Everything you changed stays as it is: edited filters and scripts, and filters you deleted. Try this first when filters stop working.
+                </dd>
+                <dt className="font-semibold text-ink-300">Complete</dt>
+                <dd className="text-ink-400">
+                  Removes the plugin packages and installs them again from scratch, which fixes a damaged package that a partial reinstall leaves in place. Every built-in filter and script goes back to how Vapourkit ships it, including ones you deleted. Edited copies are saved to <span className="font-mono text-ink-300">{String.raw`data\config\template-backups`}</span> and <span className="font-mono text-ink-300">script-backups</span> first. Filters you made yourself are never touched. It downloads several GB again.
+                </dd>
+              </dl>
+            )}
+
             <div className="flex flex-wrap gap-2 px-4 py-3">
               {!isInstalling && !installError && !isInstalled && (
-                <button onClick={handleInstallDependencies} disabled={isCheckingStatus} className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-accent-500 text-ink-950 hover:bg-accent-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <button onClick={() => void handleInstallDependencies('partial')} disabled={isCheckingStatus} className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-accent-500 text-ink-950 hover:bg-accent-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                   <Download className="w-3.5 h-3.5" />
                   Install plugins
                 </button>
               )}
               {!isInstalling && !installError && isInstalled && (
                 <>
-                  <button onClick={handleInstallDependencies} className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors">
+                  <button
+                    onClick={() => void handleInstallDependencies('partial')}
+                    title="Installs anything missing or outdated. Keeps every filter and script you changed."
+                    className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors"
+                  >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    Reinstall
+                    Partial reinstall
+                  </button>
+                  <button
+                    onClick={handleCompleteReinstall}
+                    title="Reinstalls every plugin package from scratch and puts every built-in filter and script back to stock."
+                    className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Complete reinstall
                   </button>
                   <button onClick={handleUninstallDependencies} className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold border border-bad-500/30 text-bad-400 hover:bg-bad-500/10 transition-colors">
                     <X className="w-3.5 h-3.5" />

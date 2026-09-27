@@ -87,7 +87,10 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 ### Other
 - **Built-in filters no longer vanish.** 2.1 took any missing built-in filter as one you deleted and never put it back, so a filter removed by anything else was gone for good. Vapourkit now records a delete when you make it in the app, and restores at launch any built-in filter that is missing without one
   - The trash button on a filter step asks before deleting, and the filter picker offers *Restore N deleted built-in filters* for the ones you did delete
-  - Reinstalling plugins no longer overwrites filters you edited. It adds only missing ones and never brings back one you deleted
+- **Reinstalling plugins has two options** (Plugins window):
+  - **Partial** installs any package that is missing or out of date, and any missing built-in filter. Everything you changed stays: edited filters and scripts, and filters you deleted. Try this first
+  - **Complete** removes the plugin packages and installs them again from scratch, which fixes a damaged package a partial reinstall leaves in place. Every built-in filter and script goes back to how it ships, including ones you deleted; edited copies are saved to `dataconfig	emplate-backups` and `script-backups` first. Filters you made yourself are never touched
+  - Before, Reinstall overwrote every edited plugin filter with no backup
   - A filter of your own that shares a name with one a new release ships is no longer shown as an edited built-in
   - On Linux, leftover copies of Windows-only filters are cleaned up even when their line endings differ
 - Renaming a filter saves it under the new name before removing the old one, so a failed save no longer loses it. Deleting or editing DeHalo Alpha (Old) and Undistort (PyTorch) now works on the right file

@@ -53,7 +53,11 @@ import {
   type InstalledPackage,
 } from './vendorPackages';
 import * as _7z from '7zip-min';
-import { readLedger } from './installLedger';
+import { readLedger, writeLedger } from './installLedger';
+import { shippedTemplateDigest } from './shippedTemplateDigest';
+
+/** A reinstall that keeps what the user changed, or one that restores everything shipped. */
+export type InstallMode = 'partial' | 'complete';
 
 /**
  * 'retrying' is an attempt that failed with another about to start, and
@@ -613,10 +617,10 @@ export class PluginInstaller {
    * Installs the plugin package set, or joins the install already running.
    * A failure is reported to the renderer once, when it is final.
    */
-  async installDependencies(): Promise<InstallResult> {
+  async installDependencies(mode: InstallMode = 'partial'): Promise<InstallResult> {
     return this.flights.run('install', async () => {
       this.beginOperation();
-      const result = await this.runInstallAttempt();
+      const result = await this.runInstallAttempt(mode);
       this.emitFailure(result);
       return this.withWarnings(result);
     }, running => this.busyResult(running));
@@ -706,7 +710,7 @@ export class PluginInstaller {
    * One pass through the install. Returns what happened without telling the
    * renderer it failed; the callers above decide when a failure is final.
    */
-  private async runInstallAttempt(): Promise<InstallResult> {
+  private async runInstallAttempt(mode: InstallMode = 'partial'): Promise<InstallResult> {
     // Warnings belong to the attempt that raised them; a retry raises its own.
     this.warnings = [];
     if (this.isCancelled) {
@@ -753,6 +757,26 @@ export class PluginInstaller {
 
       if (this.isCancelled) {
         return CANCELLED;
+      }
+
+      // Step 0.4, complete reinstall only: remove the plugin packages so every
+      // one installs fresh, which --upgrade alone never does for a damaged
+      // package at the version already there. The core runtime stays, as
+      // Uninstall leaves it. Non-fatal: the install below repairs what it can.
+      if (mode === 'complete') {
+        logger.info('=== Step 0.4: Removing plugin packages for a complete reinstall ===');
+        this.sendProgress({
+          type: 'installing',
+          progress: 2,
+          message: 'Removing the installed plugin packages for a clean reinstall...'
+        });
+        const clean = await this.runPipUninstall(UNINSTALL_PACKAGE_NAMES);
+        if (!clean.success) {
+          logger.warn(`Could not remove every plugin package first (continuing anyway): ${clean.error}`);
+        }
+        if (this.isCancelled) {
+          return CANCELLED;
+        }
       }
 
       // Step 0.5: remove packages belonging to a different GPU vendor, computed
@@ -891,7 +915,9 @@ export class PluginInstaller {
       // aborted part-way (scriptSync takes no signal); it is a few MB, and the
       // cancel is honoured as soon as it returns.
       logger.info('=== Step 4: Syncing VapourSynth scripts ===');
-      const scripts = await syncInstalledScripts('install', (message) => {
+      // A partial reinstall keeps edited scripts, as an app update does; a
+      // complete one restores the shipped files, backing up edited ones.
+      const scripts = await syncInstalledScripts(mode === 'complete' ? 'install' : 'update', (message) => {
         this.sendProgress({ type: 'installing', progress: 87, message });
       });
       await removeSupersededScripts();
@@ -938,7 +964,7 @@ export class PluginInstaller {
 
       // Step 5: Copy filter templates (95-100% progress)
       logger.info('=== Step 5: Copying filter templates ===');
-      await this.copyFilterTemplates();
+      await this.copyFilterTemplates(mode);
 
       // Step 7: Reload backend to refresh models and configs
       logger.info('=== Step 7: Reloading backend ===');
@@ -1373,7 +1399,7 @@ export class PluginInstaller {
     throw lastError;
   }
 
-  private async copyFilterTemplates(): Promise<void> {
+  private async copyFilterTemplates(mode: InstallMode = 'partial'): Promise<void> {
     if (!hasPluginFilterTemplates()) {
       logger.info('Bundled plugin filter templates are unavailable on this platform; skipping copy');
       return;
@@ -1411,10 +1437,23 @@ export class PluginInstaller {
 
     logger.info(`Found ${files.length} supported filter template(s) to copy`);
 
-    // Only what is missing. Overwriting here replaced every edited template
-    // with no backup; bringing an untouched one up to date, and asking about
-    // an edited one, is the launch reconcile's job. A template the user
-    // deleted stays deleted.
+    if (mode === 'complete') {
+      // The core templates too: complete means everything shipped.
+      const coreFolder = path.join(bundledBasePath, 'include', 'filter_templates');
+      const coreFiles = await fs.pathExists(coreFolder)
+        ? (await fs.readdir(coreFolder)).filter(file => file.endsWith('.vkfilter'))
+        : [];
+      await this.resetShippedTemplates([
+        ...coreFiles.map(file => path.join(coreFolder, file)),
+        ...files.map(file => path.join(pluginFiltersFolder, file)),
+      ]);
+      logger.info('Filter template copy completed');
+      return;
+    }
+
+    // Partial: only what is missing. Bringing an untouched template up to
+    // date, and asking about an edited one, is the launch reconcile's job. A
+    // template the user deleted stays deleted.
     const ledger = await readLedger().catch(() => undefined);
 
     for (const file of files) {
@@ -1436,5 +1475,36 @@ export class PluginInstaller {
     }
     
     logger.info('Filter template copy completed');
+  }
+
+  /**
+   * A complete reinstall: every shipped template back to stock. An
+   * edited copy goes to template-backups first, a deleted one comes back, and
+   * the ledger records each as ours and untouched. Templates of the user's
+   * own are other files and never touched.
+   */
+  private async resetShippedTemplates(sourcePaths: string[]): Promise<void> {
+    const ledger = await readLedger();
+    const backupDir = path.join(PATHS.CONFIG, 'template-backups', `reinstall-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+    for (const sourcePath of sourcePaths) {
+      const file = path.basename(sourcePath);
+      const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
+      try {
+        const source = await fs.readFile(sourcePath);
+        if (await fs.pathExists(destPath)) {
+          const current = await fs.readFile(destPath);
+          if (shippedTemplateDigest(current) !== shippedTemplateDigest(source)) {
+            await fs.ensureDir(backupDir);
+            await fs.writeFile(path.join(backupDir, file), current);
+            logger.info(`Backed up edited filter template before resetting it: ${file}`);
+          }
+        }
+        await fs.writeFile(destPath, source);
+        ledger.templates[file] = { digest: shippedTemplateDigest(source), appVersion: app.getVersion() };
+      } catch (error) {
+        logger.error(`Failed to reset filter template ${file}:`, error);
+      }
+    }
+    await writeLedger(ledger);
   }
 }

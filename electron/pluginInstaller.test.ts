@@ -222,3 +222,16 @@ describe('preflight', () => {
     expect(result.warnings).toEqual(['The data folder path is long.']);
   });
 });
+
+describe('reinstall modes', () => {
+  it('runs a partial reinstall unless a complete one is asked for', async () => {
+    const { installer } = createInstaller();
+    const spy = vi.spyOn(installer as unknown as { runInstallAttempt: (mode: string) => Promise<InstallResult> }, 'runInstallAttempt')
+      .mockResolvedValue({ success: true });
+
+    await installer.installDependencies();
+    await installer.installDependencies('complete');
+
+    expect(spy.mock.calls.map(call => call[0])).toEqual(['partial', 'complete']);
+  });
+});

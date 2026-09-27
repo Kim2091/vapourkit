@@ -227,7 +227,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setFilterConfigurations: (filters: any) => ipcRenderer.invoke('set-filter-configurations', filters),
   
   // Plugin dependency operations
-  installPluginDependencies: () => ipcRenderer.invoke('install-plugin-dependencies'),
+  installPluginDependencies: (mode?: 'partial' | 'complete') => ipcRenderer.invoke('install-plugin-dependencies', mode),
   retrySetupPlugins: () => ipcRenderer.invoke('retry-setup-plugins'),
   uninstallPluginDependencies: () => ipcRenderer.invoke('uninstall-plugin-dependencies'),
   checkPluginDependencies: () => ipcRenderer.invoke('check-plugin-dependencies'),
