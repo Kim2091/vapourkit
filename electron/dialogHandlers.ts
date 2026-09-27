@@ -16,7 +16,10 @@ export function registerDialogHandlers() {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: 'Videos', extensions: ['mp4', 'avi', 'mkv', 'mov', 'webm', 'flv', 'wmv'] }
+        // BestSource (bs.VideoSource) opens anything FFmpeg can demux; this list only
+        // decides what the picker shows. MTS/M2TS/TS are camcorder/Blu-ray transport streams (#9).
+        { name: 'Videos', extensions: ['mp4', 'avi', 'mkv', 'mov', 'webm', 'flv', 'wmv', 'm4v', 'mts', 'm2ts', 'ts', 'mpg', 'mpeg', 'vob'] },
+        { name: 'All Files', extensions: ['*'] }
       ]
     });
 

@@ -245,6 +245,15 @@ describe('inference backend selection', () => {
     expect(script).not.toContain('core.ort.Model');
   });
 
+  it('retries a TensorRT engine whose I/O is the other float format (#12)', async () => {
+    const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.engine')], false);
+
+    // The retry converts to the other float format and calls the same engine.
+    expect(script).toContain("if 'bits per sample mismatch' not in str(_vk_trt_error):");
+    expect(script).toContain('_vk_trt_fmt = vs.RGBS if _vk_trt_in[0].format.bits_per_sample == 16 else vs.RGBH');
+    expect(script.match(/core\.trt\.Model\(/g)).toHaveLength(2);
+  });
+
   it('emits DirectML code when the default backend is directml', async () => {
     const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.onnx')], false, 'directml');
 

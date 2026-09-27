@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { BackendId, QueueItem, Filter, SegmentSelection } from '../electron.d';
-import { generateOutputSuffix } from '../utils/generateOutputSuffix';
+import { autoOutputPath, uniqueOutputPath } from '../utils/queueOutputPath';
 import { normalizeBackendForCurrentPlatform } from '../utils/backends';
 
 interface UseQueueStoreProps {
@@ -161,21 +161,8 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
       const newItems: QueueItem[] = uniquePaths.map(videoPath => {
         const videoName = videoPath.split(/[\\\\]/).pop() || 'unknown';
 
-        let outputPath: string;
-        if (customOutputPath) {
-          outputPath = customOutputPath;
-        } else {
-          const suffix = descriptiveNamingEnabled
-            ? generateOutputSuffix(
-                {
-                  colorimetry: currentWorkflow.colorimetry,
-                  filters: currentWorkflow.filters,
-                  segment: currentWorkflow.segment,
-                }
-              )
-            : 'processed';
-          outputPath = videoPath.replace(/\.[^/.]+$/, '') + `-${suffix}.${currentWorkflow.outputFormat}`;
-        }
+        const outputPath = customOutputPath
+          ?? autoOutputPath(videoPath, currentWorkflow, descriptiveNamingEnabled);
 
         return {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -223,13 +210,23 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
     itemId: string,
     workflow: Partial<QueueItem['workflow']>
   ) => {
-    setQueue(prev => prev.map(item =>
-      item.id === itemId
-        ? { ...item, workflow: { ...item.workflow, ...workflow } }
-        : item
-    ));
+    setQueue(prev => prev.map(item => {
+      if (item.id !== itemId) return item;
+      const merged = { ...item.workflow, ...workflow };
+      // An auto-named output follows the edit, so a duplicated item that is
+      // then given a different chain gets its own file instead of overwriting
+      // the original's (#2). A path the user picked is left alone.
+      let outputPath = item.outputPath;
+      if (item.outputPath === autoOutputPath(item.videoPath, item.workflow, descriptiveNamingEnabled)) {
+        outputPath = uniqueOutputPath(
+          autoOutputPath(item.videoPath, merged, descriptiveNamingEnabled),
+          prev.filter(other => other.id !== itemId).map(other => other.outputPath),
+        );
+      }
+      return { ...item, outputPath, workflow: merged };
+    }));
     onLog(`Updated workflow for queue item`);
-  }, [onLog]);
+  }, [onLog, descriptiveNamingEnabled]);
 
   const clearQueue = useCallback(async () => {
     try {
@@ -290,6 +287,8 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
       const duplicate: QueueItem = {
         ...item,
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        // Its own file: two items writing one path overwrite each other (#2).
+        outputPath: uniqueOutputPath(item.outputPath, prev.map(q => q.outputPath)),
         status: 'pending' as const,
         progress: 0,
         errorMessage: undefined,
