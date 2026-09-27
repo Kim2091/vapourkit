@@ -46,7 +46,7 @@ vi.mock('./configManager', () => ({
 }));
 
 import { DependencyManager } from './dependencyManager';
-import { emptyReportDraft, readLedger } from './installLedger';
+import { emptyReportDraft, markTemplateDeletedByUser, readLedger } from './installLedger';
 
 const installed = path.join(root, 'data', 'config', 'filter-templates');
 const hasTag = (() => {
@@ -58,11 +58,13 @@ const hasTag = (() => {
   }
 })();
 
-describe.skipIf(!hasTag)('updating a 2.0.0 install', () => {
+// Each step digests the real template tree; slow under a parallel run.
+describe.skipIf(!hasTag)('updating a 2.0.0 install', { timeout: 30_000 }, () => {
   const manager = new DependencyManager() as unknown as {
     copyFilterTemplates(base: string, report?: ReturnType<typeof emptyReportDraft>): Promise<void>;
     getTemplateDecisions(): ReturnType<DependencyManager['getTemplateDecisions']>;
     resolveTemplateDecision: DependencyManager['resolveTemplateDecision'];
+    restoreMissingBundledTemplates: DependencyManager['restoreMissingBundledTemplates'];
   };
   const report = emptyReportDraft();
   const bundledQtgmc = path.join(root, 'include', 'plugins', 'plugin_filters', 'QTGMC _Old_.vkfilter');
@@ -143,11 +145,20 @@ describe.skipIf(!hasTag)('updating a 2.0.0 install', () => {
     expect(again).toEqual(emptyReportDraft());
   });
 
-  it('does not bring back a template the user deleted', async () => {
+  it('puts back a template that vanished without being deleted in the app', async () => {
     fs.rmSync(path.join(installed, 'Guided Filter.vkfilter'));
-    const again = emptyReportDraft();
-    await manager.copyFilterTemplates(root, again);
+    await manager.copyFilterTemplates(root, emptyReportDraft());
+    expect(fs.existsSync(path.join(installed, 'Guided Filter.vkfilter'))).toBe(true);
+  });
+
+  it('does not bring back a template the user deleted in the app', async () => {
+    fs.rmSync(path.join(installed, 'Guided Filter.vkfilter'));
+    await markTemplateDeletedByUser('Guided Filter.vkfilter');
+    await manager.copyFilterTemplates(root, emptyReportDraft());
     expect(fs.existsSync(path.join(installed, 'Guided Filter.vkfilter'))).toBe(false);
+    // Until the user asks for it back.
+    expect(await manager.restoreMissingBundledTemplates()).toEqual(['Guided Filter.vkfilter']);
+    expect(fs.existsSync(path.join(installed, 'Guided Filter.vkfilter'))).toBe(true);
   });
 
   it('says nothing about an edit made to the current body', async () => {

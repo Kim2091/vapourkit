@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as TOML from '@iarna/toml';
 import { PATHS } from './constants';
 import { logger } from './logger';
+import { markTemplateDeletedByUser } from './installLedger';
 
 export interface FilterTemplate {
   name: string;
@@ -186,7 +187,14 @@ export class TemplateManager {
       // A free path means no file holds this template.
       if (await fs.pathExists(filePath)) {
         await fs.remove(filePath);
-        logger.info(`Deleted template: ${name}`);
+        logger.info(`Deleted template: ${name} (${path.basename(filePath)})`);
+        try {
+          await markTemplateDeletedByUser(path.basename(filePath));
+        } catch (error) {
+          // The file is gone either way; without the mark, launch restores a
+          // built-in one, which is the safe way to be wrong.
+          logger.warn(`Could not record the deletion of ${name}:`, error);
+        }
       } else {
         throw new Error(`Template not found: ${name}`);
       }

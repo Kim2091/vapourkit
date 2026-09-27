@@ -31,7 +31,30 @@ describe('template reconcile', () => {
   });
 
   it('does not bring back a template the user deleted', () => {
-    expect(plan({ ledger: { 'A.vkfilter': { digest: 'a1', appVersion: '2.1.0' } } })).toEqual([]);
+    expect(plan({ ledger: { 'A.vkfilter': { digest: 'a1', appVersion: '2.1.0', deletedByUser: true } } })).toEqual([]);
+  });
+
+  it('puts back a template that went missing without the user deleting it', () => {
+    expect(plan({ ledger: { 'A.vkfilter': { digest: 'a2', appVersion: '2.1.0' } } }))
+      .toEqual([{ kind: 'restore', file: 'A.vkfilter' }]);
+  });
+
+  it('clears the deleted mark once the template is back', () => {
+    expect(plan({
+      installed: new Map([['A.vkfilter', 'a2']]),
+      ledger: { 'A.vkfilter': { digest: 'a2', appVersion: '2.1.0', deletedByUser: true } },
+    })).toEqual([{ kind: 'record', file: 'A.vkfilter', digest: 'a2' }]);
+  });
+
+  it("leaves alone a template of the user's own that a release now ships under its name", () => {
+    // 2.0.0 did not ship New.vkfilter; the user had made one.
+    expect(planTemplateReconcile(state({
+      bundled: new Map([['A.vkfilter', 'a2'], ['New.vkfilter', 'n1']]),
+      shippedAnywhere: new Set(['A.vkfilter', 'New.vkfilter']),
+      installed: new Map([['A.vkfilter', 'a2'], ['New.vkfilter', 'mine']]),
+      previousVersion: '2.0.0',
+    }), { ...tables, history: { ...tables.history, 'New.vkfilter': ['n1'] } }))
+      .toEqual([{ kind: 'record', file: 'A.vkfilter', digest: 'a2' }]);
   });
 
   it('replaces an untouched template we changed, with or without a ledger', () => {

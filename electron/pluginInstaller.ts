@@ -53,6 +53,7 @@ import {
   type InstalledPackage,
 } from './vendorPackages';
 import * as _7z from '7zip-min';
+import { readLedger } from './installLedger';
 
 /**
  * 'retrying' is an attempt that failed with another about to start, and
@@ -1409,19 +1410,23 @@ export class PluginInstaller {
     }
 
     logger.info(`Found ${files.length} supported filter template(s) to copy`);
-    
+
+    // Only what is missing. Overwriting here replaced every edited template
+    // with no backup; bringing an untouched one up to date, and asking about
+    // an edited one, is the launch reconcile's job. A template the user
+    // deleted stays deleted.
+    const ledger = await readLedger().catch(() => undefined);
+
     for (const file of files) {
       const sourcePath = path.join(pluginFiltersFolder, file);
       const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
+      if (ledger?.templates[file]?.deletedByUser) continue;
       
       // Check if it's a file (not a directory)
       const stats = await fs.stat(sourcePath);
-      if (stats.isFile()) {
+      if (stats.isFile() && !await fs.pathExists(destPath)) {
         try {
-          // Windows historically refreshes the complete bundled catalog on
-          // installation. Linux only adds its verified subset and preserves a
-          // user-modified template from an earlier setup.
-          await fs.copy(sourcePath, destPath, { overwrite: process.platform === 'win32' });
+          await fs.copy(sourcePath, destPath, { overwrite: false });
           logger.info(`Copied filter template: ${file}`);
         } catch (error) {
           logger.error(`Failed to copy filter template ${file}:`, error);

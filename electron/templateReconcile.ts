@@ -30,11 +30,19 @@ export interface LedgerEntry {
   appVersion: string;
   /** An edited copy of a template we no longer ship, which the user kept */
   keptDropped?: boolean;
+  /**
+   * The user deleted this built-in template in the app. Only this keeps a
+   * missing template missing: one that is gone without it (removed by
+   * something other than the user) is put back at launch.
+   */
+  deletedByUser?: boolean;
 }
 
 export type TemplateAction =
   /** Absent and never recorded: copy it in */
   | { kind: 'seed'; file: string }
+  /** Recorded, absent, and not deleted by the user: put it back */
+  | { kind: 'restore'; file: string }
   /** Untouched and we changed it: replace */
   | { kind: 'update'; file: string }
   /** Untouched and no longer shipped: delete */
@@ -103,19 +111,24 @@ export function planTemplateReconcile(state: TemplateState, tables: TemplateTabl
 
     if (bundled !== undefined) {
       if (installed === undefined) {
-        // A ledger entry with no file is a template the user deleted. Putting
-        // it back on every update is how it used to work, and is not a choice
-        // they made.
+        // A template the user deleted stays deleted; one that went missing
+        // any other way is put back, as every launch before the ledger did.
         if (!entry) actions.push({ kind: 'seed', file });
+        else if (!entry.deletedByUser) actions.push({ kind: 'restore', file });
         continue;
       }
 
       if (installed === bundled) {
-        if (entry?.digest !== bundled) actions.push({ kind: 'record', file, digest: bundled });
+        if (entry?.digest !== bundled || entry.deletedByUser) actions.push({ kind: 'record', file, digest: bundled });
         continue;
       }
 
       const base = baseOf(file, installed, state, tables);
+      // A template of the user's own that a release now ships under the same
+      // name: the release they ran did not ship it, so theirs is no edit of
+      // ours. Left alone, and not recorded as ours.
+      const previousRelease = releaseForVersion(state.previousVersion, tables.releases);
+      if (!entry && base === undefined && previousRelease && !(file in previousRelease)) continue;
       if (installed === base) {
         actions.push({ kind: 'update', file });
       } else if (base === bundled) {

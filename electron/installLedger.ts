@@ -127,6 +127,19 @@ export async function writeLedger(ledger: InstallLedger): Promise<void> {
   await writeJsonAtomic(ledgerPath(), ledger);
 }
 
+/**
+ * Records that the user deleted a template in the app. Only a template the
+ * ledger already tracks (a built-in one) is marked; the mark is what keeps
+ * launch from putting it back. A template of their own has no entry to mark.
+ */
+export async function markTemplateDeletedByUser(file: string): Promise<void> {
+  const ledger = await readLedger();
+  const entry = ledger.templates[file];
+  if (!entry || entry.deletedByUser) return;
+  ledger.templates[file] = { ...entry, deletedByUser: true };
+  await writeLedger(ledger);
+}
+
 export async function readUpdateReport(): Promise<UpdateReport | null> {
   try {
     return await fs.readJson(reportPath()) as UpdateReport;

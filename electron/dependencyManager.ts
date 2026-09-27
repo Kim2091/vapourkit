@@ -49,6 +49,7 @@ import {
   selectUnsupportedLinuxPluginFilterTemplates,
 } from './pluginFilterCatalog';
 import { shippedTemplateDigest } from './shippedTemplateDigest';
+import { SHIPPED_TEMPLATE_DIGESTS } from './shippedTemplateDigests';
 import { isDecision, planTemplateReconcile, type TemplateDecision, type TemplateState } from './templateReconcile';
 import {
   emptyReportDraft,
@@ -1241,11 +1242,24 @@ export class DependencyManager {
       try {
         switch (action.kind) {
           case 'seed':
+          case 'restore':
           case 'update':
+            // A file we could not read reads as absent; it may still hold an
+            // edit, so a seed or restore never writes over one that exists.
+            if (action.kind !== 'update' && await fs.pathExists(destPath)) {
+              logger.warn(`Filter template ${action.file} could not be read; leaving it as it is`);
+              break;
+            }
             await fs.copy(selected.get(action.file)!, destPath, { overwrite: true });
             ledger.templates[action.file] = { digest: state.bundled.get(action.file)!, appVersion };
-            (action.kind === 'seed' ? report?.templatesAdded : report?.templatesUpdated)?.push(action.file);
-            logger.dependency(`${action.kind === 'seed' ? 'Copied' : 'Updated unmodified'} filter template: ${action.file}`);
+            (action.kind === 'update' ? report?.templatesUpdated : report?.templatesAdded)?.push(action.file);
+            if (action.kind === 'restore') {
+              // Recorded as installed, gone, and not deleted in the app: some
+              // other process removed it. Loud, so a log shows when it happens.
+              logger.warn(`Filter template ${action.file} was missing without being deleted in the app; restored it`);
+            } else {
+              logger.dependency(`${action.kind === 'seed' ? 'Copied' : 'Updated unmodified'} filter template: ${action.file}`);
+            }
             break;
           case 'remove':
             await fs.remove(destPath);
@@ -1288,27 +1302,31 @@ export class DependencyManager {
       const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
       if (!await fs.pathExists(destPath)) continue;
 
+      // Any body the file has shipped with, line endings aside: a byte
+      // comparison against this release's copy kept a CRLF or older copy
+      // behind as a stray "custom" template.
       const [source, destination] = await Promise.all([
         fs.readFile(sourcePath),
         fs.readFile(destPath),
       ]);
-      if (source.equals(destination)) {
+      const digest = shippedTemplateDigest(destination);
+      if (digest === shippedTemplateDigest(source) || SHIPPED_TEMPLATE_DIGESTS[file]?.includes(digest)) {
         await fs.remove(destPath);
         logger.dependency(`Removed unsupported Linux bundled filter template: ${file}`);
       }
     }
   }
 
-  /** The edited templates the post-update notice asks about, with display names. */
   /**
-   * Built-in filters this install has deleted: shipped for this platform,
-   * recorded in the ledger, and no longer on disk. An update never brings
-   * those back (the delete was taken as the user's choice), so this is the
-   * way to get them back.
+   * Built-in filters the user deleted in the app: shipped for this platform,
+   * marked deleted in the ledger, and not on disk. Launch never brings those
+   * back, so this is the way to get them back.
    */
   async getMissingBundledTemplates(): Promise<string[]> {
     const { state } = await this.templateState(getBundledBasePath(), await readLedger());
-    return [...state.bundled.keys()].filter(file => !state.installed.has(file) && state.ledger[file]).sort();
+    return [...state.bundled.keys()]
+      .filter(file => !state.installed.has(file) && state.ledger[file]?.deletedByUser)
+      .sort();
   }
 
   /** Puts back every built-in filter the install has deleted; answers the files restored. */
@@ -1324,6 +1342,7 @@ export class DependencyManager {
     return missing;
   }
 
+  /** The edited templates the post-update notice asks about, with display names. */
   async getTemplateDecisions(): Promise<TemplateDecision[]> {
     const bundledBasePath = getBundledBasePath();
     const { state } = await this.templateState(bundledBasePath, await readLedger());
