@@ -1,18 +1,94 @@
 # Changelog
 
+## 2.1.0
+
+### Updating no longer costs you a re-setup
+Until now, installing a new Vapourkit over an old one deleted the whole `data` folder: the Python/VapourSynth environment (several GB, ~20 minutes to rebuild), your settings, workflows, custom filters and built TensorRT engines. That is why copying a new portable build over an old one has been the faster way to update. From 2.1 the setup installer updates in place. `data` is kept, and the update takes seconds.
+
+- **Coming from 2.0 (setup install):** just run the 2.1 installer. The uninstaller that runs during an update belongs to the version being *replaced*, and 2.0's could not cope with the environment's long file paths. It would have failed with "Vapourkit can't be closed" (or "Failed to uninstall old application files"), and clicking Retry never helped. The 2.1 installer now moves `data` out of the way before 2.0's uninstaller runs and puts it back afterwards, so the hop works and nothing is rebuilt
+  - If you pick a different install folder on another drive, the installer can't move `data` across drives. It leaves it in a folder named `<old install folder>.update-data`, tells you where, and never deletes it. Move it into the new install folder as `data` and start Vapourkit
+  - If an update is interrupted, `data` may be left in that `.update-data` folder. Running the installer again puts it back
+- **Coming from 0.16 or older:** unchanged from 2.0. The old environment isn't compatible, so setup runs once. Export your workflows and filters first
+- **Portable users:** extract 2.1 over your existing folder, keeping `data`, as before
+- **Uninstalling** removes everything, including the long-path files the old uninstaller left behind, so the install folder no longer lingers after an uninstall
+- **What an update does to an existing install, and how it tells you:** you don't have to reinstall plugins to get a release's fixes. On the first launch after an update, Vapourkit brings your install up to date and then shows a notice listing what it did. The notice stays in Settings → Last Update until every decision in it is made
+  - **Filters you haven't edited** are updated to the new version, or removed if the release dropped them. This release updates 40 and removes 14
+  - **Filters you have edited** are never changed without asking. If the release changed a filter you edited, the notice offers *Use new version* or *Keep mine*. If it dropped one, the notice offers *Remove* or *Keep*, and names the replacement when the filter was only renamed. Your copy is saved to `data\config\template-backups` before anything replaces or removes it. An edit made to a filter the release didn't change is left alone and not mentioned
+  - **Filters you deleted** stay deleted. Updates used to put them back
+  - **Python packages** are checked against the list this version installs. Anything missing or below its minimum version is installed: this release, `vapoursynth-timecube` (fast LUTs) and `vs_undistort>=2.3.1`. This needs an internet connection once. If it fails, the app still starts and tries again a day later
+  - **Vapourkit's own DLSS plugin** (`vsdlssnr.dll`) is replaced when the bundled build differs
+  - **VapourSynth scripts** (the Hybrid scripts and the bundled script pack) are versioned too. An update replaces the ones you haven't edited when a release changes them, keeps any you edited and lists them in the notice, and downloads nothing when nothing changed. Reinstalling plugins restores every shipped script, saving your edited ones to `data\config\script-backups` first
+  - **Saved workflows are never touched**: each step keeps its own copy of the filter's code
+  - How it knows: `data\config\installed-components.json` records the version of every filter, plugin and script Vapourkit put into your install, so later updates can tell its files from your changes
+
+### Installing is more reliable
+- **Downloads no longer hang.** Every download now gives up on a stalled connection instead of sitting at "Downloading… N%" forever, retries, and only hands a file to 7-Zip once it's completely written. That covers Python, pip, FFmpeg, video-compare, the model packs and the VapourSynth scripts. It also uses Windows' proxy settings. Before this, the "7-zip exited with code 2 / 0 bytes / file in use" fix only covered the scripts download
+- **Errors say what went wrong.** A failed install used to say only "exit code 1". It now names the cause and what to do, with the relevant lines under Details and the log's location. Recognised causes: disk full, antivirus or a locked file, Windows' path-length limit, no connection, proxy or HTTPS interception, a damaged pip, and an interrupted earlier install
+- **Checked before starting:** free space on the data drive and the temp folder (an NVIDIA plugin install needs 12 GB, and warns below 18 GB to leave room for pip's downloads and the TensorRT engines you'll build), whether Vapourkit's folder is writable, and warnings for a portable copy under Program Files or a folder path too long for Windows. After a successful install, pip's download cache is cleared, instead of growing to several GB
+- **No more tangled retries.** Setup retries a failed plugin install once, as before, but no longer shows "Retry" while that retry is already running. Clicking it there used to start a second install into the same environment. Only one install or uninstall can run at a time
+- **Cancel works during downloads and extraction**, not only while pip is running
+- **A failed setup no longer leaves "Start Setup" stuck** on its spinner until you restart the app
+- **The VapourSynth scripts download no longer fails the whole install.** If GitHub can't be reached, the rest installs, and the next launch fetches the scripts
+- **Repairs itself where it can:**
+  - At launch, a pip that no longer runs is reinstalled
+  - A half-extracted Python is re-extracted instead of being trusted because `python.exe` exists
+  - Plugin DLLs that vanish right after extraction are reported as antivirus quarantine, naming the folder to exclude, instead of failing later with a missing-plugin error
+- On Linux, setup runs `vapoursynth config`, which fixes "Failed to initialize VSScript" on first launch (not yet tested on a Linux machine)
+- **The dependency check runs once per launch.** It could run twice at once, and the two runs could spoil each other's files; this was the cause of the occasional "Failed to write the trtexec shim" in logs
+
+### Colour grading
+- Colour grading is a step in the filter chain, so it can sit anywhere: before the model to fix the source, after it to finish the result, or both. Reorder or disable it like any other step
+- Opening a grade docks a Resolve-style panel under the preview: lift/gamma/gain/offset trackballs, a tone grid, and scopes. On a wide enough window the scopes get their own column beside the picture
+- Grading is live against the real chain at full resolution, shaded on the GPU. Closing the panel re-renders once with the values baked in
+- The tone sliders follow the cursor and take typed values
+- A Clip toggle stripes clipped pixels (red at the top, blue at the bottom) live while you drag
+- A black point picker: click something that should be black, and lift is solved per channel for level and colour cast together
+- The preview reports where the picture sits in 8-bit code values, and flags footage that looks like limited-range video being read as full range
+- Lift and gain are now a single ramp, as in Resolve, so setting a black point no longer drags the highlights. Highlight headroom above 1.0 is kept through gamma and contrast. An unedited Color Grade template is upgraded automatically
+- LUTs (experimental): export a grade as `.cube` or `.3dl`, or import one as an Apply LUT step. **Create LUT** / **Load LUT** is a pair of steps that captures the colour at one point in the chain and restores it at another, either exactly or by fitting when a model sits between them, and reports how well it fit
+- LUTs render through `timecube` (installed automatically), which is about 4x faster and half the memory of the fallback. Fixed a `.3dl` round trip that could come back up to 16x too bright, and importing two LUTs with the same filename no longer repoints saved workflows at the wrong one
+
+### Inspect: preview the real chain in the app
+- **Inspect** shows the actual output of each step at full resolution, one step at a time, instead of a 640px ffmpeg snapshot. Number keys switch steps, and Ctrl+R reloads after a chain change
+- Playback: the chain plays in the app, each step at its own frame rate. Every frame is shown in order and none are dropped, so combing, cadence and ghosting are visible
+- Timeline: position readout, drag to scrub, loop, Home/End, Shift+arrows for one-second steps. The picture follows a segment handle while you drag it, and the Segment button now toggles the mode directly
+- The Before/After wipe works in Inspect
+- Inspect can be cancelled while it's opening, even mid engine build
+- **Removed:** the "Preview selection" button, which rendered a segment to a temp file. Playback plus loop replaces it. Preview errors now show as a toast
+- Fixed the timeline seeking to the wrong moment on steps that change the clip length (e.g. a bob deinterlacer), and being off by the segment's in point
+
+### DLSS Neural Uplift (NVIDIA)
+- New filter backed by NVIDIA's DLSS-NR model, with Vapourkit's own VapourSynth plugin (`vsdlssnr.dll`, bundled)
+- It needs `nvngx_dlssnr.dll`, which NVIDIA doesn't distribute on its own (it ships inside games that use DLSS 5). Import your copy with the file picker, either from the Plugins modal or from the bar that appears when a workflow needs it. The picker checks you chose the right DLL and not one of its lookalikes
+- About 2x faster than the first build: 4K goes from ~19.5 to ~37 fps, and 1440p from ~34 to ~53 fps (RTX 5080)
+- Optional motion vectors and depth inputs, plus automatic motion estimation on the GPU (on by default). A Vulkan backend is available and off by default
+- `working_scale` runs the model on a downscaled copy and puts the detail back. Measured at 4K: ~26 fps at 0.75 and ~31 fps at 0.5, against ~17 at 1.0. Check faces and fine texture when using it
+- Fixed several filter instances breaking each other (e.g. a preview and an encode at once)
+- The official DLL is Blackwell-only. The filter no longer claims RTX 20 to 40 series can't work with it
+
+### Filters
+- Every shipped filter is now checked against the real VapourSynth core, at both ends of the clip. **All 151 build and render**
+- 37 filters that failed to build now work, most of them broken by upstream renames: Detail/Luma/Ridge/Difference/Normalize Mask, MC_Degrain, Binarize Mask, Maximum/Minimum and their combinations, Clense, Grain Stabilize, EEDI3, Warp Sharp, Temporal Median, SpotLess, the four descalers, Undistort, and more
+- Also fixed: QTGMC (Old) on every preset, Guided Filter (refused every real source), Read Image, GradFun3, Add Duplicates, Replace Multiple Frames, LUTDeCrawl (now works at 10-bit instead of 8)
+- **Removed 13 filters that could not run**, because their native plugins have no build available: Based AA, Fill Drops RIFE/SVP, Fine Dehalo2, Frame Rate Converter, Grain Factory, LGhost Deghost, Oyster, Rainbow Smooth, Remove Dirt, Remove Dirt MC, TFMBobN, TFMBobQ. Workflows that use them keep their copy of the step. Fine Dehalo2 will come back once an upstream bug is fixed
+- Undistort works on 50-series GPUs again (needs `vs_undistort` 2.3.1, installed automatically) and gets its `window_overlap` control back
+- Crop at all zeros removes the padding a Pad or Modulus step added, as it originally did, and passes straight through when nothing was padded. Crop (Auto) is merged into it. Crop also has a visual editor
+- A step can take its picture from any step above it, not only from the original clip. Wavelet Color Fix from Step is the first filter to use this
+- Start is disabled while a filter editor is open, with the reason on hover
+
+### Models and encoding
+- BF16 TensorRT engines no longer produce corrupt output
+- Model precision is read from the ONNX graph, so BF16 models import correctly. Auto-build now actually builds BF16 models as BF16
+- The quality slider now works on hardware encoders (NVENC, AMF, QSV). Before, it had no effect, and every quality setting produced the same few-Mbps output
+
+### Other
+- Discord Rich Presence, off by default (Settings)
+- The VapourSynth core is pinned to R79, the version every plugin and filter is verified against, and a newer one is put back at launch
+- An interrupted plugin install no longer makes every later install fail. Stranded package metadata and half-removed folders are cleaned up first
+- Fixed "7-zip exited with code 2" when setup extracted the VapourSynth scripts download
+- Compare opens its window again. Before, it ran hidden, holding up to ~1GB
+
 ## 2.0.0
-- Three filters that could never have run now do, and the check that missed them was the reason
-  - QTGMC (Old) failed on any preset: the bundled script binds `core.eedi3m.EEDI3` before it decides whether the preset uses EEDI3, and `EEDI3m.dll` is removed at install because the `eedi3vk2` wheel replaces it. The template now answers to the name the script looks for
-  - Guided Filter refused every real source: it takes float only, and every clip the app hands a filter is integer. It converts around it now
-  - Read Image's placeholder path was unescaped twice, once by TOML and once by Python, so it shipped containing a literal tab
-  - The filter check excused 21 filters as "refusing for a good reason" on the strength of their first gate, with the rest of each filter never run. It now answers the refusal instead - an interlaced source for a deinterlacer, an HD one for a descale, the companion step or a real file where one was wanted - and models and backends are set up the way a generated script sets them up. All 151 filters that remain build and render; nothing is excused, and the baseline of known-broken filters is empty
-- Removed three filters that could not run as shipped
-  - TFMBobN and TFMBobQ need the `tivtc` plugin, which has no PyPI or JET wheel and is not in the bundled archive
-  - Based AA needs ArtCNN models that no part of setup downloads. Its template had a second fault, now fixed in the file's history: it took float only, so it refused every real source. If ArtCNN is ever added to the model download alongside RIFE/DPIR, restore the filter and its `LINUX_PLUGIN_FILTERS` entry
-- Undistort works again on 50-series GPUs, and gets its temporal-window overlap control back
-  - On a 50-series card with `interpolation = "bicubic"`, vs_undistort 2.2.0 caps the TensorRT build workspace at 6GB, no tactic fits, and the engine never builds - so the filter failed at its own defaults however much VRAM the card had. Upstream 2.3.x lifts that cap for exactly this case and makes one engine dimension slightly dynamic; setup now asks for `vs_undistort>=2.3.1` so an install still on 2.2.0 is upgraded rather than left broken
-  - The TensorRT variant passed `num_streams`, which 2.3.0 removed - it raised the moment it was picked
-  - `window_overlap` exists again upstream and is exposed on both variants; it smooths the seam between temporal windows
 - Filters that build TensorRT engines at runtime no longer look like a frozen app
   - A banner names the engine being built, shows progress when the builder reports it, and explains that this is the first run at that resolution; it clears when the build ends, and on every cancel/crash path
   - Engine builds are kill-safe: the engine is written to a temp file and renamed into place, so force-closing mid-build can no longer leave a truncated engine that gets reused as a cache hit and permanently breaks the filter
@@ -48,8 +124,6 @@
   - `vspipe.exe` and the core runtime now come from the VapourSynth wheel in `Lib\site-packages\vapoursynth`; plugins autoload from `Lib\site-packages\vapoursynth\plugins`
   - vsjetpack is no longer pinned to 1.1.0 (the old `vapoursynth==72` ABI pin is obsolete)
   - `vsview[full]` is installed with the main plugin step instead of a separate pinned install
-  - The VapourSynth core itself is pinned to R79 instead of tracking whatever pip resolves: every plugin wheel and bundled filter here is verified against that core, and the plugin ABI is exactly what moved between R72 and R79
-  - An install that already carries a newer core (installed before the pin, or dragged forward by another wheel's dependency) is put back to R79 at launch
 - TensorRT engine building now uses the TensorRT Python API instead of `trtexec` (the TensorRT pip wheels don't ship trtexec)
   - The Import Model dialog still accepts trtexec-style parameters; unsupported flags are ignored with a warning
 - Portable installs that reuse an existing `data` folder are migrated in place: the old portable runtime, `vs-plugins` folder, and bundled script modules that PyPI now provides are cleaned up during setup, and the Python environment is upgraded in place
