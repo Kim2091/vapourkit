@@ -4,6 +4,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './logger';
 import { PATHS, IS_WINDOWS } from './constants';
+import { appendBounded, CommandError } from './installFlow';
+
+export { CommandError } from './installFlow';
 
 export interface ProcessResult {
   stdout: string;
@@ -44,14 +47,22 @@ export function getBundledBasePath(): string {
 }
 
 /**
- * Shared utility to run a command with stdout/stderr capture
+ * Shared utility to run a command with stdout/stderr capture.
+ *
+ * A non-zero exit rejects with a CommandError, whose message is the one
+ * sentence the user should see (see installErrors.ts) and whose `output`
+ * keeps what the command printed. The raw output used to be the message, so
+ * setup showed a screenful of pip traceback where it needed to say "the disk
+ * is full". `step` names what the command was for ("Installing pip"), and
+ * opens that sentence.
  */
 export async function runCommand(
   command: string,
   args: string[],
   cwd?: string,
-  env?: NodeJS.ProcessEnv
-): Promise<void> {
+  env?: NodeJS.ProcessEnv,
+  options: { step?: string } = {}
+): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     // Keep the executable and arguments separate. Using a shell here required
     // hand-quoting paths and allowed shell metacharacters in an argument to be
@@ -67,11 +78,15 @@ export async function runCommand(
 
     let stdout = '';
     let stderr = '';
+    // Both streams in arrival order, bounded: pip splits one failure across
+    // them, and the classifier reads the tail.
+    let combined = '';
 
     if (proc.stdout) {
       proc.stdout.on('data', (data) => {
         const output = data.toString();
-        stdout += output;
+        stdout = appendBounded(stdout, output);
+        combined = appendBounded(combined, output);
         logger.debug(`[stdout] ${output.trim()}`);
       });
     }
@@ -79,7 +94,8 @@ export async function runCommand(
     if (proc.stderr) {
       proc.stderr.on('data', (data) => {
         const output = data.toString();
-        stderr += output;
+        stderr = appendBounded(stderr, output);
+        combined = appendBounded(combined, output);
         logger.debug(`[stderr] ${output.trim()}`);
       });
     }
@@ -87,17 +103,20 @@ export async function runCommand(
     proc.on('close', (code) => {
       if (code === 0) {
         logger.debug(`Command completed successfully with code ${code}`);
-        resolve();
+        resolve({ stdout, stderr, code });
       } else {
-        const errorMsg = `Command failed with code ${code}: ${stderr || stdout}`;
-        logger.error(errorMsg);
-        reject(new Error(errorMsg));
+        const error = new CommandError(combined, code, options.step);
+        logger.error(`Command failed with code ${code} (${error.classified.kind}): ${JSON.stringify([command, ...args])}`);
+        logger.error(`Output: ${stderr || stdout}`);
+        reject(error);
       }
     });
 
     proc.on('error', (error) => {
       logger.error('Command execution error:', error);
-      reject(error);
+      // Node's "spawn ... ENOENT" is how a missing interpreter shows up, and
+      // the classifier recognises it by those words.
+      reject(new CommandError(error.message, null, options.step));
     });
   });
 }

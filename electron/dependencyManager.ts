@@ -2,13 +2,40 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
 import * as TOML from '@iarna/toml';
-import axios from 'axios';
 import { app, BrowserWindow} from 'electron';
 import { ModelExtractor } from './modelExtractor';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
 import { logger } from './logger';
-import { PATHS, PYTHON_VERSION, IS_WINDOWS, VAPOURSYNTH_PIP_SPEC, VAPOURSYNTH_VERSION } from './constants';
+import * as os from 'os';
+import { spawn } from 'child_process';
+import {
+  PATHS,
+  PYTHON_VERSION,
+  IS_WINDOWS,
+  PIP_NETWORK_ARGS,
+  PYPI_EXTRA_INDEX_ARGS,
+  VAPOURSYNTH_PIP_SPEC,
+  VAPOURSYNTH_VERSION,
+} from './constants';
+import { readInstalledProjects, unmetRequirements } from './launchRequirements';
+import { getPypiPackages } from './vendorPackages';
+import { syncInstalledScripts } from './scriptSync';
+import { downloadToFile } from './download';
+import { APP_OWNED_PLUGIN_ARCHIVES, shouldExtractBundledPluginArchives } from './bundledPluginArchives';
+import { CORE_SETUP_REQUIRED_BYTES, CORE_SETUP_REQUIRED_TEMP_BYTES, runInstallPreflight } from './installPreflight';
+import {
+  appendBounded,
+  describeInstallFailure,
+  describeVanishedFiles,
+  embeddedPythonRequiredFiles,
+  InstallBlockedError,
+  judgePipProbe,
+  judgePreflight,
+  missingEmbeddedPythonFiles,
+  SingleFlight,
+  type PipProbe,
+} from './installFlow';
 import { runCommand, getBundledBasePath, resolveSupportedPythonCommand } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
@@ -21,13 +48,29 @@ import {
   selectPluginFilterTemplates,
   selectUnsupportedLinuxPluginFilterTemplates,
 } from './pluginFilterCatalog';
+import { shippedTemplateDigest } from './shippedTemplateDigest';
+import { isDecision, planTemplateReconcile, type TemplateDecision, type TemplateState } from './templateReconcile';
+import {
+  emptyReportDraft,
+  isEmptyDraft,
+  mergeUpdateReport,
+  readLedger,
+  writeLedger,
+  type InstallLedger,
+  type UpdateReportDraft,
+} from './installLedger';
 import * as _7z from '7zip-min';
 
 export interface DownloadProgress {
-  type: 'download' | 'extract' | 'complete' | 'error' | 'python-setup' | 'model-extract';
+  // 'warning' is worth showing but stops nothing; 'error' ends setup.
+  type: 'download' | 'extract' | 'complete' | 'error' | 'warning' | 'python-setup' | 'model-extract';
   component: string;
   progress: number;
   message: string;
+  /** On 'error': the one sentence to show, the lines it came from, and the log */
+  summary?: string;
+  evidence?: string;
+  logPath?: string;
 }
 
 interface ComponentConfig {
@@ -67,7 +110,16 @@ export class DependencyManager {
       message: `Setting up ${IS_WINDOWS ? 'embedded Python' : 'a Python virtual environment'} for VapourSynth...`
     });
 
-    if (!await fs.pathExists(PATHS.PYTHON)) {
+    const missingEmbedFiles = IS_WINDOWS ? await this.missingEmbeddedPythonFiles() : [];
+    if (IS_WINDOWS && missingEmbedFiles.length > 0 && await fs.pathExists(PATHS.PYTHON)) {
+      // python.exe on its own is what an extraction interrupted part-way
+      // leaves behind, and checking for it alone skipped re-extraction
+      // forever. Extracting again over it replaces what is there and fills in
+      // what is not; site-packages is not in the zip and is left alone.
+      logger.dependency(`Embedded Python is incomplete (missing ${missingEmbedFiles.join(', ')}); extracting it again`);
+    }
+
+    if (IS_WINDOWS ? missingEmbedFiles.length > 0 : !await fs.pathExists(PATHS.PYTHON)) {
       if (!IS_WINDOWS) {
         this.sendProgress({
           type: 'python-setup',
@@ -86,7 +138,9 @@ export class DependencyManager {
           throw new Error('Python 3.12, 3.13, or 3.14 with venv support is required on Linux, but no python3 or python executable was found in the desktop session PATH. Install Python and python3-venv, ensure the interpreter is visible to the desktop session, then restart Vapourkit.');
         }
         logger.dependency(`Using host Python ${pythonResolution.command} (${pythonResolution.version})`);
-        await runCommand(pythonResolution.command, ['-m', 'venv', PATHS.VS], PATHS.APP_DATA);
+        await runCommand(pythonResolution.command, ['-m', 'venv', PATHS.VS], PATHS.APP_DATA, undefined, {
+          step: 'Creating the Python virtual environment',
+        });
         logger.dependency(`Python virtual environment created at: ${PATHS.VS}`);
       } else {
         this.sendProgress({
@@ -151,32 +205,12 @@ export class DependencyManager {
     // runtime, vs-plugins DLL folder, superseded script modules).
     await migrateLegacyPortableLayout();
 
-    // Install pip if missing
-    if (!await fs.pathExists(path.join(PATHS.SITE_PACKAGES, 'pip'))) {
-      this.sendProgress({
-        type: 'python-setup',
-        component: 'Python Embedded',
-        progress: 60,
-        message: 'Downloading pip installer...'
-      });
-
-      const getPipPath = path.join(PATHS.APP_DATA, 'get-pip.py');
-      await this.downloadFile(
-        'https://bootstrap.pypa.io/get-pip.py',
-        getPipPath,
-        'pip installer'
-      );
-
-      this.sendProgress({
-        type: 'python-setup',
-        component: 'Python Embedded',
-        progress: 70,
-        message: 'Installing pip...'
-      });
-
-      logger.dependency('Installing pip');
-      await runCommand(PATHS.PYTHON, [getPipPath, '--no-warn-script-location'], PATHS.APP_DATA);
-      await fs.remove(getPipPath);
+    // Install pip if missing, or if it is there but will not run: a pip
+    // folder whose package is damaged passed the old folder check and then
+    // failed every install with "No module named pip" (vapourkit-nightly#1).
+    const pipFolderExists = await fs.pathExists(path.join(PATHS.SITE_PACKAGES, 'pip'));
+    if (!pipFolderExists || judgePipProbe(await this.probePip()) === 'repair-pip') {
+      await this.bootstrapPip('Python Embedded');
     }
 
     this.sendProgress({
@@ -192,9 +226,17 @@ export class DependencyManager {
     logger.dependency('Installing VapourSynth and BestSource from PyPI');
     await runCommand(PATHS.PYTHON, [
       '-m', 'pip', 'install', '--upgrade', '--no-warn-script-location',
+      // The same cache the plugin phase uses, so the one prune there covers
+      // it; pip's default cache is in the user profile, out of sight.
+      '--cache-dir', PATHS.PIP_CACHE,
+      ...PIP_NETWORK_ARGS,
       VAPOURSYNTH_PIP_SPEC,
       'vapoursynth-bestsource',
-    ]);
+    ], undefined, undefined, { step: 'Installing VapourSynth' });
+
+    if (!IS_WINDOWS) {
+      await this.configureVapourSynthForVenv();
+    }
 
     this.sendProgress({
       type: 'python-setup',
@@ -252,15 +294,235 @@ export class DependencyManager {
       await runCommand(PATHS.PYTHON, [
         '-m', 'pip', 'install', '--no-warn-script-location',
         '--cache-dir', PATHS.PIP_CACHE,
+        ...PIP_NETWORK_ARGS,
         VAPOURSYNTH_PIP_SPEC,
-      ]);
+      ], undefined, undefined, { step: `Reinstalling VapourSynth ${VAPOURSYNTH_VERSION}` });
       logger.dependency(`VapourSynth pinned back to ${VAPOURSYNTH_VERSION}`);
     } catch (error) {
       logger.error(`Failed to pin VapourSynth back to ${VAPOURSYNTH_VERSION}:`, error);
     }
   }
 
-  async checkDependencies(): Promise<boolean> {
+  /**
+   * Brings an existing environment up to the package list this release asks
+   * for - see launchRequirements.ts. An update keeps data\, so this is the only
+   * way a package added or raised in a release reaches anyone who updated.
+   *
+   * Only for an install whose plugin phase ran, and against the vendor that
+   * phase installed for, so launch never starts a plugin install nobody asked
+   * for or switches an install's GPU flavour. The core is left to its own pin.
+   *
+   * No --upgrade: only the unmet specs move, and anything already satisfying
+   * them stays put. The core pin rides along so no dependency can drag
+   * VapourSynth past it. Non-fatal: a failure logs, the app starts, and the
+   * attempt waits a day before running again, so an offline machine is not
+   * held up by pip on every launch.
+   */
+  private async ensurePackageRequirements(report: UpdateReportDraft): Promise<void> {
+    const vendor = configManager.getPluginsGpuVendor();
+    const installed = await readInstalledProjects(PATHS.SITE_PACKAGES);
+    if (!vendor || !installed.has('vsjetpack')) return;
+
+    const unmet = unmetRequirements(installed, getPypiPackages(vendor))
+      .filter(requirement => requirement.project !== 'vapoursynth');
+    if (unmet.length === 0) return;
+
+    const specs = unmet.map(requirement => requirement.spec);
+    const ledger = await readLedger();
+    const lastFailure = ledger.packageFailure;
+    if (lastFailure && Date.now() - Date.parse(lastFailure.at) < 24 * 60 * 60 * 1000
+      && specs.every(spec => lastFailure.specs.includes(spec))) {
+      logger.dependency(`Not retrying ${specs.join(', ')} yet: the last attempt failed at ${lastFailure.at}`);
+      return;
+    }
+
+    const message = `Installing packages this version needs: ${specs.join(', ')}...`;
+    logger.dependency(message);
+    this.sendProgress({
+      type: 'python-setup',
+      component: 'Python packages',
+      progress: 50,
+      message,
+    });
+
+    try {
+      await runCommand(PATHS.PYTHON, [
+        '-m', 'pip', 'install', '--no-warn-script-location',
+        '--cache-dir', PATHS.PIP_CACHE,
+        '--retries', '1', '--timeout', '15',
+        ...PYPI_EXTRA_INDEX_ARGS,
+        VAPOURSYNTH_PIP_SPEC,
+        ...specs,
+      ], undefined, undefined, { step: 'Installing packages this version needs' });
+      report.packagesInstalled.push(...specs);
+      delete ledger.packageFailure;
+      logger.dependency(`Installed ${specs.join(', ')}`);
+    } catch (error) {
+      ledger.packageFailure = { at: new Date().toISOString(), specs };
+      logger.error(`Failed to install ${specs.join(', ')} (will retry in a day):`, error);
+    }
+    await writeLedger(ledger);
+  }
+
+  /** The embedded-Python files that are missing or empty (Windows only). */
+  private async missingEmbeddedPythonFiles(): Promise<string[]> {
+    const present = new Map<string, boolean>();
+    for (const file of embeddedPythonRequiredFiles(PYTHON_VERSION)) {
+      try {
+        const stat = await fs.stat(path.join(PATHS.VS, file));
+        present.set(file, stat.isFile() && stat.size > 0);
+      } catch {
+        present.set(file, false);
+      }
+    }
+    return missingEmbeddedPythonFiles(PYTHON_VERSION, file => present.get(file) === true);
+  }
+
+  /**
+   * `python -m pip --version`: one interpreter start, about a tenth of a
+   * second, and the only check that pip will actually run. The time limit is
+   * generous because antivirus scanning a first start can be slow; a probe
+   * that runs out of it is inconclusive, not a verdict.
+   */
+  private probePip(): Promise<PipProbe> {
+    return new Promise(resolve => {
+      let output = '';
+      let settled = false;
+      const finish = (probe: PipProbe) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(probe);
+      };
+
+      const child = spawn(PATHS.PYTHON, ['-m', 'pip', '--version'], { cwd: PATHS.VS, windowsHide: true });
+      const timer = setTimeout(() => {
+        child.kill();
+        finish({ spawnFailed: false, timedOut: true, exitCode: null, output });
+      }, 30_000);
+      child.stdout?.on('data', (data: Buffer) => { output = appendBounded(output, data.toString(), 16 * 1024); });
+      child.stderr?.on('data', (data: Buffer) => { output = appendBounded(output, data.toString(), 16 * 1024); });
+      child.on('error', error => finish({ spawnFailed: true, exitCode: null, output: error.message }));
+      child.on('close', code => finish({ spawnFailed: false, exitCode: code, output }));
+    });
+  }
+
+  /** get-pip.py, as a fresh setup installs pip. Throws if it fails. */
+  private async bootstrapPip(component: string): Promise<void> {
+    this.sendProgress({
+      type: 'python-setup',
+      component,
+      progress: 60,
+      message: 'Downloading pip installer...'
+    });
+
+    const getPipPath = path.join(PATHS.APP_DATA, 'get-pip.py');
+    await this.downloadFile(
+      'https://bootstrap.pypa.io/get-pip.py',
+      getPipPath,
+      'pip installer'
+    );
+
+    this.sendProgress({
+      type: 'python-setup',
+      component,
+      progress: 70,
+      message: 'Installing pip...'
+    });
+
+    logger.dependency('Installing pip');
+    try {
+      await runCommand(PATHS.PYTHON, [getPipPath, '--no-warn-script-location', ...PIP_NETWORK_ARGS], PATHS.APP_DATA, undefined, {
+        step: 'Installing pip',
+      });
+    } finally {
+      await fs.remove(getPipPath).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Launch-time counterpart of setup's pip check. Every file check can pass
+   * while pip itself is broken, and then the first thing to find out is the
+   * plugin install, halfway through. Non-fatal: a repair that fails (offline,
+   * say) is logged, the app starts, and the next launch tries again.
+   */
+  private async ensurePipWorks(): Promise<void> {
+    const probe = await this.probePip();
+    const health = judgePipProbe(probe);
+    if (health === 'healthy') return;
+
+    if (health !== 'repair-pip') {
+      // A Python that cannot start is not something get-pip can fix; the
+      // embedded-Python check sends such an install back through setup.
+      logger.warn(`pip check was ${health}; not reinstalling pip. Output: ${probe.output.trim()}`);
+      return;
+    }
+
+    logger.warn(`pip does not run (exit code ${probe.exitCode}); reinstalling it. Output: ${probe.output.trim()}`);
+    try {
+      await this.bootstrapPip('Python Embedded');
+      const after = judgePipProbe(await this.probePip());
+      logger.dependency(`pip reinstalled; it is now ${after}`);
+    } catch (error) {
+      logger.error('Could not reinstall pip (will try again next launch):', error);
+    }
+  }
+
+  /**
+   * On Linux, VSScript finds Python through a config file that
+   * `python -m vapoursynth config` writes; without it vspipe fails with
+   * "Failed to initialize VSScript" (issue #10). The Windows wheel needs no
+   * config because python.exe sits beside it (the wheel's _has_implicit_config).
+   *
+   * Confirmed from the R79 wheel's source (vapoursynth/_cli.py, _utils.py):
+   * the command exists, writes $XDG_CONFIG_HOME/vapoursynth/vapoursynth.toml
+   * (default ~/.config), and reports failure by printing, not by exit code.
+   * NOT run on a real Linux machine: whether it finds libpython for every
+   * distro's venv is unverified, so it is non-fatal and its output is logged.
+   */
+  private async configureVapourSynthForVenv(): Promise<void> {
+    try {
+      const { stdout, stderr } = await runCommand(PATHS.PYTHON, ['-m', 'vapoursynth', 'config'], PATHS.VS, undefined, {
+        step: 'Configuring VapourSynth',
+      });
+      const output = `${stdout}${stderr}`.trim();
+      if (/Failed/i.test(output)) {
+        logger.warn(`vapoursynth config reported a problem: ${output}`);
+      } else {
+        logger.dependency(`vapoursynth config: ${output || 'done'}`);
+      }
+    } catch (error) {
+      logger.warn('vapoursynth config failed (vspipe may not find Python):', error);
+    }
+  }
+
+  /** Whether the VSScript config already names this venv's Python (Linux). */
+  private async vapourSynthConfigMentionsVenv(): Promise<boolean> {
+    const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+    try {
+      const config = await fs.readFile(path.join(configHome, 'vapoursynth', 'vapoursynth.toml'), 'utf8');
+      return config.includes(PATHS.PYTHON);
+    } catch {
+      return false;
+    }
+  }
+
+  private readonly checkFlight = new SingleFlight<'check', boolean>();
+
+  /**
+   * One check at a time; a caller arriving mid-check shares its result.
+   *
+   * The renderer can ask twice at once (React runs a mount effect twice in
+   * development, and a remount does it anywhere), and two checks racing each
+   * other both write the trtexec shim, the ledger and the update report - one
+   * rename then finds the other's file already moved, and the whole
+   * version-change update is abandoned for that launch.
+   */
+  checkDependencies(): Promise<boolean> {
+    return this.checkFlight.run('check', () => this.runDependencyCheck(), () => false);
+  }
+
+  private async runDependencyCheck(): Promise<boolean> {
     logger.dependency('Checking dependencies');
 
     // vspipe.exe ships inside the VapourSynth wheel (site-packages/vapoursynth),
@@ -268,7 +530,11 @@ export class DependencyManager {
     // fail these checks and get migrated by re-running setup.
     const vsExists = await fs.pathExists(PATHS.VSPIPE);
     const bsExists = await fs.pathExists(PATHS.BESTSOURCE_DLL);
-    const pythonExists = await fs.pathExists(PATHS.PYTHON);
+    // On Windows, the embed as a whole: python.exe alone survives an
+    // interrupted extraction (see setupEmbeddedPython).
+    const pythonExists = IS_WINDOWS
+      ? (await this.missingEmbeddedPythonFiles()).length === 0
+      : await fs.pathExists(PATHS.PYTHON);
     // video-compare has an official bundled Windows binary only. On Linux it
     // remains optional and is launched from PATH when the user installs it.
     const videoCompareExists = IS_WINDOWS ? await fs.pathExists(PATHS.VIDEO_COMPARE_EXE) : true;
@@ -289,8 +555,19 @@ export class DependencyManager {
     // The VapourSynth core is pinned. Put back any newer one BEFORE the rest of
     // the launch healing runs, so nothing else starts against a core the
     // shipped filters were never checked on.
+    // What this launch changes in an existing install, for the post-update notice.
+    const report = emptyReportDraft();
+
     if (coreDepsPresent) {
+      // First, because both of the steps after it run pip.
+      await this.ensurePipWorks();
+      // Installs from before the setup step existed have no VSScript config
+      // on Linux; writing it is one Python start, so only when it is absent.
+      if (!IS_WINDOWS && !await this.vapourSynthConfigMentionsVenv()) {
+        await this.configureVapourSynthForVenv();
+      }
       await this.enforceVapourSynthPin();
+      await this.ensurePackageRequirements(report);
     }
 
     // If core deps are healthy, silently extract any missing bundled ONNX models rather than
@@ -354,9 +631,13 @@ export class DependencyManager {
           if (storedVersion === currentVersion && !needsCatalogSync) {
             await this.syncGeneratedConfigFiles(getBundledBasePath());
           } else {
-            await this.updateBundledFiles();
+            await this.updateBundledFiles(report);
           }
           if (storedVersion !== currentVersion) {
+            // Every update gets a report, even one that changed nothing: that
+            // data was kept is itself the thing to tell someone who used to
+            // lose it on every update.
+            await mergeUpdateReport(report, storedVersion ?? null, currentVersion);
             await configManager.setAppVersion(currentVersion);
           }
           if (needsCatalogSync) {
@@ -367,6 +648,11 @@ export class DependencyManager {
           logger.error('Failed to update bundled files on version change:', updateError);
           // Non-fatal: don't block startup
         }
+      } else if (!isEmptyDraft(report)) {
+        // Packages topped up on a launch after the update itself (the first
+        // attempt was offline, say) still belong in the report.
+        await mergeUpdateReport(report, currentVersion, currentVersion).catch(error =>
+          logger.warn('Could not record the package install in the update report:', error));
       }
     }
 
@@ -379,40 +665,27 @@ export class DependencyManager {
   async downloadFile(url: string, outputPath: string, componentName: string): Promise<void> {
     logger.dependency(`Downloading ${componentName} from ${url}`);
     logger.dependency(`Output path: ${outputPath}`);
-    
-    await fs.ensureDir(path.dirname(outputPath));
-    
-    const response = await axios({
-      url,
-      method: 'GET',
-      responseType: 'stream',
-      onDownloadProgress: (progressEvent) => {
-        const percentCompleted = progressEvent.total 
-          ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
-          : 0;
-        
+
+    // downloadToFile settles only once the file is closed and renamed into
+    // place, times out a stalled connection instead of hanging on it, and
+    // retries; this used to settle on 'finish', with the descriptor still
+    // open, which is how a zip reached 7-Zip as "0 bytes, in use".
+    await downloadToFile(url, outputPath, {
+      label: componentName,
+      minBytes: 1024,
+      onProgress: ({ received, total }) => {
+        const percentCompleted = total ? Math.round((received * 100) / total) : 0;
         this.sendProgress({
           type: 'download',
           component: componentName,
           progress: percentCompleted,
-          message: `Downloading ${componentName}... ${percentCompleted}%`
+          message: total
+            ? `Downloading ${componentName}... ${percentCompleted}%`
+            : `Downloading ${componentName}... ${(received / 1048576).toFixed(1)} MB`,
         });
-      }
+      },
     });
-
-    const writer = fs.createWriteStream(outputPath);
-    response.data.pipe(writer);
-
-    return new Promise((resolve, reject) => {
-      writer.on('finish', () => {
-        logger.dependency(`Download completed: ${componentName}`);
-        resolve();
-      });
-      writer.on('error', (error) => {
-        logger.error(`Download failed for ${componentName}:`, error);
-        reject(error);
-      });
-    });
+    logger.dependency(`Download completed: ${componentName}`);
   }
 
   async extractArchive(archivePath: string, outputPath: string, componentName: string): Promise<void> {
@@ -533,6 +806,8 @@ export class DependencyManager {
         throw new Error(FFmpegManager.getHostPrerequisiteMessage());
       }
 
+      await this.preflightCoreSetup();
+
       // Component configurations (everything else comes from PyPI)
       const components: ComponentConfig[] = IS_WINDOWS ? [
         {
@@ -599,16 +874,48 @@ export class DependencyManager {
       logger.separator();
 
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Dependency setup failed:', errorMsg);
-      
+      const failure = describeInstallFailure(error, 'Setup');
+      logger.error(`Dependency setup failed (${failure.kind}): ${failure.summary}`, error);
+
       this.sendProgress({
         type: 'error',
         component: 'Setup',
         progress: 0,
-        message: `Setup failed: ${errorMsg}`
+        message: `Setup failed: ${failure.summary}`,
+        summary: failure.summary,
+        evidence: failure.evidence || undefined,
+        logPath: logger.getLogPath(),
       });
       throw error;
+    }
+  }
+
+  /**
+   * Refuses a core setup that cannot fit before anything is downloaded, and
+   * shows what is only worth knowing. The plugin phase runs its own, larger
+   * check before it starts (pluginInstaller.preflight).
+   */
+  private async preflightCoreSetup(): Promise<void> {
+    let problems;
+    try {
+      problems = await runInstallPreflight({
+        dataDir: PATHS.APP_DATA,
+        tempDir: os.tmpdir(),
+        requiredBytes: CORE_SETUP_REQUIRED_BYTES,
+        requiredTempBytes: CORE_SETUP_REQUIRED_TEMP_BYTES,
+      });
+    } catch (error) {
+      logger.warn('Setup preflight could not run; continuing:', error);
+      return;
+    }
+
+    const verdict = judgePreflight(problems, { action: 'Setup' });
+    for (const warning of verdict.warnings) {
+      logger.warn(`Setup preflight warning: ${warning.message}`);
+      this.sendProgress({ type: 'warning', component: 'Setup', progress: 0, message: warning.message });
+    }
+    if (verdict.refusal) {
+      throw new InstallBlockedError(verdict.refusal, verdict.evidence);
     }
   }
 
@@ -632,13 +939,93 @@ export class DependencyManager {
    * Called on version change to overwrite bundled files that must stay in sync with the app.
    * This handles upgrade-in-place scenarios where setupDependencies() is never called.
    */
-  private async updateBundledFiles(): Promise<void> {
+  private async updateBundledFiles(report: UpdateReportDraft): Promise<void> {
     const bundledBasePath = getBundledBasePath();
 
     await this.syncGeneratedConfigFiles(bundledBasePath);
 
-    // Copy any new filter templates (existing ones are preserved)
-    await this.copyFilterTemplates(bundledBasePath);
+    // Seed new filter templates, and update or retire the ones the user has
+    // not edited; edited ones are left for the post-update notice
+    await this.copyFilterTemplates(bundledBasePath, report);
+
+    await this.refreshAppOwnedPlugins(bundledBasePath, report);
+
+    // vs-scripts is only there once the plugin phase has run; a fresh install
+    // gets it there. Edited scripts are kept and reported, never overwritten.
+    if (configManager.getPluginsGpuVendor()) {
+      const scripts = await syncInstalledScripts('update');
+      report.scriptsUpdated.push(...scripts.updated, ...scripts.removed);
+      report.scriptsKept.push(...scripts.keptEdited);
+    }
+  }
+
+  /**
+   * Brings the plugins built in this repo up to the bundled build.
+   *
+   * The ledger records the digest of the archive each was extracted from, so
+   * a matching archive whose files are all present costs one hash and no
+   * extraction. Without an entry - an install from before the ledger - the
+   * files are compared by content, since a DLL rebuilt at the same version is
+   * exactly the case skip-existing extraction missed.
+   *
+   * Only on an install whose plugin phase already ran (the plugins folder
+   * exists): a fresh one extracts them there. Non-fatal: a copy that fails, a
+   * DLL held open say, logs and is retried on the next update.
+   */
+  private async refreshAppOwnedPlugins(bundledBasePath: string, report: UpdateReportDraft): Promise<void> {
+    if (!shouldExtractBundledPluginArchives() || !await fs.pathExists(PATHS.PLUGINS)) return;
+
+    const ledger = await readLedger();
+    for (const archive of APP_OWNED_PLUGIN_ARCHIVES) {
+      const archivePath = path.join(bundledBasePath, 'include', 'plugins', archive);
+      if (!await fs.pathExists(archivePath)) continue;
+
+      const digest = crypto.createHash('sha256').update(await fs.readFile(archivePath)).digest('hex');
+      const entry = ledger.plugins[archive];
+      if (entry?.digest === digest
+        && (await Promise.all(entry.files.map(file => fs.pathExists(path.join(PATHS.PLUGINS, file))))).every(Boolean)) {
+        continue;
+      }
+
+      const staging = await fs.mkdtemp(path.join(os.tmpdir(), 'vk-plugin-'));
+      try {
+        await _7z.unpack(archivePath, staging);
+        const files = await fs.readdir(staging);
+        for (const file of files) {
+          const source = path.join(staging, file);
+          const dest = path.join(PATHS.PLUGINS, file);
+          if (await fs.pathExists(dest) && (await fs.readFile(source)).equals(await fs.readFile(dest))) continue;
+          await fs.copy(source, dest, { overwrite: true });
+          report.pluginsUpdated.push(file);
+          logger.dependency(`Updated bundled plugin ${file} from ${archive}`);
+        }
+        ledger.plugins[archive] = { digest, appVersion: app.getVersion(), files };
+
+        // A copy antivirus removes on arrival (issue #11) would otherwise
+        // be recorded as installed; the ledger's own file check then
+        // re-copies it every launch without anyone learning why.
+        const vanished: string[] = [];
+        for (const file of files) {
+          if (!await fs.pathExists(path.join(PATHS.PLUGINS, file))) vanished.push(file);
+        }
+        const warning = describeVanishedFiles(vanished, PATHS.PLUGINS);
+        if (warning) {
+          logger.warn(`Bundled plugin files from ${archive} missing right after copying: ${vanished.join(', ')}`);
+          this.sendProgress({ type: 'warning', component: 'Plugins', progress: 0, message: warning });
+        }
+      } catch (error) {
+        logger.warn(`Could not refresh bundled plugin archive ${archive}:`, error);
+        this.sendProgress({
+          type: 'warning',
+          component: 'Plugins',
+          progress: 0,
+          message: `Updating the bundled plugins from ${archive} failed (${describeInstallFailure(error).summary}); the previous versions stay in use.`,
+        });
+      } finally {
+        await fs.remove(staging).catch(() => undefined);
+      }
+    }
+    await writeLedger(ledger);
   }
 
   /**
@@ -747,12 +1134,11 @@ export class DependencyManager {
     }
   }
 
-  private async copyFilterTemplates(bundledBasePath: string): Promise<void> {
-    logger.dependency('Copying filter templates');
-    
-    // Ensure filter templates directory exists
-    await fs.ensureDir(PATHS.FILTER_TEMPLATES);
-    
+  /**
+   * The bundled templates: the ones this platform seeds, by path, and the name
+   * of every one shipped on any platform.
+   */
+  private async bundledTemplates(bundledBasePath: string): Promise<{ selected: Map<string, string>; all: Set<string> }> {
     const templateDirectories = [
       path.join(bundledBasePath, 'include', 'filter_templates'),
       ...(hasPluginFilterTemplates()
@@ -760,59 +1146,238 @@ export class DependencyManager {
         : []),
     ];
 
+    const selected = new Map<string, string>();
+    const all = new Set<string>();
     for (const templateDirectory of templateDirectories) {
       if (!await fs.pathExists(templateDirectory)) {
         logger.warn(`Bundled filter templates not found at: ${templateDirectory}`);
         continue;
       }
 
-      const files = await fs.readdir(templateDirectory);
-      const sourceFiles = files.filter(f => f.endsWith('.vkfilter'));
+      const sourceFiles = (await fs.readdir(templateDirectory)).filter(f => f.endsWith('.vkfilter'));
+      sourceFiles.forEach(file => all.add(file));
       const isPluginCatalog = templateDirectory.endsWith(path.join('plugins', 'plugin_filters'));
-      const vkfilterFiles = isPluginCatalog
-        ? selectPluginFilterTemplates(sourceFiles)
-        : sourceFiles;
-      logger.dependency(`Found ${vkfilterFiles.length} supported bundled filter template(s) in ${templateDirectory}`);
+      const supported = isPluginCatalog ? selectPluginFilterTemplates(sourceFiles) : sourceFiles;
+      for (const file of supported) selected.set(file, path.join(templateDirectory, file));
+      logger.dependency(`Found ${supported.length} supported bundled filter template(s) in ${templateDirectory}`);
+    }
+    return { selected, all };
+  }
 
-      for (const file of vkfilterFiles) {
-        const sourcePath = path.join(templateDirectory, file);
-        const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
-
-        if (!await fs.pathExists(destPath)) {
-          await fs.copy(sourcePath, destPath);
-          logger.dependency(`Copied filter template: ${file}`);
-        } else if (isPluginCatalog && file === 'Crop.vkfilter' && await this.upgradeLegacyCropTemplate(sourcePath, destPath)) {
-          // The migration itself logged the update.
-        } else if (file === 'Color Grade.vkfilter' && await this.upgradeSupersededGradeTemplate(sourcePath, destPath)) {
-          // The migration itself logged the update.
-        } else {
-          logger.dependency(`Filter template already exists: ${file}`);
-        }
+  /** Every template file in a folder, by shippedTemplateDigest. */
+  private static async digestTemplates(files: Iterable<[string, string]>): Promise<Map<string, string>> {
+    const digests = new Map<string, string>();
+    for (const [file, filePath] of files) {
+      try {
+        digests.set(file, shippedTemplateDigest(await fs.readFile(filePath)));
+      } catch (error) {
+        logger.warn(`Could not read filter template ${file}:`, error);
       }
+    }
+    return digests;
+  }
 
-      // Version 2.0.0 briefly copied every Windows-authored plugin template to
-      // Linux. Remove only unchanged bundled files from that release; a user
-      // edit is deliberately kept as a custom template.
-      if (isPluginCatalog && process.platform === 'linux') {
-        for (const file of selectUnsupportedLinuxPluginFilterTemplates(sourceFiles)) {
-          const sourcePath = path.join(templateDirectory, file);
-          const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
-          if (!await fs.pathExists(destPath)) continue;
+  private async templateState(bundledBasePath: string, ledger: InstallLedger): Promise<{
+    state: TemplateState;
+    selected: Map<string, string>;
+  }> {
+    const { selected, all } = await this.bundledTemplates(bundledBasePath);
+    const installedFiles = await fs.pathExists(PATHS.FILTER_TEMPLATES)
+      ? (await fs.readdir(PATHS.FILTER_TEMPLATES)).filter(f => f.endsWith('.vkfilter'))
+      : [];
 
-          const [source, destination] = await Promise.all([
-            fs.readFile(sourcePath),
-            fs.readFile(destPath),
-          ]);
-          if (source.equals(destination)) {
+    return {
+      selected,
+      state: {
+        bundled: await DependencyManager.digestTemplates(selected),
+        shippedAnywhere: all,
+        installed: await DependencyManager.digestTemplates(
+          installedFiles.map(file => [file, path.join(PATHS.FILTER_TEMPLATES, file)]),
+        ),
+        ledger: ledger.templates,
+        previousVersion: configManager.getAppVersion(),
+      },
+    };
+  }
+
+  /**
+   * Seeds, updates and retires filter templates against the install ledger;
+   * see templateReconcile.ts for the rules. What it does silently goes into
+   * `report` when given one; what needs the user is left for the post-update
+   * notice, which asks for it through getTemplateDecisions.
+   */
+  private async copyFilterTemplates(bundledBasePath: string, report?: UpdateReportDraft): Promise<void> {
+    logger.dependency('Reconciling filter templates');
+    await fs.ensureDir(PATHS.FILTER_TEMPLATES);
+
+    // Targeted migrations from before the ledger, which match on the code
+    // alone and so also catch a copy whose metadata alone was changed.
+    const { selected: bundledSources } = await this.bundledTemplates(bundledBasePath);
+    for (const [file, migrate] of [
+      ['Crop.vkfilter', this.upgradeLegacyCropTemplate],
+      ['Color Grade.vkfilter', this.upgradeSupersededGradeTemplate],
+    ] as const) {
+      const sourcePath = bundledSources.get(file);
+      const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
+      if (sourcePath && await fs.pathExists(destPath) && await migrate.call(this, sourcePath, destPath)) {
+        report?.templatesUpdated.push(file);
+      }
+    }
+    await this.removeUnsupportedLinuxTemplates(bundledBasePath);
+    await this.removeRetiredTemplates(report);
+
+    const ledger = await readLedger();
+    const { state, selected } = await this.templateState(bundledBasePath, ledger);
+    // A missing bundle would read every installed template as dropped.
+    if (selected.size === 0) {
+      logger.warn('No bundled filter templates found; leaving installed templates alone');
+      return;
+    }
+
+    const appVersion = app.getVersion();
+    let decisions = 0;
+    for (const action of planTemplateReconcile(state)) {
+      const destPath = path.join(PATHS.FILTER_TEMPLATES, action.file);
+      try {
+        switch (action.kind) {
+          case 'seed':
+          case 'update':
+            await fs.copy(selected.get(action.file)!, destPath, { overwrite: true });
+            ledger.templates[action.file] = { digest: state.bundled.get(action.file)!, appVersion };
+            (action.kind === 'seed' ? report?.templatesAdded : report?.templatesUpdated)?.push(action.file);
+            logger.dependency(`${action.kind === 'seed' ? 'Copied' : 'Updated unmodified'} filter template: ${action.file}`);
+            break;
+          case 'remove':
             await fs.remove(destPath);
-            logger.dependency(`Removed unsupported Linux bundled filter template: ${file}`);
-          }
+            delete ledger.templates[action.file];
+            report?.templatesRemoved.push(action.file);
+            logger.dependency(`Removed filter template no longer shipped: ${action.file}`);
+            break;
+          case 'record':
+            ledger.templates[action.file] = { digest: action.digest, appVersion };
+            break;
+          case 'forget':
+            delete ledger.templates[action.file];
+            break;
+          default:
+            decisions++;
+            logger.dependency(`Filter template needs a decision (${action.kind}): ${action.file}`);
         }
+      } catch (error) {
+        logger.warn(`Could not ${action.kind} filter template ${action.file}:`, error);
       }
     }
 
-    await this.removeRetiredTemplates();
-    logger.dependency('Filter templates copied');
+    await writeLedger(ledger);
+    logger.dependency(`Filter templates reconciled${decisions > 0 ? `; ${decisions} edited template(s) need a decision` : ''}`);
+  }
+
+  /**
+   * Version 2.0.0 briefly copied every Windows-authored plugin template to
+   * Linux. Remove only unchanged bundled files from that release; a user
+   * edit is deliberately kept as a custom template.
+   */
+  private async removeUnsupportedLinuxTemplates(bundledBasePath: string): Promise<void> {
+    if (process.platform !== 'linux') return;
+    const templateDirectory = path.join(bundledBasePath, 'include', 'plugins', 'plugin_filters');
+    if (!await fs.pathExists(templateDirectory)) return;
+
+    const sourceFiles = (await fs.readdir(templateDirectory)).filter(f => f.endsWith('.vkfilter'));
+    for (const file of selectUnsupportedLinuxPluginFilterTemplates(sourceFiles)) {
+      const sourcePath = path.join(templateDirectory, file);
+      const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
+      if (!await fs.pathExists(destPath)) continue;
+
+      const [source, destination] = await Promise.all([
+        fs.readFile(sourcePath),
+        fs.readFile(destPath),
+      ]);
+      if (source.equals(destination)) {
+        await fs.remove(destPath);
+        logger.dependency(`Removed unsupported Linux bundled filter template: ${file}`);
+      }
+    }
+  }
+
+  /** The edited templates the post-update notice asks about, with display names. */
+  async getTemplateDecisions(): Promise<TemplateDecision[]> {
+    const bundledBasePath = getBundledBasePath();
+    const { state } = await this.templateState(bundledBasePath, await readLedger());
+    if (state.bundled.size === 0) return [];
+
+    const decisions: TemplateDecision[] = [];
+    for (const action of planTemplateReconcile(state).filter(isDecision)) {
+      decisions.push({
+        file: action.file,
+        name: await DependencyManager.templateName(path.join(PATHS.FILTER_TEMPLATES, action.file)) ?? action.file.replace(/\.vkfilter$/, ''),
+        kind: action.kind,
+        replacement: action.kind === 'edited-dropped' && action.replacement
+          ? await DependencyManager.templateName(path.join(PATHS.FILTER_TEMPLATES, action.replacement)) ?? action.replacement.replace(/\.vkfilter$/, '')
+          : undefined,
+      });
+    }
+    return decisions;
+  }
+
+  private static async templateName(filePath: string): Promise<string | undefined> {
+    try {
+      const parsed = TOML.parse(await fs.readFile(filePath, 'utf-8')) as { name?: unknown };
+      return typeof parsed.name === 'string' ? parsed.name : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Carries out the user's answer about one edited template. Anything that
+   * would lose their copy backs it up first, to config/template-backups.
+   */
+  async resolveTemplateDecision(file: string, choice: 'replace' | 'keep' | 'remove'): Promise<{ backupPath?: string }> {
+    if (path.basename(file) !== file || !file.endsWith('.vkfilter')) {
+      throw new Error(`Not a filter template: ${file}`);
+    }
+
+    const bundledBasePath = getBundledBasePath();
+    const ledger = await readLedger();
+    const { state, selected } = await this.templateState(bundledBasePath, ledger);
+    const action = planTemplateReconcile(state).find(candidate => candidate.file === file);
+    if (!action || !isDecision(action)) {
+      // Already settled, by an earlier click or an edit since the notice opened.
+      return {};
+    }
+
+    const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
+    const appVersion = app.getVersion();
+    const backup = async (): Promise<string> => {
+      const backupDir = path.join(PATHS.CONFIG, 'template-backups', `before-${appVersion}`);
+      await fs.ensureDir(backupDir);
+      const backupPath = path.join(backupDir, file);
+      await fs.copy(destPath, backupPath, { overwrite: true });
+      return backupPath;
+    };
+
+    let backupPath: string | undefined;
+    if (action.kind === 'edited-outdated' && choice === 'replace') {
+      backupPath = await backup();
+      await fs.copy(selected.get(file)!, destPath, { overwrite: true });
+      ledger.templates[file] = { digest: state.bundled.get(file)!, appVersion };
+    } else if (action.kind === 'edited-outdated' && choice === 'keep') {
+      // Their edit now counts as based on this release's body, so it is asked
+      // about again only when a later release changes it.
+      ledger.templates[file] = { digest: state.bundled.get(file)!, appVersion };
+    } else if (action.kind === 'edited-dropped' && choice === 'remove') {
+      backupPath = await backup();
+      await fs.remove(destPath);
+      delete ledger.templates[file];
+    } else if (action.kind === 'edited-dropped' && choice === 'keep') {
+      ledger.templates[file] = { digest: state.installed.get(file)!, appVersion, keptDropped: true };
+    } else {
+      throw new Error(`Cannot ${choice} ${file}: ${action.kind}`);
+    }
+
+    await writeLedger(ledger);
+    logger.dependency(`Filter template ${file}: ${choice}${backupPath ? ` (backup at ${backupPath})` : ''}`);
+    return { backupPath };
   }
 
   /**
@@ -840,7 +1405,7 @@ export class DependencyManager {
     },
   ];
 
-  private async removeRetiredTemplates(): Promise<void> {
+  private async removeRetiredTemplates(report?: UpdateReportDraft): Promise<void> {
     for (const retired of DependencyManager.RETIRED_TEMPLATES) {
       const destPath = path.join(PATHS.FILTER_TEMPLATES, retired.file);
       try {
@@ -854,6 +1419,7 @@ export class DependencyManager {
         if (!retired.shipped.has(digest)) continue;
 
         await fs.remove(destPath);
+        report?.templatesRemoved.push(retired.file);
         logger.dependency(`Removed the retired ${retired.file} template: ${retired.reason}`);
       } catch (error) {
         logger.warn(`Could not inspect ${retired.file} for retirement:`, error);

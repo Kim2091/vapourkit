@@ -7,6 +7,10 @@ import { getBackendsForVendor } from './vendorPackages';
 import { createIpcHandler } from './ipcUtilities';
 import { DependencyManager } from './dependencyManager';
 import { PluginInstaller } from './pluginInstaller';
+import { describeInstallFailure, failureResult, SingleFlight, type InstallResult } from './installFlow';
+
+/** Which half of setup failed: the core runtime, or the plugin phase the user can skip. */
+type SetupResult = InstallResult & { phase?: 'core' | 'plugins' };
 
 /**
  * Registers all dependency and plugin-related IPC handlers
@@ -58,32 +62,46 @@ export function registerDependencyHandlers(
     return await pollGpuStats();
   });
 
+  // One setup at a time. A second request (the renderer reloaded mid-setup
+  // and the button was pressed again, say) joins the running one instead of
+  // starting another pip into the same environment.
+  const setupFlight = new SingleFlight<'setup', SetupResult>();
+
+  const runSetup = async (): Promise<SetupResult> => {
+    try {
+      await dependencyManager.setupDependencies();
+    } catch (error) {
+      // setupDependencies already sent the 'error' event; this is the same
+      // verdict for the invoke's reply, which the renderer also acts on.
+      const failure = describeInstallFailure(error, 'Setup');
+      return { ...failureResult(failure, logger.getLogPath()), phase: 'core' };
+    }
+    // Reload config after setup to get the stock config with model metadata
+    await configManager.load();
+    logger.info('Config reloaded after core setup');
+
+    // Auto-install plugins as the final phase of unified setup.
+    logger.info('Starting plugin install phase of unified setup');
+    const pluginResult = await pluginInstaller.installDependenciesForSetup();
+    if (!pluginResult.success) {
+      logger.error(`Plugin install failed during setup: ${pluginResult.summary ?? pluginResult.error}`);
+      // pluginInstaller already emitted a setup-progress error event with
+      // component='Plugins'. Return failure so the renderer can show recovery UI.
+      return { ...pluginResult, phase: 'plugins' };
+    }
+
+    // Reload config again so any plugin-extracted templates/filters are picked up.
+    await configManager.load();
+
+    // Final unified setup completion event — fires only after BOTH phases succeed.
+    pluginInstaller.emitSetupComplete();
+    return { ...pluginResult, success: true };
+  };
+
   ipcMain.handle('setup-dependencies',
     createIpcHandler(
       'setup-dependencies',
-      async () => {
-        await dependencyManager.setupDependencies();
-        // Reload config after setup to get the stock config with model metadata
-        await configManager.load();
-        logger.info('Config reloaded after core setup');
-
-        // Auto-install plugins as the final phase of unified setup.
-        logger.info('Starting plugin install phase of unified setup');
-        const pluginResult = await pluginInstaller.installDependenciesForSetup();
-        if (!pluginResult.success) {
-          logger.error(`Plugin install failed during setup: ${pluginResult.error}`);
-          // pluginInstaller already emitted a setup-progress error event with
-          // component='Plugins'. Return failure so the renderer can show recovery UI.
-          return { success: false, error: pluginResult.error };
-        }
-
-        // Reload config again so any plugin-extracted templates/filters are picked up.
-        await configManager.load();
-
-        // Final unified setup completion event — fires only after BOTH phases succeed.
-        pluginInstaller.emitSetupComplete();
-        return { success: true };
-      },
+      () => setupFlight.run('setup', runSetup, () => ({ success: false, alreadyRunning: true })),
       { useLogSeparator: true }
     )
   );

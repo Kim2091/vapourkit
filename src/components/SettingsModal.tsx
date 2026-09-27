@@ -1,6 +1,6 @@
 import { memo, useState, useEffect } from 'react';
-import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive, Palette, MessageCircle } from 'lucide-react';
-import type { BackendId, DiscordRichPresenceSettings } from '../electron.d';
+import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive, Palette, MessageCircle, PackageCheck, ChevronRight } from 'lucide-react';
+import type { BackendId, DiscordRichPresenceSettings, UpdateReportSnapshot } from '../electron.d';
 import { BACKENDS } from '../utils/backends';
 import { DEFAULT_ACCENT_COLOR } from '../hooks/useAccentColor';
 import { DEFAULT_MAIN_COLOR } from '../hooks/useMainColor';
@@ -30,6 +30,7 @@ interface SettingsModalProps {
   accentColor: string;
   onChangeAccentColor: (color: string) => void;
   onResetAccentColor: () => void;
+  onOpenUpdateReport: () => void;
 }
 
 type Tab = 'general' | 'processing';
@@ -59,9 +60,20 @@ export const SettingsModal = memo<SettingsModalProps>(({
   accentColor,
   onChangeAccentColor,
   onResetAccentColor,
+  onOpenUpdateReport,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [showVideoCompareOptions, setShowVideoCompareOptions] = useState(false);
+  // The last update's notes stay here until they are cleared, so a decision
+  // put off at the notice is never lost.
+  const [updateNotes, setUpdateNotes] = useState<UpdateReportSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!show) return;
+    window.electronAPI.getUpdateReport()
+      .then(setUpdateNotes)
+      .catch(error => console.error('Failed to read the update report:', error));
+  }, [show]);
 
   // Handle escape key to close modal
   useEffect(() => {
@@ -176,6 +188,33 @@ export const SettingsModal = memo<SettingsModalProps>(({
         <div className="flex-1 overflow-y-auto">
           {activeTab === 'general' && (
             <>
+              {(updateNotes?.report || (updateNotes?.decisions.length ?? 0) > 0) && updateNotes && (
+                <section>
+                  <div className="h-9 flex items-stretch gap-2.5 bg-ink-850 border-b border-ink-800">
+                    <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <PackageCheck className="w-3.5 h-3.5 text-ink-500" />
+                      <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Last Update</h3>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { onClose(); onOpenUpdateReport(); }}
+                    className="w-full h-8 flex items-center gap-2.5 px-4 border-b border-ink-900 text-left text-[12.5px] text-ink-300 hover:bg-ink-850 hover:text-ink-200 transition-colors group"
+                  >
+                    <span className="flex-1 truncate">
+                      {updateNotes.report ? <>What changed in {updateNotes.report.toVersion}</> : 'Edited filters to review'}
+                      {updateNotes.report?.fromVersion && <span className="text-ink-500"> (from {updateNotes.report.fromVersion})</span>}
+                    </span>
+                    {updateNotes.decisions.length > 0 && (
+                      <span className="text-[11px] font-semibold text-warn-400">
+                        {updateNotes.decisions.length} need{updateNotes.decisions.length === 1 ? 's' : ''} a decision
+                      </span>
+                    )}
+                    <ChevronRight className="w-3.5 h-3.5 text-ink-600 group-hover:text-ink-400 transition-colors" />
+                  </button>
+                </section>
+              )}
+
               {/* Inference Backend Section */}
               <section className="mt-2 border-t border-ink-700 first:mt-0 first:border-t-0">
                 <div className="h-9 flex items-stretch gap-2.5 bg-ink-850 border-b border-ink-800">

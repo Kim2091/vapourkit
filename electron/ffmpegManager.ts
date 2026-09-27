@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { IS_WINDOWS, PATHS } from './constants';
+import { downloadToFile } from './download';
 import { logger } from './logger';
 import { isCommandAvailable } from './utils';
 
@@ -79,108 +80,77 @@ export class FFmpegManager {
       return;
     }
 
+    const archivePath = path.join(PATHS.APP_DATA, 'ffmpeg-git-full.7z');
+    const extractPath = path.join(PATHS.APP_DATA, 'temp', 'ffmpeg-extract');
+
     try {
-      const axios = (await import('axios')).default;
       const _7z = (await import('7zip-min')).default;
-      
-      // Download ffmpeg
-      const archivePath = path.join(PATHS.APP_DATA, 'ffmpeg-git-full.7z');
-      
+
+      await FFmpegManager.removeStaleExtractions();
+
       onProgress?.('Downloading ffmpeg from gyan.dev...', 0);
-      logger.dependency(`Downloading ffmpeg from ${FFmpegManager.FFMPEG_URL}`);
-      
-      await fs.ensureDir(path.dirname(archivePath));
-      
-      const response = await axios({
-        url: FFmpegManager.FFMPEG_URL,
-        method: 'GET',
-        responseType: 'stream',
-        onDownloadProgress: (progressEvent) => {
-          const percentCompleted = progressEvent.total 
-            ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
-            : 0;
+      await downloadToFile(FFmpegManager.FFMPEG_URL, archivePath, {
+        label: 'FFmpeg',
+        // The full build is well over 100 MB; anything this small is a
+        // stub or error page, not the archive.
+        minBytes: 10 * 1024 * 1024,
+        onProgress: ({ received, total }) => {
+          const percentCompleted = total ? Math.round((received * 100) / total) : 0;
           onProgress?.(`Downloading ffmpeg... ${percentCompleted}%`, percentCompleted * 0.8);
-        }
-      });
-
-      const writer = fs.createWriteStream(archivePath);
-      response.data.pipe(writer);
-
-      await new Promise<void>((resolve, reject) => {
-        writer.on('finish', resolve);
-        writer.on('error', reject);
+        },
       });
 
       logger.dependency('Download completed, extracting...');
       onProgress?.('Extracting ffmpeg...', 80);
 
-      // Extract directly to parent directory
-      const extractPath = path.dirname(FFmpegManager.FFMPEG_DIR);
+      // Extracted into a folder of its own, emptied first. Extracting into
+      // data\ and taking the first ffmpeg-* entry there picked up whatever an
+      // earlier interrupted run had left behind, which could be half a build.
+      await fs.remove(extractPath);
       await fs.ensureDir(extractPath);
-      
-      // Retry logic for file locking issues on Windows
-      const maxRetries = 5;
-      const retryDelay = 2000; // 2 seconds
-      let lastError: any = null;
 
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      // The download now settles only after its file handle is closed, which
+      // is what the old five-attempt loop here was really waiting out. What
+      // remains is a scanner briefly holding the fresh archive, which shows
+      // up as a sharing violation and clears within a second or two; a
+      // "Can not open the file as archive" now means the file is bad, and
+      // retrying it would only hide that.
+      const maxAttempts = 3;
+      for (let attempt = 1; ; attempt++) {
         try {
-          await new Promise<void>((resolve, reject) => {
-            _7z.unpack(archivePath, extractPath, (err: Error | null) => {
-              if (err) reject(err);
-              else resolve();
-            });
-          });
-          
-          // Success, break out of retry loop
+          await _7z.unpack(archivePath, extractPath);
           break;
-        } catch (err: any) {
-          lastError = err;
-          const errorMessage = err.message || String(err);
-          
-          // Check if it's a file locking error
-          const isFileLockError = 
-            errorMessage.includes('Can not open the file as archive') ||
-            errorMessage.includes('The process cannot access the file because it is being used by another process') ||
-            errorMessage.includes("Can't open as archive");
-          
-          if (isFileLockError && attempt < maxRetries) {
-            logger.dependency(`File locked during extraction (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}ms...`);
-            onProgress?.(`FFmpeg - file locked, retrying (${attempt}/${maxRetries})...`, 80 + Math.round((attempt / maxRetries) * 10));
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-            continue;
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          const inUse = errorMessage.includes('being used by another process');
+          if (!inUse || attempt >= maxAttempts) {
+            throw err;
           }
-          
-          // If it's not a file lock error, or we've exhausted retries, throw
-          if (attempt === maxRetries) {
-            logger.error(`Failed to extract ffmpeg after ${maxRetries} attempts`);
-            throw lastError;
-          }
-          throw err;
+          logger.dependency(`FFmpeg archive in use during extraction (attempt ${attempt}/${maxAttempts}), retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 1500));
         }
       }
 
-      // Find the extracted ffmpeg folder (it has a version number in the name)
-      const extractedContents = await fs.readdir(extractPath);
-      const ffmpegFolder = extractedContents.find(item => item.startsWith('ffmpeg-'));
-      
-      if (!ffmpegFolder) {
+      // The archive holds one versioned folder (ffmpeg-<date>-git-<sha>-full_build);
+      // it is recognised by what it contains rather than by its name.
+      let extractedFfmpegPath: string | null = null;
+      for (const entry of await fs.readdir(extractPath)) {
+        const candidate = path.join(extractPath, entry);
+        if (await fs.pathExists(path.join(candidate, 'bin', 'ffmpeg.exe'))) {
+          extractedFfmpegPath = candidate;
+          break;
+        }
+      }
+      if (!extractedFfmpegPath) {
         throw new Error('Could not find ffmpeg folder in extracted archive');
       }
 
-      const extractedFfmpegPath = path.join(extractPath, ffmpegFolder);
-      
-      // Rename to final location if needed
-      if (extractedFfmpegPath !== FFmpegManager.FFMPEG_DIR) {
-        // Remove existing ffmpeg directory if present
-        if (await fs.pathExists(FFmpegManager.FFMPEG_DIR)) {
-          await fs.remove(FFmpegManager.FFMPEG_DIR);
-        }
-        await fs.rename(extractedFfmpegPath, FFmpegManager.FFMPEG_DIR);
+      await fs.remove(FFmpegManager.FFMPEG_DIR);
+      await fs.move(extractedFfmpegPath, FFmpegManager.FFMPEG_DIR);
+
+      if (!await fs.pathExists(FFmpegManager.FFMPEG_EXE)) {
+        throw new Error(`Extraction finished but ${FFmpegManager.FFMPEG_EXE} is missing`);
       }
-      
-      // Clean up archive
-      await fs.remove(archivePath);
 
       onProgress?.('FFmpeg installed successfully', 100);
       logger.dependency('FFmpeg installation completed');
@@ -190,6 +160,32 @@ export class FFmpegManager {
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error('Failed to install ffmpeg:', errorMsg);
       throw new Error(`FFmpeg installation failed: ${errorMsg}`);
+    } finally {
+      await fs.remove(archivePath).catch(() => undefined);
+      await fs.remove(extractPath).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Earlier versions extracted straight into data\, so an interrupted
+   * install left a versioned ffmpeg-*_build folder there that nothing ever
+   * removed (and that a later install could mistake for its own). Only
+   * folders of that shape are touched; data\ffmpeg itself never matches.
+   */
+  private static async removeStaleExtractions(): Promise<void> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.readdir(PATHS.APP_DATA, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name.startsWith('ffmpeg-') && entry.name.endsWith('_build')) {
+        logger.dependency(`Removing leftover ffmpeg extraction ${entry.name}`);
+        await fs.remove(path.join(PATHS.APP_DATA, entry.name)).catch(error => {
+          logger.warn(`Could not remove leftover ${entry.name}:`, error);
+        });
+      }
     }
   }
 

@@ -46,25 +46,9 @@ export const SUPERSEDED_PLUGIN_FILES: string[] = [
   'libscxvid.dll',
 ];
 
-/**
- * Python modules from the old bundled extra_scripts.7z that are now installed
- * from PyPI. vs-scripts is on the import path, so stale copies here would shadow
- * the pip-installed packages in site-packages.
- *
- * NOT listed (still bundled, not on PyPI): vs_deepdeinterlace, vsmlrt.py, the
- * Hybrid scripts.
- */
-export const SUPERSEDED_SCRIPT_MODULES: string[] = [
-  'vs_temporalfix',
-  'vs_undistort',
-  'vs_colorfix',
-  'vs_colorfix.py',
-  'vs_grain',
-  'vs_grain.py',
-  'vs_tiletools',
-  'vs_tiletools.py',
-  'dfttest2.py',
-];
+// Defined beside the script sources, which must never install these either.
+export { SUPERSEDED_SCRIPT_MODULES } from './scriptSources';
+import { SUPERSEDED_SCRIPT_MODULES } from './scriptSources';
 
 /**
  * Files and folders from the old VapourSynth R72 portable zip that used to live

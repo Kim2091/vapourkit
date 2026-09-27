@@ -31,6 +31,23 @@ export const PYPI_EXTRA_INDEX_ARGS = [
   '--extra-index-url', 'https://jaded-encoding-thaumaturgy.github.io/vs-wheels/simple',
 ];
 
+// Network flags for the install-time pip runs (setup, plugin install, the
+// VapourSynth pin). pip's socket timeout defaults to 15 s, and pypi.nvidia.com
+// in particular goes quiet for longer than that mid-way through a 2 GB torch
+// or TensorRT wheel on a slow link, which fails the whole install. 30 s rides
+// that out without leaving a dead connection hanging for minutes. --retries is
+// pip's default (5 connection attempts) written out, so a future pip changing
+// its default cannot quietly make installs less patient; resuming a download
+// cut off mid-body is pip's --resume-retries, whose default (5 in pip 26) is
+// already what we want. The launch-time top-up keeps its own shorter figures
+// so an offline launch is not held up (see ensurePackageRequirements).
+//
+// --progress-bar off: output is piped, and pip 26 already draws no bar when
+// it is not a terminal (none appears in the logs), so nothing reads it; the
+// flag keeps it that way, since a redrawn bar would fill the captured output
+// the error classifier reads from.
+export const PIP_NETWORK_ARGS = ['--retries', '5', '--timeout', '30', '--progress-bar', 'off'];
+
 // Platform helpers — keep every platform-specific filename/layout decision in
 // this file so a Linux build only needs changes here (plus a venv bootstrap in
 // dependencyManager instead of the Windows embedded-Python download).

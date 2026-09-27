@@ -5,9 +5,8 @@ import { BrowserWindow, app } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs-extra';
-import * as https from 'https';
 import { logger } from './logger';
-import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
+import { PATHS, PIP_NETWORK_ARGS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
@@ -16,7 +15,27 @@ import { hasPluginFilterTemplates, selectPluginFilterTemplates } from './pluginF
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { ensureTrtexecShim } from './trtexecShim';
-import { detectGpuVendor } from './gpuDetection';
+import { syncInstalledScripts } from './scriptSync';
+import { detectGpuVendor, type GpuVendor } from './gpuDetection';
+import { classifyInstallError } from './installErrors';
+import {
+  PLUGIN_INSTALL_REQUIRED_BYTES,
+  PLUGIN_INSTALL_REQUIRED_TEMP_BYTES,
+  prunePipCache,
+  runInstallPreflight,
+} from './installPreflight';
+import {
+  appendBounded,
+  archiveFileNames,
+  describeInstallFailure,
+  describeVanishedFiles,
+  failureResult,
+  isRetryableFailure,
+  judgePreflight,
+  runWithRetry,
+  SingleFlight,
+  type InstallResult,
+} from './installFlow';
 import {
   brokenProjectNames,
   inspectPythonEnvironment,
@@ -35,24 +54,47 @@ import {
 } from './vendorPackages';
 import * as _7z from '7zip-min';
 
+/**
+ * 'retrying' is an attempt that failed with another about to start, and
+ * 'warning' something to tell the user that does not stop the install; only
+ * 'complete' and 'error' end one.
+ */
 export interface PluginDependencyProgress {
-  type: 'installing' | 'complete' | 'error';
+  type: 'installing' | 'retrying' | 'warning' | 'complete' | 'error';
   progress: number;
   message: string;
+  summary?: string;
+  evidence?: string;
+  logPath?: string;
+  warnings?: string[];
 }
 
-interface SetupProgressEvent {
-  type: 'installing' | 'complete' | 'error';
+interface SetupProgressEvent extends PluginDependencyProgress {
   component: string;
-  progress: number;
-  message: string;
 }
+
+/**
+ * pip's cache only saves downloads, and an NVIDIA install puts ~5 GB in it
+ * (a 1.8 GB torch wheel alone). It earns its space within one install - the
+ * torch repair step and setup's second attempt reuse what the first fetched -
+ * so it is left alone while an install runs and cut back once one succeeds.
+ * prunePipCache removes the whole cache above this size, so after a full
+ * install it is usually emptied, and a later reinstall downloads again.
+ */
+const PIP_CACHE_LIMIT_BYTES = 1024 ** 3;
+
+const CANCELLED: InstallResult = { success: false, cancelled: true, error: 'Installation cancelled by user' };
 
 export class PluginInstaller {
   private mainWindow: BrowserWindow | null;
   private installProcess: ChildProcess | null = null;
   private isCancelled: boolean = false;
   private useSetupChannel: boolean = false;
+  // Everything this class does runs pip against the one site-packages, so
+  // installs and uninstalls go through here one at a time.
+  private flights = new SingleFlight<'install' | 'uninstall', InstallResult>();
+  private abortController: AbortController | null = null;
+  private warnings: string[] = [];
 
   constructor(mainWindow: BrowserWindow | null = null) {
     this.mainWindow = mainWindow;
@@ -61,16 +103,50 @@ export class PluginInstaller {
   private sendProgress(progress: PluginDependencyProgress) {
     if (!this.mainWindow) return;
     if (this.useSetupChannel) {
-      const setupEvent: SetupProgressEvent = {
-        type: progress.type,
-        component: 'Plugins',
-        progress: progress.progress,
-        message: progress.message,
-      };
+      const setupEvent: SetupProgressEvent = { ...progress, component: 'Plugins' };
       this.mainWindow.webContents.send('setup-progress', setupEvent);
     } else {
       this.mainWindow.webContents.send('plugin-dependency-progress', progress);
     }
+  }
+
+  /** Logged, shown as it happens, and carried on the result so the UI can keep it on screen. */
+  private warn(message: string, progress: number) {
+    logger.warn(message);
+    this.warnings.push(message);
+    this.sendProgress({ type: 'warning', progress, message });
+  }
+
+  /** The one terminal error event for an operation, sent after its last attempt. */
+  private emitFailure(result: InstallResult) {
+    if (result.success || result.cancelled) return;
+    this.sendProgress({
+      type: 'error',
+      progress: 0,
+      message: result.error ?? result.summary ?? 'Installation failed',
+      summary: result.summary,
+      evidence: result.evidence,
+      logPath: result.logPath,
+      warnings: this.warnings.length > 0 ? [...this.warnings] : undefined,
+    });
+  }
+
+  private busyResult(running: 'install' | 'uninstall'): InstallResult {
+    const what = running === 'install' ? 'A plugin install' : 'A plugin uninstall';
+    const error = `${what} is already running. Wait for it to finish (or cancel it), then try again.`;
+    logger.warn(`Refused a plugin operation: ${what.toLowerCase()} is already running`);
+    return { success: false, alreadyRunning: true, error, summary: error };
+  }
+
+  /** Fresh cancel state for one operation, however many attempts it makes. */
+  private beginOperation() {
+    this.isCancelled = false;
+    this.abortController = new AbortController();
+    this.warnings = [];
+  }
+
+  private withWarnings(result: InstallResult): InstallResult {
+    return this.warnings.length > 0 ? { ...result, warnings: [...this.warnings] } : result;
   }
 
   /**
@@ -132,31 +208,46 @@ export class PluginInstaller {
     }
   }
 
+  /**
+   * `step` names what this run is for ("Installing PyTorch"); it opens the
+   * sentence the user sees if pip fails.
+   */
   private async runPipInstall(
+    step: string,
     packages: string[],
     progressOffset: number,
     progressScale: number,
     extraArgs: string[] = []
-  ): Promise<{ success: boolean; error?: string }> {
+  ): Promise<InstallResult> {
+    // A cancel that landed between two steps must not start the next pip.
+    if (this.isCancelled) {
+      return CANCELLED;
+    }
+
     const pathAlias = await this.createPipPathAlias();
     const args = [
       '-m', 'pip', 'install',
       '--no-warn-script-location',
       '--cache-dir', PATHS.PIP_CACHE,
+      ...PIP_NETWORK_ARGS,
       ...pathAlias.installArgs,
       ...packages,
       ...extraArgs
     ];
-    
+
     const commandStr = `${PATHS.PYTHON} ${args.join(' ')}`;
     logger.info(`Running command: ${commandStr}`);
 
-    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+    return new Promise<InstallResult>((resolve) => {
       this.installProcess = spawn(PATHS.PYTHON, args, createWorkloadSpawnOptions({
         cwd: PATHS.VS,
         windowsHide: true
       }));
 
+      // stdout and stderr together, in arrival order, because pip splits one
+      // failure across both: the "Collecting" context on stdout, the error on
+      // stderr. Only the tail is kept; that is where the reason is.
+      let outputBuffer = '';
       let errorBuffer = '';
       let lastProgress = 0;
       let currentPackage = '';
@@ -259,19 +350,21 @@ export class PluginInstaller {
 
       this.installProcess.stdout?.on('data', (data: Buffer) => {
         const output = data.toString();
+        outputBuffer = appendBounded(outputBuffer, output);
         lineBuffer += output;
-        
+
         // Process complete lines
         const lines = lineBuffer.split('\n');
         lineBuffer = lines.pop() || ''; // Keep incomplete line in buffer
-        
+
         lines.forEach(line => processLine(line, 'stdout'));
       });
 
       this.installProcess.stderr?.on('data', (data: Buffer) => {
         const output = data.toString();
-        errorBuffer += output;
-        
+        outputBuffer = appendBounded(outputBuffer, output);
+        errorBuffer = appendBounded(errorBuffer, output);
+
         // Process stderr lines (pip often outputs progress to stderr)
         const lines = output.split('\n');
         lines.forEach(line => processLine(line, 'stderr'));
@@ -282,12 +375,12 @@ export class PluginInstaller {
         if (lineBuffer.trim()) {
           processLine(lineBuffer, 'stdout');
         }
-        
+
         this.installProcess = null;
 
         if (this.isCancelled) {
           logger.info('Plugin dependency installation cancelled');
-          resolve({ success: false, error: 'Installation cancelled by user' });
+          resolve(CANCELLED);
           return;
         }
 
@@ -296,21 +389,25 @@ export class PluginInstaller {
           logger.info('✓ Step completed successfully');
           resolve({ success: true });
         } else {
-          const errorMsg = `Installation failed with exit code ${code}`;
-          logger.error(errorMsg);
+          logger.error(`${step}: pip exited with code ${code}`);
           if (errorBuffer.trim()) {
             logger.error('Error output:');
             errorBuffer.split('\n').forEach(line => {
               if (line.trim()) logger.error(`  ${line}`);
             });
           }
-          resolve({ success: false, error: errorMsg });
+          const classified = classifyInstallError(outputBuffer, { step, exitCode: code });
+          logger.error(`${step} failed (${classified.kind}): ${classified.summary}`);
+          resolve(failureResult(classified, logger.getLogPath()));
         }
       });
 
       this.installProcess.on('error', (error: Error) => {
         logger.error('Failed to start pip process:', error);
-        resolve({ success: false, error: error.message });
+        this.installProcess = null;
+        // Node's own words ("spawn ...python.exe ENOENT") are what the
+        // classifier recognises a missing interpreter by.
+        resolve(failureResult(classifyInstallError(error.message, { step }), logger.getLogPath()));
       });
     }).finally(() => pathAlias.cleanup());
   }
@@ -511,9 +608,109 @@ export class PluginInstaller {
     }).finally(() => pathAlias.cleanup());
   }
 
-  async installDependencies(): Promise<{ success: boolean; error?: string }> {
-    logger.info('Starting plugin dependency installation');
-    this.isCancelled = false;
+  /**
+   * Installs the plugin package set, or joins the install already running.
+   * A failure is reported to the renderer once, when it is final.
+   */
+  async installDependencies(): Promise<InstallResult> {
+    return this.flights.run('install', async () => {
+      this.beginOperation();
+      const result = await this.runInstallAttempt();
+      this.emitFailure(result);
+      return this.withWarnings(result);
+    }, running => this.busyResult(running));
+  }
+
+  /**
+   * The setup screen's plugin phase, with one automatic retry: a first
+   * install on a fresh machine fails on transient things (a dropped
+   * connection, antivirus holding a DLL while it scans it) that a second
+   * attempt usually gets past, and the second attempt reuses what the first
+   * downloaded because the pip cache is only pruned after a success.
+   *
+   * Nothing tells the renderer the install failed until the retry has too.
+   * The setup screen offers Retry and "Continue without plugins" on that
+   * event, and offering them while attempt 2 was still running is how a
+   * second pip came to be started into the same environment.
+   */
+  async installDependenciesForSetup(): Promise<InstallResult> {
+    return this.flights.run('install', async () => {
+      this.beginOperation();
+      this.useSetupChannel = true;
+      try {
+        const result = await runWithRetry(
+          async attempt => {
+            logger.info(`Starting plugin dependency installation (setup mode, attempt ${attempt}/2)`);
+            return this.runInstallAttempt();
+          },
+          {
+            attempts: 2,
+            shouldRetry: failed => isRetryableFailure(failed) && !this.isCancelled,
+            onRetry: (failed, next) => {
+              logger.info(`Plugin install attempt ${next - 1} failed (${failed.summary ?? failed.error}); retrying once`);
+              this.sendProgress({
+                type: 'retrying',
+                progress: 0,
+                message: `${failed.summary ?? 'The plugin install failed.'} Retrying automatically (attempt ${next} of 2)...`,
+              });
+            },
+          },
+        );
+        if (!result.success && !result.cancelled) {
+          logger.error(`Plugin install failed after its automatic retry: ${result.summary ?? result.error}`);
+        }
+        this.emitFailure(result);
+        return this.withWarnings(result);
+      } finally {
+        this.useSetupChannel = false;
+      }
+    }, running => this.busyResult(running));
+  }
+
+  /**
+   * Refuses an install that cannot fit before any of it is downloaded, and
+   * passes on what is only worth knowing. Returns the refusal, or null to go on.
+   */
+  private async preflight(vendor: GpuVendor): Promise<InstallResult | null> {
+    let problems;
+    try {
+      problems = await runInstallPreflight({
+        dataDir: PATHS.APP_DATA,
+        tempDir: os.tmpdir(),
+        requiredBytes: PLUGIN_INSTALL_REQUIRED_BYTES[vendor],
+        requiredTempBytes: PLUGIN_INSTALL_REQUIRED_TEMP_BYTES[vendor],
+      });
+    } catch (error) {
+      // The checks are there to save a doomed install, not to stop a
+      // working one because a check itself broke.
+      logger.warn('Install preflight could not run; installing anyway:', error);
+      return null;
+    }
+
+    const verdict = judgePreflight(problems, {
+      reinstall: configManager.getPluginsGpuVendor() === vendor,
+      action: 'The plugin install',
+    });
+    for (const warning of verdict.warnings) {
+      this.warn(warning.message, 0);
+    }
+    if (!verdict.refusal) {
+      return null;
+    }
+    logger.error(`Plugin install refused by preflight: ${verdict.refusal}`);
+    return { ...failureResult({ summary: verdict.refusal, evidence: verdict.evidence }, logger.getLogPath()), blocked: true };
+  }
+
+  /**
+   * One pass through the install. Returns what happened without telling the
+   * renderer it failed; the callers above decide when a failure is final.
+   */
+  private async runInstallAttempt(): Promise<InstallResult> {
+    // Warnings belong to the attempt that raised them; a retry raises its own.
+    this.warnings = [];
+    if (this.isCancelled) {
+      return CANCELLED;
+    }
 
     try {
       // The vendor decides the torch flavor, the vsjetpack extras and which
@@ -529,6 +726,11 @@ export class PluginInstaller {
         message: `Preparing to install Python packages from PyPI (GPU vendor: ${vendor})...`
       });
 
+      const refusal = await this.preflight(vendor);
+      if (refusal) {
+        return refusal;
+      }
+
       logger.info('Starting plugin dependency installation...');
 
       // Runs before any pip install: an unreadable dist-info aborts pip
@@ -538,23 +740,18 @@ export class PluginInstaller {
       // Step 0: Ensure setuptools and wheel are installed (0-3% progress)
       logger.info('=== Step 0: Ensuring setuptools and wheel are installed ===');
       const setupResult = await this.runPipInstall(
+        'Installing setuptools and wheel',
         ['setuptools', 'wheel'],
         0,
         3,
         ['--upgrade']
       );
-
       if (!setupResult.success) {
-        this.sendProgress({
-          type: 'error',
-          progress: 0,
-          message: setupResult.error || 'Failed to install setuptools and wheel'
-        });
-        return { success: false, error: setupResult.error };
+        return setupResult;
       }
 
       if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
+        return CANCELLED;
       }
 
       // Step 0.5: remove packages belonging to a different GPU vendor, computed
@@ -577,7 +774,7 @@ export class PluginInstaller {
       }
 
       if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
+        return CANCELLED;
       }
 
       // Step 1: PyTorch (3-35% progress) — needed by the bundled (non-PyPI)
@@ -586,19 +783,14 @@ export class PluginInstaller {
       logger.info('=== Step 1: Installing PyTorch and torchvision ===');
       const torchInstall = getTorchInstall(vendor);
       const pytorchResult = await this.runPipInstall(
+        'Installing PyTorch',
         torchInstall.packages,
         3,
         32,
         torchInstall.extraArgs
       );
-
       if (!pytorchResult.success) {
-        this.sendProgress({
-          type: 'error',
-          progress: 0,
-          message: pytorchResult.error || 'PyTorch installation failed'
-        });
-        return { success: false, error: pytorchResult.error };
+        return pytorchResult;
       }
 
       // A package can retain valid dist-info metadata even when files from its
@@ -606,7 +798,7 @@ export class PluginInstaller {
       // no-op because pip prints "Requirement already satisfied". Repair the
       // wheel explicitly before continuing; torchgen ships inside torch and
       // must never be installed from the unrelated `torchgen` project on PyPI.
-      if (!await this.hasHealthyTorchRuntime()) {
+      if (!this.isCancelled && !await this.hasHealthyTorchRuntime()) {
         logger.warn('PyTorch runtime is incomplete; repairing torch and torchvision in place');
         this.sendProgress({
           type: 'installing',
@@ -615,6 +807,7 @@ export class PluginInstaller {
         });
 
         const repairResult = await this.runPipInstall(
+          'Repairing PyTorch',
           torchInstall.packages,
           32,
           3,
@@ -624,16 +817,20 @@ export class PluginInstaller {
           // cached wheel instead.
           [...torchInstall.extraArgs, '--ignore-installed']
         );
-
-        if (!repairResult.success || !await this.hasHealthyTorchRuntime()) {
-          const error = repairResult.error || 'PyTorch runtime import check failed after reinstall';
-          this.sendProgress({ type: 'error', progress: 0, message: error });
-          return { success: false, error };
+        if (!repairResult.success) {
+          return repairResult;
+        }
+        if (!await this.hasHealthyTorchRuntime()) {
+          return failureResult({
+            summary: 'Repairing PyTorch failed: it still cannot be imported after reinstalling, which usually means ' +
+              'antivirus removed some of its files. Allow Vapourkit\'s folder in your antivirus and retry.',
+            evidence: 'import torch, torchgen failed after pip reinstalled them (the log has the Python error).',
+          }, logger.getLogPath());
         }
       }
 
       if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
+        return CANCELLED;
       }
 
       // Step 2: Extract bundled plugins without a PyPI counterpart (35-40% progress).
@@ -646,7 +843,7 @@ export class PluginInstaller {
       await removeSupersededPlugins();
 
       if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
+        return CANCELLED;
       }
 
       // Step 3: VapourSynth ecosystem from PyPI (40-80% progress).
@@ -666,19 +863,14 @@ export class PluginInstaller {
         ...getBackendPipPackages(vendor),
       ];
       const pypiResult = await this.runPipInstall(
+        'Installing the VapourSynth plugin packages',
         pypiPackages,
         40,
         40,
         ['--upgrade', ...PYPI_EXTRA_INDEX_ARGS]
       );
-
       if (!pypiResult.success) {
-        this.sendProgress({
-          type: 'error',
-          progress: 0,
-          message: pypiResult.error || 'PyPI packages installation failed'
-        });
-        return { success: false, error: pypiResult.error };
+        return pypiResult;
       }
 
       // Remove plugin builds that crash VapourSynth autoload and resolve the
@@ -686,15 +878,31 @@ export class PluginInstaller {
       await applyPluginCompatibilityFixes(vendor);
 
       if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
+        return CANCELLED;
       }
 
-      // Step 4: Download and extract VapourSynth scripts from GitHub (85-90% progress)
-      logger.info('=== Step 4: Downloading VapourSynth scripts from GitHub ===');
-      await this.downloadAndExtractVSScripts();
+      // Step 4: VapourSynth scripts, from every source in scriptSources.ts
+      // (85-90% progress). A reinstall restores the shipped files, backing up
+      // any the user edited. Not fatal: the Hybrid scripts come from GitHub,
+      // and failing a whole install - torch and all - over them strands the
+      // user with nothing. Only the filters importing a missing script are
+      // affected, and the next launch retries the source. This step cannot be
+      // aborted part-way (scriptSync takes no signal); it is a few MB, and the
+      // cancel is honoured as soon as it returns.
+      logger.info('=== Step 4: Syncing VapourSynth scripts ===');
+      const scripts = await syncInstalledScripts('install', (message) => {
+        this.sendProgress({ type: 'installing', progress: 87, message });
+      });
+      await removeSupersededScripts();
+      for (const failure of scripts.failed) {
+        this.warn(
+          `Some VapourSynth scripts could not be installed (${failure.error}); a few filters may not work until the next launch retries.`,
+          88,
+        );
+      }
 
       if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
+        return CANCELLED;
       }
 
       // Step 4.5: vs-mlrt model zoo for the bundled RIFE/DPIR templates (the
@@ -705,8 +913,11 @@ export class PluginInstaller {
         try {
           await VsMlrtModelsManager.ensureModels((message) => {
             this.sendProgress({ type: 'installing', progress: 90, message });
-          });
+          }, this.abortController?.signal);
         } catch (error) {
+          if (this.isCancelled) {
+            return CANCELLED;
+          }
           logger.warn('vs-mlrt model zoo download failed (continuing; retried at next startup):', error);
         }
       }
@@ -721,21 +932,11 @@ export class PluginInstaller {
       }
 
       if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
+        return CANCELLED;
       }
 
-      // Step 5: Extract all scripts from scripts folder (90-95% progress)
-      logger.info('=== Step 5: Extracting scripts from scripts folder ===');
-      await this.extractAllScripts();
-      // Same for script modules that are now pip-installed (vs_temporalfix, ...)
-      await removeSupersededScripts();
-
-      if (this.isCancelled) {
-        return { success: false, error: 'Installation cancelled by user' };
-      }
-
-      // Step 6: Copy filter templates (95-100% progress)
-      logger.info('=== Step 6: Copying filter templates ===');
+      // Step 5: Copy filter templates (95-100% progress)
+      logger.info('=== Step 5: Copying filter templates ===');
       await this.copyFilterTemplates();
 
       // Step 7: Reload backend to refresh models and configs
@@ -743,7 +944,7 @@ export class PluginInstaller {
       try {
         await configManager.load();
         logger.info('Backend reloaded successfully');
-        
+
         // Notify frontend to refresh models
         if (this.mainWindow) {
           this.mainWindow.webContents.send('backend-reloaded');
@@ -757,6 +958,11 @@ export class PluginInstaller {
       // successful install, so a failed AMD run can't mask a working NVIDIA one.
       await configManager.setPluginsGpuVendor(vendor);
 
+      // Step 8: trim the pip cache. Only here: this runs inside the one
+      // operation this class allows at a time, after its last pip has exited,
+      // so nothing of ours is writing to the cache while it goes.
+      await prunePipCache(PATHS.PIP_CACHE, PIP_CACHE_LIMIT_BYTES);
+
       // All installations complete
       logger.info('All plugin dependencies and plugins installed successfully');
       logger.info('='.repeat(50));
@@ -765,43 +971,16 @@ export class PluginInstaller {
       this.sendProgress({
         type: 'complete',
         progress: 100,
-        message: 'Dependencies installed successfully!'
+        message: 'Dependencies installed successfully!',
+        warnings: this.warnings.length > 0 ? [...this.warnings] : undefined,
       });
       return { success: true };
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Plugin dependency installation error:', errorMsg);
-      this.sendProgress({
-        type: 'error',
-        progress: 0,
-        message: errorMsg
-      });
-      return { success: false, error: errorMsg };
-    }
-  }
-
-  async installDependenciesForSetup(): Promise<{ success: boolean; error?: string }> {
-    this.useSetupChannel = true;
-    try {
-      logger.info('Starting plugin dependency installation (setup mode, attempt 1/2)');
-      const firstResult = await this.installDependencies();
-      if (firstResult.success) {
-        return firstResult;
-      }
-
       if (this.isCancelled) {
-        return firstResult;
+        return CANCELLED;
       }
-
-      logger.info(`Plugin install attempt 1 failed (${firstResult.error}); retrying once`);
-      this.isCancelled = false;
-      const secondResult = await this.installDependencies();
-      if (!secondResult.success) {
-        logger.error(`Plugin install retry failed: ${secondResult.error}`);
-      }
-      return secondResult;
-    } finally {
-      this.useSetupChannel = false;
+      logger.error('Plugin dependency installation error:', error);
+      return failureResult(describeInstallFailure(error, 'Installing plugins'), logger.getLogPath());
     }
   }
 
@@ -855,9 +1034,18 @@ export class PluginInstaller {
     return { installed: state.installed, packages: foundPackages };
   }
 
-  async uninstallDependencies(): Promise<{ success: boolean; error?: string }> {
+  async uninstallDependencies(): Promise<InstallResult> {
+    return this.flights.run('uninstall', async () => {
+      this.beginOperation();
+      const result = await this.runUninstall();
+      this.emitFailure(result);
+      return result;
+    }, running => this.busyResult(running));
+  }
+
+  private async runUninstall(): Promise<InstallResult> {
     logger.info('Starting plugin dependency uninstallation');
-    this.isCancelled = false;
+    const step = 'Uninstalling plugins';
 
     try {
       this.sendProgress({
@@ -872,16 +1060,17 @@ export class PluginInstaller {
       const packagesToUninstall = UNINSTALL_PACKAGE_NAMES;
       const args = ['-m', 'pip', 'uninstall', '-y', ...packagesToUninstall];
       const pathAlias = await this.createPipPathAlias();
-      
+
       const commandStr = `${pathAlias.pythonPath} ${args.join(' ')}`;
       logger.info(`Running command: ${commandStr}`);
 
-      return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      return new Promise<InstallResult>((resolve) => {
         this.installProcess = spawn(pathAlias.pythonPath, args, createWorkloadSpawnOptions({
           cwd: PATHS.VS,
           windowsHide: true
         }));
 
+        let outputBuffer = '';
         let errorBuffer = '';
         let progress = 0;
         let lineBuffer = '';
@@ -916,18 +1105,20 @@ export class PluginInstaller {
 
         this.installProcess.stdout?.on('data', (data: Buffer) => {
           const output = data.toString();
+          outputBuffer = appendBounded(outputBuffer, output);
           lineBuffer += output;
-          
+
           const lines = lineBuffer.split('\n');
           lineBuffer = lines.pop() || '';
-          
+
           lines.forEach(line => processLine(line));
         });
 
         this.installProcess.stderr?.on('data', (data: Buffer) => {
           const output = data.toString();
-          errorBuffer += output;
-          
+          outputBuffer = appendBounded(outputBuffer, output);
+          errorBuffer = appendBounded(errorBuffer, output);
+
           const lines = output.split('\n');
           lines.forEach(line => processLine(line));
         });
@@ -936,12 +1127,12 @@ export class PluginInstaller {
           if (lineBuffer.trim()) {
             processLine(lineBuffer);
           }
-          
+
           this.installProcess = null;
 
           if (this.isCancelled) {
             logger.info('Plugin dependency uninstallation cancelled');
-            resolve({ success: false, error: 'Uninstallation cancelled by user' });
+            resolve({ ...CANCELLED, error: 'Uninstallation cancelled by user' });
             return;
           }
 
@@ -954,42 +1145,26 @@ export class PluginInstaller {
             });
             resolve({ success: true });
           } else {
-            const errorMsg = `Uninstallation failed with exit code ${code}`;
-            logger.error(errorMsg);
+            logger.error(`${step}: pip exited with code ${code}`);
             if (errorBuffer.trim()) {
               logger.error('Error output:');
               errorBuffer.split('\n').forEach(line => {
                 if (line.trim()) logger.error(`  ${line}`);
               });
             }
-            this.sendProgress({
-              type: 'error',
-              progress: 0,
-              message: errorMsg
-            });
-            resolve({ success: false, error: errorMsg });
+            resolve(failureResult(classifyInstallError(outputBuffer, { step, exitCode: code }), logger.getLogPath()));
           }
         });
 
         this.installProcess.on('error', (error: Error) => {
           logger.error('Failed to start pip uninstall process:', error);
-          this.sendProgress({
-            type: 'error',
-            progress: 0,
-            message: error.message
-          });
-          resolve({ success: false, error: error.message });
+          this.installProcess = null;
+          resolve(failureResult(classifyInstallError(error.message, { step }), logger.getLogPath()));
         });
       }).finally(() => pathAlias.cleanup());
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Plugin dependency uninstallation error:', errorMsg);
-      this.sendProgress({
-        type: 'error',
-        progress: 0,
-        message: errorMsg
-      });
-      return { success: false, error: errorMsg };
+      logger.error('Plugin dependency uninstallation error:', error);
+      return failureResult(describeInstallFailure(error, step), logger.getLogPath());
     }
   }
 
@@ -1004,10 +1179,21 @@ export class PluginInstaller {
     }
   }
 
+  /**
+   * Stops whatever install or uninstall is running, at whatever step it is
+   * on: a running pip is killed, a download is aborted, and every step
+   * boundary checks the flag before starting the next. The operation's
+   * promise settles once it has actually stopped, which is what the Plugins
+   * window waits for before showing itself idle again.
+   */
   cancel(): void {
+    if (!this.flights.running) {
+      return;
+    }
+    logger.info('Cancelling plugin dependency operation');
+    this.isCancelled = true;
+    this.abortController?.abort();
     if (this.installProcess) {
-      logger.info('Cancelling plugin dependency operation');
-      this.isCancelled = true;
       terminateProcessTree(this.installProcess, 'SIGTERM');
       this.installProcess = null;
     }
@@ -1022,11 +1208,11 @@ export class PluginInstaller {
     }
 
     logger.info('Extracting all plugins from plugins folder');
-    
+
     // Get bundled plugins path
     const bundledBasePath = getBundledBasePath();
     const pluginsFolder = path.join(bundledBasePath, 'include', 'plugins');
-    
+
     if (!await fs.pathExists(pluginsFolder)) {
       logger.info('No plugins folder found, skipping plugin extraction');
       return;
@@ -1041,21 +1227,26 @@ export class PluginInstaller {
     // Get all .7z files in the plugins folder
     const files = await fs.readdir(pluginsFolder);
     const archiveFiles = files.filter(f => f.endsWith('.7z'));
-    
+
     if (archiveFiles.length === 0) {
       logger.info('No plugin archives found in plugins folder');
       return;
     }
 
     logger.info(`Found ${archiveFiles.length} plugin archive(s) to extract`);
-    
+
+    const expected: string[] = [];
     for (let i = 0; i < archiveFiles.length; i++) {
+      if (this.isCancelled) {
+        return;
+      }
+
       const archiveFile = archiveFiles[i];
       const archivePath = path.join(pluginsFolder, archiveFile);
       const progress = 35 + Math.floor((i / archiveFiles.length) * 5);
-      
+
       logger.info(`Extracting ${archiveFile} (${i + 1}/${archiveFiles.length})`);
-      
+
       this.sendProgress({
         type: 'installing',
         progress,
@@ -1069,209 +1260,63 @@ export class PluginInstaller {
         // this and overwrites same-named bundled copies, so pip always wins.)
         await this.extractArchive(archivePath, PATHS.PLUGINS, archiveFile, { skipExisting: true });
         logger.info(`Successfully extracted ${archiveFile}`);
+        expected.push(...await this.archiveContents(archivePath));
       } catch (error) {
+        // Other archives are still worth extracting, but this one's plugins
+        // are missing and the filters using them will not load, so the user
+        // hears about it instead of finding out from a broken filter.
         logger.error(`Failed to extract ${archiveFile}:`, error);
-        // Continue with other plugins even if one fails
+        const message = error instanceof Error ? error.message : String(error);
+        const classified = classifyInstallError(message, { step: `Extracting ${archiveFile}` });
+        this.warn(
+          classified.kind === 'unknown'
+            ? `Extracting ${archiveFile} failed (${message}); the plugins in it are missing and filters that use them will not load.`
+            : `${classified.summary} Until then, the plugins in ${archiveFile} are missing.`,
+          progress,
+        );
       }
     }
 
+    await this.reportVanishedPlugins(expected);
     logger.info('Plugin extraction completed');
   }
 
-  private async downloadAndExtractVSScripts(): Promise<void> {
-    const downloadUrl = 'https://github.com/Selur/VapoursynthScriptsInHybrid/archive/d430e1973a78c2dc52a6e4aa58e5f89cc0093ae9.zip';
-    const tempDir = path.join(PATHS.APP_DATA, 'temp');
-    const zipPath = path.join(tempDir, 'vs-scripts.zip');
-    const extractPath = path.join(tempDir, 'vs-scripts-extracted');
-
-    logger.info('Downloading VapourSynth scripts from GitHub');
-    this.sendProgress({
-      type: 'installing',
-      progress: 85,
-      message: 'Downloading VapourSynth scripts...'
-    });
-
+  /** The files an archive holds, or none if it cannot be listed (verification is then skipped for it). */
+  private async archiveContents(archivePath: string): Promise<string[]> {
     try {
-      // Ensure temp directory exists
-      await fs.ensureDir(tempDir);
-
-      // Download the zip file.
-      //
-      // Three things here are load-bearing, and the previous version got each of them wrong in
-      // a way that only showed up on some machines:
-      //
-      //  * Redirects are followed to a fixed depth rather than exactly once. GitHub sends
-      //    /archive/<sha>.zip to codeload.github.com, and that hop can itself redirect. Piping
-      //    a redirect's (empty) body to disk produced a zero-byte "zip" and the misleading
-      //    "Can not open the file as archive".
-      //  * Only a 200 is written. An error page saved under a .zip name fails the same way,
-      //    and blaming 7-Zip for it costs an hour.
-      //  * The promise settles on the write stream's 'close', not 'finish'. finish fires while
-      //    the descriptor is still open, so extraction could start against a file this process
-      //    still held - which is exactly what "used by another process" was reporting.
-      try {
-        await fs.remove(zipPath);
-      } catch {
-        // A leftover from an interrupted run is not fatal; the write below truncates anyway.
-      }
-
-      await new Promise<void>((resolve, reject) => {
-        const maxRedirects = 5;
-
-        const fetch = (url: string, hop: number): void => {
-          if (hop > maxRedirects) {
-            reject(new Error(`Too many redirects fetching VapourSynth scripts (${maxRedirects})`));
-            return;
-          }
-
-          https.get(url, (response) => {
-            const status = response.statusCode ?? 0;
-
-            if (status >= 300 && status < 400 && response.headers.location) {
-              response.resume(); // Drain, or the socket is never released.
-              fetch(new URL(response.headers.location, url).toString(), hop + 1);
-              return;
-            }
-
-            if (status !== 200) {
-              response.resume();
-              reject(new Error(`VapourSynth scripts download failed with HTTP ${status}`));
-              return;
-            }
-
-            const file = fs.createWriteStream(zipPath);
-            file.on('close', () => resolve());
-            file.on('error', reject);
-            response.on('error', reject);
-            response.pipe(file);
-          }).on('error', reject);
-        };
-
-        fetch(downloadUrl, 0);
-      }).catch(async (err) => {
-        await fs.remove(zipPath).catch(() => {});
-        throw err;
-      });
-
-      // Cheap guard so a bad download is reported as a bad download rather than as a 7-Zip
-      // failure three lines further on.
-      const downloaded = await fs.stat(zipPath);
-      if (downloaded.size === 0) {
-        await fs.remove(zipPath).catch(() => {});
-        throw new Error('The VapourSynth scripts download produced an empty file');
-      }
-
-      logger.info(`Download completed (${downloaded.size} bytes), extracting...`);
-      this.sendProgress({
-        type: 'installing',
-        progress: 87,
-        message: 'Extracting VapourSynth scripts...'
-      });
-
-      // Extract the zip file
-      await fs.ensureDir(extractPath);
-      await _7z.unpack(zipPath, extractPath);
-
-      // Find all .py files in the extracted directory and move them to PATHS.SCRIPTS
-      logger.info('Moving .py files to vs-scripts folder');
-      await fs.ensureDir(PATHS.SCRIPTS);
-
-      const findPyFiles = async (dir: string): Promise<string[]> => {
-        const pyFiles: string[] = [];
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            pyFiles.push(...await findPyFiles(fullPath));
-          } else if (entry.isFile() && entry.name.endsWith('.py')) {
-            pyFiles.push(fullPath);
-          }
-        }
-        
-        return pyFiles;
-      };
-
-      const pyFiles = await findPyFiles(extractPath);
-      logger.info(`Found ${pyFiles.length} .py file(s)`);
-
-      for (const pyFile of pyFiles) {
-        const fileName = path.basename(pyFile);
-        const destPath = path.join(PATHS.SCRIPTS, fileName);
-        await fs.copy(pyFile, destPath, { overwrite: true });
-        logger.info(`Copied ${fileName} to vs-scripts folder`);
-      }
-
-      // Clean up temp files
-      await fs.remove(zipPath);
-      await fs.remove(extractPath);
-      logger.info('VapourSynth scripts download and extraction completed');
-
+      return archiveFileNames(await _7z.list(archivePath));
     } catch (error) {
-      logger.error('Failed to download and extract VapourSynth scripts:', error);
-      // Clean up on error
-      try {
-        await fs.remove(zipPath);
-        await fs.remove(extractPath);
-      } catch (cleanupError) {
-        // Ignore cleanup errors
-      }
-      throw error;
+      logger.warn(`Could not list ${archivePath} to verify its extraction:`, error);
+      return [];
     }
   }
 
-  private async extractAllScripts(): Promise<void> {
-    logger.info('Extracting all scripts from scripts folder');
-    
-    // Get bundled scripts path
-    const bundledBasePath = getBundledBasePath();
-    const scriptsFolder = path.join(bundledBasePath, 'include', 'scripts');
-    
-    if (!await fs.pathExists(scriptsFolder)) {
-      logger.info('No scripts folder found, skipping script extraction');
+  /**
+   * Checks that what extraction wrote is still there. Antivirus quarantines
+   * some of these DLLs moments after they are written (issue #11), and the
+   * install used to carry on as if nothing happened, leaving filters that
+   * fail at load time with nothing pointing at the cause.
+   *
+   * Real-time scanners act on a file as it is closed, but removal can land a
+   * little later, so the check waits briefly first rather than racing it.
+   */
+  private async reportVanishedPlugins(expected: string[]): Promise<void> {
+    if (expected.length === 0) {
       return;
     }
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
-    this.sendProgress({
-      type: 'installing',
-      progress: 90,
-      message: 'Extracting scripts...'
-    });
-
-    // Get all .7z files in the scripts folder
-    const files = await fs.readdir(scriptsFolder);
-    const archiveFiles = files.filter(f => f.endsWith('.7z'));
-    
-    if (archiveFiles.length === 0) {
-      logger.info('No script archives found in scripts folder');
-      return;
-    }
-
-    logger.info(`Found ${archiveFiles.length} script archive(s) to extract`);
-    
-    for (let i = 0; i < archiveFiles.length; i++) {
-      const archiveFile = archiveFiles[i];
-      const archivePath = path.join(scriptsFolder, archiveFile);
-      const progress = 90 + Math.floor((i / archiveFiles.length) * 5);
-      
-      logger.info(`Extracting ${archiveFile} (${i + 1}/${archiveFiles.length})`);
-      
-      this.sendProgress({
-        type: 'installing',
-        progress,
-        message: `Extracting ${archiveFile}...`
-      });
-
-      try {
-        await this.extractArchive(archivePath, PATHS.SCRIPTS, archiveFile);
-        logger.info(`Successfully extracted ${archiveFile}`);
-      } catch (error) {
-        logger.error(`Failed to extract ${archiveFile}:`, error);
-        // Continue with other scripts even if one fails
+    const missing: string[] = [];
+    for (const file of expected) {
+      if (!await fs.pathExists(path.join(PATHS.PLUGINS, file))) {
+        missing.push(file);
       }
     }
-    
-    logger.info('Script extraction completed');
+    const warning = describeVanishedFiles(missing, PATHS.PLUGINS);
+    if (warning) {
+      logger.warn(`Plugin files missing right after extraction: ${missing.join(', ')}`);
+      this.warn(warning, 40);
+    }
   }
 
   private async extractArchive(

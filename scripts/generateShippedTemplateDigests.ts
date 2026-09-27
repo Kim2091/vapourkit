@@ -1,0 +1,122 @@
+/**
+ * Regenerates electron/shippedTemplateDigests.ts: the sha256 of every body any
+ * commit has ever carried for each bundled .vkfilter, keyed by filename.
+ *
+ * An update keeps data\, so an installed template is whatever the release that
+ * seeded it shipped. The table is how launch tells a copy nobody touched (safe
+ * to replace, or to remove once the filter is dropped) from one a user edited
+ * (never touched). It has to cover the current bodies too, which is what the
+ * test holding this file to the bundled templates enforces: a template change
+ * that forgets to rerun this fails there, instead of stranding that body in
+ * every install that seeded it.
+ *
+ *   npx tsx scripts/generateShippedTemplateDigests.ts
+ */
+import { execFileSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { shippedTemplateDigest } from '../electron/shippedTemplateDigest';
+
+const repoRoot = path.resolve(__dirname, '..');
+const outputPath = path.join(repoRoot, 'electron', 'shippedTemplateDigests.ts');
+
+function git(args: string[]): string {
+  return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+}
+
+const digests = new Map<string, Set<string>>();
+const seenBlobs = new Set<string>();
+
+function record(file: string, blob: string): void {
+  const key = `${blob}\t${file}`;
+  if (seenBlobs.has(key)) return;
+  seenBlobs.add(key);
+  const content = execFileSync('git', ['cat-file', 'blob', blob], { cwd: repoRoot, encoding: 'utf8' });
+  if (!digests.has(file)) digests.set(file, new Set());
+  digests.get(file)!.add(shippedTemplateDigest(content));
+}
+
+for (const commit of git(['rev-list', 'HEAD', '--', 'include']).split('\n').filter(Boolean)) {
+  for (const line of git(['ls-tree', '-r', commit, 'include']).split('\n')) {
+    const match = /^\d+ blob ([0-9a-f]+)\t(.+\.vkfilter)$/.exec(line);
+    if (match) record(path.posix.basename(match[2]), match[1]);
+  }
+}
+
+// The working tree as well, so a template edited but not yet committed is
+// covered by the table that ships beside it.
+for (const dir of ['include/filter_templates', 'include/plugins/plugin_filters']) {
+  for (const file of fs.readdirSync(path.join(repoRoot, dir)).filter(f => f.endsWith('.vkfilter'))) {
+    const content = fs.readFileSync(path.join(repoRoot, dir, file), 'utf8');
+    if (!digests.has(file)) digests.set(file, new Set());
+    digests.get(file)!.add(shippedTemplateDigest(content));
+  }
+}
+
+// What each release shipped, by tag. An install from before the ledger that
+// holds an edited template has no record of what the edit started from; the
+// release it was running is the best answer there is.
+const releases = new Map<string, Map<string, string>>();
+for (const tag of git(['tag', '--list', 'v*']).split('\n').filter(Boolean)) {
+  const files = new Map<string, string>();
+  for (const line of git(['ls-tree', '-r', tag, 'include']).split('\n')) {
+    const match = /^\d+ blob ([0-9a-f]+)\t(.+\.vkfilter)$/.exec(line);
+    if (!match) continue;
+    const content = execFileSync('git', ['cat-file', 'blob', match[1]], { cwd: repoRoot, encoding: 'utf8' });
+    files.set(path.posix.basename(match[2]), shippedTemplateDigest(content));
+  }
+  if (files.size > 0) releases.set(tag.replace(/^v/, ''), files);
+}
+
+// Renamed templates, followed to the name that ships now, so a notice about
+// an edited copy of the old name can point at its replacement.
+const bundledNow = new Set<string>();
+for (const dir of ['include/filter_templates', 'include/plugins/plugin_filters']) {
+  fs.readdirSync(path.join(repoRoot, dir)).filter(f => f.endsWith('.vkfilter')).forEach(f => bundledNow.add(f));
+}
+const renamedTo = new Map<string, string>();
+for (const line of git(['log', '--diff-filter=R', '-M', '--name-status', '--format=', 'HEAD', '--', 'include']).split('\n')) {
+  const match = /^R\d*\t(.+\.vkfilter)\t(.+\.vkfilter)$/.exec(line);
+  if (match) renamedTo.set(path.posix.basename(match[1]), path.posix.basename(match[2]));
+}
+const renames = new Map<string, string>();
+for (const from of renamedTo.keys()) {
+  let to = renamedTo.get(from)!;
+  for (let hops = 0; renamedTo.has(to) && hops < 20; hops++) to = renamedTo.get(to)!;
+  if (bundledNow.has(to) && !bundledNow.has(from)) renames.set(from, to);
+}
+
+const body = [...digests.keys()].sort().map(file => {
+  const hashes = [...digests.get(file)!].sort().map(h => `    '${h}',`).join('\n');
+  return `  ${JSON.stringify(file)}: [\n${hashes}\n  ],`;
+}).join('\n');
+
+const releaseBody = [...releases.keys()].sort().map(version => {
+  const files = releases.get(version)!;
+  const entries = [...files.keys()].sort().map(file => `    ${JSON.stringify(file)}: '${files.get(file)}',`).join('\n');
+  return `  ${JSON.stringify(version)}: {\n${entries}\n  },`;
+}).join('\n');
+
+const renameBody = [...renames.keys()].sort()
+  .map(from => `  ${JSON.stringify(from)}: ${JSON.stringify(renames.get(from))},`).join('\n');
+
+fs.writeFileSync(outputPath, `// Generated by scripts/generateShippedTemplateDigests.ts - do not edit by hand.
+// See that script for why each table exists.
+
+/** Every body each bundled filter template has shipped with, as shippedTemplateDigest(). */
+export const SHIPPED_TEMPLATE_DIGESTS: Readonly<Record<string, readonly string[]>> = {
+${body}
+};
+
+/** The body each release tag shipped, by version without the leading v. */
+export const RELEASE_TEMPLATE_DIGESTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+${releaseBody}
+};
+
+/** Templates no longer shipped under their old name, mapped to the name they ship as now. */
+export const RENAMED_TEMPLATES: Readonly<Record<string, string>> = {
+${renameBody}
+};
+`);
+
+console.log(`Wrote ${digests.size} templates, ${[...digests.values()].reduce((n, s) => n + s.size, 0)} bodies to ${path.relative(repoRoot, outputPath)}`);

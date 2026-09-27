@@ -11,6 +11,7 @@ import { registerQueueHandlers } from './queueHandlers';
 import { registerDiscordRichPresenceHandlers } from './discordRichPresenceHandlers';
 import { registerDlssRuntimeHandlers } from './dlssRuntimeHandlers';
 import { registerLutHandlers } from './lutHandlers';
+import { registerUpdateReportHandlers } from './updateReportHandlers';
 import { DependencyManager } from './dependencyManager';
 import { VapourSynthScriptGenerator } from './scriptGenerator';
 import { TemplateManager } from './templateManager';
@@ -40,4 +41,5 @@ export function registerAllIpcHandlers(
   registerQueueHandlers();
   registerDiscordRichPresenceHandlers();
   registerDlssRuntimeHandlers();
+  registerUpdateReportHandlers(dependencyManager);
 }

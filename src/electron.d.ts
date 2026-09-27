@@ -7,7 +7,7 @@ export interface ElectronAPI {
   // Dependency management
   platform: NodeJS.Platform;
   checkDependencies: () => Promise<boolean>;
-  setupDependencies: () => Promise<{ success: boolean; error?: string }>;
+  setupDependencies: () => Promise<InstallResult & { phase?: 'core' | 'plugins' }>;
   onSetupProgress: (callback: (progress: SetupProgress) => void) => () => void;
   detectCudaSupport: () => Promise<boolean>;
   getInferenceBackendInfo: () => Promise<{ hasCudaSupport: boolean; backend: BackendId }>;
@@ -143,6 +143,13 @@ export interface ElectronAPI {
   // DLSS 5 Neural Uplift runtime (nvngx_dlssnr.dll)
   dlssRuntimeStatus: () => Promise<DlssRuntimeStatus>;
   dlssRuntimeImport: () => Promise<DlssImportResult>;
+
+  // Post-update notice
+  getUpdateReport: () => Promise<UpdateReportSnapshot>;
+  markUpdateReportSeen: () => Promise<void>;
+  clearUpdateReport: () => Promise<void>;
+  resolveTemplateDecision: (file: string, choice: TemplateDecisionChoice) => Promise<UpdateReportSnapshot & { backupPath?: string }>;
+  openTemplateBackups: () => Promise<void>;
   
   // Console logs
   onDevConsoleLog: (callback: (log: DevConsoleLog) => void) => () => void;
@@ -232,9 +239,9 @@ export interface ElectronAPI {
     Promise<{ success: true; path: string; name: string } | { success: false; error: string }>;
   
   // Plugin dependency operations
-  installPluginDependencies: () => Promise<{ success: boolean; error?: string }>;
-  retrySetupPlugins: () => Promise<{ success: boolean; error?: string }>;
-  uninstallPluginDependencies: () => Promise<{ success: boolean; error?: string }>;
+  installPluginDependencies: () => Promise<InstallResult>;
+  retrySetupPlugins: () => Promise<InstallResult>;
+  uninstallPluginDependencies: () => Promise<InstallResult>;
   checkPluginDependencies: () => Promise<{ installed: boolean; packages: string[] }>;
   cancelPluginDependencyInstall: () => Promise<{ success: boolean }>;
   onPluginDependencyProgress: (callback: (progress: PluginDependencyProgress) => void) => () => void;
@@ -255,6 +262,38 @@ export interface ElectronAPI {
   updateVsMlrtVersion: () => Promise<{ success: boolean; version?: string; error?: string }>;
   updateVsMlrtPlugin: () => Promise<{ success: boolean; version?: string; error?: string }>;
   onVsMlrtUpdateProgress: (callback: (progress: { progress: number; message: string }) => void) => () => void;
+}
+
+/** What the last app update did on its own; see electron/installLedger.ts. */
+export interface UpdateReport {
+  /** null when the install predates version tracking */
+  fromVersion: string | null;
+  toVersion: string;
+  createdAt: string;
+  seen: boolean;
+  templatesAdded: string[];
+  templatesUpdated: string[];
+  templatesRemoved: string[];
+  packagesInstalled: string[];
+  pluginsUpdated: string[];
+  scriptsUpdated: string[];
+  /** Scripts the user edited, left as they were */
+  scriptsKept: string[];
+}
+
+/** An edited filter template the update left for the user; see electron/templateReconcile.ts. */
+export interface TemplateDecision {
+  file: string;
+  name: string;
+  kind: 'edited-outdated' | 'edited-dropped';
+  replacement?: string;
+}
+
+export type TemplateDecisionChoice = 'replace' | 'keep' | 'remove';
+
+export interface UpdateReportSnapshot {
+  report: UpdateReport | null;
+  decisions: TemplateDecision[];
 }
 
 export interface DlssRuntimeStatus {
@@ -285,11 +324,40 @@ export interface VsMlrtVersionInfo {
   needsNotification: boolean;
 }
 
+/** How an install, uninstall or setup phase ended (electron/installFlow.ts). */
+export interface InstallResult {
+  success: boolean;
+  /** summary plus where the full log is */
+  error?: string;
+  /** One sentence saying what went wrong and what to do */
+  summary?: string;
+  /** The output lines the summary was drawn from */
+  evidence?: string;
+  logPath?: string;
+  cancelled?: boolean;
+  alreadyRunning?: boolean;
+  blocked?: boolean;
+  warnings?: string[];
+}
+
+/** An install failure as the UI shows it: the sentence up front, the evidence behind "Details". */
+export interface InstallFailureInfo {
+  summary: string;
+  evidence?: string;
+  logPath?: string;
+}
+
 export interface SetupProgress {
-  type: 'download' | 'extract' | 'installing' | 'complete' | 'error' | 'model-extract';
+  // 'retrying': an attempt failed and another is starting; 'warning': worth
+  // showing, stops nothing. Only 'complete' and 'error' end a phase.
+  type: 'download' | 'extract' | 'installing' | 'python-setup' | 'retrying' | 'warning' | 'complete' | 'error' | 'model-extract';
   component: string;
   progress: number;
   message: string;
+  summary?: string;
+  evidence?: string;
+  logPath?: string;
+  warnings?: string[];
 }
 
 /** One selectable step of the chain, as the open script exposes it. */
@@ -763,10 +831,13 @@ export interface WorkflowData {
 }
 
 export interface PluginDependencyProgress {
-  type: 'download' | 'extract' | 'install' | 'complete' | 'error';
+  type: 'installing' | 'retrying' | 'warning' | 'complete' | 'error';
   progress: number;
   message: string;
-  package?: string;
+  summary?: string;
+  evidence?: string;
+  logPath?: string;
+  warnings?: string[];
 }
 
 export interface UpdateInfo {

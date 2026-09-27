@@ -37,6 +37,7 @@ import {
   resolveHostCommand,
   resolveSupportedPythonCommand,
   runCommand,
+  CommandError,
 } from './utils';
 
 const mockSpawn = vi.mocked(spawn);
@@ -68,9 +69,10 @@ describe('runCommand', () => {
       ['-m', 'pip', 'install', 'package name'],
       'C:\\working directory',
     );
+    proc.stdout.emit('data', Buffer.from('done'));
     proc.emit('close', 0);
 
-    await expect(completed).resolves.toBeUndefined();
+    await expect(completed).resolves.toEqual({ stdout: 'done', stderr: '', code: 0 });
     expect(mockSpawn).toHaveBeenCalledWith(
       'C:\\Program Files\\Python\\python.exe',
       ['-m', 'pip', 'install', 'package name'],
@@ -78,7 +80,26 @@ describe('runCommand', () => {
     );
   });
 
-  it('preserves stderr in a non-zero exit error', async () => {
+  it('keeps the raw output on the error and makes the message the classified sentence', async () => {
+    const proc = createProcess();
+    mockSpawn.mockReturnValue(proc as never);
+
+    const completed = runCommand('python3', ['-m', 'pip'], undefined, undefined, { step: 'Installing VapourSynth' });
+    proc.stdout.emit('data', Buffer.from('Collecting vapoursynth\n'));
+    proc.stderr.emit('data', Buffer.from('ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device\n'));
+    proc.emit('close', 1);
+
+    const error = await completed.catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(CommandError);
+    const commandError = error as CommandError;
+    expect(commandError.message).toMatch(/^Installing VapourSynth failed because the drive .* is full/);
+    expect(commandError.classified.kind).toBe('disk-full');
+    expect(commandError.exitCode).toBe(1);
+    expect(commandError.output).toContain('Collecting vapoursynth');
+    expect(commandError.output).toContain('[Errno 28]');
+  });
+
+  it('falls back to the exit code when the output says nothing recognisable', async () => {
     const proc = createProcess();
     mockSpawn.mockReturnValue(proc as never);
 
@@ -86,9 +107,22 @@ describe('runCommand', () => {
     proc.stderr.emit('data', Buffer.from('installation failed'));
     proc.emit('close', 1);
 
-    await expect(completed).rejects.toThrow(
-      'Command failed with code 1: installation failed',
-    );
+    const error = (await completed.catch((caught: unknown) => caught)) as CommandError;
+    expect(error.message).toBe('The install failed (exit code 1). The details below and the full log show why.');
+    expect(error.output).toBe('installation failed');
+  });
+
+  it('classifies a missing interpreter from the spawn error', async () => {
+    const proc = createProcess();
+    mockSpawn.mockReturnValue(proc as never);
+
+    const python = 'C:\\vk\\data\\vapoursynth-portable\\python.exe';
+    const completed = runCommand(python, ['-m', 'pip'], undefined, undefined, { step: 'Installing pip' });
+    proc.emit('error', new Error(`spawn ${python} ENOENT`));
+
+    const error = (await completed.catch((caught: unknown) => caught)) as CommandError;
+    expect(error.classified.kind).toBe('python-missing');
+    expect(error.message).toMatch(/^Installing pip failed because Vapourkit's Python could not be found/);
   });
 });
 

@@ -1,7 +1,8 @@
 import { memo, useMemo } from 'react';
 import { Loader2, Download, XCircle, CheckCircle2, Terminal } from 'lucide-react';
-import type { SetupProgress } from '../electron.d';
+import type { InstallFailureInfo, SetupProgress } from '../electron.d';
 import { Logo } from './Logo';
+import { InstallFailureDetails, InstallWarnings } from './InstallFailureDetails';
 
 interface SetupScreenProps {
   isCheckingDeps: boolean;
@@ -10,7 +11,10 @@ interface SetupScreenProps {
   setupProgress: SetupProgress | null;
   isSettingUp: boolean;
   onSetup: () => Promise<void>;
-  pluginInstallError: string | null;
+  pluginInstallError: InstallFailureInfo | null;
+  /** Core setup stopped; Start Setup is enabled again to retry it */
+  setupError: InstallFailureInfo | null;
+  setupWarnings: string[];
   onRetryPlugins: () => Promise<void>;
   onContinueWithoutPlugins: () => void;
 }
@@ -23,6 +27,8 @@ export const SetupScreen = memo<SetupScreenProps>(({
   isSettingUp,
   onSetup,
   pluginInstallError,
+  setupError,
+  setupWarnings,
   onRetryPlugins,
   onContinueWithoutPlugins,
 }: SetupScreenProps) => {
@@ -236,23 +242,40 @@ export const SetupScreen = memo<SetupScreenProps>(({
               </p>
             )}
 
-            {/* Error Message */}
-            {setupProgress?.type === 'error' && !pluginInstallError && (
+            {/* The first plugin attempt failed and the automatic retry is running:
+                say so, or the plugin step just appears to restart from 0%. */}
+            {isSettingUp && setupProgress?.type === 'retrying' && (
+              <p className="mb-4 text-xs leading-relaxed text-warn-300">{setupProgress.message}</p>
+            )}
+
+            {/* Warnings: things worth knowing that did not stop setup */}
+            {setupWarnings.length > 0 && (
+              <div className="mb-4">
+                <InstallWarnings warnings={setupWarnings} />
+              </div>
+            )}
+
+            {/* Core setup error: Start Setup below is enabled again to retry */}
+            {setupError && !pluginInstallError && (
               <div className="mb-4 p-3 bg-bad-500/10 border border-bad-500/20 rounded-lg">
-                <p className="text-bad-400 text-sm flex items-center gap-2">
-                  <XCircle className="w-4 h-4 flex-shrink-0" />
-                  {setupProgress.message}
+                <p className="text-bad-400 text-sm flex items-start gap-2">
+                  <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>Setup failed: {setupError.summary}</span>
                 </p>
+                <InstallFailureDetails failure={setupError} />
               </div>
             )}
 
             {/* Plugin install error with recovery options */}
             {pluginInstallError && (
               <div className="mb-4 p-3 bg-bad-500/10 border border-bad-500/20 rounded-lg space-y-3">
-                <p className="text-bad-400 text-sm flex items-center gap-2">
-                  <XCircle className="w-4 h-4 flex-shrink-0" />
-                  Plugin install failed: {pluginInstallError}
-                </p>
+                <div>
+                  <p className="text-bad-400 text-sm flex items-start gap-2">
+                    <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>Plugin install failed: {pluginInstallError.summary}</span>
+                  </p>
+                  <InstallFailureDetails failure={pluginInstallError} />
+                </div>
                 <p className="text-ink-400 text-xs">
                   You can retry now, or continue without plugins and install them later from the Plugins menu.
                 </p>

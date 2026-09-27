@@ -130,6 +130,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dlssRuntimeStatus: () => ipcRenderer.invoke('dlss-runtime-status'),
   dlssRuntimeImport: () => ipcRenderer.invoke('dlss-runtime-import'),
 
+  // Post-update notice: what the last update did, and the edited templates it asks about
+  getUpdateReport: () => ipcRenderer.invoke('update-report-get'),
+  markUpdateReportSeen: () => ipcRenderer.invoke('update-report-mark-seen'),
+  clearUpdateReport: () => ipcRenderer.invoke('update-report-clear'),
+  resolveTemplateDecision: (file: string, choice: 'replace' | 'keep' | 'remove') =>
+    ipcRenderer.invoke('update-report-resolve', file, choice),
+  openTemplateBackups: () => ipcRenderer.invoke('update-report-open-backups'),
+
   // Console logs
   onDevConsoleLog: (callback: (log: any) => void) => {
     const listener = (event: any, log: any) => callback(log);

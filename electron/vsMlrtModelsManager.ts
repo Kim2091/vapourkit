@@ -10,8 +10,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs-extra';
-import * as https from 'https';
 import * as _7z from '7zip-min';
+import { downloadToFile } from './download';
 import { logger } from './logger';
 import { PATHS } from './constants';
 
@@ -76,17 +76,36 @@ export class VsMlrtModelsManager {
   /**
    * Downloads and extracts any missing packs. Concurrent callers share one
    * run (checkDependencies fires this on every app mount).
+   *
+   * `signal` lets a cancelled plugin install stop waiting. It aborts the
+   * download itself only when this caller started it; a caller that joined
+   * the launch-time background run stops waiting and leaves that run alone,
+   * since its other waiter did not ask to stop.
    */
-  static async ensureModels(progressCallback?: (message: string) => void): Promise<void> {
+  static async ensureModels(progressCallback?: (message: string) => void, signal?: AbortSignal): Promise<void> {
     if (!VsMlrtModelsManager.downloadInFlight) {
-      VsMlrtModelsManager.downloadInFlight = VsMlrtModelsManager.downloadMissing(progressCallback)
+      VsMlrtModelsManager.downloadInFlight = VsMlrtModelsManager.downloadMissing(progressCallback, signal)
         .finally(() => { VsMlrtModelsManager.downloadInFlight = null; });
+      return VsMlrtModelsManager.downloadInFlight;
     }
-    return VsMlrtModelsManager.downloadInFlight;
+    return VsMlrtModelsManager.untilAborted(VsMlrtModelsManager.downloadInFlight, signal);
   }
 
-  private static async downloadMissing(progressCallback?: (message: string) => void): Promise<void> {
+  private static untilAborted(run: Promise<void>, signal?: AbortSignal): Promise<void> {
+    if (!signal) return run;
+    if (signal.aborted) return Promise.reject(new Error('vs-mlrt model download cancelled'));
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => reject(new Error('vs-mlrt model download cancelled'));
+      signal.addEventListener('abort', onAbort, { once: true });
+      run.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+    });
+  }
+
+  private static async downloadMissing(progressCallback?: (message: string) => void, signal?: AbortSignal): Promise<void> {
     for (const pack of MODEL_PACKS) {
+      if (signal?.aborted) {
+        throw new Error('vs-mlrt model download cancelled');
+      }
       const missing: ModelFamily[] = [];
       for (const family of pack.families) {
         if (!await VsMlrtModelsManager.isFamilyInstalled(family)) {
@@ -108,7 +127,20 @@ export class VsMlrtModelsManager {
 
       try {
         await fs.ensureDir(tempDir);
-        await VsMlrtModelsManager.downloadFile(pack.url, archivePath);
+        // Awaited to completion before extraction: downloadToFile settles only
+        // once the archive is closed and renamed into place, so 7-Zip never
+        // opens a file this process is still writing.
+        await downloadToFile(pack.url, archivePath, {
+          label: `${label} models`,
+          // The smallest pack is ~20 MB; a body under 1 MB is an error page.
+          minBytes: 1024 * 1024,
+          signal,
+          onProgress: ({ received, total }) => {
+            if (total) {
+              progressCallback?.(`Downloading ${label} models... ${Math.round((received * 100) / total)}%`);
+            }
+          },
+        });
 
         progressCallback?.(`Extracting ${label} models...`);
         await fs.remove(extractPath);
@@ -156,40 +188,5 @@ export class VsMlrtModelsManager {
       }
     }
     return null;
-  }
-
-  /** Simple https download following redirects (GitHub release assets redirect). */
-  private static downloadFile(url: string, outputPath: string, redirectsLeft: number = 5): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const request = https.get(url, (response) => {
-        if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          response.resume();
-          if (redirectsLeft <= 0) {
-            reject(new Error(`Too many redirects downloading ${url}`));
-            return;
-          }
-          VsMlrtModelsManager.downloadFile(response.headers.location, outputPath, redirectsLeft - 1)
-            .then(resolve, reject);
-          return;
-        }
-        if (response.statusCode !== 200) {
-          response.resume();
-          reject(new Error(`Download failed with HTTP ${response.statusCode}: ${url}`));
-          return;
-        }
-        const file = fs.createWriteStream(outputPath);
-        response.pipe(file);
-        file.on('finish', () => { file.close(); resolve(); });
-        file.on('error', (err) => {
-          file.close();
-          fs.unlink(outputPath, () => {});
-          reject(err);
-        });
-      });
-      request.on('error', (err) => {
-        fs.unlink(outputPath, () => {});
-        reject(err);
-      });
-    });
   }
 }

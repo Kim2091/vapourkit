@@ -8,6 +8,7 @@ import { AboutModal } from './AboutModal';
 import { PluginsModal } from './PluginsModal';
 import { UpdateNotificationModal } from './UpdateNotificationModal';
 import { VsMlrtUpdateModal } from './VsMlrtUpdateModal';
+import { UpdateReportModal } from './UpdateReportModal';
 import { FilterImportModal } from './FilterImportModal';
 import type { BackendId, DiscordRichPresenceSettings, UpdateInfo, VsMlrtVersionInfo } from '../electron';
 
@@ -61,6 +62,7 @@ interface AppModalsProps {
   accentColor: string;
   onChangeAccentColor: (color: string) => void;
   onResetAccentColor: () => void;
+  onOpenUpdateReport: () => void;
 
   // About
   showAbout: boolean;
@@ -81,6 +83,10 @@ interface AppModalsProps {
   vsMlrtVersionInfo: VsMlrtVersionInfo | null;
   onCloseVsMlrtModal: () => void;
   onEnginesCleared: () => Promise<void>;
+
+  // Post-update notice
+  showUpdateReport: boolean;
+  onCloseUpdateReport: () => void;
 
   // Filter Import
   importModalState: { isOpen: boolean; workflowName: string; filters: any[] };
@@ -143,6 +149,7 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
         accentColor={props.accentColor}
         onChangeAccentColor={props.onChangeAccentColor}
         onResetAccentColor={props.onResetAccentColor}
+        onOpenUpdateReport={props.onOpenUpdateReport}
       />
 
       <AboutModal
@@ -170,6 +177,11 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
           onEnginesCleared={props.onEnginesCleared}
         />
       )}
+
+      <UpdateReportModal
+        show={props.showUpdateReport}
+        onClose={props.onCloseUpdateReport}
+      />
 
       <FilterImportModal
         isOpen={props.importModalState.isOpen}

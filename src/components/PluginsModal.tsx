@@ -15,13 +15,8 @@ import {
 import { useConsoleLog } from '../hooks/useConsoleLog';
 import { ModalSectionHeader as SectionHeader } from './ModalSectionHeader';
 import { DlssRuntimeSection } from './DlssRuntimeSection';
-
-interface PluginDependencyProgress {
-  type: 'download' | 'extract' | 'install' | 'complete' | 'error';
-  progress: number;
-  message: string;
-  package?: string;
-}
+import { InstallFailureDetails, InstallWarnings } from './InstallFailureDetails';
+import type { InstallFailureInfo, InstallResult, PluginDependencyProgress } from '../electron.d';
 
 interface PluginsModalProps {
   show: boolean;
@@ -32,7 +27,10 @@ interface PluginsModalProps {
 export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstallationComplete }) => {
   const [isInstalling, setIsInstalling] = useState(false);
   const [progress, setProgress] = useState<PluginDependencyProgress | null>(null);
-  const [installError, setInstallError] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<InstallFailureInfo | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  // Cancel was asked for and the operation has not stopped yet
+  const [isCancelling, setIsCancelling] = useState(false);
   const [showConsole, setShowConsole] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
@@ -71,64 +69,89 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
   useEffect(() => {
     if (!show) return;
 
-    const unsubscribe = window.electronAPI.onPluginDependencyProgress(async (nextProgress: PluginDependencyProgress) => {
+    const unsubscribe = window.electronAPI.onPluginDependencyProgress((nextProgress: PluginDependencyProgress) => {
+      // A warning stops nothing; keep it listed rather than letting the next
+      // progress message overwrite it.
+      if (nextProgress.type === 'warning') {
+        setWarnings(previous => previous.includes(nextProgress.message) ? previous : [...previous, nextProgress.message]);
+        return;
+      }
+
       setProgress(nextProgress);
 
       if (nextProgress.type === 'complete') {
         setIsInstalling(false);
+        setIsCancelling(false);
         setInstallError(null);
-        await checkInstallationStatus();
-        onInstallationComplete?.();
+        if (nextProgress.warnings) setWarnings(nextProgress.warnings);
+        void checkInstallationStatus().then(() => onInstallationComplete?.());
       } else if (nextProgress.type === 'error') {
         setIsInstalling(false);
-        setInstallError(nextProgress.message);
+        setIsCancelling(false);
+        setInstallError({
+          summary: nextProgress.summary ?? nextProgress.message,
+          evidence: nextProgress.evidence,
+          logPath: nextProgress.logPath,
+        });
       }
     });
 
     return unsubscribe;
   }, [show, onInstallationComplete]);
 
-  const handleInstallDependencies = async () => {
+  /**
+   * What the install or uninstall replied once it ended. This, not the
+   * cancel click, is what returns the window to idle: the operation replies
+   * only after it has actually stopped, and the window may have been closed
+   * (and missed the progress events) while it ran.
+   */
+  const settle = (result: InstallResult, fallback: string) => {
+    setIsCancelling(false);
+    setIsInstalling(false);
+    if (result.success) {
+      if (result.warnings) setWarnings(result.warnings);
+      return;
+    }
+    if (result.cancelled) {
+      setProgress(null);
+      return;
+    }
+    setInstallError(previous => previous ?? {
+      summary: result.summary ?? result.error ?? fallback,
+      evidence: result.evidence,
+      logPath: result.logPath,
+    });
+  };
+
+  const startOperation = async (run: () => Promise<InstallResult>, fallback: string) => {
     setIsInstalling(true);
+    setIsCancelling(false);
     setProgress(null);
     setInstallError(null);
+    setWarnings([]);
 
     try {
-      const result = await window.electronAPI.installPluginDependencies();
-      if (!result.success) {
-        setInstallError(result.error || 'Installation failed');
-        setIsInstalling(false);
-      }
+      settle(await run(), fallback);
     } catch (error) {
-      setInstallError(error instanceof Error ? error.message : 'Unknown error');
+      setInstallError({ summary: error instanceof Error ? error.message : 'Unknown error' });
       setIsInstalling(false);
+      setIsCancelling(false);
     }
   };
 
-  const handleUninstallDependencies = async () => {
-    setIsInstalling(true);
-    setProgress(null);
-    setInstallError(null);
+  const handleInstallDependencies = () =>
+    startOperation(() => window.electronAPI.installPluginDependencies(), 'Installation failed');
 
-    try {
-      const result = await window.electronAPI.uninstallPluginDependencies();
-      if (!result.success) {
-        setInstallError(result.error || 'Uninstallation failed');
-        setIsInstalling(false);
-      }
-    } catch (error) {
-      setInstallError(error instanceof Error ? error.message : 'Unknown error');
-      setIsInstalling(false);
-    }
-  };
+  const handleUninstallDependencies = () =>
+    startOperation(() => window.electronAPI.uninstallPluginDependencies(), 'Uninstallation failed');
 
   const handleCancelInstall = async () => {
+    setIsCancelling(true);
     try {
       await window.electronAPI.cancelPluginDependencyInstall();
-      setIsInstalling(false);
-      setProgress(null);
     } catch (error) {
       console.error('Error canceling installation:', error);
+      setIsCancelling(false);
     }
   };
 
@@ -142,7 +165,9 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
   const status = isCheckingStatus
     ? { label: 'Checking installation', detail: 'Verifying the installed VapourSynth package set.', tone: 'text-ink-400', icon: Loader2, spin: true }
     : isInstalling
-      ? { label: 'Installation in progress', detail: progress?.message || 'Preparing the runtime package set.', tone: 'text-accent-400', icon: Loader2, spin: true }
+      ? isCancelling
+        ? { label: 'Cancelling', detail: 'Stopping the running step; this can take a few seconds.', tone: 'text-ink-300', icon: Loader2, spin: true }
+        : { label: 'Installation in progress', detail: progress?.message || 'Preparing the runtime package set.', tone: 'text-accent-400', icon: Loader2, spin: true }
       : installError
         ? { label: 'Installation failed', detail: 'Review the error details below, then retry when ready.', tone: 'text-bad-400', icon: XCircle, spin: false }
         : isInstalled
@@ -199,10 +224,17 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
               </div>
             )}
 
+            {warnings.length > 0 && (
+              <div className="px-4 py-3 border-b border-ink-900">
+                <InstallWarnings warnings={warnings} />
+              </div>
+            )}
+
             {installError && (
               <div className="px-4 py-3 border-b border-ink-900 bg-bad-500/5">
-                <p className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-bad-400 mb-1">Error details</p>
-                <p className="text-[11.5px] leading-relaxed text-bad-300 whitespace-pre-wrap">{installError}</p>
+                <p className="text-[11px] font-display font-semibold uppercase tracking-[0.09em] text-bad-400 mb-1">What went wrong</p>
+                <p className="text-[12.5px] leading-relaxed text-bad-300 whitespace-pre-wrap">{installError.summary}</p>
+                <InstallFailureDetails failure={installError} />
               </div>
             )}
 
@@ -226,9 +258,9 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
                 </>
               )}
               {isInstalling && (
-                <button onClick={handleCancelInstall} className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold border border-bad-500/30 text-bad-400 hover:bg-bad-500/10 transition-colors">
-                  <X className="w-3.5 h-3.5" />
-                  Cancel
+                <button onClick={handleCancelInstall} disabled={isCancelling} className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold border border-bad-500/30 text-bad-400 hover:bg-bad-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isCancelling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                  {isCancelling ? 'Cancelling...' : 'Cancel'}
                 </button>
               )}
               {installError && (

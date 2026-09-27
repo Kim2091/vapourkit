@@ -105,7 +105,7 @@ function App() {
 
   // Setup and initialization hooks
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
-  const { isSetupComplete, isCheckingDeps, hasCudaSupport, recommendedBackend, setupProgress, isSettingUp, handleSetup, pluginInstallError, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
+  const { isSetupComplete, isCheckingDeps, hasCudaSupport, recommendedBackend, setupProgress, isSettingUp, handleSetup, pluginInstallError, setupError, setupWarnings, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
   const { defaultBackend, setDefaultBackend, numStreams, updateNumStreams, showBackendOverrides, setShowBackendOverrides } = useSettings(recommendedBackend);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
   const {
@@ -180,6 +180,7 @@ function App() {
   // vs-mlrt version mismatch notification state
   const [vsMlrtVersionInfo, setVsMlrtVersionInfo] = useState<VsMlrtVersionInfo | null>(null);
   const [showVsMlrtModal, setShowVsMlrtModal] = useState(false);
+  const [showUpdateReport, setShowUpdateReport] = useState(false);
 
   // vs-view loading state
   const [isLaunchingPreviewer, setIsLaunchingPreviewer] = useState(false);
@@ -617,6 +618,7 @@ function App() {
     setShowUpdateModal,
     setVsMlrtVersionInfo,
     setShowVsMlrtModal,
+    setShowUpdateReport,
   });
 
   const handleChangeBackend = (backend: BackendId): void => {
@@ -1356,6 +1358,8 @@ function App() {
         isSettingUp={isSettingUp}
         onSetup={handleSetup}
         pluginInstallError={pluginInstallError}
+        setupError={setupError}
+        setupWarnings={setupWarnings}
         onRetryPlugins={handleRetryPlugins}
         onContinueWithoutPlugins={handleContinueWithoutPlugins}
       />
@@ -1739,6 +1743,7 @@ function App() {
         accentColor={accentColor}
         onChangeAccentColor={setAccentColor}
         onResetAccentColor={resetAccentColor}
+        onOpenUpdateReport={() => setShowUpdateReport(true)}
         showAbout={showAbout}
         onCloseAbout={() => closeModalWithFocusRestore(() => setShowAbout(false))}
         showPlugins={showPlugins}
@@ -1751,6 +1756,8 @@ function App() {
         vsMlrtVersionInfo={vsMlrtVersionInfo}
         onCloseVsMlrtModal={() => closeModalWithFocusRestore(() => setShowVsMlrtModal(false))}
         onEnginesCleared={async () => { await loadModels(); await loadUninitializedModels(); }}
+        showUpdateReport={showUpdateReport}
+        onCloseUpdateReport={() => closeModalWithFocusRestore(() => setShowUpdateReport(false))}
         importModalState={importModalState}
         closeImportModal={closeImportModal}
         confirmImportFilters={confirmImportFilters}

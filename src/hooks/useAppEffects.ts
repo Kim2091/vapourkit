@@ -15,6 +15,7 @@ interface UseAppEffectsOptions {
   setShowUpdateModal: (show: boolean) => void;
   setVsMlrtVersionInfo: (info: VsMlrtVersionInfo) => void;
   setShowVsMlrtModal: (show: boolean) => void;
+  setShowUpdateReport: (show: boolean) => void;
 }
 
 export function useAppEffects({
@@ -27,6 +28,7 @@ export function useAppEffects({
   setShowUpdateModal,
   setVsMlrtVersionInfo,
   setShowVsMlrtModal,
+  setShowUpdateReport,
 }: UseAppEffectsOptions) {
   // Preserve scroll position in right panel when preview updates
   useEffect(() => {
@@ -38,6 +40,21 @@ export function useAppEffects({
       });
     }
   }, [previewFrame]);
+
+  // Say what the last app update did to this install, once. After that the
+  // notes wait in Settings until every decision in them is made.
+  useEffect(() => {
+    if (!isSetupComplete) return;
+    window.electronAPI.getUpdateReport()
+      .then(async ({ report }) => {
+        if (!report || report.seen) return;
+        addConsoleLog(`Updated ${report.fromVersion ?? 'from an earlier version'} → ${report.toVersion}; showing what changed`);
+        // Marked before opening, so the notice's own read never races the write.
+        await window.electronAPI.markUpdateReportSeen();
+        setShowUpdateReport(true);
+      })
+      .catch(error => console.error('Failed to read the update report:', error));
+  }, [isSetupComplete, addConsoleLog, setShowUpdateReport]);
 
   // Check for updates on startup
   useEffect(() => {
