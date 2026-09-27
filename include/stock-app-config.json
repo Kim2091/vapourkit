@@ -91,6 +91,14 @@
       "modelType": "image",
       "createdAt": "2025-12-25T22:41:27.399Z",
       "category": ["Anime", "Blur", "Noise", "Compression", "Dot Crawl", "Rainbowing", "Color Bleed"]
+    },
+    "2x_bndl_animefilm_v3_1x27xHxW_dyn-HW_fp32_op20": {
+      "useFp32": true,
+      "useBf16": false,
+      "modelType": "vsr",
+      "temporalFrames": 9,
+      "createdAt": "2026-09-27T00:00:00.000Z",
+      "category": ["Anime", "Blur", "Noise", "Compression", "Dot Crawl", "Rainbowing", "Color Bleed"]
     }
   }
 }

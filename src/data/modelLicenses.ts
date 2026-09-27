@@ -23,7 +23,7 @@ export const MODEL_LICENSES: ModelLicense[] = [
     name: 'AnimeUpV2 TSPAN',
     category: 'Video Models (VSR)',
     license: 'CC BY-NC-SA 4.0',
-    description: 'Low Quality Anime',
+    description: 'LQ Anime',
   },
   {
     name: 'AniRestore TFDAT',
@@ -31,12 +31,24 @@ export const MODEL_LICENSES: ModelLicense[] = [
     license: 'CC BY-NC-SA 4.0',
     description: 'LQ Anime or Cartoons (Dot Crawl, Rainbows)',
   },
+  {
+    name: 'bndl animefilm v3',
+    category: 'Video Models (VSR)',
+    license: 'CC BY-NC-SA 4.0',
+    description: 'Anime Film',
+  },
   // Image Based Models - Frame-by-frame processing
   {
-    name: 'AnimeJaNai HD V3',
+    name: 'AnimeJaNai HD V3 / V3 Sharp1',
     category: 'Image Based Models',
     license: 'CC BY-NC-SA 4.0',
     description: 'Modern Anime',
+  },
+  {
+    name: 'AnimeJaNai V2',
+    category: 'Image Based Models',
+    license: 'CC BY-NC-SA 4.0',
+    description: 'Modern HQ Anime',
   },
   {
     name: 'AnimeJaNai SD V1',
@@ -48,16 +60,16 @@ export const MODEL_LICENSES: ModelLicense[] = [
     name: 'AniSD AC/DC SPAN',
     category: 'Image Based Models',
     license: 'CC BY-NC 4.0',
-    description: 'Classic SD Anime',
+    description: 'Classic HQ/LQ SD Anime',
   },
   {
-    name: 'AnimeSharpV4',
+    name: 'AnimeSharpV4 Fast',
     category: 'Image Based Models',
     license: 'CC BY-NC-SA 4.0',
-    description: 'Low Quality Anime',
+    description: 'LQ Anime',
   },
   {
-    name: '2x_bndl_animefilm_v1.5',
+    name: 'bndl animefilm v1.5',
     category: 'Image Based Models',
     license: 'CC BY 4.0',
     description: 'Low Quality SD Anime',
