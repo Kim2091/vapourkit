@@ -171,7 +171,6 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
                   colorimetry: currentWorkflow.colorimetry,
                   filters: currentWorkflow.filters,
                   segment: currentWorkflow.segment,
-                  selectedModel: currentWorkflow.selectedModel,
                 }
               )
             : 'processed';

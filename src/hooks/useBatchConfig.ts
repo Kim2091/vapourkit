@@ -72,7 +72,7 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
         const fileName = videoPath.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, '') || 'output';
         const suffix = descriptiveNamingEnabled
           ? generateOutputSuffix(
-              { colorimetry, filters, segment, selectedModel }
+              { colorimetry, filters, segment }
             )
           : 'processed';
 

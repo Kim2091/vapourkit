@@ -1,67 +1,132 @@
 import type { Filter, SegmentSelection } from '../electron.d';
 
+// The descriptive part of an output filename: what was done to the video, in
+// the order it was done, from facts rather than guesses.
+//
+// Each enabled step contributes a tag in chain order: an AI model by its own
+// name, a filter by what its category says it does. Resolution and frame rate
+// are added only when the app has evaluated the script and knows them, and
+// only when they differ from the source - a height guessed from a model's
+// filename was wrong whenever a resize, crop or second model was in the chain.
+
 /**
- * Maps filter categories to short filename-safe tags.
+ * What a filter category says about the picture, as a filename tag. Keys are
+ * the categories the shipped templates actually use (lower-cased). An empty
+ * tag means the step does not describe the result - a mask, a utility, a
+ * comparison - and is left out. "Hybrid" marks where a template came from,
+ * not what it does, so it is skipped in favour of the category beside it.
  */
-const CATEGORY_TAG_MAP: Record<string, string> = {
-  'denoise/deblock': 'denoise',
-  'deinterlace': 'deinterlace',
-  'anti-aliasing/dehalo': 'dehalo',
-  'resize/transform': 'resize',
-  'color': 'color',
+const CATEGORY_TAGS: Record<string, string> = {
+  'denoising': 'denoise',
+  'deblocking': 'deblock',
+  'debanding': 'deband',
+  'cleaning': 'clean',
+  'restoration': 'restore',
+  'stabilization': 'stabilize',
+  'temporal smoothing': 'smooth',
+  'sharpening': 'sharpen',
+  'blurring': 'blur',
+  'anti-aliasing': 'aa',
+  'dehalo': 'dehalo',
+  'deinterlacing': 'deint',
   'frame rate': 'framerate',
-  'sharpen/detail': 'sharpen',
-  'grain/noise': 'grain',
-  'stabilize/fix': 'stabilize',
+  'frame recovery': 'framefix',
+  'frame manipulation': 'frames',
+  'color modification': 'color',
+  'resizing': 'resize',
+  'unresize': 'descale',
+  'padding/cropping': 'crop',
+  'transform': 'transform',
+  'lines': 'lines',
+  'effects': 'fx',
+  'overlays': 'overlay',
+  'tiling': 'tile',
+  'grain': 'grain',
+  'chroma': 'chroma',
+  'frame interpolation': 'interp',
+  // Limit Filter only clamps how far another filter moved the picture.
+  'limiting': '',
+  'masking': '',
+  'utility': '',
+  'comparison': '',
 };
 
-function getCategoryTag(category: string | string[] | undefined, preset: string): string {
-  if (category) {
-    const categories = Array.isArray(category) ? category : [category];
-    for (const cat of categories) {
-      const normalized = cat.toLowerCase().trim();
-      if (CATEGORY_TAG_MAP[normalized]) {
-        return CATEGORY_TAG_MAP[normalized];
-      }
-    }
-  }
-  // Fallback: first alphanumeric word of preset
-  const match = preset.match(/[a-zA-Z0-9]+/);
-  return match ? match[0].toLowerCase() : 'filter';
-}
+const SOURCE_CATEGORIES = new Set(['hybrid']);
 
-function extractScaleFromModelPath(modelPath: string): number | null {
-  const basename = modelPath.split(/[\\/]/).pop() || modelPath;
-  // Try patterns like 4x, 2X, x4, X2
-  const match = basename.match(/(?:^|\b|_)(\d)[xX]/) || basename.match(/[xX](\d)(?:\b|_|\.)/);
-  if (match) {
-    const scale = parseInt(match[1], 10);
-    if (scale > 0) return scale;
-  }
-  return null;
-}
+/**
+ * Filters whose category misdescribes them in a filename, by template name
+ * (lower-cased). Modulus pads to a size a model accepts, and a Crop later in
+ * the chain takes that back off, so it changed nothing a name should mention;
+ * Balance Borders evens out edges rather than cropping.
+ */
+const NAME_TAGS: Record<string, string> = {
+  'modulus': '',
+  'balance borders': 'borders',
+};
 
-function parseResolutionHeight(resolution: string | null | undefined): number | null {
-  if (!resolution) return null;
-  const parts = resolution.toLowerCase().split('x');
-  if (parts.length >= 2) {
-    const height = parseInt(parts[1].trim(), 10);
-    if (!isNaN(height) && height > 0) return height;
-  }
-  return null;
-}
-
-function deduplicateConsecutive<T>(arr: T[]): T[] {
-  return arr.filter((item, index) => index === 0 || item !== arr[index - 1]);
-}
+/** Longest a single tag may be; a model or filter name past this is cut. */
+const MAX_TAG_LENGTH = 24;
+/** Longest the whole suffix may be. Whole tags are dropped to fit, never cut. */
+const MAX_SUFFIX_LENGTH = 64;
 
 function sanitizeTag(tag: string): string {
-  return tag.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  return tag.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, MAX_TAG_LENGTH);
+}
+
+/** A filter's tag: '' when it does not describe the result. */
+function filterTag(filter: Filter): string {
+  const named = NAME_TAGS[filter.preset.toLowerCase().trim()];
+  if (named !== undefined) return named;
+  const categories = filter.category === undefined ? [] : Array.isArray(filter.category) ? filter.category : [filter.category];
+  const known = categories
+    .map(category => category.toLowerCase().trim())
+    .filter(category => !SOURCE_CATEGORIES.has(category));
+  for (const category of known) {
+    if (category in CATEGORY_TAGS) return CATEGORY_TAGS[category];
+  }
+  // A category we have no word for: the filter's own name says more than
+  // the first word of it did.
+  return sanitizeTag(filter.preset);
+}
+
+/**
+ * Build tokens a model file carries that say nothing about the model:
+ * precision, opset, dynamic-shape markers, input shapes like 1x3xHxW.
+ */
+const MODEL_NOISE = /^(fp16|fp32|bf16|int8|op\d+|opset\d+|dyn|dynamic|static|hw|onnx|trt|engine|(?:\d+|[hw])(?:x(?:\d+|[hw])){2,})$/i;
+
+/** An AI model's tag: its file name without the build details. */
+export function modelTag(modelPath: string): string {
+  const base = (modelPath.split(/[\\/]/).pop() || modelPath).replace(/\.[^.]+$/, '');
+  const words = base.split(/[_\-\s.]+/).filter(word => word && !MODEL_NOISE.test(word));
+  return sanitizeTag(words.join('')) || 'model';
+}
+
+function parseResolution(resolution: string | null | undefined): { width: number; height: number } | null {
+  const match = resolution?.toLowerCase().match(/(\d+)\s*x\s*(\d+)/);
+  if (!match) return null;
+  const width = parseInt(match[1], 10);
+  const height = parseInt(match[2], 10);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+function parseFps(fps: string | number | null | undefined): number | null {
+  if (fps === null || fps === undefined || fps === '') return null;
+  const value = typeof fps === 'number' ? fps : parseFloat(String(fps));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** "59.94fps", "60fps": two decimals at most, trailing zeros dropped. */
+function fpsTag(fps: number): string {
+  return `${parseFloat(fps.toFixed(2))}fps`;
 }
 
 export interface GenerateOutputSuffixOptions {
   inputResolution?: string | null;
+  /** The evaluated script's output, once the workflow has been validated */
   outputResolution?: string | null;
+  inputFps?: string | number | null;
+  outputFps?: string | number | null;
 }
 
 export function generateOutputSuffix(
@@ -69,76 +134,57 @@ export function generateOutputSuffix(
     colorimetry?: any;
     filters: Filter[];
     segment?: SegmentSelection;
-    selectedModel?: string | null;
   },
   options?: GenerateOutputSuffixOptions
 ): string {
-  const tags: string[] = [];
+  const steps: string[] = [];
 
-  // 1. Colorimetry
   if (workflow.colorimetry?.overwriteMatrix || workflow.colorimetry?.matrix709) {
-    tags.push('colorimetry');
+    steps.push('colorimetry');
   }
 
-  // 2. Custom filters
-  const customFilters = workflow.filters.filter(f => f.enabled && f.filterType === 'custom');
-  for (const filter of customFilters) {
-    const tag = sanitizeTag(getCategoryTag(filter.category, filter.preset));
-    if (tag) {
-      tags.push(tag);
-    }
-  }
-
-  // 3. AI Model scale
-  const aiModels = workflow.filters.filter(f => f.enabled && f.filterType === 'aiModel' && f.modelPath);
-  let scale: number | null = null;
-  if (aiModels.length > 0) {
-    scale = extractScaleFromModelPath(aiModels[0].modelPath!);
-    if (scale) {
-      tags.push(`${scale}x`);
+  // The chain, in order. A model step with no model file runs nothing.
+  const chain = [...workflow.filters].filter(filter => filter.enabled).sort((a, b) => a.order - b.order);
+  for (const filter of chain) {
+    if (filter.filterType === 'aiModel') {
+      if (filter.modelPath) steps.push(modelTag(filter.modelPath));
     } else {
-      tags.push('upscale');
+      const tag = filterTag(filter);
+      if (tag) steps.push(tag);
     }
   }
 
-  // Also check selectedModel if no AI model filter is in the filter chain
-  if (aiModels.length === 0 && workflow.selectedModel) {
-    scale = extractScaleFromModelPath(workflow.selectedModel);
-    if (scale) {
-      tags.push(`${scale}x`);
-    } else {
-      tags.push('upscale');
-    }
+  // Facts about the result, only when known and different from the source.
+  const facts: string[] = [];
+  const input = parseResolution(options?.inputResolution);
+  const output = parseResolution(options?.outputResolution);
+  if (input && output && (input.width !== output.width || input.height !== output.height)) {
+    // "2160p" while the shape is kept; the full size once it is not, since a
+    // crop or pad to a new aspect is exactly what a height alone would hide.
+    const sameShape = input.width * output.height === input.height * output.width;
+    facts.push(sameShape ? `${output.height}p` : `${output.width}x${output.height}`);
   }
-
-  // 4. Resize tag
-  const inputHeight = parseResolutionHeight(options?.inputResolution);
-  const outputHeight = parseResolutionHeight(options?.outputResolution);
-  if (outputHeight && inputHeight && outputHeight !== inputHeight) {
-    tags.push(`resize${outputHeight}`);
-  } else if (scale && inputHeight) {
-    const estimatedHeight = inputHeight * scale;
-    tags.push(`resize${estimatedHeight}`);
+  const inputFps = parseFps(options?.inputFps);
+  const outputFps = parseFps(options?.outputFps);
+  if (inputFps && outputFps && Math.abs(inputFps - outputFps) > 0.01) {
+    facts.push(fpsTag(outputFps));
   }
-
-  // 5. Segment / trim
   if (workflow.segment?.enabled) {
-    tags.push('trim');
+    facts.push('trim');
   }
 
-  // Deduplicate consecutive identical tags
-  const dedupedTags = deduplicateConsecutive(tags);
+  // Once each, first occurrence kept: "denoise_sharpen_denoise" said nothing
+  // the shorter form does not.
+  const unique = (tags: string[]) => tags.filter((tag, index) => tags.indexOf(tag) === index);
+  let kept = unique(steps);
+  const tail = unique(facts);
 
-  if (dedupedTags.length === 0) {
-    return 'processed';
+  // Over the limit, the last steps go first; the facts about the result stay.
+  const length = () => [...kept, ...tail].join('_').length;
+  while (kept.length > 0 && length() > MAX_SUFFIX_LENGTH) {
+    kept = kept.slice(0, -1);
   }
 
-  let suffix = dedupedTags.join('_');
-
-  // Truncate to 32 characters if needed
-  if (suffix.length > 32) {
-    suffix = suffix.slice(0, 32);
-  }
-
-  return suffix;
+  const suffix = [...kept, ...tail].join('_');
+  return suffix || 'processed';
 }
