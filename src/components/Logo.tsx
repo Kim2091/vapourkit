@@ -20,23 +20,23 @@ export const Logo = memo<LogoProps>(({ className = "w-6 h-6", monochrome = false
   >
     <defs>
       <linearGradient id="sparkle1" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(2.93953,2.18819,-2.50017,3.35864,292.163,691.186)">
-        <stop offset="0" style={{stopColor: 'rgb(0,8,200)', stopOpacity: 1}} />
-        <stop offset="0.5" style={{stopColor: 'rgb(34,152,255)', stopOpacity: 1}} />
-        <stop offset="0.59" style={{stopColor: 'rgb(113,140,255)', stopOpacity: 1}} />
-        <stop offset="0.7" style={{stopColor: 'rgb(189,129,255)', stopOpacity: 1}} />
-        <stop offset="1" style={{stopColor: 'rgb(222,124,255)', stopOpacity: 1}} />
+        <stop offset="0" style={{stopColor: 'rgb(38,126,112)', stopOpacity: 1}} />
+        <stop offset="0.5" style={{stopColor: 'rgb(63,185,166)', stopOpacity: 1}} />
+        <stop offset="0.59" style={{stopColor: 'rgb(103,203,188)', stopOpacity: 1}} />
+        <stop offset="0.7" style={{stopColor: 'rgb(149,218,208)', stopOpacity: 1}} />
+        <stop offset="1" style={{stopColor: 'rgb(187,231,225)', stopOpacity: 1}} />
       </linearGradient>
       <linearGradient id="sparkle2" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(7.4901,4.66815,-5.55383,8.91119,295.4,693.599)">
-        <stop offset="0" style={{stopColor: 'rgb(152,163,255)', stopOpacity: 1}} />
-        <stop offset="0.27" style={{stopColor: 'rgb(150,155,255)', stopOpacity: 1}} />
-        <stop offset="0.41" style={{stopColor: 'rgb(135,106,255)', stopOpacity: 1}} />
-        <stop offset="0.7" style={{stopColor: 'rgb(181,25,224)', stopOpacity: 1}} />
-        <stop offset="1" style={{stopColor: 'rgb(195,0,214)', stopOpacity: 1}} />
+        <stop offset="0" style={{stopColor: 'rgb(103,203,188)', stopOpacity: 1}} />
+        <stop offset="0.27" style={{stopColor: 'rgb(103,203,188)', stopOpacity: 1}} />
+        <stop offset="0.41" style={{stopColor: 'rgb(63,185,166)', stopOpacity: 1}} />
+        <stop offset="0.7" style={{stopColor: 'rgb(49,155,139)', stopOpacity: 1}} />
+        <stop offset="1" style={{stopColor: 'rgb(38,126,112)', stopOpacity: 1}} />
       </linearGradient>
       <linearGradient id="sparkle3" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(3.03444,1.94506,-2.37663,3.70771,291.695,697.543)">
-        <stop offset="0" style={{stopColor: 'rgb(131,157,255)', stopOpacity: 1}} />
-        <stop offset="0.5" style={{stopColor: 'rgb(160,122,215)', stopOpacity: 1}} />
-        <stop offset="1" style={{stopColor: 'rgb(232,110,255)', stopOpacity: 1}} />
+        <stop offset="0" style={{stopColor: 'rgb(103,203,188)', stopOpacity: 1}} />
+        <stop offset="0.5" style={{stopColor: 'rgb(63,185,166)', stopOpacity: 1}} />
+        <stop offset="1" style={{stopColor: 'rgb(149,218,208)', stopOpacity: 1}} />
       </linearGradient>
     </defs>
     <g transform="matrix(35.0572,0,0,35.0572,-10249.9,-24185.8)">
