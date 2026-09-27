@@ -1,6 +1,9 @@
 /node_modules
 /data
-/build
+# NOTE: do not ignore /build - it is electron-builder's buildResources dir
+# (icons, installer.nsh), which is source, not output. Output goes to
+# /dist and /release. Ignoring it meant build/installer.nsh would never
+# reach CI, and the icons only survived because they were force-added.
 /dist
 /.vite
 /release
