@@ -67,6 +67,7 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - The official DLL is Blackwell-only. The filter no longer claims RTX 20 to 40 series can't work with it
 
 ### Filters
+- **New: Grain Synth.** Adds film grain fitted to real sources, with two models: `mega_v1` (stronger, harsher) and `real_v5` (softer). Apply it after upscaling, at the final resolution. The grain is the same on every render of a frame, and it runs on CUDA with TensorRT or on the CPU otherwise
 - Every shipped filter is now checked against the real VapourSynth core, at both ends of the clip. **All 151 build and render**
 - 37 filters that failed to build now work, most of them broken by upstream renames: Detail/Luma/Ridge/Difference/Normalize Mask, MC_Degrain, Binarize Mask, Maximum/Minimum and their combinations, Clense, Grain Stabilize, EEDI3, Warp Sharp, Temporal Median, SpotLess, the four descalers, Undistort, and more
 - Also fixed: QTGMC (Old) on every preset, Guided Filter (refused every real source), Read Image, GradFun3, Add Duplicates, Replace Multiple Frames, LUTDeCrawl (now works at 10-bit instead of 8)
@@ -77,11 +78,17 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - Start is disabled while a filter editor is open, with the reason on hover
 
 ### Models and encoding
+- **New model: bndl animefilm v3** (2x, video). It uses 9 neighbouring frames and is CC BY-NC-SA 4.0
+- The model licenses in About are up to date: AnimeJaNai V2 is listed, and AnimeJaNai HD V3 covers its Sharp1 variant
 - BF16 TensorRT engines no longer produce corrupt output
 - Model precision is read from the ONNX graph, so BF16 models import correctly. Auto-build now actually builds BF16 models as BF16
 - The quality slider now works on hardware encoders (NVENC, AMF, QSV). Before, it had no effect, and every quality setting produced the same few-Mbps output
 
 ### Other
+- Plugins no longer read as "not installed" on NVIDIA laptops. When `nvidia-smi` took more than 3 seconds to wake a sleeping GPU, or failed once, the app decided the machine had no NVIDIA GPU and checked for the wrong package set. It now waits longer and keeps a known NVIDIA GPU through one failed check
+- TensorRT no longer fails with "bits per sample mismatch" on models that take 32-bit input despite 16-bit weights, such as the bundled TSPAN models (#12)
+- The video picker shows MTS, M2TS, TS, M4V, MPG and VOB files, and has an All Files option (#9)
+- A duplicated queue item writes to its own file (`name-2.mp4`), and an automatically named output follows edits to its item's chain. Before, a duplicate overwrote the original's output (#2)
 - New app icon, in the same teal as the rest of the app and the website
 - Descriptive output filenames now describe what actually ran
   - Steps are named in the order they run: an AI model by its own name (`2xbndlanimefilmv3`, not a scale guessed from the filename), and a filter by what it does (`deint`, `denoise`, `color`, `crop`…). Before, almost every filter was named by the first word of its title

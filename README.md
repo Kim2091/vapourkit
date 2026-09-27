@@ -79,7 +79,7 @@ See the [Vapourkit documentation](https://www.vapourkit.app/introduction/) for i
 ### Requirements
 - **OS**: Windows 10/11 (x64), or an x86_64 glibc-based Linux distribution running the AppImage
 - **RAM**: 8 GB or more recommended
-- **Storage**: 5 GB minimum; 10 GB recommended for the application and dependencies
+- **Storage**: 15 GB free to install on NVIDIA, 10 GB on other GPUs; 25 GB recommended, since TensorRT engines built with use add up to several GB
 - **GPU**:
   - 6 GB VRAM or more recommended
   - Windows: NVIDIA 16-series or newer for TensorRT (driver 580.x or newer), or an AMD/Intel/NVIDIA GPU with DirectX 12 support for DirectML
