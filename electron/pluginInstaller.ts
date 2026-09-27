@@ -716,7 +716,7 @@ export class PluginInstaller {
       // The vendor decides the torch flavor, the vsjetpack extras and which
       // inference backends get installed. Persist the detection immediately;
       // pluginsGpuVendor is only written once the install actually succeeds.
-      const vendor = await detectGpuVendor();
+      const vendor = await detectGpuVendor(configManager.getGpuVendor());
       await configManager.setGpuVendor(vendor);
       logger.info(`Installing for GPU vendor: ${vendor}`);
 

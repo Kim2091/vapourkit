@@ -19,7 +19,7 @@ vi.mock('./logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { mapPciVendorId, pickPreferredVendor, type GpuVendor } from './gpuDetection';
+import { mapPciVendorId, pickPreferredVendor, resolveGpuVendor, type GpuVendor } from './gpuDetection';
 
 describe('mapPciVendorId', () => {
   const cases: Array<[string, number, GpuVendor]> = [
@@ -53,5 +53,29 @@ describe('pickPreferredVendor', () => {
 
   it.each(cases)('picks %j → %s', (candidates, expected) => {
     expect(pickPreferredVendor(candidates)).toBe(expected);
+  });
+});
+describe('GPU vendor resolution', () => {
+  it('takes nvidia-smi answering as NVIDIA', () => {
+    expect(resolveGpuVendor('yes', ['intel'])).toBe('nvidia');
+  });
+
+  it('does not read an nvidia-smi timeout as no NVIDIA', () => {
+    // A hybrid laptop whose NVIDIA GPU was asleep.
+    expect(resolveGpuVendor('timeout', ['intel', 'nvidia'])).toBe('nvidia');
+  });
+
+  it('keeps a recorded NVIDIA vendor through one failed nvidia-smi', () => {
+    expect(resolveGpuVendor('no', ['intel', 'nvidia'], 'nvidia')).toBe('nvidia');
+  });
+
+  it('passes over an NVIDIA device that has never had a working driver', () => {
+    expect(resolveGpuVendor('no', ['intel', 'nvidia'])).toBe('intel');
+    expect(resolveGpuVendor('no', ['nvidia'], 'intel')).toBe('unknown');
+  });
+
+  it('follows a real change of GPU', () => {
+    expect(resolveGpuVendor('no', ['amd'], 'nvidia')).toBe('amd');
+    expect(resolveGpuVendor('timeout', ['amd'], 'nvidia')).toBe('amd');
   });
 });

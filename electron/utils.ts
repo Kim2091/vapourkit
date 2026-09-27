@@ -229,52 +229,71 @@ export async function pollGpuStats(): Promise<GpuStats | null> {
 /**
  * Detects if CUDA-capable NVIDIA GPU is available
  */
-export async function detectCudaSupport(): Promise<boolean> {
+/**
+ * What nvidia-smi says: 'yes' (it listed a GPU), 'no' (it is missing or
+ * exited without one), or 'timeout'. A timeout is not a no: on a laptop whose
+ * NVIDIA GPU is powered down, nvidia-smi can take several seconds to wake it,
+ * and reading that as "no NVIDIA" made an installed NVIDIA setup look like
+ * one for another vendor, so its plugins read as not installed.
+ */
+export type NvidiaSmiResult = 'yes' | 'no' | 'timeout';
+
+const NVIDIA_SMI_TIMEOUT_MS = 15000;
+
+export async function probeNvidiaSmi(): Promise<NvidiaSmiResult> {
   try {
-    // Try to run nvidia-smi to detect NVIDIA GPU
     const proc = spawn('nvidia-smi', ['--query-gpu=name', '--format=csv,noheader'], {
       shell: false,
       windowsHide: true
     });
 
-    return new Promise((resolve) => {
+    return await new Promise<NvidiaSmiResult>((resolve) => {
       let hasOutput = false;
+      let settled = false;
+      const finish = (result: NvidiaSmiResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
 
-      if (proc.stdout) {
-        proc.stdout.on('data', (data) => {
-          const output = data.toString().trim();
-          if (output.length > 0) {
-            hasOutput = true;
-            logger.info(`CUDA GPU detected: ${output}`);
-          }
-        });
-      }
+      const timer = setTimeout(() => {
+        logger.warn(`nvidia-smi did not answer within ${NVIDIA_SMI_TIMEOUT_MS / 1000}s`);
+        proc.kill();
+        finish('timeout');
+      }, NVIDIA_SMI_TIMEOUT_MS);
+
+      proc.stdout?.on('data', (data) => {
+        const output = data.toString().trim();
+        if (output.length > 0) {
+          hasOutput = true;
+          logger.info(`CUDA GPU detected: ${output}`);
+        }
+      });
 
       proc.on('close', (code) => {
         if (code === 0 && hasOutput) {
           logger.info('CUDA support detected');
-          resolve(true);
+          finish('yes');
         } else {
-          logger.info('No CUDA support detected');
-          resolve(false);
+          logger.info(`No CUDA support detected (nvidia-smi exit code ${code})`);
+          finish('no');
         }
       });
 
       proc.on('error', () => {
         logger.info('nvidia-smi not found - no CUDA support');
-        resolve(false);
+        finish('no');
       });
-
-      // Timeout after 3 seconds
-      setTimeout(() => {
-        proc.kill();
-        resolve(false);
-      }, 3000);
     });
   } catch (error) {
     logger.info('Error detecting CUDA support:', error);
-    return false;
+    return 'no';
   }
+}
+
+export async function detectCudaSupport(): Promise<boolean> {
+  return await probeNvidiaSmi() === 'yes';
 }
 
 /** Checks whether an executable is available on the host PATH. */

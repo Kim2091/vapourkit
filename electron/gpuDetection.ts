@@ -11,7 +11,7 @@
 // needs no child process and works cross-platform.
 
 import { logger } from './logger';
-import { detectCudaSupport } from './utils';
+import { probeNvidiaSmi, type NvidiaSmiResult } from './utils';
 
 export type GpuVendor = 'nvidia' | 'amd' | 'intel' | 'unknown';
 
@@ -83,12 +83,33 @@ async function probeGpuInfoVendors(): Promise<GpuVendor[]> {
 }
 
 /**
+ * The vendor from nvidia-smi's answer and the PCI devices present, given the
+ * vendor recorded last time.
+ *
+ * nvidia-smi saying yes is NVIDIA. Otherwise an NVIDIA device only counts when
+ * nvidia-smi could not answer (it timed out waking the GPU) or this machine was
+ * NVIDIA last time (its driver failing once must not re-target every package
+ * check at another vendor, which reads an installed setup as not installed).
+ * A 0x10DE device that has never answered still falls through to the others.
+ */
+export function resolveGpuVendor(
+  smi: NvidiaSmiResult,
+  devices: GpuVendor[],
+  previous?: GpuVendor,
+): GpuVendor {
+  if (smi === 'yes') return 'nvidia';
+  if (devices.includes('nvidia') && (smi === 'timeout' || previous === 'nvidia')) return 'nvidia';
+  return pickPreferredVendor(devices.filter(vendor => vendor !== 'nvidia'));
+}
+
+/**
  * Detects the GPU vendor this machine should install packages for.
  *
  * Order: env override → nvidia-smi → Electron GPU info → 'unknown' (the safe
- * DirectML baseline, which works on every Windows GPU).
+ * DirectML baseline, which works on every Windows GPU). `previous` is the
+ * vendor recorded last time, which a probe that learns nothing never replaces.
  */
-export async function detectGpuVendor(): Promise<GpuVendor> {
+export async function detectGpuVendor(previous?: GpuVendor): Promise<GpuVendor> {
   const override = process.env.VAPOURKIT_FORCE_GPU_VENDOR;
   if (isGpuVendor(override)) {
     logger.info(`*** VAPOURKIT_FORCE_GPU_VENDOR is set — GPU vendor forced to '${override}' ***`);
@@ -98,20 +119,19 @@ export async function detectGpuVendor(): Promise<GpuVendor> {
     logger.warn(`Ignoring VAPOURKIT_FORCE_GPU_VENDOR='${override}' (expected one of ${GPU_VENDORS.join(', ')})`);
   }
 
-  // nvidia-smi is the single NVIDIA authority — it already logs and times out.
-  if (await detectCudaSupport()) {
-    return 'nvidia';
+  const smi = await probeNvidiaSmi();
+  if (smi === 'yes') return 'nvidia';
+
+  let devices: GpuVendor[];
+  try {
+    devices = await probeGpuInfoVendors();
+  } catch (error) {
+    logger.warn(`GPU probe failed/timed out: ${error instanceof Error ? error.message : String(error)}`);
+    // Nothing learned: keep what we knew rather than retarget the packages.
+    return previous && previous !== 'unknown' ? previous : 'unknown';
   }
 
-  try {
-    // nvidia-smi already said no, so a 0x10DE device here has no usable CUDA
-    // driver; prefer any AMD/Intel GPU that is present instead.
-    const candidates = (await probeGpuInfoVendors()).filter(vendor => vendor !== 'nvidia');
-    const vendor = pickPreferredVendor(candidates);
-    logger.info(`GPU vendor detected from Electron GPU info: ${vendor}`);
-    return vendor;
-  } catch (error) {
-    logger.warn(`GPU probe failed/timed out, using baseline packages: ${error instanceof Error ? error.message : String(error)}`);
-    return 'unknown';
-  }
+  const vendor = resolveGpuVendor(smi, devices, previous);
+  logger.info(`GPU vendor detected from Electron GPU info: ${vendor} (nvidia-smi: ${smi}, devices: ${devices.join(', ') || 'none'}${previous ? `, previously ${previous}` : ''})`);
+  return vendor;
 }

@@ -35,7 +35,7 @@ export function registerDependencyHandlers(
         // every app mount, so it keeps gpuVendor fresh across GPU/driver
         // changes). The renderer contract stays a boolean: nvidia-smi success
         // implied `true` before and still does.
-        const vendor = await detectGpuVendor();
+        const vendor = await detectGpuVendor(configManager.getGpuVendor());
         await configManager.setGpuVendor(vendor);
         logger.info(`GPU vendor: ${vendor}`);
         return vendor === 'nvidia';
@@ -48,7 +48,7 @@ export function registerDependencyHandlers(
     createIpcHandler(
       'get-inference-backend-info',
       async () => {
-        const vendor = await detectGpuVendor();
+        const vendor = await detectGpuVendor(configManager.getGpuVendor());
         await configManager.setGpuVendor(vendor);
         const backend = getBackendsForVendor(vendor)[0];
         logger.info(`GPU vendor: ${vendor}; recommended inference backend: ${backend}`);
