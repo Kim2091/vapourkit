@@ -82,6 +82,12 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - The quality slider now works on hardware encoders (NVENC, AMF, QSV). Before, it had no effect, and every quality setting produced the same few-Mbps output
 
 ### Other
+- New app icon, in the same teal as the rest of the app and the website
+- Descriptive output filenames now describe what actually ran
+  - Steps are named in the order they run: an AI model by its own name (`2xbndlanimefilmv3`, not a scale guessed from the filename), and a filter by what it does (`deint`, `denoise`, `color`, `crop`…). Before, almost every filter was named by the first word of its title
+  - The resolution and frame rate in the name (`2160p`, `59.94fps`) come from the evaluated workflow, and only appear when they differ from the source. The old guess ignored every resize, crop and second model
+  - A model that is selected but not in the chain no longer adds a scale (`-4x`) to a run that never used it
+  - Mask, utility and comparison steps are left out, each tag appears once, and a long name drops whole steps instead of cutting a word in half
 - Discord Rich Presence, off by default (Settings)
 - The VapourSynth core is pinned to R79, the version every plugin and filter is verified against, and a newer one is put back at launch
 - An interrupted plugin install no longer makes every later install fail. Stranded package metadata and half-removed folders are cleaned up first
