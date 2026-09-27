@@ -76,6 +76,42 @@ export class TemplateManager {
   }
 
   /**
+   * The file that holds the template called `name`. A bundled file is not
+   * always named after its template ("DeHalo Alpha (Old).vkfilter",
+   * "Undistort _Pytorch_.vkfilter"), so deleting or saving by the derived name
+   * alone missed those, or wrote a second copy beside them. Falls back to the
+   * derived path for a template that has no file yet.
+   */
+  private async resolveTemplatePath(name: string): Promise<string> {
+    const nameIn = async (filePath: string): Promise<unknown> => {
+      try {
+        return (TOML.parse(await fs.readFile(filePath, 'utf-8')) as { name?: unknown }).name;
+      } catch {
+        return undefined;
+      }
+    };
+
+    const derived = this.getTemplatePath(name);
+    if (await fs.pathExists(derived) && await nameIn(derived) === name) return derived;
+    try {
+      for (const file of (await fs.readdir(this.templatesDir)).filter(f => f.endsWith('.vkfilter'))) {
+        const filePath = path.join(this.templatesDir, file);
+        if (await nameIn(filePath) === name) return filePath;
+      }
+    } catch (error) {
+      logger.warn(`Could not search filter templates for ${name}:`, error);
+    }
+
+    // No file holds it yet. Two names can sanitize alike ("A (x)", "A [x]"),
+    // so never hand out a path another template already lives at.
+    let candidate = derived;
+    for (let n = 2; await fs.pathExists(candidate); n++) {
+      candidate = derived.replace(/\.vkfilter$/, ` ${n}.vkfilter`);
+    }
+    return candidate;
+  }
+
+  /**
    * Loads all filter templates from the templates directory
    */
   async loadTemplates(): Promise<FilterTemplate[]> {
@@ -129,7 +165,7 @@ export class TemplateManager {
         template.metadata.createdAt = new Date().toISOString();
       }
       
-      const filePath = this.getTemplatePath(template.name);
+      const filePath = await this.resolveTemplatePath(template.name);
       const content = TOML.stringify(template as any);
       
       await fs.writeFile(filePath, content, 'utf-8');
@@ -145,8 +181,9 @@ export class TemplateManager {
    */
   async deleteTemplate(name: string): Promise<void> {
     try {
-      const filePath = this.getTemplatePath(name);
+      const filePath = await this.resolveTemplatePath(name);
       
+      // A free path means no file holds this template.
       if (await fs.pathExists(filePath)) {
         await fs.remove(filePath);
         logger.info(`Deleted template: ${name}`);

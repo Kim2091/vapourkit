@@ -1300,6 +1300,30 @@ export class DependencyManager {
   }
 
   /** The edited templates the post-update notice asks about, with display names. */
+  /**
+   * Built-in filters this install has deleted: shipped for this platform,
+   * recorded in the ledger, and no longer on disk. An update never brings
+   * those back (the delete was taken as the user's choice), so this is the
+   * way to get them back.
+   */
+  async getMissingBundledTemplates(): Promise<string[]> {
+    const { state } = await this.templateState(getBundledBasePath(), await readLedger());
+    return [...state.bundled.keys()].filter(file => !state.installed.has(file) && state.ledger[file]).sort();
+  }
+
+  /** Puts back every built-in filter the install has deleted; answers the files restored. */
+  async restoreMissingBundledTemplates(): Promise<string[]> {
+    const missing = await this.getMissingBundledTemplates();
+    if (missing.length === 0) return [];
+    const ledger = await readLedger();
+    for (const file of missing) delete ledger.templates[file];
+    await writeLedger(ledger);
+    // With no ledger entry and no file, the reconcile seeds them.
+    await this.copyFilterTemplates(getBundledBasePath());
+    logger.dependency(`Restored ${missing.length} built-in filter template(s): ${missing.join(', ')}`);
+    return missing;
+  }
+
   async getTemplateDecisions(): Promise<TemplateDecision[]> {
     const bundledBasePath = getBundledBasePath();
     const { state } = await this.templateState(bundledBasePath, await readLedger());

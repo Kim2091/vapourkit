@@ -150,6 +150,10 @@ export interface ElectronAPI {
   clearUpdateReport: () => Promise<void>;
   resolveTemplateDecision: (file: string, choice: TemplateDecisionChoice) => Promise<UpdateReportSnapshot & { backupPath?: string }>;
   openTemplateBackups: () => Promise<void>;
+  /** Built-in filter files this install deleted, which updates never restore */
+  getMissingBundledTemplates: () => Promise<string[]>;
+  /** Puts them back; answers the files restored */
+  restoreMissingBundledTemplates: () => Promise<string[]>;
   
   // Console logs
   onDevConsoleLog: (callback: (log: DevConsoleLog) => void) => () => void;

@@ -137,6 +137,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resolveTemplateDecision: (file: string, choice: 'replace' | 'keep' | 'remove') =>
     ipcRenderer.invoke('update-report-resolve', file, choice),
   openTemplateBackups: () => ipcRenderer.invoke('update-report-open-backups'),
+  getMissingBundledTemplates: () => ipcRenderer.invoke('templates-missing-bundled'),
+  restoreMissingBundledTemplates: () => ipcRenderer.invoke('templates-restore-bundled'),
 
   // Console logs
   onDevConsoleLog: (callback: (log: any) => void) => {

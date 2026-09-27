@@ -61,6 +61,13 @@ export function useFilterTemplates(isSetupComplete: boolean = true) {
     }
   }, [loadTemplates]);
 
+  // Put back the built-in filters this install deleted
+  const restoreTemplates = useCallback(async (): Promise<string[]> => {
+    const restored = await window.electronAPI.restoreMissingBundledTemplates();
+    await loadTemplates();
+    return restored;
+  }, [loadTemplates]);
+
   // Load templates on mount
   useEffect(() => {
     loadTemplates();
@@ -80,5 +87,6 @@ export function useFilterTemplates(isSetupComplete: boolean = true) {
     loadTemplates,
     saveTemplate,
     deleteTemplate,
+    restoreTemplates,
   };
 }

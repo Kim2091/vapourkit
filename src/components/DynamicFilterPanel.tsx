@@ -25,6 +25,8 @@ interface DynamicFilterPanelProps {
   onFiltersChange: (filters: Filter[]) => void;
   onSaveTemplate?: (template: FilterTemplate) => Promise<boolean>;
   onDeleteTemplate?: (name: string) => Promise<boolean>;
+  /** Puts back deleted built-in filters; answers the files restored */
+  onRestoreTemplates?: () => Promise<string[]>;
   onDragStart?: (filterId: string) => void;
   onDragEnd?: () => void;
   onDrop?: (targetId: string | null) => void;
@@ -98,6 +100,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   onFiltersChange,
   onSaveTemplate,
   onDeleteTemplate,
+  onRestoreTemplates,
   onDragStart,
   onDragEnd,
   onDrop,
@@ -496,6 +499,13 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   };
 
   const handleDeleteTemplate = async (name: string, filterId: string) => {
+    // One click used to delete the file outright, and an update never puts a
+    // deleted built-in filter back, so a stray click lost it for good.
+    if (!confirm(`Delete template "${name}"?
+
+A built-in filter can be restored from the bottom of the filter picker.`)) {
+      return;
+    }
     if (onDeleteTemplate) {
       await onDeleteTemplate(name);
       // Reset selection if deleted template was selected
@@ -510,13 +520,12 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     if (!onSaveTemplate) return false;
     
     try {
-      // If name changed, delete the old template first
-      if (oldName !== updatedTemplate.name && onDeleteTemplate) {
+      // Save under the new name first: deleting the old one first lost the
+      // template outright whenever the save then failed.
+      const success = await onSaveTemplate(updatedTemplate);
+      if (success && oldName !== updatedTemplate.name && onDeleteTemplate) {
         await onDeleteTemplate(oldName);
       }
-      
-      // Save the updated template
-      const success = await onSaveTemplate(updatedTemplate);
       
       if (success && oldName !== updatedTemplate.name) {
         // Update any filters using the old template name to use the new name
@@ -1265,6 +1274,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
               handlePresetChange(showFilterSelector, templateName);
             }
           }}
+          onRestoreTemplates={onRestoreTemplates}
           onDeleteTemplate={onDeleteTemplate ? async (name: string) => {
             const success = await onDeleteTemplate(name);
             if (success && showFilterSelector) {

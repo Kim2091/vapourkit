@@ -142,7 +142,7 @@ function App() {
     loadUninitializedModels,
     uninitializedModels,
   } = useModels(isSetupComplete);
-  const { templates: filterTemplates, saveTemplate, deleteTemplate, loadTemplates } = useFilterTemplates(isSetupComplete);
+  const { templates: filterTemplates, saveTemplate, deleteTemplate, restoreTemplates, loadTemplates } = useFilterTemplates(isSetupComplete);
   
   // State management hooks
   const { filters, handleSetFilters, canUndo, canRedo, handleUndo, handleRedo } = useFilterConfig(isSetupComplete, addConsoleLog);
@@ -1621,6 +1621,7 @@ function App() {
                     onFiltersChange={handleSetFilters}
                     onSaveTemplate={saveTemplate}
                     onDeleteTemplate={deleteTemplate}
+                    onRestoreTemplates={restoreTemplates}
                     onOpenFilterEditor={handleOpenFilterEditor}
                     lut={lutPanel}
                   />

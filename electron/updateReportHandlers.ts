@@ -40,6 +40,16 @@ export function registerUpdateReportHandlers(dependencyManager: DependencyManage
   );
 
   ipcMain.handle(
+    'templates-missing-bundled',
+    createIpcHandler('templates-missing-bundled', () => dependencyManager.getMissingBundledTemplates(), { throwOnError: true }),
+  );
+
+  ipcMain.handle(
+    'templates-restore-bundled',
+    createIpcHandler('templates-restore-bundled', () => dependencyManager.restoreMissingBundledTemplates(), { throwOnError: true }),
+  );
+
+  ipcMain.handle(
     'update-report-open-backups',
     createIpcHandler('update-report-open-backups', async () => {
       const error = await shell.openPath(path.join(PATHS.CONFIG, 'template-backups'));

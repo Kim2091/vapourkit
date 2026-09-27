@@ -9,6 +9,8 @@ interface FilterSelectorModalProps {
   onSelectTemplate: (templateName: string) => void;
   onDeleteTemplate?: (name: string) => Promise<boolean>;
   onEditTemplate?: (oldName: string, template: FilterTemplate) => Promise<boolean>;
+  /** Puts back deleted built-in filters; answers the files restored */
+  onRestoreTemplates?: () => Promise<string[]>;
   currentSelection?: string;
 }
 
@@ -56,9 +58,36 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
   onSelectTemplate,
   onDeleteTemplate,
   onEditTemplate,
+  onRestoreTemplates,
   currentSelection = '',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  // Built-in filters this install deleted. An update never brings them back,
+  // so this is the one place to.
+  const [missingBuiltIns, setMissingBuiltIns] = useState<string[]>([]);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !onRestoreTemplates) return;
+    let cancelled = false;
+    window.electronAPI.getMissingBundledTemplates()
+      .then(files => { if (!cancelled) setMissingBuiltIns(files); })
+      .catch(() => { if (!cancelled) setMissingBuiltIns([]); });
+    return () => { cancelled = true; };
+  }, [isOpen, onRestoreTemplates, filterTemplates]);
+
+  const handleRestoreBuiltIns = async () => {
+    if (!onRestoreTemplates || isRestoring) return;
+    setIsRestoring(true);
+    try {
+      await onRestoreTemplates();
+      setMissingBuiltIns(await window.electronAPI.getMissingBundledTemplates());
+    } catch (error) {
+      console.error('Failed to restore built-in filters:', error);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
@@ -685,6 +714,21 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
             <span>{filteredTemplates.length} filters shown</span>
             <span>•</span>
             <span>{favorites.size} favorites</span>
+            {missingBuiltIns.length > 0 && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={handleRestoreBuiltIns}
+                  disabled={isRestoring}
+                  title={missingBuiltIns.map(f => f.replace(/\.vkfilter$/, '')).join(', ')}
+                  className="text-accent-400 hover:text-accent-300 hover:underline disabled:opacity-50"
+                >
+                  {isRestoring
+                    ? 'Restoring…'
+                    : `Restore ${missingBuiltIns.length} deleted built-in filter${missingBuiltIns.length === 1 ? '' : 's'}`}
+                </button>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <kbd className="px-1.5 py-0.5 bg-ink-850 border border-ink-750 rounded text-[10px] font-mono text-ink-300">Esc</kbd>

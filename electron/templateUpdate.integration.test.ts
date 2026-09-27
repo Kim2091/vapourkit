@@ -89,7 +89,7 @@ describe.skipIf(!hasTag)('updating a 2.0.0 install', () => {
     fs.writeFileSync(path.join(installed, 'Mine.vkfilter'), 'name = "Mine"\ncode = "clip = clip"\n');
 
     await manager.copyFilterTemplates(root, report);
-  });
+  }, 60_000); // copies the real template tree; slow under a parallel run
 
   afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 

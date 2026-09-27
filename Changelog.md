@@ -85,6 +85,8 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - The quality slider now works on hardware encoders (NVENC, AMF, QSV). Before, it had no effect, and every quality setting produced the same few-Mbps output
 
 ### Other
+- **Deleted filters can be restored.** An update never brings back a filter you deleted, so the trash button on a filter step, which deleted it with one click, could lose a built-in filter for good. It now asks first, and the filter picker offers *Restore N deleted built-in filters* whenever any are missing
+- Renaming a filter saves it under the new name before removing the old one, so a failed save no longer loses it. Deleting or editing DeHalo Alpha (Old) and Undistort (PyTorch) now works on the right file
 - Plugins no longer read as "not installed" on NVIDIA laptops. When `nvidia-smi` took more than 3 seconds to wake a sleeping GPU, or failed once, the app decided the machine had no NVIDIA GPU and checked for the wrong package set. It now waits longer and keeps a known NVIDIA GPU through one failed check
 - TensorRT no longer fails with "bits per sample mismatch" on models that take 32-bit input despite 16-bit weights, such as the bundled TSPAN models (#12)
 - The video picker shows MTS, M2TS, TS, M4V, MPG and VOB files, and has an All Files option (#9)
