@@ -14,6 +14,7 @@ import { shouldExtractBundledPluginArchives } from './bundledPluginArchives';
 import { hasPluginFilterTemplates, selectPluginFilterTemplates } from './pluginFilterCatalog';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
+import { MigxRuntimeManager } from './migxRuntimeManager';
 import { ensureTrtexecShim } from './trtexecShim';
 import { syncInstalledScripts } from './scriptSync';
 import { detectGpuVendor, type GpuVendor } from './gpuDetection';
@@ -45,6 +46,7 @@ import {
   computeVendorPurge,
   evaluateInstallState,
   getBackendPipPackages,
+  getBackendsForVendor,
   getCheckPackageNames,
   getPypiPackages,
   getTorchInstall,
@@ -797,6 +799,13 @@ export class PluginInstaller {
           logger.warn(`Failed to remove mismatched packages (continuing anyway): ${purgeResult.error}`);
         }
       }
+      // The Windows MIGraphX runtime is not a pip package, so the purge above
+      // never sees it: drop it here when this machine no longer gets MIGraphX.
+      if (process.platform === 'win32' && !getBackendsForVendor(vendor).includes('migraphx')) {
+        await MigxRuntimeManager.remove().catch((error) => {
+          logger.warn('Failed to remove the MIGraphX runtime (continuing anyway):', error);
+        });
+      }
 
       if (this.isCancelled) {
         return CANCELLED;
@@ -946,6 +955,25 @@ export class PluginInstaller {
             return CANCELLED;
           }
           logger.warn('vs-mlrt model zoo download failed (continuing; retried at next startup):', error);
+        }
+      }
+
+      // Step 4.55: MIGraphX on Windows. No pip index carries it, so the plugin
+      // and its HIP runtime come from the vs-mlrt GitHub release. Non-fatal
+      // like the model zoo: only the MIGraphX backend is affected, and startup
+      // re-attempts it (checkDependencies).
+      if (process.platform === 'win32' && getBackendsForVendor(vendor).includes('migraphx')
+        && await MigxRuntimeManager.needsInstall()) {
+        logger.info('=== Step 4.55: Installing the MIGraphX runtime ===');
+        try {
+          await MigxRuntimeManager.ensureRuntime((message) => {
+            this.sendProgress({ type: 'installing', progress: 91, message });
+          }, this.abortController?.signal);
+        } catch (error) {
+          if (this.isCancelled) {
+            return CANCELLED;
+          }
+          logger.warn('MIGraphX runtime install failed (continuing; retried at next startup):', error);
         }
       }
 

@@ -12,7 +12,7 @@
 // filtering, import modal options, script generation, plugin install — is
 // driven by this metadata and the provider module. No other files need edits.
 
-export type BackendId = 'tensorrt' | 'directml' | 'ncnn'; // future: | 'openvino'
+export type BackendId = 'tensorrt' | 'directml' | 'ncnn' | 'migraphx'; // future: | 'openvino'
 export type BackendPlatform = 'win32' | 'linux';
 
 /** Sentinel for per-filter backend selection: inherit the app-level default. */
@@ -98,6 +98,22 @@ export const BACKENDS: readonly BackendDescriptor[] = [
     supportsShapes: false,
     supportsCustomBuildParams: false,
     vsmlrtBackendAttr: 'NCNN_VK',
+  },
+  {
+    id: 'migraphx',
+    supportedPlatforms: ['win32', 'linux'],
+    label: 'MIGraphX',
+    shortLabel: 'MIGX',
+    // MIGraphX programs are compiled for one input size, so the script compiles
+    // and caches one per resolution on first use rather than at import time
+    // (see providers/migraphx.ts) — to the importer it runs ONNX directly.
+    description: 'AMD MIGraphX (ROCm) — AMD GPUs; compiles each model on first use at a new resolution. Windows needs an RX 6800 / RDNA3 or newer; Linux needs ROCm installed.',
+    requiresEngineBuild: false,
+    runsOnnxDirectly: true,
+    importPrecisions: ['fp16', 'fp32'],
+    supportsShapes: false,
+    supportsCustomBuildParams: false,
+    vsmlrtBackendAttr: 'MIGX',
   },
 ] as const;
 

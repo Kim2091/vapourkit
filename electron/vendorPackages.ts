@@ -31,14 +31,20 @@ function distNameOf(spec: string): string {
 export function getBackendsForVendor(vendor: GpuVendor, platform: NodeJS.Platform = process.platform): BackendId[] {
   if (platform === 'linux') {
     // DirectML is Windows-only. NCNN/Vulkan is the Linux default for every
-    // GPU vendor; NVIDIA users additionally receive TensorRT as an option.
-    return vendor === 'nvidia' ? ['ncnn', 'tensorrt'] : ['ncnn'];
+    // GPU vendor; NVIDIA users additionally receive TensorRT and AMD users
+    // MIGraphX as an option (it needs a system ROCm install, so never default).
+    if (vendor === 'nvidia') return ['ncnn', 'tensorrt'];
+    if (vendor === 'amd') return ['ncnn', 'migraphx'];
+    return ['ncnn'];
   }
   if (platform === 'win32') {
     // NCNN is also available on Windows, giving every Windows GPU vendor a
     // Vulkan option alongside DirectML. NVIDIA retains TensorRT as its fastest
-    // backend.
-    return vendor === 'nvidia' ? ['tensorrt', 'directml', 'ncnn'] : ['directml', 'ncnn'];
+    // backend. AMD gets MIGraphX as an option, not the default: it only runs on
+    // RX 6800-class (gfx1030) and RDNA3+ cards, which vendor detection can't tell apart.
+    if (vendor === 'nvidia') return ['tensorrt', 'directml', 'ncnn'];
+    if (vendor === 'amd') return ['directml', 'ncnn', 'migraphx'];
+    return ['directml', 'ncnn'];
   }
   // macOS and other platforms are not supported yet; never treat them as Linux.
   return [];
@@ -46,7 +52,7 @@ export function getBackendsForVendor(vendor: GpuVendor, platform: NodeJS.Platfor
 
 /** pip specs for every backend this vendor gets (composed from the providers). */
 export function getBackendPipPackages(vendor: GpuVendor, platform: NodeJS.Platform = process.platform): string[] {
-  return getBackendsForVendor(vendor, platform).flatMap(id => getProvider(id).pipPackages());
+  return getBackendsForVendor(vendor, platform).flatMap(id => getProvider(id).pipPackages(platform));
 }
 
 export interface TorchInstall {

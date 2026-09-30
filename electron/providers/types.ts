@@ -66,8 +66,12 @@ export interface InferenceProvider {
    */
   modelCallCode(inputExpr: string, modelFile: string, opts: ModelCallOptions): string;
 
-  /** pip requirement specs installed with the plugin bundle. */
-  pipPackages(): string[];
+  /**
+   * pip requirement specs installed with the plugin bundle on `platform`.
+   * Empty when the backend's plugin does not come from pip there (MIGraphX on
+   * Windows ships from a GitHub release instead).
+   */
+  pipPackages(platform?: NodeJS.Platform): string[];
 
   /**
    * Plugin locations proving a healthy install. Each inner array lists

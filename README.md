@@ -8,8 +8,8 @@
 
 **Vapourkit** is a free, open-source application for upscaling and enhancing videos with VapourSynth and AI models. It runs on **Windows and Linux**, with inference backends varying by operating system:
 
-- **Windows:** TensorRT for NVIDIA GPUs, DirectML for AMD/Intel/NVIDIA GPUs, and NCNN Vulkan.
-- **Linux:** NCNN Vulkan on GPUs with a working Vulkan driver, and TensorRT on NVIDIA GPUs with a compatible CUDA/TensorRT stack. DirectML is Windows-only.
+- **Windows:** TensorRT for NVIDIA GPUs, DirectML for AMD/Intel/NVIDIA GPUs, NCNN Vulkan, and MIGraphX for recent AMD GPUs.
+- **Linux:** NCNN Vulkan on GPUs with a working Vulkan driver, TensorRT on NVIDIA GPUs with a compatible CUDA/TensorRT stack, and MIGraphX on AMD GPUs with ROCm installed. DirectML is Windows-only.
 
 ![Vapourkit v2.0.0 interface](assets/vapourkit-cover.png)
 
@@ -59,7 +59,7 @@ For advanced features like custom filters and workflows, see the [Vapourkit docu
 
 ### Core Capabilities
 - **AI Video Upscaling**: Upscale videos with high-quality AI models
-- **Inference Backends**: TensorRT, DirectML, and NCNN Vulkan; availability depends on your operating system and GPU
+- **Inference Backends**: TensorRT, DirectML, NCNN Vulkan, and MIGraphX; availability depends on your operating system and GPU
 - **Real-time Preview**: See results while processing
 - **Video Comparison**: Compare source and output in a built-in side-by-side viewer
 - **Batch Processing**: Process multiple videos sequentially with custom workflows
@@ -82,8 +82,8 @@ See the [Vapourkit documentation](https://www.vapourkit.app/introduction/) for i
 - **Storage**: 15 GB free to install on NVIDIA, 10 GB on other GPUs; 25 GB recommended, since TensorRT engines built with use add up to several GB
 - **GPU**:
   - 6 GB VRAM or more recommended
-  - Windows: NVIDIA 16-series or newer for TensorRT (driver 580.x or newer), or an AMD/Intel/NVIDIA GPU with DirectX 12 support for DirectML
-  - Linux: a working Vulkan loader and GPU driver for NCNN Vulkan inference. TensorRT on Linux requires a separately installed, compatible NVIDIA CUDA/TensorRT stack.
+  - Windows: NVIDIA 16-series or newer for TensorRT (driver 580.x or newer), or an AMD/Intel/NVIDIA GPU with DirectX 12 support for DirectML. MIGraphX needs an AMD RX 6800-class (gfx1030) or RDNA3-or-newer GPU
+  - Linux: a working Vulkan loader and GPU driver for NCNN Vulkan inference. TensorRT on Linux requires a separately installed, compatible NVIDIA CUDA/TensorRT stack; MIGraphX requires a system ROCm install with MIGraphX.
 
 ### Linux prerequisites
 

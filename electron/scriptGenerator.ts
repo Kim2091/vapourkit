@@ -231,7 +231,14 @@ export class VapourSynthScriptGenerator {
     code += '    if hasattr(backend, "custom_env"):\n';
     code += '        for _key, _value in VK_BUILD_ENV.items():\n';
     code += '            backend.custom_env.setdefault(_key, _value)\n';
+    code += '    # vsmlrt runs migraphx-driver with custom_env as its WHOLE environment,\n';
+    code += '    # so an empty one leaves HIP without PATH, HOME or its cache folders\n';
+    code += '    if type(backend).__name__ == "MIGX":\n';
+    code += '        import os as _vk_os\n';
+    code += '        for _key, _value in _vk_os.environ.items():\n';
+    code += '            backend.custom_env.setdefault(_key, _value)\n';
     code += '    return backend\n';
+    code += this.generateMigxHelper();
     code += '# vsmlrt model zoo location (downloaded by the app; the pip vs-mlrt wheels\n';
     code += "# don't ship a models folder, so vsmlrt's default path doesn't exist)\n";
     code += 'try:\n';
@@ -240,9 +247,60 @@ export class VapourSynthScriptGenerator {
     code += '    # pip TensorRT ships no trtexec binary; the app writes a shim that runs\n';
     code += "    # its own Python API engine builder (see electron/trtexecShim.ts)\n";
     code += `    _vk_vsmlrt.trtexec_path = "${PATHS.TRTEXEC_SHIM.replace(/\\/g, '/')}"\n`;
+    code += '    # vsmlrt looks for migraphx-driver in a vsmlrt-hip folder beside the first\n';
+    code += "    # vs-mlrt plugin it finds, which a pip install doesn't have\n";
+    code += this.platform === 'win32'
+      ? `    _vk_vsmlrt.migraphx_driver_path = ${pyString(PATHS.MIGX_DRIVER_WIN.replace(/\\/g, '/'))}\n`
+      : '    import os as _vk_os, shutil as _vk_shutil\n' +
+        '    _vk_vsmlrt.migraphx_driver_path = _vk_shutil.which("migraphx-driver") or ' +
+        '_vk_os.path.join(_vk_os.environ.get("ROCM_PATH", "/opt/rocm"), "bin", "migraphx-driver")\n';
     code += 'except Exception:\n';
     code += '    pass\n\n';
     return code;
+  }
+
+  /**
+   * vk_migx_model(), which the MIGraphX provider's model step calls. vsmigx runs
+   * programs compiled for one input size, so this compiles one at the clip's
+   * resolution on first use — through vsmlrt's own migraphx_driver(), which
+   * caches it beside the ONNX keyed by size, precision, MIGraphX version, GPU
+   * and model checksum — and announces the compile with the [vk-build]
+   * protocol so the app shows a banner instead of looking frozen.
+   *
+   * The clip is prepared in the float format of the model's *import*
+   * precision, but vsmigx demands the program's I/O type; as with TensorRT
+   * (#12) the call retries once in the other float format on a mismatch.
+   */
+  private generateMigxHelper(): string {
+    return [
+      'def vk_migx_model(clips, network_path, input_name="input", fp16=True, num_streams=1):',
+      '    import os, sys',
+      '    import vsmlrt as _vk_m',
+      '    clips = clips if isinstance(clips, list) else [clips]',
+      '    width, height = clips[0].width, clips[0].height',
+      '    program = dict(network_path=network_path, opt_shapes=(width, height), fp16=fp16,',
+      '                   fast_math=True, exhaustive_tune=False, device_id=0, short_path=None)',
+      '    compiled = os.access(_vk_m.get_mxr_path(**program), os.R_OK)',
+      '    label = f"Compiling MIGraphX program: {os.path.basename(network_path)} at {width}x{height}"',
+      '    if not compiled:',
+      '        print(f"[vk-build] begin {label}", file=sys.stderr, flush=True)',
+      '    try:',
+      '        mxr = _vk_m.migraphx_driver(channels=sum(c.format.num_planes for c in clips), input_name=input_name,',
+      '                                    custom_env=dict(os.environ), **program)',
+      '    finally:',
+      '        if not compiled:',
+      '            print(f"[vk-build] end {label}", file=sys.stderr, flush=True)',
+      '    try:',
+      '        return core.migx.Model(clips, mxr, num_streams=num_streams)',
+      '    except vs.Error as _vk_migx_error:',
+      '        # "sample type mismatch" / "bytes per sample mismatch"',
+      '        if "sample" not in str(_vk_migx_error) or "mismatch" not in str(_vk_migx_error):',
+      '            raise',
+      '        bits = 32 if clips[0].format.bits_per_sample == 16 else 16',
+      '        clips = [core.resize.Point(c, format=c.format.replace(bits_per_sample=bits)) for c in clips]',
+      '        return core.migx.Model(clips, mxr, num_streams=num_streams)',
+      '',
+    ].join('\n');
   }
 
   /**

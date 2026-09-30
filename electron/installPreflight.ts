@@ -93,7 +93,9 @@ const GB = 1024 ** 3;
 /**
  * Data-drive bytes a plugin install certainly writes: the installed packages
  * and the vs-mlrt model packs mid-extract, with no built engines.
- * NVIDIA: 10 + 1.5 = 11.5, rounded to 12 GB. Others: 4 + 1.5 = 5.5, to 6 GB.
+ * NVIDIA: 10 + 1.5 = 11.5, rounded to 12 GB. Others: 4 + 1.5 = 5.5, to 6 GB;
+ * Windows AMD adds the MIGraphX runtime (0.38 GB unpacked plus its 0.07 GB
+ * archive), 5.95 GB, still inside the 6.
  */
 export const PLUGIN_INSTALL_REQUIRED_BYTES: Record<'nvidia' | 'amd' | 'intel' | 'unknown', number> = {
   nvidia: 12 * GB,

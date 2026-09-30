@@ -57,6 +57,14 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - **Removed:** the "Preview selection" button, which rendered a segment to a temp file. Playback plus loop replaces it. Preview errors now show as a toast
 - Fixed the timeline seeking to the wrong moment on steps that change the clip length (e.g. a bob deinterlacer), and being off by the segment's in point
 
+### MIGraphX backend (AMD)
+- New inference backend for AMD GPUs, built on vs-mlrt's MIGraphX plugin. Pick it from the backend menu, globally or per step. DirectML stays the default on AMD
+- There's no build step at import. The first render at a new resolution compiles the model for that size, with a build banner while it works (expect minutes), and later renders reuse the result
+- **Windows:** needs an RX 6800-class (gfx1030) or RDNA3-or-newer GPU and a current AMD driver. The plugin and its HIP runtime aren't on PyPI, so AMD installs download them from the vs-mlrt release (68 MB, 383 MB on disk); existing AMD installs fetch them in the background on the next launch. On a GPU or driver MIGraphX can't use, a render stops with a message saying to switch to DirectML or NCNN
+- **Linux:** needs ROCm with MIGraphX installed on the system (`migraphx-driver` on `PATH`, or under `$ROCM_PATH`/`/opt/rocm`)
+- Models whose input is 5-D (some multi-frame VSR architectures) aren't supported by MIGraphX and say so; 4-D models, including frame-stacked VSR, work
+- Not yet tested on AMD hardware
+
 ### DLSS Neural Uplift (NVIDIA)
 - New filter backed by NVIDIA's DLSS-NR model, with Vapourkit's own VapourSynth plugin (`vsdlssnr.dll`, bundled)
 - It needs `nvngx_dlssnr.dll`, which NVIDIA doesn't distribute on its own (it ships inside games that use DLSS 5). Import your copy with the file picker, either from the Plugins modal or from the bar that appears when a workflow needs it. The picker checks you chose the right DLL and not one of its lookalikes

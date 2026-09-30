@@ -39,13 +39,18 @@ describe('getBackendsForVendor', () => {
     expect(getBackendsForVendor('nvidia', 'win32')).toEqual(['tensorrt', 'directml', 'ncnn']);
   });
 
-  it.each(NON_NVIDIA)('gives Windows %s DirectML and NCNN', (vendor) => {
+  it('gives Windows AMD DirectML, NCNN, and MIGraphX as a non-default option', () => {
+    expect(getBackendsForVendor('amd', 'win32')).toEqual(['directml', 'ncnn', 'migraphx']);
+  });
+
+  it.each(['intel', 'unknown'] as GpuVendor[])('gives Windows %s DirectML and NCNN', (vendor) => {
     expect(getBackendsForVendor(vendor, 'win32')).toEqual(['directml', 'ncnn']);
   });
 
-  it('uses NCNN as the Linux default, retaining TensorRT as an NVIDIA option', () => {
+  it('uses NCNN as the Linux default, with TensorRT on NVIDIA and MIGraphX on AMD as options', () => {
     expect(getBackendsForVendor('nvidia', 'linux')).toEqual(['ncnn', 'tensorrt']);
-    for (const vendor of NON_NVIDIA) {
+    expect(getBackendsForVendor('amd', 'linux')).toEqual(['ncnn', 'migraphx']);
+    for (const vendor of ['intel', 'unknown'] as GpuVendor[]) {
       expect(getBackendsForVendor(vendor, 'linux')).toEqual(['ncnn']);
     }
   });
@@ -73,6 +78,15 @@ describe('getBackendPipPackages', () => {
     expect(getBackendPipPackages('nvidia', 'win32').some(spec => spec.startsWith('vapoursynth-mlrt-trt=='))).toBe(true);
     for (const vendor of NON_NVIDIA) {
       expect(getBackendPipPackages(vendor, 'win32').some(spec => spec.startsWith('vapoursynth-mlrt-trt'))).toBe(false);
+    }
+  });
+
+  it('asks pip for MIGraphX on Linux AMD only; Windows gets it from the GitHub release', () => {
+    expect(getBackendPipPackages('amd', 'win32').some(spec => spec.startsWith('vapoursynth-mlrt-migx'))).toBe(false);
+    expect(getBackendPipPackages('amd', 'linux').some(spec => spec.startsWith('vapoursynth-mlrt-migx==')))
+      .toBe(process.arch === 'x64');
+    for (const vendor of ['nvidia', 'intel', 'unknown'] as GpuVendor[]) {
+      expect(getBackendPipPackages(vendor, 'linux').some(spec => spec.startsWith('vapoursynth-mlrt-migx'))).toBe(false);
     }
   });
 

@@ -48,6 +48,9 @@ vi.mock('./legacyCleanup', () => ({
   applyPluginCompatibilityFixes: vi.fn(),
 }));
 vi.mock('./vsMlrtModelsManager', () => ({ VsMlrtModelsManager: { needsDownload: vi.fn(async () => false), ensureModels: vi.fn() } }));
+vi.mock('./migxRuntimeManager', () => ({
+  MigxRuntimeManager: { needsInstall: vi.fn(async () => false), ensureRuntime: vi.fn(), remove: vi.fn(async () => undefined) },
+}));
 vi.mock('./trtexecShim', () => ({ ensureTrtexecShim: vi.fn() }));
 vi.mock('./scriptSync', () => ({ syncInstalledScripts: vi.fn(async () => ({ updated: [], removed: [], keptEdited: [], failed: [] })) }));
 vi.mock('./gpuDetection', () => ({ detectGpuVendor: vi.fn(async () => 'nvidia') }));

@@ -17,6 +17,14 @@ export class ErrorMessageHandler {
     // Log the full error content before any clipping
     logger.error('Full stderr output:', stderr);
 
+    // vsmigx loads the HIP runtime lazily, on the first MIGraphX call. When
+    // the GPU or driver can't run it, the load failure kills vspipe outright
+    // (no Python exception), leaving only this line to go on.
+    if (/vsmigx: failed to preload .*amdhip64/i.test(stderr)) {
+      return 'MIGraphX could not start the AMD HIP runtime. This GPU or driver is not supported by MIGraphX ' +
+        '(it needs an RX 6800 / RDNA3 or newer GPU and a current AMD driver). Switch the inference backend to DirectML or NCNN.';
+    }
+
     // Common error patterns to look for (in order of priority)
     const errorPatterns = [
       /Error:\s*(.+?)(?:\n|$)/i,

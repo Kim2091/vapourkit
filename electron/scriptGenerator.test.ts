@@ -30,7 +30,7 @@ vi.mock('./configManager', () => ({
 }));
 
 vi.mock('./logger', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), model: vi.fn() },
 }));
 
 import { VapourSynthScriptGenerator, Filter } from './scriptGenerator';
@@ -369,6 +369,29 @@ describe('inference backend selection', () => {
     expect(script).toContain('VK_BACKEND = "ncnn"');
     expect(script).toContain('core.ncnn.Model(clip, network_path="C:/models/m_fp16.onnx"');
     expect(script).not.toContain('provider="DML"');
+  });
+
+  it('emits the MIGraphX compile-and-run helper and calls it for migraphx', async () => {
+    const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.engine')], false, 'migraphx');
+
+    expect(script).toContain('"migraphx": Backend.MIGX');
+    expect(script).toContain('def vk_migx_model(clips, network_path, input_name="input", fp16=True, num_streams=1):');
+    // An .engine stored while TensorRT was selected runs as its ONNX
+    expect(script).toContain('clip = vk_migx_model(clip, "C:/models/m_fp16.onnx", input_name="input", fp16=True, num_streams=');
+    expect(script.indexOf('def vk_migx_model(')).toBeLessThan(script.indexOf('clip = vk_migx_model('));
+    // First compile at a resolution is announced for the build banner
+    expect(script).toContain('print(f"[vk-build] begin {label}", file=sys.stderr, flush=True)');
+    // vsmlrt would hand migraphx-driver an empty environment otherwise
+    expect(script).toContain('custom_env=dict(os.environ)');
+  });
+
+  it('points vsmlrt at the app-installed migraphx-driver on Windows and at ROCm on Linux', async () => {
+    const win = await generate([customFilter(0, 'CAS Sharpen')], false);
+    expect(win).toMatch(/_vk_vsmlrt\.migraphx_driver_path = ".*migx\/vsmlrt-hip\/migraphx-driver\.exe"/);
+
+    const linux = await generate([customFilter(0, 'CAS Sharpen')], false, 'ncnn', undefined, 'linux');
+    expect(linux).toContain('_vk_shutil.which("migraphx-driver")');
+    expect(linux).toContain('_vk_os.environ.get("ROCM_PATH", "/opt/rocm")');
   });
 
   it('does not emit Windows cmd.exe environment variables for Linux TensorRT scripts', async () => {

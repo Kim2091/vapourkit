@@ -18,6 +18,17 @@ export const VS_MLRT_VERSION = '16.1';
 // Linux installs stay reproducible without requesting a non-existent 16.1 wheel.
 export const VS_MLRT_NCNN_VERSION = '15.16';
 
+// MIGraphX (AMD) ships as a PyPI wheel on Linux x86_64 only; it links against
+// the system ROCm install. vsjetpack[amd] already pulls it at >=15.16, so this
+// pin only makes the version explicit.
+export const VS_MLRT_MIGX_VERSION = '17.0';
+
+// On Windows MIGraphX is not on any pip index: it comes from the vs-mlrt GitHub
+// release as VSMIGX-Windows-x64 (the plugin) plus vsmlrt-hip (the HIP and
+// MIGraphX runtime, 68 MB download / 383 MB unpacked). Stays on the latest
+// non-prerelease tag.
+export const VS_MLRT_MIGX_WINDOWS_RELEASE = 'v15.16';
+
 // Minimum vsview version the app requires (named preview outputs rely on its
 // set_output API). The vs-view launch path upgrades older installs to satisfy
 // this floor; the main plugin install already runs pip with --upgrade.
@@ -146,6 +157,14 @@ export const PATHS = {
   get ORT_CUDA_PLUGIN_DLL() { return path.join(this.PLUGINS, 'ort-cuda', IS_WINDOWS ? 'vsort.dll' : 'libvsort.so'); },
   get NCNN_PLUGIN_DLL() { return path.join(this.PLUGINS, IS_WINDOWS ? 'vsncnn.dll' : 'libvsncnn.so'); },
   get TRT_PLUGIN_DLL() { return path.join(this.PLUGINS, 'trt', IS_WINDOWS ? 'vstrt.dll' : 'libvstrt.so'); },
+  // Windows: app-installed from the GitHub release into plugins\migx, beside the
+  // vsmlrt-hip runtime folder vsmigx.dll preloads from. Linux: the pip wheel
+  // drops libvsmigx.so straight into the plugins root.
+  get MIGX_PLUGIN_DIR() { return path.join(this.PLUGINS, 'migx'); },
+  get MIGX_PLUGIN_DLL() {
+    return IS_WINDOWS ? path.join(this.MIGX_PLUGIN_DIR, 'vsmigx.dll') : path.join(this.PLUGINS, 'libvsmigx.so');
+  },
+  get MIGX_DRIVER_WIN() { return path.join(this.MIGX_PLUGIN_DIR, 'vsmlrt-hip', 'migraphx-driver.exe'); },
   get TENSORRT_PACKAGE() { return path.join(this.SITE_PACKAGES, 'tensorrt'); },
 
   // FFmpeg

@@ -19,6 +19,13 @@ describe('ErrorMessageHandler.extractErrorMessage', () => {
     expect(ErrorMessageHandler.extractErrorMessage('   \n  ')).toBe('Unknown error (no error details available)');
   });
 
+  it('explains a MIGraphX HIP runtime that cannot load (the process dies with no traceback)', () => {
+    // Captured from a real run on a machine without an AMD driver
+    const stderr = 'Warning: Plugin C:\\p\\migx\\vsmigx.dll is using API3 which is deprecated and will be removed shortly.\n' +
+      'vsmigx: failed to preload C:\\p\\migx\\vsmlrt-hip\\amdhip64_6.dll\n';
+    expect(ErrorMessageHandler.extractErrorMessage(stderr)).toMatch(/^MIGraphX could not start the AMD HIP runtime\..*DirectML or NCNN\.$/);
+  });
+
   it('extracts Error: pattern', () => {
     const stderr = 'Some output\nError: Could not open file\nMore output';
     expect(ErrorMessageHandler.extractErrorMessage(stderr)).toBe('Could not open file');

@@ -5,6 +5,7 @@ import * as TOML from '@iarna/toml';
 import { app, BrowserWindow} from 'electron';
 import { ModelExtractor } from './modelExtractor';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
+import { MigxRuntimeManager } from './migxRuntimeManager';
 import { ensureTrtexecShim } from './trtexecShim';
 import { logger } from './logger';
 import * as os from 'os';
@@ -19,7 +20,7 @@ import {
   VAPOURSYNTH_VERSION,
 } from './constants';
 import { readInstalledProjects, unmetRequirements } from './launchRequirements';
-import { getPypiPackages } from './vendorPackages';
+import { getBackendsForVendor, getPypiPackages } from './vendorPackages';
 import { syncInstalledScripts } from './scriptSync';
 import { downloadToFile } from './download';
 import { APP_OWNED_PLUGIN_ARCHIVES, shouldExtractBundledPluginArchives } from './bundledPluginArchives';
@@ -594,6 +595,17 @@ export class DependencyManager {
       VsMlrtModelsManager.ensureModels()
         .then(() => logger.dependency('vs-mlrt model zoo download complete'))
         .catch((error) => logger.error('vs-mlrt model zoo download failed (will retry next launch):', error));
+    }
+
+    // Same for the Windows MIGraphX runtime (68 MB, AMD installs only): existing
+    // AMD installs predate it, and a release bump replaces it.
+    const pluginsVendor = configManager.getPluginsGpuVendor();
+    if (coreDepsPresent && process.platform === 'win32' && pluginsVendor
+      && getBackendsForVendor(pluginsVendor).includes('migraphx') && await MigxRuntimeManager.needsInstall()) {
+      logger.dependency('MIGraphX runtime missing or outdated — installing in the background');
+      MigxRuntimeManager.ensureRuntime()
+        .then(() => logger.dependency('MIGraphX runtime install complete'))
+        .catch((error) => logger.error('MIGraphX runtime install failed (will retry next launch):', error));
     }
 
     // Keep the trtexec shim (and the engine builder it runs) in step with the

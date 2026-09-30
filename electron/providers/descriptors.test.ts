@@ -7,7 +7,7 @@ import {
 
 describe('backend platform policy', () => {
   it('exposes only supported backends on Linux', () => {
-    expect(getBackendsForPlatform('linux').map(backend => backend.id)).toEqual(['tensorrt', 'ncnn']);
+    expect(getBackendsForPlatform('linux').map(backend => backend.id)).toEqual(['tensorrt', 'ncnn', 'migraphx']);
   });
 
   it('migrates a Windows-only DirectML value to Linux NCNN', () => {
@@ -17,6 +17,8 @@ describe('backend platform policy', () => {
   it('preserves Linux-compatible backend values', () => {
     expect(normalizeBackendForPlatform('tensorrt', 'linux')).toBe('tensorrt');
     expect(normalizeBackendForPlatform('ncnn', 'linux')).toBe('ncnn');
+    expect(normalizeBackendForPlatform('migraphx', 'linux')).toBe('migraphx');
+    expect(normalizeBackendForPlatform('migraphx', 'win32')).toBe('migraphx');
   });
 
   it('does not classify unsupported platforms as Linux', () => {
