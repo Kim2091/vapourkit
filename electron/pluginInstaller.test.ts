@@ -78,7 +78,7 @@ vi.mock('./installPreflight', () => ({
 }));
 
 import { spawn } from 'child_process';
-import { PluginInstaller } from './pluginInstaller';
+import { PluginInstaller, describeTorchImportFailure } from './pluginInstaller';
 import { runInstallPreflight } from './installPreflight';
 import { inspectPythonEnvironment } from './pythonEnvIntegrity';
 import type { InstallResult } from './installFlow';
@@ -236,5 +236,36 @@ describe('reinstall modes', () => {
     await installer.installDependencies('complete');
 
     expect(spy.mock.calls.map(call => call[0])).toEqual(['partial', 'complete']);
+  });
+});
+
+describe('describeTorchImportFailure', () => {
+  const traceback = (last: string) => [
+    'Traceback (most recent call last):',
+    '  File "<string>", line 1, in <module>',
+    '  File "...\site-packages\torch\__init__.py", line 281, in <module>',
+    last,
+    '',
+  ].join('\r\n');
+
+  it('points a DLL load failure at the Visual C++ runtime and shows the error', () => {
+    const last = 'OSError: [WinError 1114] A dynamic link library (DLL) initialization routine failed. ' +
+      'Error loading "C:\vk\torch\lib\c10.dll" or one of its dependencies.';
+    const result = describeTorchImportFailure(traceback(last));
+    expect(result.summary).toContain('Visual C++');
+    expect(result.evidence).toBe(last);
+  });
+
+  it('blames antivirus when a module is missing', () => {
+    const result = describeTorchImportFailure(traceback("ModuleNotFoundError: No module named 'torchgen'"));
+    expect(result.summary).toContain('antivirus removed them');
+    expect(result.evidence).toBe("ModuleNotFoundError: No module named 'torchgen'");
+  });
+
+  it('falls back to the raw error without guessing a cause', () => {
+    const result = describeTorchImportFailure(traceback('RuntimeError: something else'));
+    expect(result.summary).not.toMatch(/antivirus|Visual C\+\+/);
+    expect(result.evidence).toBe('RuntimeError: something else');
+    expect(describeTorchImportFailure('').evidence).toMatch(/no error output/);
   });
 });

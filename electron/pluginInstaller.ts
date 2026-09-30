@@ -92,6 +92,47 @@ const PIP_CACHE_LIMIT_BYTES = 1024 ** 3;
 
 const CANCELLED: InstallResult = { success: false, cancelled: true, error: 'Installation cancelled by user' };
 
+interface ImportCheck {
+  ok: boolean;
+  /** Python's stderr when the import failed. */
+  error: string;
+}
+
+/**
+ * Turns the stderr of a failed `import torch, torchgen` into the dialog text.
+ *
+ * Users often don't send logs, so the Python error goes in the details itself,
+ * and the likely cause is named from it. A DLL that won't load is usually a
+ * missing or old Visual C++ runtime, not a deleted file, so antivirus is only
+ * named first when a module or file is actually missing.
+ */
+export function describeTorchImportFailure(stderr: string): { summary: string; evidence: string } {
+  const lines = stderr.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const last = lines[lines.length - 1] ?? '';
+  const evidence = (last || 'import torch, torchgen failed with no error output').slice(0, 400);
+  const prefix = 'Repairing PyTorch failed: it still cannot be imported after reinstalling. ';
+
+  if (/WinError (126|127|1114)|DLL load failed|Error loading ".*\.dll"/i.test(stderr)) {
+    return {
+      summary: prefix + 'One of its DLLs will not load, which usually means the Microsoft Visual C++ ' +
+        'Redistributable (x64) is missing or outdated. Install the latest one from Microsoft and retry. ' +
+        'If it is already current, antivirus may be blocking the DLL.',
+      evidence,
+    };
+  }
+  if (/ModuleNotFoundError|No module named|FileNotFoundError|No such file/i.test(stderr)) {
+    return {
+      summary: prefix + 'Some of its files are missing, which usually means antivirus removed them. ' +
+        'Allow Vapourkit\'s folder in your antivirus and retry.',
+      evidence,
+    };
+  }
+  return {
+    summary: prefix + 'The details show the Python error.',
+    evidence,
+  };
+}
+
 export class PluginInstaller {
   private mainWindow: BrowserWindow | null;
   private installProcess: ChildProcess | null = null;
@@ -425,7 +466,7 @@ export class PluginInstaller {
    * an incomplete wheel extraction (for example, `torch` being present while
    * its bundled top-level `torchgen` package is missing).
    */
-  private async canImportPythonModules(modules: string[], label: string): Promise<boolean> {
+  private async canImportPythonModules(modules: string[], label: string): Promise<ImportCheck> {
     const importCode =
       `import importlib; [importlib.import_module(name) for name in ${JSON.stringify(modules)}]`;
 
@@ -442,7 +483,7 @@ export class PluginInstaller {
 
       checkProcess.on('close', (code: number | null) => {
         if (code === 0) {
-          resolve(true);
+          resolve({ ok: true, error: '' });
           return;
         }
 
@@ -450,12 +491,12 @@ export class PluginInstaller {
           `${label} import check failed (exit code: ${code})` +
           (errorBuffer.trim() ? `: ${errorBuffer.trim()}` : '')
         );
-        resolve(false);
+        resolve({ ok: false, error: errorBuffer });
       });
 
       checkProcess.on('error', (error: Error) => {
         logger.warn(`Failed to run ${label} import check:`, error);
-        resolve(false);
+        resolve({ ok: false, error: error.message });
       });
     });
   }
@@ -496,7 +537,7 @@ export class PluginInstaller {
     }
   }
 
-  private hasHealthyTorchRuntime(): Promise<boolean> {
+  private checkTorchRuntime(): Promise<ImportCheck> {
     // torchgen is part of the official torch wheel, not the unrelated PyPI
     // distribution with the same name. Import both so a partial extraction is
     // caught even when pip still reports `torch` as installed.
@@ -832,7 +873,7 @@ export class PluginInstaller {
       // no-op because pip prints "Requirement already satisfied". Repair the
       // wheel explicitly before continuing; torchgen ships inside torch and
       // must never be installed from the unrelated `torchgen` project on PyPI.
-      if (!this.isCancelled && !await this.hasHealthyTorchRuntime()) {
+      if (!this.isCancelled && !(await this.checkTorchRuntime()).ok) {
         logger.warn('PyTorch runtime is incomplete; repairing torch and torchvision in place');
         this.sendProgress({
           type: 'installing',
@@ -854,12 +895,9 @@ export class PluginInstaller {
         if (!repairResult.success) {
           return repairResult;
         }
-        if (!await this.hasHealthyTorchRuntime()) {
-          return failureResult({
-            summary: 'Repairing PyTorch failed: it still cannot be imported after reinstalling, which usually means ' +
-              'antivirus removed some of its files. Allow Vapourkit\'s folder in your antivirus and retry.',
-            evidence: 'import torch, torchgen failed after pip reinstalled them (the log has the Python error).',
-          }, logger.getLogPath());
+        const recheck = await this.checkTorchRuntime();
+        if (!recheck.ok) {
+          return failureResult(describeTorchImportFailure(recheck.error), logger.getLogPath());
         }
       }
 
