@@ -1,18 +1,6 @@
 name = "Guided Color Fix"
 code = """
-# Corrects the colour of the picture against a reference whose colour is
-# right: the source before any filter (the default), the picture at an earlier
-# step, or a separate video of the same footage - a DVD whose colour you trust
-# for an HD master whose colour you do not. Pick it on the card. Unlike the
-# wavelet fix, which pulls the whole picture's low frequencies toward the
-# reference, this is a model (PACC V4): it learns a smooth colour transform of
-# the picture itself, so flat areas stay flat and halos or bleed in the
-# reference are not copied in.
-#
-# The reference can be any size; it is resized to half the picture's size,
-# the pairing the model was trained on. It is matched frame for frame, so a
-# separate video needs the same frame rate and framing, and an offset on the
-# card when it starts on a different frame.
+# Matches the colour to the reference picked on the card, keeping the detail.
 
 model       = "2x_bndl_anicc"  # The shipped model, or a path to your own PACC V4 .onnx, .safetensors or .pth.
 fp16        = True
