@@ -95,6 +95,16 @@ export default {
           200: '#fac2c2', 300: '#f7a3a3', 400: '#f47d7d', 500: '#ef5f5f',
           600: '#d94848', 700: '#b23636', 800: '#7d2727', 900: '#3f1717',
         },
+
+        // Side chains (a second video and its steps). Structural, not
+        // semantic: a periwinkle well clear of the teal accent and of
+        // ok / warn / bad, so a side chain never reads as a state. The
+        // mockup's gold sat on top of warn and would have.
+        chain: {
+          DEFAULT: '#8d7cec',
+          200: '#d6d0fa', 300: '#bdb4f6', 400: '#a598f2', 500: '#8d7cec',
+          600: '#7363d1', 700: '#5a4ca6', 800: '#3f3574', 900: '#241f42',
+        },
       },
     },
   },

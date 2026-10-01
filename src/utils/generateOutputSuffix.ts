@@ -1,3 +1,4 @@
+import { isMainChainStep } from '../../electron/chainGraph';
 import type { Filter, SegmentSelection } from '../electron.d';
 
 // The descriptive part of an output filename: what was done to the video, in
@@ -143,8 +144,9 @@ export function generateOutputSuffix(
     steps.push('colorimetry');
   }
 
-  // The chain, in order. A model step with no model file runs nothing.
-  const chain = [...workflow.filters].filter(filter => filter.enabled).sort((a, b) => a.order - b.order);
+  // The main chain, in order: a side chain only feeds a step, so what it does
+  // is not what the output went through. A model step with no model runs nothing.
+  const chain = [...workflow.filters].filter(filter => filter.enabled && isMainChainStep(filter)).sort((a, b) => a.order - b.order);
   for (const filter of chain) {
     if (filter.filterType === 'aiModel') {
       if (filter.modelPath) steps.push(modelTag(filter.modelPath));

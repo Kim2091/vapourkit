@@ -1,5 +1,5 @@
-import { memo, useState, useEffect, useRef } from 'react';
-import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Crop, Palette } from 'lucide-react';
+import { Fragment, memo, useState, useEffect, useRef } from 'react';
+import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Crop, Palette, Film } from 'lucide-react';
 import type { BackendId, FilterBackend, Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { BACKENDS, getBackendDescriptor, resolveFilterBackend } from '../utils/backends';
 import { PythonCodeEditor } from './PythonCodeEditor';
@@ -9,6 +9,8 @@ import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
 import { CreateLutCard, LoadLutCard } from './LutStepCards';
 import { StageSourceCard } from './StageSourceCard';
+import { LoadVideoCard } from './LoadVideoCard';
+import { chainOf, isSideChainHead, layoutChains, normalizeChainOrder, stepTag } from '../../electron/chainGraph';
 import type { LutJob } from '../hooks/useLutSteps';
 
 interface DynamicFilterPanelProps {
@@ -123,6 +125,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const [newlyDuplicatedId, setNewlyDuplicatedId] = useState<string | null>(null);
   const [showFilterSelector, setShowFilterSelector] = useState<string | null>(null);
   const [showModelSelector, setShowModelSelector] = useState<string | null>(null);
+  /** Side chains folded shut in the rail, by Load Video id. */
+  const [collapsedChains, setCollapsedChains] = useState<Set<string>>(new Set());
 
   // Group filter templates by category (templates can appear in multiple categories)
   const groupedTemplates = filterTemplates.reduce((acc, template) => {
@@ -147,9 +151,11 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const previousExpandedCountRef = useRef<number>(expandedFilters.size);
   const previousProcessingRef = useRef<boolean>(isProcessing);
 
-  // Sync pending filters when filters prop changes from outside
+  // Sync pending filters when filters prop changes from outside. Normalized,
+  // because a list from a workflow or an older version may not be in the
+  // order the rail shows chains in, and every handler here relies on it.
   useEffect(() => {
-    setPendingFilters(filters);
+    setPendingFilters(normalizeChainOrder(filters));
   }, [filters]);
 
   // Handle focus restoration when processing state changes
@@ -203,50 +209,85 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     previousExpandedCountRef.current = currentExpandedCount;
   }, [expandedFilters.size]);
 
-  const handleAddCustomFilter = () => {
+  /**
+   * Every change that adds, removes or moves a step goes through here, so the
+   * array stays in the order the rail shows it (normalizeChainOrder) and an
+   * array position keeps meaning one place in one chain.
+   */
+  const commitOrder = (updated: Filter[]) => {
+    const normalized = normalizeChainOrder(updated);
+    setPendingFilters(normalized);
+    onFiltersChange(normalized);
+    return normalized;
+  };
+
+  /** Past every existing order, so normalizing puts it last in its chain. */
+  const nextOrder = () => pendingFilters.reduce((max, f) => Math.max(max, f.order), -1) + 1;
+
+  const handleAddCustomFilter = (chain?: string) => {
     const newFilter: Filter = {
       id: `filter-${Date.now()}`,
       enabled: true,
       filterType: 'custom',
       preset: '',
       code: '',
-      order: pendingFilters.length,
+      order: nextOrder(),
+      ...(chain ? { chain } : {}),
     };
-    const updatedFilters = [...pendingFilters, newFilter];
-    setPendingFilters(updatedFilters);
-    onFiltersChange(updatedFilters);
+    commitOrder([...pendingFilters, newFilter]);
     setExpandedFilters(prev => new Set([...prev, newFilter.id]));
     setShowAddMenu(false);
     // Immediately open the filter selector modal for the new filter
     setShowFilterSelector(newFilter.id);
   };
 
-  const handleAddAIModelFilter = () => {
+  const handleAddAIModelFilter = (chain?: string) => {
     const newFilter: Filter = {
       id: `filter-${Date.now()}`,
       enabled: true,
       filterType: 'aiModel',
       preset: 'AI Model',
       code: '',
-      order: pendingFilters.length,
+      order: nextOrder(),
       modelPath: '',
       modelType: 'image',
+      ...(chain ? { chain } : {}),
     };
-    const updatedFilters = [...pendingFilters, newFilter];
-    setPendingFilters(updatedFilters);
-    onFiltersChange(updatedFilters);
+    commitOrder([...pendingFilters, newFilter]);
     setExpandedFilters(prev => new Set([...prev, newFilter.id]));
     setShowAddMenu(false);
     // Immediately open the model selector for the new AI model filter
     setShowModelSelector(newFilter.id);
   };
 
+  /** A new side chain: a Load Video, below any others, with its file chosen up front. */
+  const handleAddVideoSource = async () => {
+    setShowAddMenu(false);
+    const path = await window.electronAPI.selectReferenceVideo();
+    if (!path) return;
+    const head: Filter = {
+      id: `filter-${Date.now()}`,
+      enabled: true,
+      filterType: 'videoSource',
+      preset: 'Load Video',
+      code: '',
+      // Normalizing sorts Load Videos among themselves by order, so the
+      // largest puts this one below the others and above the main chain.
+      order: nextOrder(),
+      sourcePath: path,
+    };
+    commitOrder([...pendingFilters, head]);
+  };
+
+  /**
+   * A Load Video and its side chain cannot be separated: the steps below it
+   * work on its video and nothing else's, so they go with it rather than being
+   * left behind to run nowhere.
+   */
   const handleRemoveFilter = (id: string) => {
-    const updatedFilters = pendingFilters
-      .filter(f => f.id !== id)
-      .map((f, index) => ({ ...f, order: index }));
-    setPendingFilters(updatedFilters);
-    onFiltersChange(updatedFilters);
+    const target = pendingFilters.find(f => f.id === id);
+    const removing = target !== undefined && isSideChainHead(target);
+    commitOrder(pendingFilters.filter(f => f.id !== id && !(removing && f.chain === id)));
     setExpandedFilters(prev => {
       const next = new Set(prev);
       next.delete(id);
@@ -272,10 +313,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     updatedFilters.splice(duplicateIndex + 1, 0, newFilter);
     
     // Update order property for all filters
-    const reorderedFilters = updatedFilters.map((f, index) => ({ ...f, order: index }));
-    
-    setPendingFilters(reorderedFilters);
-    onFiltersChange(reorderedFilters);
+    commitOrder(updatedFilters.map((f, index) => ({ ...f, order: index })));
     setExpandedFilters(prev => new Set([...prev, newFilterId]));
     
     // Set the newly duplicated ID for animation
@@ -363,11 +401,9 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       parameters: { ...defaultsForVariables(template), source_id: markerId },
       variables: template.variables,
       editor: template.editor,
-      order: pendingFilters.length,
+      order: nextOrder(),
     };
-    const updatedFilters = [...pendingFilters, step];
-    setPendingFilters(updatedFilters);
-    onFiltersChange(updatedFilters);
+    commitOrder([...pendingFilters, step]);
     setExpandedFilters(prev => new Set([...prev, step.id]));
   };
 
@@ -551,7 +587,26 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  /**
+   * Where a dragged step may land: beside another step of its own chain, or —
+   * for a Load Video — on another Load Video, which moves the whole side
+   * chain. Never into another chain by dragging; that would silently change
+   * which video a step works on.
+   */
+  const canDropOn = (sourceId: string | null, targetId: string): boolean => {
+    const source = pendingFilters.find(f => f.id === sourceId);
+    const target = pendingFilters.find(f => f.id === targetId);
+    if (!source || !target) return true; // a drop from another section; the parent decides
+    if (isSideChainHead(source)) return isSideChainHead(target);
+    return chainOf(source) === chainOf(target);
+  };
+
   const handleDragOver = (e: React.DragEvent, id: string) => {
+    if (draggedId && !canDropOn(draggedId, id)) {
+      e.dataTransfer.dropEffect = 'none';
+      setDragOverId(null);
+      return;
+    }
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (draggedId !== id && draggedFilterId !== id) {
@@ -574,7 +629,7 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
       return;
     }
 
-    if (!draggedId || draggedId === targetId) {
+    if (!draggedId || draggedId === targetId || !canDropOn(draggedId, targetId)) {
       setDraggedId(null);
       return;
     }
@@ -591,10 +646,9 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
     const [draggedFilter] = newFilters.splice(draggedIndex, 1);
     newFilters.splice(targetIndex, 0, draggedFilter);
 
-    // Update order property
-    const reorderedFilters = newFilters.map((f, index) => ({ ...f, order: index }));
-    setPendingFilters(reorderedFilters);
-    onFiltersChange(reorderedFilters);
+    // Update order property. A Load Video carries its side chain with it:
+    // normalizing regroups each chain under its Load Video wherever it landed.
+    commitOrder(newFilters.map((f, index) => ({ ...f, order: index })));
     setDraggedId(null);
   };
 
@@ -633,6 +687,44 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
       setExpandedFilters(new Set(pendingFilters.map(f => f.id)));
     }
   };
+
+  // Side chains in the rail: where the "Main chain" label goes, and which
+  // row each open side chain's add footer follows.
+  const layout = layoutChains(pendingFilters);
+  const hasSideChains = layout.side.length > 0;
+  const firstMainId = layout.main.steps[0]?.id;
+  const footerAfter = new Map<string, string>();
+  for (const chain of layout.side) {
+    if (!collapsedChains.has(chain.id)) footerAfter.set(chain.steps[chain.steps.length - 1]?.id ?? chain.id, chain.id);
+  }
+  const toggleChainFold = (id: string) => setCollapsedChains(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  /** Under an open side chain: add a step to it rather than to the main chain. */
+  const chainFooter = (chainId: string) => (
+    <div className="ml-7 mr-1.5 mb-1.5 flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => handleAddCustomFilter(chainId)}
+        disabled={isProcessing}
+        className="h-6 px-2 rounded border border-dashed border-chain-600/60 text-chain-300 hover:bg-chain-500/10 text-[11px] inline-flex items-center gap-1 disabled:opacity-50"
+      >
+        <Plus className="w-3 h-3" /> VS Filter
+      </button>
+      <button
+        type="button"
+        onClick={() => handleAddAIModelFilter(chainId)}
+        disabled={isProcessing}
+        className="h-6 px-2 rounded border border-dashed border-chain-600/60 text-chain-300 hover:bg-chain-500/10 text-[11px] inline-flex items-center gap-1 disabled:opacity-50"
+      >
+        <Plus className="w-3 h-3" /> AI Model
+      </button>
+      <span className="text-[10.5px] text-ink-600">to side chain {stepTag(pendingFilters, chainId)}</span>
+    </div>
+  );
 
   return (
     <>
@@ -696,18 +788,26 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
               {showAddMenu && (
                 <div className="absolute right-0 top-full mt-1 bg-ink-850 border border-ink-750 rounded-lg shadow-xl shadow-black/50 z-50 min-w-[160px] overflow-hidden">
                   <button
-                    onClick={handleAddAIModelFilter}
+                    onClick={() => handleAddAIModelFilter()}
                     className="w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200 border-b border-ink-800"
                   >
                     <Sparkles className="w-4 h-4 text-accent-400" />
                     AI Model
                   </button>
                   <button
-                    onClick={handleAddCustomFilter}
-                    className="w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200"
+                    onClick={() => handleAddCustomFilter()}
+                    className="w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200 border-b border-ink-800"
                   >
                     <LucideFilter className="w-4 h-4 text-ink-400" />
                     VS Filter
+                  </button>
+                  <button
+                    onClick={() => { void handleAddVideoSource(); }}
+                    title="Load a second video with its own steps — a side chain another step can read from"
+                    className="w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200"
+                  >
+                    <Film className="w-4 h-4 text-chain-400" />
+                    Load Video
                   </button>
                 </div>
               )}
@@ -731,6 +831,55 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
 
         {/* Filter List */}
         {pendingFilters.map((filter, index) => {
+          const isHead = isSideChainHead(filter);
+          const inSide = !isHead && Boolean(filter.chain);
+          // A folded side chain shows its Load Video and nothing below it.
+          if (inSide && collapsedChains.has(filter.chain!)) return null;
+          const tag = stepTag(pendingFilters, filter.id) || String(index + 1);
+          const footerChain = footerAfter.get(filter.id);
+          const mainLabel = hasSideChains && filter.id === firstMainId && (
+            <div className="mx-1.5 mt-2.5 mb-0.5 text-[10px] font-display font-semibold uppercase tracking-[0.08em] text-ink-500">
+              Main chain
+            </div>
+          );
+
+          if (isHead) {
+            const chain = layout.side.find(c => c.id === filter.id);
+            return (
+              <Fragment key={filter.id}>
+                <div
+                  onDragOver={(e) => handleDragOver(e, filter.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, filter.id)}
+                  className={`relative m-1.5 rounded ${draggedId === filter.id ? 'opacity-40' : ''}`}
+                >
+                  {dragOverId === filter.id && draggedId !== filter.id && (
+                    <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-chain-400 rounded-full z-10" />
+                  )}
+                  <LoadVideoCard
+                    filter={filter}
+                    tag={tag}
+                    stepCount={chain?.steps.length ?? 0}
+                    folded={collapsedChains.has(filter.id)}
+                    disabled={isProcessing}
+                    onFold={() => toggleChainFold(filter.id)}
+                    onToggle={(enabled) => handleToggleFilter(filter.id, enabled)}
+                    onRemove={() => handleRemoveFilter(filter.id)}
+                    onRename={(name) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, preset: name } : f))}
+                    onPickVideo={() => window.electronAPI.selectReferenceVideo()}
+                    onChooseVideo={(path) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, sourcePath: path } : f))}
+                    dragProps={{
+                      draggable: !isProcessing,
+                      onDragStart: (e) => handleDragStart(e, filter.id),
+                      onDragEnd: handleDragEnd,
+                    }}
+                  />
+                </div>
+                {footerChain && chainFooter(footerChain)}
+              </Fragment>
+            );
+          }
+
           const isExpanded = expandedFilters.has(filter.id);
           const selectedTemplate = filterTemplates.find(t => t.name === filter.preset);
           const isDragging = draggedId === filter.id || draggedFilterId === filter.id;
@@ -771,12 +920,13 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
           };
 
           return (
+            <Fragment key={filter.id}>
+            {mainLabel}
             <div
-              key={filter.id}
               onDragOver={(e) => handleDragOver(e, filter.id)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, filter.id)}
-              className={`relative m-1.5 rounded ${
+              className={`relative m-1.5 rounded ${inSide ? 'ml-7' : ''} ${
                 isDragging ? 'opacity-40 scale-95' : 'opacity-100 scale-100'
               } ${
                 isHovered && !isDragging ? 'scale-[1.01] transition-transform duration-200' : ''
@@ -786,6 +936,11 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                 isNewlyDuplicated ? 'animate-[highlight_0.33s_ease-in-out] bg-accent-500/20 border-accent-500/50 border-2 shadow-lg shadow-accent-500/50 transition-all duration-200' : ''
               }`}
             >
+              {/* A side chain's steps hang off its Load Video on a guide line */}
+              {inSide && (
+                <div className="absolute -left-3.5 -top-1.5 -bottom-1.5 w-0.5 bg-chain-500/35 rounded-full" aria-hidden="true" />
+              )}
+
               {/* Drop indicator */}
               {dragOverId === filter.id && !isDragging && (
                 <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-accent-500 rounded-full shadow-lg shadow-accent-500/50 z-10" />
@@ -812,11 +967,11 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                   }`}
                 >
                   {/* Filter Order Number */}
-                  <div className={`flex-shrink-0 w-5 h-5 rounded ${
-                    isAIModel ? 'bg-accent-500/20 border-accent-500/45' : 'bg-ink-800 border-ink-700'
+                  <div className={`flex-shrink-0 min-w-5 h-5 px-0.5 rounded ${
+                    isAIModel ? 'bg-accent-500/20 border-accent-500/45' : inSide ? 'bg-chain-500/10 border-chain-600/50' : 'bg-ink-800 border-ink-700'
                   } border flex items-center justify-center`}>
-                    <span className={`text-xs font-bold ${isAIModel ? 'text-accent-400' : 'text-ink-400'}`}>
-                      {index + 1}
+                    <span className={`text-xs font-bold ${isAIModel ? 'text-accent-400' : inSide ? 'text-chain-300' : 'text-ink-400'}`}>
+                      {tag}
                     </span>
                   </div>
 
@@ -1261,6 +1416,8 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                 )}
               </div>
             </div>
+            {footerChain && chainFooter(footerChain)}
+            </Fragment>
           );
         })}
     </Section>

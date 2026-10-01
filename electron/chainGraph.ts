@@ -119,6 +119,23 @@ export function layoutChains<S extends GraphStep>(steps: S[]): ChainLayout<S> {
   return { main, side, orphans };
 }
 
+/**
+ * The list in the order the rail shows it, with `order` renumbered to match:
+ * each side chain (its Load Video, then its steps), then the main chain, then
+ * orphans. The panel's add, remove, duplicate and drag code all work on array
+ * positions; running this after each of them keeps a position meaning one
+ * place in one chain, so none of that code has to know chains exist.
+ */
+export function normalizeChainOrder<S extends GraphStep>(steps: S[]): S[] {
+  const { main, side, orphans } = layoutChains(steps);
+  const ordered = [
+    ...side.flatMap(chain => [chain.head!, ...chain.steps]),
+    ...main.steps,
+    ...orphans,
+  ];
+  return ordered.map((step, order) => (step.order === order ? step : { ...step, order }));
+}
+
 /** Whether a side chain will run: its Load Video is on and has a file. */
 export function sideChainRuns(chain: Chain): boolean {
   return chain.head !== null && chain.head.enabled && producesPicture(chain.head);
