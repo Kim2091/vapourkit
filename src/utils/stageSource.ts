@@ -19,6 +19,7 @@
 import { stepLabel } from '../hooks/useChainPreview';
 import { stepNumber } from './lutSteps';
 import type { Filter } from '../electron.d';
+import { parseReferenceVideo, type ReferenceVideo } from '../../electron/referenceVideo';
 
 /**
  * Whether a step puts a picture into the chain at all.
@@ -43,6 +44,8 @@ export function stageSourceId(filter: Filter, variable: string): string {
 export type StageLink =
   /** Nothing named, which means the source — what the older filter always used. */
   | { state: 'source' }
+  /** A separate video file rather than a step; see electron/referenceVideo.ts. */
+  | { state: 'file'; video: ReferenceVideo }
   | { state: 'missing' }
   | { state: 'self' }
   | { state: 'disabled'; step: Filter; number: number; label: string }
@@ -54,6 +57,8 @@ export type StageLink =
 export function stageLink(filters: Filter[], reader: Filter, variable: string): StageLink {
   const id = stageSourceId(reader, variable);
   if (!id) return { state: 'source' };
+  const video = parseReferenceVideo(id);
+  if (video) return { state: 'file', video };
   if (id === reader.id) return { state: 'self' };
 
   const step = filters.find(filter => filter.id === id);

@@ -14,6 +14,7 @@ import type { Filter } from '../electron.d';
 import { stepLabel } from '../hooks/useChainPreview';
 import { stepNumber } from '../utils/lutSteps';
 import { stageLink, stageSourceId, stagesAbove } from '../utils/stageSource';
+import { encodeReferenceVideo, referenceVideoName } from '../../electron/referenceVideo';
 
 const BOX = 'rounded-md border border-ink-800 bg-ink-950/40 p-2 space-y-1.5';
 const HEADING = 'block text-[10px] font-display font-semibold uppercase tracking-[0.07em] text-ink-500';
@@ -60,6 +61,71 @@ const FrameCountNote = memo(() => {
   );
 });
 
+/**
+ * Which reference frame lines up with the source's first frame.
+ *
+ * Typed as a draft and committed on blur or Enter, so clearing the box to type
+ * a new number does not regenerate the script around a zero on the way.
+ */
+const OffsetInput = memo<{ value: number; disabled?: boolean; onCommit: (offset: number) => void }>(({
+  value, disabled, onCommit,
+}) => {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const parsed = Math.trunc(Number(draft));
+    setDraft(null);
+    if (Number.isFinite(parsed) && parsed !== value) onCommit(parsed);
+  };
+  return (
+    <label
+      className="flex items-center gap-2"
+      title="The reference frame that lines up with the source's first frame. Positive skips frames at the start of the reference; negative holds its first frame for that many frames."
+    >
+      <span className={`${HEADING} flex-1`}>Reference offset (frames)</span>
+      <input
+        type="number"
+        step={1}
+        value={draft ?? String(value)}
+        disabled={disabled}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => { if (event.key === 'Enter') commit(); }}
+        className="h-6 w-20 rounded border border-ink-700 bg-ink-850 px-1.5 text-[11px] tabular-nums text-ink-200 focus:outline-none focus:border-accent-500 disabled:opacity-50"
+      />
+    </label>
+  );
+});
+
+/** Not step ids: what the file entries of the dropdown carry. */
+const PICK_FILE = '\u0000pick-file';
+const CHOSEN_FILE = '\u0000chosen-file';
+
+/** How a separate file is lined up, folded like FrameCountNote. */
+const ReferenceFileNote = memo(() => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className={`${PROSE} flex items-center gap-1 text-ink-600 hover:text-ink-400 transition-colors`}
+      >
+        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        Matched frame for frame from the offset
+      </button>
+      {open && (
+        <p className={`${PROSE} text-ink-500 mt-1 pl-4`}>
+          The video has to be the same footage at the same frame rate and framing; its size does not
+          matter. It is cut to the same segment as the source. Frames past the source's end are
+          dropped, and if it runs short, its last frame is held.
+        </p>
+      )}
+    </div>
+  );
+});
+
 interface StageSourceCardProps {
   filter: Filter;
   filters: Filter[];
@@ -68,10 +134,12 @@ interface StageSourceCardProps {
   label?: string;
   disabled?: boolean;
   onChoose: (sourceId: string) => void;
+  /** Offer a video file outside the chain; the filter has to declare it can take one. */
+  onPickVideo?: () => Promise<string | null>;
 }
 
 export const StageSourceCard = memo<StageSourceCardProps>(({
-  filter, filters, variable, label, disabled, onChoose,
+  filter, filters, variable, label, disabled, onChoose, onPickVideo,
 }) => {
   const chosen = stageSourceId(filter, variable);
   const link = stageLink(filters, filter, variable);
@@ -81,14 +149,27 @@ export const StageSourceCard = memo<StageSourceCardProps>(({
   // reason it stopped working underneath it rather than a silent reset to
   // something else.
   const chosenElsewhere = 'step' in link && !offered.some(step => step.id === link.step.id) ? link.step : null;
+  const video = link.state === 'file' ? link.video : null;
+
+  const choose = async (value: string) => {
+    if (value === CHOSEN_FILE) return;
+    if (value !== PICK_FILE) {
+      onChoose(value);
+      return;
+    }
+    // Cancelling leaves the choice as it was; the select snaps back to it.
+    const path = await onPickVideo?.();
+    if (path) onChoose(encodeReferenceVideo({ path, offset: video?.offset ?? 0 }));
+  };
 
   return (
     <div className={BOX}>
       <span className={HEADING}>{label || 'Match the colour of'}</span>
       <select
-        value={chosen}
+        value={video ? CHOSEN_FILE : chosen}
         disabled={disabled}
-        onChange={(event) => onChoose(event.target.value)}
+        onChange={(event) => { void choose(event.target.value); }}
+        title={video?.path}
         className={SELECT}
       >
         <option value="">The source, before any filter</option>
@@ -109,12 +190,32 @@ export const StageSourceCard = memo<StageSourceCardProps>(({
         {link.state === 'missing' && (
           <option value={chosen}>A step that is no longer in the chain</option>
         )}
+        {(onPickVideo || video) && (
+          <optgroup label="Another video">
+            {video && <option value={CHOSEN_FILE}>{referenceVideoName(video)}</option>}
+            {onPickVideo && (
+              <option value={PICK_FILE}>{video ? 'Choose a different video file…' : 'A video file…'}</option>
+            )}
+          </optgroup>
+        )}
       </select>
 
       {link.state === 'source' && (
         <p className={`${PROSE} text-ink-500`}>
-          Pick a step to match against the picture partway down the chain instead.
+          {onPickVideo
+            ? 'Pick a step partway down the chain, or a separate video of the same footage, to match against instead.'
+            : 'Pick a step to match against the picture partway down the chain instead.'}
         </p>
+      )}
+      {video && (
+        <>
+          <OffsetInput
+            value={video.offset}
+            disabled={disabled}
+            onCommit={(offset) => onChoose(encodeReferenceVideo({ ...video, offset }))}
+          />
+          <ReferenceFileNote />
+        </>
       )}
       {link.state === 'ready' && <FrameCountNote />}
       {link.state === 'missing' && (

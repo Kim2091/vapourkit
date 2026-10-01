@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Video operations
   selectVideoFile: () => ipcRenderer.invoke('select-video-file'),
+  selectReferenceVideo: () => ipcRenderer.invoke('select-reference-video'),
   selectOnnxFile: () => ipcRenderer.invoke('select-onnx-file'),
   selectTemplateFile: () => ipcRenderer.invoke('select-template-file'),
   getVideoInfo: (filePath: string) => ipcRenderer.invoke('get-video-info', filePath),

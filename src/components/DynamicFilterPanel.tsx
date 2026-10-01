@@ -1073,6 +1073,9 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                             onChoose={(source) => handleFilterParameterChange(
                               filter.id, interactiveEditor.variables.source, source,
                             )}
+                            onPickVideo={interactiveEditor.videoFile
+                              ? () => window.electronAPI.selectReferenceVideo()
+                              : undefined}
                           />
                         ) : interactiveEditor && onOpenFilterEditor && interactiveEditor.type in EDITOR_LABELS && (
                           <button

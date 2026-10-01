@@ -33,6 +33,20 @@ export function registerDialogHandlers() {
     return result.filePaths;
   });
 
+  // One file: a step's colour reference, not a batch to queue.
+  ipcMain.handle('select-reference-video', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Choose the reference video',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Videos', extensions: ['mp4', 'avi', 'mkv', 'mov', 'webm', 'flv', 'wmv', 'm4v', 'mts', 'm2ts', 'ts', 'mpg', 'mpeg', 'vob'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    return handleDialogResult<string>(result, 'Reference video selection');
+  });
+
   ipcMain.handle('select-onnx-file', async () => {
     logger.info('Opening ONNX file selection dialog');
     const result = await dialog.showOpenDialog({

@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { producesPicture, stageLink, stagesAbove } from './stageSource';
 import type { Filter } from '../electron.d';
+import { encodeReferenceVideo } from '../../electron/referenceVideo';
 
 let order = 0;
 const filter = (over: Partial<Filter>): Filter => ({
@@ -50,6 +51,11 @@ describe('what a stage reference is pointed at', () => {
 
   it('labels a model step by its model, the way the rail does', () => {
     expect(link('uplift')).toMatchObject({ state: 'ready', number: 2, label: '4x-AnimeSharp' });
+  });
+
+  it('names a video file outside the chain, with its offset', () => {
+    const value = encodeReferenceVideo({ path: 'D:/dvd/ep01.mkv', offset: 5 });
+    expect(link(value)).toEqual({ state: 'file', video: { path: 'D:/dvd/ep01.mkv', offset: 5 } });
   });
 
   it('says the step is gone rather than falling back to the source', () => {

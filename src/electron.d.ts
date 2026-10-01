@@ -38,6 +38,8 @@ export interface ElectronAPI {
   
   // Video operations
   selectVideoFile: () => Promise<string[] | null>;
+  /** One video file, for a step that matches against footage outside the chain. */
+  selectReferenceVideo: () => Promise<string | null>;
   selectOnnxFile: () => Promise<string | null>;
   selectTemplateFile: () => Promise<string | null>;
   getVideoInfo: (filePath: string) => Promise<VideoInfo>;
@@ -784,6 +786,12 @@ export interface LutSourceFilterEditor {
 export interface StageSourceFilterEditor {
   type: 'stageSource';
   label?: string;
+  /**
+   * Also offer a video file outside the chain, held in the same variable
+   * (electron/referenceVideo.ts). Only for a filter whose code copes with a
+   * picture of a different size; the file is fitted to the source's length.
+   */
+  videoFile?: boolean;
   variables: {
     source: string;
   };

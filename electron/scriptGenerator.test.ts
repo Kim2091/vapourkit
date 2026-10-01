@@ -34,6 +34,7 @@ vi.mock('./logger', () => ({
 }));
 
 import { VapourSynthScriptGenerator, Filter } from './scriptGenerator';
+import { encodeReferenceVideo } from './referenceVideo';
 
 const aiFilter = (order: number, modelPath: string, backend?: Filter['backend'], numStreams?: number): Filter => ({
   id: `ai-${order}`,
@@ -532,6 +533,57 @@ describe('a step that reads the picture from another step', () => {
 
     expect(script).toContain('reference = original_clip');
     expect(script).toContain('who = ""');
+  });
+
+  describe('naming a video file instead of a step', () => {
+    const file = encodeReferenceVideo({ path: 'D:\\dvd\\ep01 "remux".mkv', offset: 12 });
+
+    it('opens the file through the helper, offset and all, and keeps no stage for it', async () => {
+      const script = await generate([customFilter(0, 'CAS Sharpen'), reader(1, file)], false);
+
+      expect(script).toContain('def vk_reference_video(path, offset=0):');
+      expect(script).toContain('reference = vk_reference_video("D:\\\\dvd\\\\ep01 \\"remux\\".mkv", 12)');
+      expect(script).not.toContain('VK_STAGES');
+      expect(script.indexOf('def vk_reference_video')).toBeLessThan(script.indexOf('reference = vk_reference_video'));
+    });
+
+    it('emits no helper when no step names a file', async () => {
+      const script = await generate([customFilter(0, 'CAS Sharpen'), reader(1, '')], false);
+
+      expect(script).not.toContain('vk_reference_video');
+    });
+
+    it('cuts the file to the same segment as the source', async () => {
+      const generator = new VapourSynthScriptGenerator('win32');
+      const scriptPath = await generator.generateScript({
+        inputVideo: 'C:\\videos\\input.mkv',
+        enginePath: '',
+        pluginsPath: 'C:\\plugins',
+        filters: [reader(0, file)],
+        segment: { enabled: true, startFrame: 100, endFrame: 250 },
+      });
+      const script = await fs.readFile(scriptPath, 'utf-8');
+      await fs.remove(scriptPath);
+
+      expect(script).toContain('original_clip = core.std.Trim(original_clip, first=100, last=249)');
+      expect(script).toContain('    ref = ref[100:250]');
+    });
+
+    it('cuts to the validation window too', async () => {
+      const generator = new VapourSynthScriptGenerator('win32');
+      const scriptPath = await generator.generateScript({
+        inputVideo: 'C:\\videos\\input.mkv',
+        enginePath: '',
+        pluginsPath: 'C:\\plugins',
+        filters: [reader(0, file)],
+        validationMode: true,
+        sourceFps: 24,
+      });
+      const script = await fs.readFile(scriptPath, 'utf-8');
+      await fs.remove(scriptPath);
+
+      expect(script).toContain('    ref = ref[0:120]');
+    });
   });
 });
 

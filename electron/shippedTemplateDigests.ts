@@ -381,6 +381,7 @@ export const SHIPPED_TEMPLATE_DIGESTS: Readonly<Record<string, readonly string[]
     '3402de346f2c84f7e6d744dde816b1170d38df22b391eb3fbe1052f04447d2de',
   ],
   "Guided Color Fix.vkfilter": [
+    '229cc7b2a0620a9307e2c2a1f8b356b4efc23963562166d78c9a15306bcc1f48',
     '3e16bd597f7fa2fc1568ce7bf4001d5accb24ab3d411593d55ba0ab9bebef0ba',
   ],
   "Guided Filter.vkfilter": [

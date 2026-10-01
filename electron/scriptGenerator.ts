@@ -9,6 +9,7 @@ import { logger } from './logger';
 import { BACKENDS, normalizeBackendForPlatform, resolveFilterBackend, type BackendId, type FilterBackend } from './providers/descriptors';
 import { getProvider } from './providers/registry';
 import type { InferenceProvider } from './providers/types';
+import { parseReferenceVideo } from './referenceVideo';
 
 export type ModelType = 'vsr' | 'image';
 
@@ -154,10 +155,55 @@ export class VapourSynthScriptGenerator {
       if (filter.filterType !== 'custom') continue;
       for (const [, variable] of filter.code.matchAll(STAGE_REFERENCE)) {
         const id = this.stageIdOf(filter, variable);
-        if (id) wanted.add(id);
+        if (id && !parseReferenceVideo(id)) wanted.add(id);
       }
     }
     return wanted;
+  }
+
+  /** Whether some enabled filter reads its picture from a video file. */
+  private readsReferenceVideo(enabledFilters: Filter[]): boolean {
+    return enabledFilters.some(filter => filter.filterType === 'custom'
+      && [...filter.code.matchAll(STAGE_REFERENCE)].some(([, variable]) => parseReferenceVideo(this.stageIdOf(filter, variable))));
+  }
+
+  /**
+   * vk_reference_video(), the picture a step reads when it names a file.
+   *
+   * The file is a second copy of the footage, so it has to be cut exactly as
+   * the source was: offset first, which is in the file's own frame numbers,
+   * then the same segment or validation trim, then fitted to the source's
+   * length. A reference a few frames short is the usual case between two
+   * releases and is padded with its last frame; refusing it would make the
+   * feature unusable for the job it is for.
+   */
+  private generateReferenceVideoHelper(trim: { first: number; last?: number }): string {
+    const cut = trim.last === undefined ? `[${trim.first}:]` : `[${trim.first}:${trim.last + 1}]`;
+    return [
+      'def vk_reference_video(path, offset=0):',
+      '    import os as _vk_os',
+      '    if not _vk_os.path.isfile(path):',
+      '        raise ValueError("The reference video " + path + " is not there any more. Pick it again.")',
+      '    ref = core.bs.VideoSource(source=path, cachemode=3)',
+      '    if offset >= ref.num_frames:',
+      '        raise ValueError("The reference offset %d is past the end of %s, which has %d frames." % (offset, _vk_os.path.basename(path), ref.num_frames))',
+      '    if offset > 0:',
+      '        ref = ref[offset:]',
+      '    elif offset < 0:',
+      '        ref = ref[0] * -offset + ref',
+      `    if ref.num_frames <= ${trim.first}:`,
+      `        raise ValueError("The reference video ends before frame ${trim.first}, where this segment starts.")`,
+      `    ref = ref${cut}`,
+      '    if ref.num_frames > original_clip.num_frames:',
+      '        ref = ref[:original_clip.num_frames]',
+      '    elif ref.num_frames < original_clip.num_frames:',
+      '        ref = ref + ref[-1] * (original_clip.num_frames - ref.num_frames)',
+      '    if original_clip.fps_num:',
+      '        ref = core.std.AssumeFPS(ref, src=original_clip)',
+      '    return ref',
+      '',
+      '',
+    ].join('\n');
   }
 
   /**
@@ -182,6 +228,8 @@ export class VapourSynthScriptGenerator {
   ): string {
     const id = this.stageIdOf(filter, variable);
     if (!id) return 'original_clip';
+    const video = parseReferenceVideo(id);
+    if (video) return `vk_reference_video(${pyString(video.path)}, ${video.offset})`;
     if (emitted.has(id)) return `${STAGES}[${pyString(id)}]`;
 
     const here = filter.preset || 'A custom filter';
@@ -369,6 +417,16 @@ export class VapourSynthScriptGenerator {
         filterCode += `clip = core.std.Trim(clip, first=${startFrame}, last=${endFrame - 1})\n`;
         filterCode += `original_clip = core.std.Trim(original_clip, first=${startFrame}, last=${endFrame - 1})\n\n`;
       }
+    }
+
+    if (this.readsReferenceVideo(enabledFilters)) {
+      const trim = config.validationMode
+        ? { first: 0, last: Math.ceil((config.sourceFps || 30) * 5) - 1 }
+        : config.segment?.enabled
+          ? { first: config.segment.startFrame, last: config.segment.endFrame === -1 ? undefined : config.segment.endFrame - 1 }
+          : { first: 0 };
+      filterCode += '# A step below matches against a separate video file\n';
+      filterCode += this.generateReferenceVideoHelper(trim);
     }
 
     // For vs-view previews, name output tabs via vsview's set_output API and
