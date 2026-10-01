@@ -50,6 +50,7 @@ import {
   getCheckPackageNames,
   getPypiPackages,
   getTorchInstall,
+  getNoDepsPackages,
   normalizePackageName,
   UNINSTALL_PACKAGE_NAMES,
   type InstalledPackage,
@@ -943,6 +944,22 @@ export class PluginInstaller {
       );
       if (!pypiResult.success) {
         return pypiResult;
+      }
+
+      // Packages whose declared dependencies this vendor cannot use - off
+      // NVIDIA, vs_undistort's 3.8 GB TensorRT stack (getNoDepsPackages).
+      const noDepsPackages = getNoDepsPackages(vendor);
+      if (noDepsPackages.length > 0 && !this.isCancelled) {
+        const noDepsResult = await this.runPipInstall(
+          'Installing the remaining plugin packages',
+          noDepsPackages,
+          80,
+          2,
+          ['--upgrade', '--no-deps', ...PYPI_EXTRA_INDEX_ARGS]
+        );
+        if (!noDepsResult.success) {
+          return noDepsResult;
+        }
       }
 
       // Remove plugin builds that crash VapourSynth autoload and resolve the

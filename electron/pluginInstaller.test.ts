@@ -66,6 +66,7 @@ vi.mock('./vendorPackages', () => ({
   getCheckPackageNames: vi.fn(() => []),
   getPypiPackages: vi.fn(() => []),
   getTorchInstall: vi.fn(() => ({ packages: ['torch'], extraArgs: [] })),
+  getNoDepsPackages: vi.fn(() => []),
   normalizePackageName: (name: string) => name,
   UNINSTALL_PACKAGE_NAMES: ['torch'],
 }));

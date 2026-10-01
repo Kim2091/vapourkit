@@ -29,6 +29,7 @@ import {
   getCheckPackageNames,
   getPypiPackages,
   getTorchInstall,
+  getNoDepsPackages,
   UNINSTALL_PACKAGE_NAMES,
 } from './vendorPackages';
 
@@ -131,9 +132,6 @@ describe('getPypiPackages', () => {
       expect(packages).toContain(VAPOURSYNTH_PIP_SPEC);
       expect(packages).not.toContain('vapoursynth');
       expect(packages).toContain('vs_temporalfix');
-      // Floored, not bare: 2.2.0 cannot build an Undistort TensorRT engine on a
-      // 50-series GPU, so an install sitting on it has to be moved forward.
-      expect(packages).toContain('vs_undistort>=2.3.1');
       expect(packages).toContain('vs_grain');
       expect(packages).toContain('vapoursynth-mvtools');
       expect(packages).toContain('positional-encodings');
@@ -141,6 +139,17 @@ describe('getPypiPackages', () => {
       expect(packages).toContain('timm');
       // Backend wheels come from the providers, never from this list
       expect(packages.some(spec => spec.startsWith('vapoursynth-mlrt'))).toBe(false);
+    }
+  });
+
+  // Floored, not bare: 2.2.0 cannot build an Undistort TensorRT engine on a
+  // 50-series GPU, so an install sitting on it has to be moved forward.
+  it('installs vs_undistort with its TensorRT dependencies only on NVIDIA', () => {
+    expect(getPypiPackages('nvidia')).toContain('vs_undistort>=2.3.1');
+    expect(getNoDepsPackages('nvidia')).toEqual([]);
+    for (const vendor of NON_NVIDIA) {
+      expect(getPypiPackages(vendor).some(spec => spec.startsWith('vs_undistort'))).toBe(false);
+      expect(getNoDepsPackages(vendor)).toEqual(['vs_undistort>=2.3.1']);
     }
   });
 });
@@ -152,10 +161,21 @@ describe('getTorchInstall', () => {
     expect(install.extraArgs).toEqual(['--index-url', 'https://download.pytorch.org/whl/cu130']);
   });
 
-  it.each(NON_NVIDIA)('uses the default PyPI index (CPU wheels) on %s', (vendor) => {
-    const install = getTorchInstall(vendor);
+  it.each(NON_NVIDIA)('uses the default PyPI index (CPU wheels) on Windows %s', (vendor) => {
+    const install = getTorchInstall(vendor, 'win32');
     expect(install.packages).toEqual(['torch', 'torchvision']);
     expect(install.extraArgs).toEqual([]);
+  });
+
+  // Plain PyPI torch on Linux is the CUDA build, with ~2 GB of nvidia-* wheels
+  it.each(NON_NVIDIA)('uses the CPU wheel index on Linux %s', (vendor) => {
+    expect(getTorchInstall(vendor, 'linux').extraArgs)
+      .toEqual(['--index-url', 'https://download.pytorch.org/whl/cpu']);
+  });
+
+  it('uses the CUDA wheel index on Linux NVIDIA too', () => {
+    expect(getTorchInstall('nvidia', 'linux').extraArgs)
+      .toEqual(['--index-url', 'https://download.pytorch.org/whl/cu130']);
   });
 });
 
@@ -302,13 +322,32 @@ describe('computeVendorPurge', () => {
     const purge = computeVendorPurge('nvidia', [
       { name: 'torch', version: '2.9.0' },
       { name: 'torchvision', version: '0.24.0' },
-    ]);
+    ], 'win32');
     expect(purge).toEqual(['torch', 'torchvision']);
   });
 
   it('leaves a matching torch flavor alone in both directions', () => {
-    expect(computeVendorPurge('nvidia', [{ name: 'torch', version: '2.9.0+cu130' }])).toEqual([]);
-    expect(computeVendorPurge('amd', [{ name: 'torch', version: '2.9.0' }])).toEqual([]);
+    expect(computeVendorPurge('nvidia', [{ name: 'torch', version: '2.9.0+cu130' }], 'win32')).toEqual([]);
+    expect(computeVendorPurge('amd', [{ name: 'torch', version: '2.9.0' }], 'win32')).toEqual([]);
+  });
+
+  it('treats an untagged torch as the CUDA build on Linux', () => {
+    // What plain PyPI installed for a Linux AMD user, with triton beside it
+    expect(computeVendorPurge('amd', [
+      { name: 'torch', version: '2.14.1' },
+      { name: 'torchvision', version: '0.29.1' },
+      { name: 'triton', version: '3.8.0' },
+    ], 'linux')).toEqual(['triton', 'torch', 'torchvision']);
+    expect(computeVendorPurge('amd', [{ name: 'torch', version: '2.14.1+cpu' }], 'linux')).toEqual([]);
+    expect(computeVendorPurge('nvidia', [{ name: 'torch', version: '2.14.1+cpu' }], 'linux')).toEqual(['torch', 'torchvision']);
+  });
+
+  it("purges vs_undistort's CUDA bindings off NVIDIA", () => {
+    expect(computeVendorPurge('amd', [
+      { name: 'cuda-python', version: '13.0.0' },
+      { name: 'cuda-bindings', version: '13.0.0' },
+      { name: 'vs-undistort', version: '2.3.1' },
+    ], 'win32')).toEqual(['cuda-python', 'cuda-bindings']);
   });
 
   it('returns nothing for an empty environment', () => {

@@ -20,7 +20,7 @@ import {
   VAPOURSYNTH_VERSION,
 } from './constants';
 import { readInstalledProjects, unmetRequirements } from './launchRequirements';
-import { getBackendsForVendor, getPypiPackages } from './vendorPackages';
+import { getBackendsForVendor, getNoDepsPackages, getPypiPackages } from './vendorPackages';
 import { syncInstalledScripts } from './scriptSync';
 import { downloadToFile } from './download';
 import { APP_OWNED_PLUGIN_ARCHIVES, shouldExtractBundledPluginArchives } from './bundledPluginArchives';
@@ -359,9 +359,13 @@ export class DependencyManager {
 
     const unmet = unmetRequirements(installed, getPypiPackages(vendor))
       .filter(requirement => requirement.project !== 'vapoursynth');
-    if (unmet.length === 0) return;
+    // Installed separately with --no-deps, as the plugin phase does.
+    const unmetNoDeps = unmetRequirements(installed, getNoDepsPackages(vendor));
+    if (unmet.length === 0 && unmetNoDeps.length === 0) return;
 
-    const specs = unmet.map(requirement => requirement.spec);
+    const resolvedSpecs = unmet.map(requirement => requirement.spec);
+    const noDepsSpecs = unmetNoDeps.map(requirement => requirement.spec);
+    const specs = [...resolvedSpecs, ...noDepsSpecs];
     const ledger = await readLedger();
     const lastFailure = ledger.packageFailure;
     if (lastFailure && Date.now() - Date.parse(lastFailure.at) < 24 * 60 * 60 * 1000
@@ -379,15 +383,22 @@ export class DependencyManager {
       message,
     });
 
+    const pipInstall = (extraArgs: string[], packages: string[]) => runCommand(PATHS.PYTHON, [
+      '-m', 'pip', 'install', '--no-warn-script-location',
+      '--cache-dir', PATHS.PIP_CACHE,
+      '--retries', '1', '--timeout', '15',
+      ...PYPI_EXTRA_INDEX_ARGS,
+      ...extraArgs,
+      ...packages,
+    ], undefined, undefined, { step: 'Installing packages this version needs' });
+
     try {
-      await runCommand(PATHS.PYTHON, [
-        '-m', 'pip', 'install', '--no-warn-script-location',
-        '--cache-dir', PATHS.PIP_CACHE,
-        '--retries', '1', '--timeout', '15',
-        ...PYPI_EXTRA_INDEX_ARGS,
-        VAPOURSYNTH_PIP_SPEC,
-        ...specs,
-      ], undefined, undefined, { step: 'Installing packages this version needs' });
+      if (resolvedSpecs.length > 0) {
+        await pipInstall([], [VAPOURSYNTH_PIP_SPEC, ...resolvedSpecs]);
+      }
+      if (noDepsSpecs.length > 0) {
+        await pipInstall(['--no-deps'], noDepsSpecs);
+      }
       report.packagesInstalled.push(...specs);
       delete ledger.packageFailure;
       logger.dependency(`Installed ${specs.join(', ')}`);

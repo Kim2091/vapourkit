@@ -63,17 +63,39 @@ export interface TorchInstall {
 /**
  * PyTorch is only needed by the bundled (non-PyPI) vs_deepdeinterlace and
  * vs_grainsynth scripts.
- * NVIDIA gets the CUDA wheels; every other vendor gets CPU wheels from the
- * default PyPI index — slow but importable, which keeps the bundled filter
- * templates working instead of silently breaking them.
+ * NVIDIA gets the CUDA wheels; every other vendor gets CPU wheels — slow but
+ * importable, which keeps the bundled filter templates working instead of
+ * silently breaking them. On Windows the default PyPI torch is the CPU build;
+ * on Linux it is the CUDA one, which drags in ~2 GB of nvidia-* and triton
+ * wheels, so Linux takes the CPU index explicitly.
  */
-export function getTorchInstall(vendor: GpuVendor): TorchInstall {
-  return {
-    packages: ['torch', 'torchvision'],
-    extraArgs: vendor === 'nvidia'
-      ? ['--index-url', 'https://download.pytorch.org/whl/cu130']
-      : [],
-  };
+export function getTorchInstall(vendor: GpuVendor, platform: NodeJS.Platform = process.platform): TorchInstall {
+  let extraArgs: string[] = [];
+  if (vendor === 'nvidia') {
+    extraArgs = ['--index-url', 'https://download.pytorch.org/whl/cu130'];
+  } else if (platform === 'linux') {
+    extraArgs = ['--index-url', 'https://download.pytorch.org/whl/cpu'];
+  }
+  return { packages: ['torch', 'torchvision'], extraArgs };
+}
+
+// 2.3.0 removed num_streams and 2.3.x carries the workaround for 50-series
+// GPUs on TensorRT 11.2: with bicubic on compute 12.x, 2.2.0 caps the build
+// workspace at 6GB and no tactic fits, so the engine never builds. A floor
+// rather than a bare name so an install still sitting on 2.2.0 is upgraded.
+const VS_UNDISTORT_SPEC = 'vs_undistort>=2.3.1';
+
+/**
+ * Packages installed with --no-deps for this vendor, after getPypiPackages.
+ *
+ * vs_undistort declares tensorrt-cu13 (a 3.8 GB wheel), cuda-python and
+ * vapoursynth-mlrt-trt as hard requirements, but imports them only inside its
+ * TensorRT backend. Off NVIDIA only the PyTorch backend can run, so its
+ * dependencies are left out: they filled a Linux AMD user's disk mid-install,
+ * and the vendor purge removes that stack on every reinstall anyway.
+ */
+export function getNoDepsPackages(vendor: GpuVendor): string[] {
+  return vendor === 'nvidia' ? [] : [VS_UNDISTORT_SPEC];
 }
 
 /**
@@ -105,11 +127,9 @@ export function getPypiPackages(vendor: GpuVendor): string[] {
     getVsJetpackSpec(vendor),
     `vsview[full]>=${VSVIEW_MIN_VERSION}`,
     'vs_temporalfix',
-    // 2.3.0 removed num_streams and 2.3.x carries the workaround for 50-series
-    // GPUs on TensorRT 11.2: with bicubic on compute 12.x, 2.2.0 caps the build
-    // workspace at 6GB and no tactic fits, so the engine never builds. A floor
-    // rather than a bare name so an install still sitting on 2.2.0 is upgraded.
-    'vs_undistort>=2.3.1',
+    // Off NVIDIA it is installed without its TensorRT dependencies instead;
+    // see getNoDepsPackages.
+    ...(isNvidia ? [VS_UNDISTORT_SPEC] : []),
     'vs_grain',
     // Only a .dev release exists on PyPI so far; a bare name would not match it
     'vs_tiletools>=1.0.0.dev0',
@@ -250,6 +270,10 @@ const NVIDIA_ONLY_PREFIXES: string[] = [
   'vapoursynth-vszipcu',
   'vapoursynth-nlm-cuda',
   'vapoursynth-dfttest2-cuda',
+  // cuda-python, cuda-bindings, cuda-pathfinder: vs_undistort's TensorRT path
+  'cuda-',
+  // Only the Linux CUDA torch wheel pulls this
+  'triton',
 ];
 
 /** ROCm/HIP plugin prefixes only an AMD install should carry. */
@@ -273,7 +297,11 @@ export interface InstalledPackage {
  * ort-cuda plugin folder wins the autoload race over plain ort, and the
  * CUDA/TensorRT stack is multi-GB of dead weight off NVIDIA.
  */
-export function computeVendorPurge(vendor: GpuVendor, installed: InstalledPackage[]): string[] {
+export function computeVendorPurge(
+  vendor: GpuVendor,
+  installed: InstalledPackage[],
+  platform: NodeJS.Platform = process.platform,
+): string[] {
   const prefixes: string[] = [];
   if (vendor !== 'nvidia') {
     prefixes.push(...NVIDIA_ONLY_PREFIXES);
@@ -298,11 +326,15 @@ export function computeVendorPurge(vendor: GpuVendor, installed: InstalledPackag
     }
   }
 
-  // Torch flavor rule: a +cuXXX local version on a non-NVIDIA machine (or a
-  // plain CPU wheel on an NVIDIA one) must be uninstalled before the correct
-  // flavor can be installed, because pip considers both to satisfy "torch".
+  // Torch flavor rule: a CUDA build on a non-NVIDIA machine (or a CPU build
+  // on an NVIDIA one) must be uninstalled before the correct flavor can be
+  // installed, because pip considers both to satisfy "torch". The CUDA index
+  // tags its wheels +cuXXX; on Linux the plain PyPI wheel is CUDA too, and
+  // only the CPU index's +cpu tag marks a CPU build there.
   const torch = installed.find(pkg => normalizePackageName(pkg.name) === 'torch');
-  if (torch && torch.version.includes('+cu') !== (vendor === 'nvidia')) {
+  const torchIsCuda = (version: string) => version.includes('+cu')
+    || (platform === 'linux' && !version.includes('+cpu'));
+  if (torch && torchIsCuda(torch.version) !== (vendor === 'nvidia')) {
     add('torch');
     add('torchvision');
   }
