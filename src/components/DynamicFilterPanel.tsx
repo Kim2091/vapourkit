@@ -10,7 +10,7 @@ import { notify } from '../utils/notifications';
 import { CreateLutCard, LoadLutCard } from './LutStepCards';
 import { StageSourceCard } from './StageSourceCard';
 import { LoadVideoCard } from './LoadVideoCard';
-import { chainOf, isSideChainHead, layoutChains, normalizeChainOrder, stepTag } from '../../electron/chainGraph';
+import { isSideChainHead, layoutChains, normalizeChainOrder, stepTag } from '../../electron/chainGraph';
 import type { LutJob } from '../hooks/useLutSteps';
 
 interface DynamicFilterPanelProps {
@@ -588,17 +588,42 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
   };
 
   /**
-   * Where a dragged step may land: beside another step of its own chain, or —
-   * for a Load Video — on another Load Video, which moves the whole side
-   * chain. Never into another chain by dragging; that would silently change
-   * which video a step works on.
+   * Where a dragged step may land. A step lands beside any other step and
+   * joins that step's chain, or on a Load Video to become the first step of
+   * its side chain: dragging is how a step moves into or out of a side chain,
+   * and the indent it lands in shows which video it now runs on. A Load Video
+   * lands only on another Load Video, moving its whole side chain.
    */
   const canDropOn = (sourceId: string | null, targetId: string): boolean => {
     const source = pendingFilters.find(f => f.id === sourceId);
     const target = pendingFilters.find(f => f.id === targetId);
     if (!source || !target) return true; // a drop from another section; the parent decides
     if (isSideChainHead(source)) return isSideChainHead(target);
-    return chainOf(source) === chainOf(target);
+    return true;
+  };
+
+  /** The chain a step dropped on `target` joins: a Load Video's own, or the target's. */
+  const chainAfterDrop = (target: Filter): string | undefined =>
+    isSideChainHead(target) ? target.id : target.chain;
+
+  /** Moves a step into a chain, keeping `chain` absent for the main one as saved workflows expect. */
+  const withChain = (step: Filter, chain: string | undefined): Filter => {
+    const { chain: _old, ...rest } = step;
+    void _old;
+    return chain ? { ...rest, chain } : rest;
+  };
+
+  /** Drops a step after the last step of a side chain: the zone under it while dragging. */
+  const handleDropAtChainEnd = (e: React.DragEvent, chainId: string) => {
+    e.preventDefault();
+    setDragOverId(null);
+    const dragged = pendingFilters.find(f => f.id === draggedId);
+    setDraggedId(null);
+    if (!dragged || isSideChainHead(dragged)) return;
+    const last = pendingFilters.filter(f => f.id === chainId || f.chain === chainId)
+      .reduce((max, f) => Math.max(max, f.order), -1);
+    setCollapsedChains(prev => { const next = new Set(prev); next.delete(chainId); return next; });
+    commitOrder(pendingFilters.map(f => f.id === dragged.id ? { ...withChain(f, chainId), order: last + 0.5 } : f));
   };
 
   const handleDragOver = (e: React.DragEvent, id: string) => {
@@ -644,7 +669,13 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
 
     const newFilters = [...pendingFilters];
     const [draggedFilter] = newFilters.splice(draggedIndex, 1);
-    newFilters.splice(targetIndex, 0, draggedFilter);
+    const target = pendingFilters[targetIndex];
+    // A step takes the chain of where it lands; a Load Video keeps its own.
+    const moved = isSideChainHead(draggedFilter) ? draggedFilter : withChain(draggedFilter, chainAfterDrop(target));
+    newFilters.splice(targetIndex, 0, moved);
+    if (isSideChainHead(target) && !isSideChainHead(draggedFilter)) {
+      setCollapsedChains(prev => { const next = new Set(prev); next.delete(target.id); return next; });
+    }
 
     // Update order property. A Load Video carries its side chain with it:
     // normalizing regroups each chain under its Load Video wherever it landed.
@@ -697,6 +728,62 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+
+  /**
+   * Under a side chain. Empty, it says how to fill it and offers the two
+   * adds. While a step is being dragged, every open side chain shows one, so
+   * there is somewhere to drop a step at the end of it.
+   */
+  const chainDropZone = (chainId: string, empty: boolean) => {
+    const dragging = draggedId !== null && !isSideChainHead(pendingFilters.find(f => f.id === draggedId) ?? ({} as Filter));
+    if (!empty && !dragging) return null;
+    const over = dragOverId === `end:${chainId}`;
+    const letter = stepTag(pendingFilters, chainId);
+    return (
+      <div
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverId(`end:${chainId}`); }}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDropAtChainEnd(e, chainId)}
+        className={`relative ml-7 mr-1.5 mb-1.5 h-7 px-2 rounded border border-dashed flex items-center gap-1.5 text-[11px] transition-colors ${
+          over ? 'border-chain-400 bg-chain-500/15 text-chain-200' : 'border-chain-700/70 text-ink-500'
+        }`}
+      >
+        <div className="absolute -left-3.5 -top-1.5 bottom-1/2 w-0.5 bg-chain-500/35 rounded-full" aria-hidden="true" />
+        {dragging ? (
+          <span>Drop to add to the end of side chain {letter}</span>
+        ) : (
+          <>
+            <span className="truncate">Drag steps here to run them on this video, or add</span>
+            <button
+              type="button"
+              onClick={() => handleAddCustomFilter(chainId)}
+              disabled={isProcessing}
+              className="text-chain-300 hover:text-chain-200 font-semibold flex-shrink-0 disabled:opacity-50"
+            >
+              VS Filter
+            </button>
+            <span className="text-ink-600">/</span>
+            <button
+              type="button"
+              onClick={() => handleAddAIModelFilter(chainId)}
+              disabled={isProcessing}
+              className="text-chain-300 hover:text-chain-200 font-semibold flex-shrink-0 disabled:opacity-50"
+            >
+              AI Model
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  /** The last row of each open side chain, which the drop zone follows. */
+  const zoneAfter = new Map<string, { chain: string; empty: boolean }>();
+  for (const chain of layout.side) {
+    if (collapsedChains.has(chain.id)) continue;
+    const last = chain.steps[chain.steps.length - 1];
+    zoneAfter.set(last?.id ?? chain.id, { chain: chain.id, empty: !last });
+  }
 
   return (
     <>
@@ -825,7 +912,9 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                   className={`relative m-1.5 rounded ${draggedId === filter.id ? 'opacity-40' : ''}`}
                 >
                   {dragOverId === filter.id && draggedId !== filter.id && (
-                    <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-chain-400 rounded-full z-10" />
+                    isSideChainHead(pendingFilters.find(f => f.id === draggedId) ?? ({} as Filter))
+                      ? <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-chain-400 rounded-full z-10" />
+                      : <div className="absolute inset-0 rounded ring-2 ring-chain-400 pointer-events-none z-10" />
                   )}
                   <LoadVideoCard
                     filter={filter}
@@ -839,11 +928,6 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                     onRename={(name) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, preset: name } : f))}
                     onPickVideo={() => window.electronAPI.selectReferenceVideo()}
                     onChooseVideo={(path) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, sourcePath: path } : f))}
-                    onAddStep={(kind) => {
-                      // Unfolded, so the step just added is visible.
-                      setCollapsedChains(prev => { const next = new Set(prev); next.delete(filter.id); return next; });
-                      if (kind === 'aiModel') handleAddAIModelFilter(filter.id); else handleAddCustomFilter(filter.id);
-                    }}
                     dragProps={{
                       draggable: !isProcessing,
                       onDragStart: (e) => handleDragStart(e, filter.id),
@@ -851,6 +935,7 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                     }}
                   />
                 </div>
+                {zoneAfter.get(filter.id) && chainDropZone(zoneAfter.get(filter.id)!.chain, zoneAfter.get(filter.id)!.empty)}
               </Fragment>
             );
           }
@@ -1391,6 +1476,7 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                 )}
               </div>
             </div>
+            {zoneAfter.get(filter.id) && chainDropZone(zoneAfter.get(filter.id)!.chain, zoneAfter.get(filter.id)!.empty)}
             </Fragment>
           );
         })}

@@ -3,15 +3,16 @@
 // A Load Video is not a filter: it opens a second video, and the steps under
 // it run on that video instead of the main one (electron/chainGraph.ts). Its
 // row is the same height as any step's, and everything it has to say fits on
-// it: which video, how many steps hang off it, and a + to add another. The
-// file's full path lives in tooltips, and opening the row adds one line —
-// rename, or change the video — rather than a card of its own.
+// it: which video and how many steps hang off it. Steps get in and out of
+// the chain by dragging (DynamicFilterPanel). The file's full path lives in
+// tooltips, and opening the row adds one line — rename, or change the video —
+// rather than a card of its own.
 //
 // Its colour is the side chain's own (chain-*, a periwinkle), never the teal
 // accent and never a state colour: being a side chain is not a condition.
 
-import { memo, useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Film, FolderOpen, GripVertical, Plus, Sparkles, Filter as LucideFilter, X } from 'lucide-react';
+import { memo, useState } from 'react';
+import { ChevronDown, ChevronRight, Film, FolderOpen, GripVertical, X } from 'lucide-react';
 import type { Filter } from '../electron.d';
 
 interface LoadVideoCardProps {
@@ -28,7 +29,6 @@ interface LoadVideoCardProps {
   onRename: (name: string) => void;
   onPickVideo: () => Promise<string | null>;
   onChooseVideo: (path: string) => void;
-  onAddStep: (kind: 'custom' | 'aiModel') => void;
   dragProps: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
 }
 
@@ -37,26 +37,14 @@ const fileName = (path: string) => path.split(/[\\/]/).pop() || path;
 const ICON_BUTTON = 'p-1 rounded flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 
 export const LoadVideoCard = memo<LoadVideoCardProps>(({
-  filter, tag, stepCount, folded, disabled, onFold, onToggle, onRemove, onRename, onPickVideo, onChooseVideo, onAddStep, dragProps,
+  filter, tag, stepCount, folded, disabled, onFold, onToggle, onRemove, onRename, onPickVideo, onChooseVideo, dragProps,
 }) => {
   const [open, setOpen] = useState(false);
-  const [adding, setAdding] = useState(false);
   // Typed as a draft and committed on blur or Enter, so the script is not
   // regenerated around every keystroke.
   const [draft, setDraft] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const named = filter.preset && filter.preset !== 'Load Video' ? filter.preset : '';
   const title = named || (filter.sourcePath ? fileName(filter.sourcePath) : 'Load Video');
-
-  // The add menu closes on any click outside it, like the panel's own.
-  useEffect(() => {
-    if (!adding) return;
-    const close = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setAdding(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [adding]);
 
   const commitName = () => {
     if (draft === null) return;
@@ -68,11 +56,6 @@ export const LoadVideoCard = memo<LoadVideoCardProps>(({
   const pick = async () => {
     const path = await onPickVideo();
     if (path) onChooseVideo(path);
-  };
-
-  const add = (kind: 'custom' | 'aiModel') => {
-    setAdding(false);
-    onAddStep(kind);
   };
 
   return (
@@ -113,42 +96,6 @@ export const LoadVideoCard = memo<LoadVideoCardProps>(({
             {stepCount === 0 ? 'no steps' : `${stepCount} step${stepCount === 1 ? '' : 's'}`}
           </span>
         </button>
-
-        <div className="relative flex-shrink-0" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setAdding(!adding)}
-            disabled={disabled}
-            className={`${ICON_BUTTON} ${adding ? 'text-chain-200 bg-chain-500/20' : 'text-chain-300 hover:text-chain-200 hover:bg-chain-500/15'}`}
-            title={`Add a step to side chain ${tag}`}
-            aria-haspopup="menu"
-            aria-expanded={adding}
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-          {adding && (
-            <div role="menu" className="absolute right-0 top-full mt-1 bg-ink-850 border border-ink-750 rounded-lg shadow-xl shadow-black/50 z-50 min-w-[150px] overflow-hidden">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => add('aiModel')}
-                className="w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200 border-b border-ink-800"
-              >
-                <Sparkles className="w-4 h-4 text-accent-400" />
-                AI Model
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => add('custom')}
-                className="w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200"
-              >
-                <LucideFilter className="w-4 h-4 text-ink-400" />
-                VS Filter
-              </button>
-            </div>
-          )}
-        </div>
 
         <button
           type="button"
