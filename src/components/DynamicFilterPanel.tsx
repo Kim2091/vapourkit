@@ -688,43 +688,15 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
     }
   };
 
-  // Side chains in the rail: where the "Main chain" label goes, and which
-  // row each open side chain's add footer follows.
+  // Side chains in the rail: where the "Main chain" label goes.
   const layout = layoutChains(pendingFilters);
   const hasSideChains = layout.side.length > 0;
   const firstMainId = layout.main.steps[0]?.id;
-  const footerAfter = new Map<string, string>();
-  for (const chain of layout.side) {
-    if (!collapsedChains.has(chain.id)) footerAfter.set(chain.steps[chain.steps.length - 1]?.id ?? chain.id, chain.id);
-  }
   const toggleChainFold = (id: string) => setCollapsedChains(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
-
-  /** Under an open side chain: add a step to it rather than to the main chain. */
-  const chainFooter = (chainId: string) => (
-    <div className="ml-7 mr-1.5 mb-1.5 flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => handleAddCustomFilter(chainId)}
-        disabled={isProcessing}
-        className="h-6 px-2 rounded border border-dashed border-chain-600/60 text-chain-300 hover:bg-chain-500/10 text-[11px] inline-flex items-center gap-1 disabled:opacity-50"
-      >
-        <Plus className="w-3 h-3" /> VS Filter
-      </button>
-      <button
-        type="button"
-        onClick={() => handleAddAIModelFilter(chainId)}
-        disabled={isProcessing}
-        className="h-6 px-2 rounded border border-dashed border-chain-600/60 text-chain-300 hover:bg-chain-500/10 text-[11px] inline-flex items-center gap-1 disabled:opacity-50"
-      >
-        <Plus className="w-3 h-3" /> AI Model
-      </button>
-      <span className="text-[10.5px] text-ink-600">to side chain {stepTag(pendingFilters, chainId)}</span>
-    </div>
-  );
 
   return (
     <>
@@ -836,9 +808,8 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
           // A folded side chain shows its Load Video and nothing below it.
           if (inSide && collapsedChains.has(filter.chain!)) return null;
           const tag = stepTag(pendingFilters, filter.id) || String(index + 1);
-          const footerChain = footerAfter.get(filter.id);
           const mainLabel = hasSideChains && filter.id === firstMainId && (
-            <div className="mx-1.5 mt-2.5 mb-0.5 text-[10px] font-display font-semibold uppercase tracking-[0.08em] text-ink-500">
+            <div className="mx-2 mt-2 -mb-0.5 text-[10px] font-display font-semibold uppercase tracking-[0.08em] text-ink-500">
               Main chain
             </div>
           );
@@ -868,6 +839,11 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                     onRename={(name) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, preset: name } : f))}
                     onPickVideo={() => window.electronAPI.selectReferenceVideo()}
                     onChooseVideo={(path) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, sourcePath: path } : f))}
+                    onAddStep={(kind) => {
+                      // Unfolded, so the step just added is visible.
+                      setCollapsedChains(prev => { const next = new Set(prev); next.delete(filter.id); return next; });
+                      if (kind === 'aiModel') handleAddAIModelFilter(filter.id); else handleAddCustomFilter(filter.id);
+                    }}
                     dragProps={{
                       draggable: !isProcessing,
                       onDragStart: (e) => handleDragStart(e, filter.id),
@@ -875,7 +851,6 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                     }}
                   />
                 </div>
-                {footerChain && chainFooter(footerChain)}
               </Fragment>
             );
           }
@@ -1416,7 +1391,6 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                 )}
               </div>
             </div>
-            {footerChain && chainFooter(footerChain)}
             </Fragment>
           );
         })}

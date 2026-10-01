@@ -1,20 +1,18 @@
 // src/components/LoadVideoCard.tsx — the row that starts a side chain.
 //
 // A Load Video is not a filter: it opens a second video, and the steps under
-// it run on that video instead of the main one (electron/chainGraph.ts). So
-// its row says the two things that matter and nothing else — which file, and
-// how many steps hang off it — and folds the chain shut, since a reference
-// that has been lined up is something you stop looking at.
+// it run on that video instead of the main one (electron/chainGraph.ts). Its
+// row is the same height as any step's, and everything it has to say fits on
+// it: which video, how many steps hang off it, and a + to add another. The
+// file's full path lives in tooltips, and opening the row adds one line —
+// rename, or change the video — rather than a card of its own.
 //
 // Its colour is the side chain's own (chain-*, a periwinkle), never the teal
 // accent and never a state colour: being a side chain is not a condition.
 
-import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight, Film, FolderOpen, GripVertical, X } from 'lucide-react';
+import { memo, useEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Film, FolderOpen, GripVertical, Plus, Sparkles, Filter as LucideFilter, X } from 'lucide-react';
 import type { Filter } from '../electron.d';
-
-const HEADING = 'block text-[10px] font-display font-semibold uppercase tracking-[0.07em] text-ink-500';
-const PROSE = 'text-[10.5px] leading-snug';
 
 interface LoadVideoCardProps {
   filter: Filter;
@@ -30,20 +28,35 @@ interface LoadVideoCardProps {
   onRename: (name: string) => void;
   onPickVideo: () => Promise<string | null>;
   onChooseVideo: (path: string) => void;
+  onAddStep: (kind: 'custom' | 'aiModel') => void;
   dragProps: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
 }
 
 const fileName = (path: string) => path.split(/[\\/]/).pop() || path;
 
+const ICON_BUTTON = 'p-1 rounded flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
 export const LoadVideoCard = memo<LoadVideoCardProps>(({
-  filter, tag, stepCount, folded, disabled, onFold, onToggle, onRemove, onRename, onPickVideo, onChooseVideo, dragProps,
+  filter, tag, stepCount, folded, disabled, onFold, onToggle, onRemove, onRename, onPickVideo, onChooseVideo, onAddStep, dragProps,
 }) => {
   const [open, setOpen] = useState(false);
-  // Typed as a draft and committed on blur or Enter, like the reference
-  // offset, so the script is not regenerated around every keystroke.
+  const [adding, setAdding] = useState(false);
+  // Typed as a draft and committed on blur or Enter, so the script is not
+  // regenerated around every keystroke.
   const [draft, setDraft] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const named = filter.preset && filter.preset !== 'Load Video' ? filter.preset : '';
   const title = named || (filter.sourcePath ? fileName(filter.sourcePath) : 'Load Video');
+
+  // The add menu closes on any click outside it, like the panel's own.
+  useEffect(() => {
+    if (!adding) return;
+    const close = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setAdding(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [adding]);
 
   const commitName = () => {
     if (draft === null) return;
@@ -55,6 +68,11 @@ export const LoadVideoCard = memo<LoadVideoCardProps>(({
   const pick = async () => {
     const path = await onPickVideo();
     if (path) onChooseVideo(path);
+  };
+
+  const add = (kind: 'custom' | 'aiModel') => {
+    setAdding(false);
+    onAddStep(kind);
   };
 
   return (
@@ -70,7 +88,7 @@ export const LoadVideoCard = memo<LoadVideoCardProps>(({
         <button
           type="button"
           onClick={onFold}
-          title={folded ? 'Show this side chain\'s steps' : 'Fold this side chain shut'}
+          title={folded ? 'Show this side chain\'s steps' : 'Fold this side chain\'s steps away'}
           aria-expanded={!folded}
           className="flex-shrink-0 w-5 h-5 rounded bg-chain-500/20 border border-chain-500/45 flex items-center justify-center text-chain-300 hover:bg-chain-500/30 transition-colors"
         >
@@ -87,23 +105,56 @@ export const LoadVideoCard = memo<LoadVideoCardProps>(({
           type="button"
           onClick={() => filter.enabled && setOpen(!open)}
           disabled={!filter.enabled}
-          className="flex-1 flex items-center gap-2 text-left min-w-0 hover:opacity-80 transition-opacity disabled:opacity-50"
-          title={filter.sourcePath}
+          className="flex-1 flex items-baseline gap-2 text-left min-w-0 hover:opacity-80 transition-opacity disabled:opacity-50"
+          title={filter.sourcePath ? `Side chain on ${filter.sourcePath}` : 'Side chain'}
         >
-          <span className="flex flex-col min-w-0">
-            <span className="text-[12.5px] font-medium truncate text-ink-100">{title}</span>
-            <span className="text-[10.5px] text-chain-300/80 truncate">
-              Side chain · {stepCount === 0 ? 'no steps yet' : `${stepCount} step${stepCount === 1 ? '' : 's'}`}
-              {folded && stepCount > 0 ? ' (folded)' : ''}
-            </span>
+          <span className="text-[12.5px] font-medium truncate text-ink-100">{title}</span>
+          <span className="text-[11px] text-chain-300/70 flex-shrink-0 tabular-nums">
+            {stepCount === 0 ? 'no steps' : `${stepCount} step${stepCount === 1 ? '' : 's'}`}
           </span>
         </button>
+
+        <div className="relative flex-shrink-0" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setAdding(!adding)}
+            disabled={disabled}
+            className={`${ICON_BUTTON} ${adding ? 'text-chain-200 bg-chain-500/20' : 'text-chain-300 hover:text-chain-200 hover:bg-chain-500/15'}`}
+            title={`Add a step to side chain ${tag}`}
+            aria-haspopup="menu"
+            aria-expanded={adding}
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          {adding && (
+            <div role="menu" className="absolute right-0 top-full mt-1 bg-ink-850 border border-ink-750 rounded-lg shadow-xl shadow-black/50 z-50 min-w-[150px] overflow-hidden">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => add('aiModel')}
+                className="w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200 border-b border-ink-800"
+              >
+                <Sparkles className="w-4 h-4 text-accent-400" />
+                AI Model
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => add('custom')}
+                className="w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-800 transition-colors flex items-center gap-2 text-ink-200"
+              >
+                <LucideFilter className="w-4 h-4 text-ink-400" />
+                VS Filter
+              </button>
+            </div>
+          )}
+        </div>
 
         <button
           type="button"
           onClick={onFold}
-          className="text-ink-400 hover:text-chain-300 p-1 rounded flex-shrink-0"
-          title={folded ? 'Show steps' : 'Fold steps'}
+          className={`${ICON_BUTTON} text-ink-400 hover:text-chain-300`}
+          title={folded ? 'Show steps' : 'Fold steps away'}
         >
           {folded ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
@@ -121,7 +172,7 @@ export const LoadVideoCard = memo<LoadVideoCardProps>(({
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="text-bad-400 hover:text-bad-300 hover:bg-bad-900/30 p-1 rounded transition-all disabled:opacity-50 flex-shrink-0"
+          className={`${ICON_BUTTON} text-bad-400 hover:text-bad-300 hover:bg-bad-900/30`}
           title={stepCount > 0 ? `Remove this side chain and its ${stepCount} step${stepCount === 1 ? '' : 's'}` : 'Remove this side chain'}
         >
           <X className="w-4 h-4" />
@@ -129,42 +180,28 @@ export const LoadVideoCard = memo<LoadVideoCardProps>(({
       </div>
 
       {filter.enabled && open && (
-        <div className="px-3 pb-2.5 pt-2.5 space-y-2 border-t border-chain-800">
-          <div className="flex gap-1.5">
-            <div
-              className="flex-1 min-w-0 h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12px] text-ink-300 flex items-center"
-              title={filter.sourcePath}
-            >
-              <span className="truncate">{filter.sourcePath || 'No video chosen'}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => { void pick(); }}
-              disabled={disabled}
-              title="Choose a different video"
-              className="h-7 px-2 rounded border border-chain-600/60 bg-chain-500/10 text-chain-300 hover:bg-chain-500/20 text-[11.5px] font-semibold inline-flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-              Change
-            </button>
-          </div>
-          <label className="flex items-center gap-2">
-            <span className={`${HEADING} flex-shrink-0`}>Name</span>
-            <input
-              type="text"
-              value={draft ?? named}
-              placeholder={filter.sourcePath ? fileName(filter.sourcePath) : 'Side chain'}
-              disabled={disabled}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commitName}
-              onKeyDown={(e) => { if (e.key === 'Enter') commitName(); }}
-              className="h-6 flex-1 min-w-0 rounded border border-ink-700 bg-ink-850 px-1.5 text-[11px] text-ink-200 focus:outline-none focus:border-chain-500 disabled:opacity-50"
-            />
-          </label>
-          <p className={`${PROSE} text-ink-500`}>
-            Steps added to this side chain run on this video, not the main one. A step in the main
-            chain can read the result, like Guided Color Fix's “Match the colour of”.
-          </p>
+        <div className="px-3 py-2 border-t border-chain-800 flex items-center gap-1.5">
+          <input
+            type="text"
+            aria-label="Side chain name"
+            value={draft ?? named}
+            placeholder={filter.sourcePath ? fileName(filter.sourcePath) : 'Side chain'}
+            disabled={disabled}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitName(); }}
+            title="Name this side chain; empty uses the file name"
+            className="h-7 flex-1 min-w-0 rounded border border-ink-700 bg-ink-850 px-2 text-[12px] text-ink-200 focus:outline-none focus:border-chain-500 disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={() => { void pick(); }}
+            disabled={disabled}
+            title={filter.sourcePath ? `Change the video (now ${filter.sourcePath})` : 'Choose the video'}
+            className="h-7 w-7 grid place-items-center rounded border border-chain-600/60 bg-chain-500/10 text-chain-300 hover:bg-chain-500/20 flex-shrink-0 disabled:opacity-50"
+          >
+            <FolderOpen className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>
