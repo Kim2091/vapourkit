@@ -106,6 +106,23 @@ function App() {
   // Setup and initialization hooks
   const { consoleOutput, consoleEndRef, addConsoleLog } = useConsoleLog();
   const { isSetupComplete, isCheckingDeps, hasCudaSupport, recommendedBackend, setupProgress, isSettingUp, handleSetup, pluginInstallError, setupError, setupWarnings, handleRetryPlugins, handleContinueWithoutPlugins } = useSetup(addConsoleLog);
+
+  // An NVIDIA driver too old for the bundled FFmpeg's NVENC fails every NVENC
+  // encode before its first frame, so say so at launch. Raised once the main
+  // screen is up: the notification container only mounts with it.
+  const nvencCheckedRef = useRef(false);
+  useEffect(() => {
+    if (nvencCheckedRef.current || isCheckingDeps || !isSetupComplete) return;
+    nvencCheckedRef.current = true;
+    window.electronAPI.getNvencDriverProblem()
+      .then(problem => {
+        if (problem) {
+          addConsoleLog(problem);
+          notify.warning('NVIDIA Driver Too Old for NVENC', problem);
+        }
+      })
+      .catch(() => { /* the check is advisory */ });
+  }, [isCheckingDeps, isSetupComplete, addConsoleLog]);
   const { defaultBackend, setDefaultBackend, numStreams, updateNumStreams, showBackendOverrides, setShowBackendOverrides } = useSettings(recommendedBackend);
   const { privacyMode, togglePrivacyMode } = usePrivacyMode();
   const {

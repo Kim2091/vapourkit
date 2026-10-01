@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('./logger', () => ({
   logger: {
     error: vi.fn(),
+    warn: vi.fn(),
     getLogPath: () => '/mock/log/path.log',
   },
 }));
@@ -81,3 +82,33 @@ describe('ErrorMessageHandler.formatUserErrorMessage', () => {
     expect(result).toContain('/mock/log/path.log');
   });
 });
+
+describe('ErrorMessageHandler.extractErrorMessage: noise and NVENC', () => {
+  const api3 = (dll: string) =>
+    `Warning: Plugin c:\program files\vapourkit\data\vapoursynth-portable\Lib\site-packages\vapoursynth\plugins\${dll} is using API3 which is deprecated and will be removed shortly.`;
+
+  it('never reports the API3 autoload notices as the error', () => {
+    const stderr = [api3('vsncnn.dll'), api3('vsnlm_cuda.dll'), api3('wnnm.dll'), ''].join('\r\n');
+    const result = ErrorMessageHandler.extractErrorMessage(stderr);
+    expect(result).not.toContain('API3');
+    expect(result).toContain('stopped without printing an error');
+  });
+
+  it('finds the real error behind the notices', () => {
+    const stderr = [api3('vsncnn.dll'), 'Script evaluation failed:', 'Python exception: No module named vsmlrt'].join('\n');
+    expect(ErrorMessageHandler.extractErrorMessage(stderr)).not.toContain('API3');
+  });
+
+  it('explains an NVIDIA driver too old for NVENC instead of "Output file is empty"', () => {
+    const stderr = [
+      '[h264_nvenc @ 000002bc1db72000] Driver does not support the required nvenc API version. Required: 13.1 Found: 13.0',
+      '[h264_nvenc @ 000002bc1db72000] The minimum required Nvidia driver for nvenc is 610.00 or newer',
+      '[out#1/image2pipe @ 000002bc1c0f7300] Output file is empty, nothing was encoded',
+      'Conversion failed!',
+    ].join('\r\n');
+    const result = ErrorMessageHandler.extractErrorMessage(stderr);
+    expect(result).toContain('NVIDIA driver is too old');
+    expect(result).toContain('610 or newer');
+  });
+});
+

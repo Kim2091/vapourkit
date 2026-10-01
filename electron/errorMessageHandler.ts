@@ -1,6 +1,8 @@
 // electron/errorMessageHandler.ts
 import { logger } from './logger';
 import { API3_UNSUPPORTED, describeCoreTooNew } from './vapoursynthCore';
+import { stripPluginLoadWarnings } from './vapourSynthErrorFormatter';
+import { describeNvencDriverError, parseNvencDriverError } from './nvencCheck';
 
 /**
  * Utility class for handling and formatting error messages from subprocess output
@@ -30,6 +32,20 @@ export class ErrorMessageHandler {
     // which names the wrong cause; see vapoursynthPin.ts.
     if (API3_UNSUPPORTED.test(stderr)) {
       return describeCoreTooNew();
+    }
+
+    // ffmpeg's NVENC refusing an old driver ends in "Output file is empty",
+    // which names no cause at all; see nvencCheck.ts.
+    const nvenc = parseNvencDriverError(stderr);
+    if (nvenc) {
+      return describeNvencDriverError(nvenc);
+    }
+
+    // The API3 autoload notices are never the error, and with nothing else
+    // printed they were all the "last lines" fallback below had to show.
+    stderr = stripPluginLoadWarnings(stderr);
+    if (!stderr) {
+      return 'VapourSynth stopped without printing an error. The log has its full output.';
     }
 
     // Common error patterns to look for (in order of priority)

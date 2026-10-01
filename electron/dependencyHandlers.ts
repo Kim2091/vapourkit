@@ -6,6 +6,8 @@ import { detectGpuVendor } from './gpuDetection';
 import { getBackendsForVendor } from './vendorPackages';
 import { createIpcHandler } from './ipcUtilities';
 import { DependencyManager } from './dependencyManager';
+import { FFmpegManager } from './ffmpegManager';
+import { describeNvencDriverError, probeNvencDriver } from './nvencCheck';
 import { PluginInstaller } from './pluginInstaller';
 import { describeInstallFailure, failureResult, SingleFlight, type InstallResult } from './installFlow';
 
@@ -19,6 +21,23 @@ export function registerDependencyHandlers(
   dependencyManager: DependencyManager,
   pluginInstaller: PluginInstaller
 ) {
+  // Whether this NVIDIA driver can run the bundled FFmpeg's NVENC encoders.
+  // A one-frame test encode, once per launch and only on NVIDIA machines;
+  // null when NVENC works or there is nothing useful to say (nvencCheck.ts).
+  let nvencCheck: Promise<string | null> | null = null;
+  ipcMain.handle('get-nvenc-driver-problem', () => {
+    nvencCheck ??= (async () => {
+      const ffmpegPath = FFmpegManager.getFFmpegPath();
+      if (configManager.getGpuVendor() !== 'nvidia' || !ffmpegPath) return null;
+      const problem = await probeNvencDriver(ffmpegPath);
+      return problem ? describeNvencDriverError(problem) : null;
+    })().catch(error => {
+      logger.warn('NVENC driver check failed:', error);
+      return null;
+    });
+    return nvencCheck;
+  });
+
   ipcMain.handle('check-dependencies', 
     createIpcHandler(
       'check-dependencies',

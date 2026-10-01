@@ -45,6 +45,14 @@ export class UpscaleExecutor {
   private ffmpegProcess: ChildProcess | null = null;
   private vsInfoExtractor: VapourSynthInfoExtractor;
   private isCanceling: boolean = false;
+  /**
+   * Processes this executor stopped itself (cancel, kill, a new run replacing
+   * this one). Their exit is not an error: on Windows a terminated process
+   * exits with code 1, and kill() had already cleared isCanceling by the time
+   * that close event arrived, so a stopped run reported a "VapourSynth Error"
+   * made of whatever it had printed - API3 notices - over the run replacing it.
+   */
+  private stoppedByApp = new WeakSet<ChildProcess>();
   private gpuPollInterval: ReturnType<typeof setInterval> | null = null;
   private latestGpuStats: GpuStats | null = null;
 
@@ -649,8 +657,15 @@ export class UpscaleExecutor {
     vspipe.on('close', (code) => {
       buildTracker.reset();
       logger.upscale(`vspipe exited with code ${code}`);
-      this.process = null; // Clear reference on exit
-      
+      if (this.process === vspipe) this.process = null; // Clear reference on exit
+
+      // A cancel lets ffmpeg finish what it has, and its close settles the
+      // run; a kill stops ffmpeg too, whose close settles it the same way.
+      if (this.stoppedByApp.has(vspipe)) {
+        logger.upscale('vspipe was stopped by the app; not an error');
+        return;
+      }
+
       if (code !== 0 && code !== null) {
         // Kill ffmpeg process since vspipe failed
         if (ffmpeg && !ffmpeg.killed) {
@@ -681,8 +696,15 @@ export class UpscaleExecutor {
     ffmpeg.on('close', (code) => {
       buildTracker.reset();
       logger.upscale(`ffmpeg exited with code ${code}`);
-      this.ffmpegProcess = null; // Clear reference on exit
+      if (this.ffmpegProcess === ffmpeg) this.ffmpegProcess = null; // Clear reference on exit
       this.stopGpuPolling();
+
+      // Killed by the app: settle quietly, without an error event or dialog
+      if (code !== 0 && this.stoppedByApp.has(ffmpeg)) {
+        logger.upscale('ffmpeg was stopped by the app; not an error');
+        reject(new Error('Processing was stopped'));
+        return;
+      }
 
       if (code === 0) {
         if (benchmarkMode) {
@@ -704,7 +726,15 @@ export class UpscaleExecutor {
         resolve();
       } else {
         logger.separator();
-        
+
+        // vspipe has nowhere to write now, and was left blocked on the dead
+        // pipe until the next run killed it; that exit is not a second error
+        if (this.process === vspipe) {
+          this.stoppedByApp.add(vspipe);
+          terminateProcessTree(vspipe);
+          this.process = null;
+        }
+
         // Extract actual error from stderr
         const actualError = ErrorMessageHandler.extractErrorMessage(ffmpegStderrBuffer);
         const errorMsg = ErrorMessageHandler.formatUserErrorMessage('FFmpeg Error', actualError);
@@ -762,6 +792,7 @@ export class UpscaleExecutor {
     
     // Step 2: Kill vspipe to stop new frames from being generated
     if (vspipeProcess) {
+      this.stoppedByApp.add(vspipeProcess);
       logger.upscale('Stopping vspipe process (no new frames)');
       terminateProcessTree(vspipeProcess, 'SIGTERM');
       
@@ -791,6 +822,7 @@ export class UpscaleExecutor {
       const ffmpegTimeout = setTimeout(() => {
         if (ffmpegProcess && !ffmpegProcess.killed) {
           logger.upscale('FFmpeg did not finish in time, force killing');
+          this.stoppedByApp.add(ffmpegProcess);
           terminateProcessTree(ffmpegProcess);
         }
       }, 10000); // 10 second grace period for encoding
@@ -827,12 +859,14 @@ export class UpscaleExecutor {
 
     if (this.process) {
       logger.upscale('Force killing vspipe');
+      this.stoppedByApp.add(this.process);
       terminateProcessTree(this.process);
       this.process = null;
     }
 
     if (this.ffmpegProcess) {
       logger.upscale('Force killing ffmpeg');
+      this.stoppedByApp.add(this.ffmpegProcess);
       terminateProcessTree(this.ffmpegProcess);
       this.ffmpegProcess = null;
     }

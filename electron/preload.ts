@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Dependency management
   platform: process.platform,
   checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
+  getNvencDriverProblem: () => ipcRenderer.invoke('get-nvenc-driver-problem'),
   detectCudaSupport: () => ipcRenderer.invoke('detect-cuda-support'),
   getInferenceBackendInfo: () => ipcRenderer.invoke('get-inference-backend-info'),
   getGpuStats: () => ipcRenderer.invoke('get-gpu-stats'),

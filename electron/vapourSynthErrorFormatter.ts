@@ -13,17 +13,27 @@ const API3_PLUGIN_UNSUPPORTED_LINE =
   /^(Warning|Critical):\s+Plugin\s+.+?\s+uses API 3, which is no longer supported\.\s*$/i;
 
 /**
- * Removes known non-fatal VapourSynth plugin startup warnings from an error
- * presented to the user. All other warnings, output, and tracebacks remain.
- * A core past the pin gets its explanation first.
+ * Removes the per-plugin API3 notices VapourSynth prints at autoload, leaving
+ * every other line. Every path that turns vspipe output into a message uses
+ * it: on an install with a dozen API3 plugins they are all a failed run
+ * prints, and they pushed the real error out of view.
  */
-export function formatVapourSynthValidationError(output: string): string {
-  const filtered = output
+export function stripPluginLoadWarnings(output: string): string {
+  return output
     .split(/\r?\n/)
     .filter(line => !API3_PLUGIN_DEPRECATION_WARNING.test(line) && !API3_PLUGIN_UNSUPPORTED_LINE.test(line))
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * Removes known non-fatal VapourSynth plugin startup warnings from an error
+ * presented to the user. All other warnings, output, and tracebacks remain.
+ * A core past the pin gets its explanation first.
+ */
+export function formatVapourSynthValidationError(output: string): string {
+  const filtered = stripPluginLoadWarnings(output);
 
   if (API3_UNSUPPORTED.test(output)) {
     return filtered ? `${describeCoreTooNew()}\n\n${filtered}` : describeCoreTooNew();

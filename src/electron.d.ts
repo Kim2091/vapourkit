@@ -28,6 +28,8 @@ export interface ElectronAPI {
   // Dependency management
   platform: NodeJS.Platform;
   checkDependencies: () => Promise<boolean>;
+  /** Why NVENC encoding cannot work on this NVIDIA driver, or null */
+  getNvencDriverProblem: () => Promise<string | null>;
   setupDependencies: () => Promise<InstallResult & { phase?: 'core' | 'plugins' }>;
   onSetupProgress: (callback: (progress: SetupProgress) => void) => () => void;
   detectCudaSupport: () => Promise<boolean>;
