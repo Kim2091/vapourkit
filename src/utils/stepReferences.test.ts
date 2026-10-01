@@ -49,4 +49,9 @@ describe('carrying a reference across new ids', () => {
     const [, same] = remapStepReferences([filter('a', { source_id: 'old-1' }), untouched], moved);
     expect(same).toBe(untouched);
   });
+
+  it('moves a side chain step onto the new id of its Load Video', () => {
+    const [step] = remapStepReferences([{ ...filter('new-9'), chain: 'old-1' }], moved);
+    expect(step.chain).toBe('new-1');
+  });
 });

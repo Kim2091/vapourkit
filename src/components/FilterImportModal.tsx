@@ -22,7 +22,7 @@ interface FilterImportModalProps {
     name: string;
     code: string;
     description?: string;
-    filterType: 'aiModel' | 'custom';
+    filterType: 'aiModel' | 'custom' | 'videoSource';
     category?: string | string[];
     parameters?: FilterParameterValues;
     variables?: FilterVariables;
@@ -67,7 +67,7 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
   useEffect(() => {
     if (isOpen) {
       // Filter out AI model filters and initialize with default names
-      const customFilters = filters.filter(f => f.filterType !== 'aiModel');
+      const customFilters = filters.filter(f => f.filterType === 'custom');
       setImportItems(
         customFilters.map(filter => ({
           originalName: filter.name,

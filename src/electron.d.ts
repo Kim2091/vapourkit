@@ -645,10 +645,15 @@ export interface UpscaleResult {
 export interface Filter {
   id: string;
   enabled: boolean;
-  filterType: 'aiModel' | 'custom';
+  /** 'videoSource' is a Load Video step, which heads a side chain (electron/chainGraph.ts). */
+  filterType: 'aiModel' | 'custom' | 'videoSource';
   preset: string;
   code: string;
   order: number;
+  /** A Load Video step's file. */
+  sourcePath?: string;
+  /** The Load Video step whose side chain this step is in; absent for the main chain. */
+  chain?: string;
   modelPath?: string;
   modelType?: 'vsr' | 'image';
   category?: string | string[];
@@ -848,7 +853,11 @@ export interface WorkflowData {
     description?: string;
     enabled: boolean;
     order: number;
-    filterType: 'aiModel' | 'custom';
+    filterType: 'aiModel' | 'custom' | 'videoSource';
+    /** A Load Video step's file. Absolute, so a workflow moved to another machine names it as it was. */
+    sourcePath?: string;
+    /** The exported id of the Load Video step heading this step's side chain. */
+    chain?: string;
     modelPath?: string;
     modelType?: 'vsr' | 'image';
     category?: string | string[];

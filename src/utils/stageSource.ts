@@ -17,22 +17,22 @@
 // to find out.
 
 import { stepLabel } from '../hooks/useChainPreview';
-import { stepNumber } from './lutSteps';
 import type { Filter } from '../electron.d';
-import { parseReferenceVideo, type ReferenceVideo } from '../../electron/referenceVideo';
+import type { ReferenceVideo } from '../../electron/referenceVideo';
+import {
+  producesPicture as graphProducesPicture,
+  readableFrom,
+  resolveReference,
+  sideChainLabel,
+  sideChainLetter,
+  layoutChains,
+  stepTag,
+  type Chain,
+} from '../../electron/chainGraph';
 
-/**
- * Whether a step puts a picture into the chain at all.
- *
- * A model step with nothing chosen yet and a custom step with an empty body
- * both sit in the list looking like steps and emit no code whatsoever. Neither
- * can be read from, and an AI step with no model is not an edge case — it is
- * what every model step looks like for the minute before a model is picked.
- */
+/** Whether a step puts a picture into the chain at all; see chainGraph.ts. */
 export function producesPicture(filter: Filter): boolean {
-  return filter.filterType === 'aiModel'
-    ? Boolean(filter.modelPath)
-    : filter.code.trim().length > 0;
+  return graphProducesPicture(filter);
 }
 
 /** The step id a reference holds, or '' for the source. */
@@ -40,49 +40,71 @@ export function stageSourceId(filter: Filter, variable: string): string {
   return String(filter.parameters?.[variable] ?? '').trim();
 }
 
-/** What a step's reference is pointed at, and what is wrong with it. */
+/** A step, as the card names it: its tag in the rail ("3", "A2") and its label. */
+interface Named { step: Filter; tag: string; label: string }
+
+/** A side chain, as the card names it: its letter and its label. */
+interface NamedChain { chain: Chain<Filter>; letter: string; label: string }
+
+/**
+ * What a step's reference is pointed at, and what is wrong with it. The rules
+ * are chainGraph.resolveReference's; this only adds the names the card prints.
+ */
 export type StageLink =
-  /** Nothing named, which means the source — what the older filter always used. */
+  /** Nothing named: the source of the reader's own chain, before any filter. */
   | { state: 'source' }
   /** A separate video file rather than a step; see electron/referenceVideo.ts. */
   | { state: 'file'; video: ReferenceVideo }
+  | ({ state: 'chain' } & NamedChain)
+  | ({ state: 'chainOff' } & NamedChain)
+  | ({ state: 'chainLoop' } & NamedChain)
   | { state: 'missing' }
   | { state: 'self' }
-  | { state: 'disabled'; step: Filter; number: number; label: string }
-  | { state: 'below'; step: Filter; number: number; label: string }
+  | ({ state: 'otherChain' } & Named)
+  | ({ state: 'disabled' } & Named)
+  | ({ state: 'below' } & Named)
   /** In the chain and above, but emitting nothing to read. */
-  | { state: 'silent'; step: Filter; number: number; label: string }
-  | { state: 'ready'; step: Filter; number: number; label: string };
+  | ({ state: 'silent' } & Named)
+  | ({ state: 'ready' } & Named);
+
+export function nameChain(filters: Filter[], chain: Chain<Filter>): NamedChain {
+  const at = layoutChains(filters).side.findIndex(candidate => candidate.id === chain.id);
+  return { chain, letter: sideChainLetter(Math.max(at, 0)), label: sideChainLabel(chain) };
+}
+
+export function nameStep(filters: Filter[], step: Filter): Named {
+  return { step, tag: stepTag(filters, step.id), label: stepLabel(step) };
+}
 
 export function stageLink(filters: Filter[], reader: Filter, variable: string): StageLink {
-  const id = stageSourceId(reader, variable);
-  if (!id) return { state: 'source' };
-  const video = parseReferenceVideo(id);
-  if (video) return { state: 'file', video };
-  if (id === reader.id) return { state: 'self' };
-
-  const step = filters.find(filter => filter.id === id);
-  if (!step) return { state: 'missing' };
-
-  const at = { step, number: stepNumber(filters, id), label: stepLabel(step) };
-  if (!step.enabled) return { state: 'disabled', ...at };
-  // Order, not enabled position: the two agree for enabled steps, and this is
-  // the order the person is looking at.
-  if (step.order >= reader.order) return { state: 'below', ...at };
-  if (!producesPicture(step)) return { state: 'silent', ...at };
-  return { state: 'ready', ...at };
+  const reference = resolveReference(filters, reader, stageSourceId(reader, variable));
+  switch (reference.state) {
+    case 'source':
+    case 'file':
+    case 'missing':
+    case 'self':
+      return reference;
+    case 'chain':
+    case 'chainOff':
+    case 'chainLoop':
+      return { state: reference.state, ...nameChain(filters, reference.chain) };
+    default:
+      return { state: reference.state, ...nameStep(filters, reference.step) };
+  }
 }
 
 /**
- * The steps a reference could be pointed at: enabled, above, and actually
- * producing something.
+ * What a reference could be pointed at: steps above the reader in its own
+ * chain that produce a picture, and the side chains it may read.
  *
  * Offering only these is the cheapest guard there is — most of the broken
  * states above are only reachable by changing the chain after the choice was
  * made, never by making the choice.
  */
 export function stagesAbove(filters: Filter[], reader: Filter): Filter[] {
-  return [...filters]
-    .sort((a, b) => a.order - b.order)
-    .filter(filter => filter.enabled && filter.order < reader.order && producesPicture(filter));
+  return readableFrom(filters, reader).steps;
+}
+
+export function chainsReadable(filters: Filter[], reader: Filter): Chain<Filter>[] {
+  return readableFrom(filters, reader).chains;
 }

@@ -28,17 +28,23 @@ export function remapStepReferences(filters: Filter[], byOldId: Map<string, stri
   if (byOldId.size === 0) return filters;
 
   return filters.map(filter => {
-    if (!filter.parameters) return filter;
+    // A side chain step names its Load Video the same way, in a field of its
+    // own rather than a parameter.
+    const chain = filter.chain ? byOldId.get(filter.chain) : undefined;
+    let changed = chain !== undefined;
+    let parameters = filter.parameters;
 
-    let changed = false;
-    const parameters = Object.fromEntries(
-      Object.entries(filter.parameters).map(([name, value]) => {
-        const moved = typeof value === 'string' ? byOldId.get(value) : undefined;
-        if (moved === undefined) return [name, value];
-        changed = true;
-        return [name, moved];
-      }),
-    );
-    return changed ? { ...filter, parameters } : filter;
+    if (filter.parameters) {
+      parameters = Object.fromEntries(
+        Object.entries(filter.parameters).map(([name, value]) => {
+          const moved = typeof value === 'string' ? byOldId.get(value) : undefined;
+          if (moved === undefined) return [name, value];
+          changed = true;
+          return [name, moved];
+        }),
+      );
+    }
+    if (!changed) return filter;
+    return { ...filter, parameters, ...(chain !== undefined ? { chain } : {}) };
   });
 }

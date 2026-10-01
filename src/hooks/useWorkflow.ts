@@ -14,7 +14,7 @@ interface ImportWorkflowModalState {
     name: string;
     code: string;
     description?: string;
-    filterType: 'aiModel' | 'custom';
+    filterType: 'aiModel' | 'custom' | 'videoSource';
     category?: string | string[];
     parameters?: Filter['parameters'];
     variables?: Filter['variables'];
@@ -213,6 +213,8 @@ export function useWorkflow({
           preset: wf.filterType === 'aiModel' ? 'AI Model' : wf.name,
           code: wf.code || '',
           order: wf.order,
+          sourcePath: wf.sourcePath,
+          chain: wf.chain,
           modelPath: resolvedModelPath,
           modelType: wf.modelType,
           category: wf.category,
@@ -381,6 +383,8 @@ export function useWorkflow({
             enabled: filter.enabled,
             order: filter.order,
             filterType: filter.filterType,
+            sourcePath: filter.sourcePath,
+            chain: filter.chain,
             modelPath: portableModelName,
             modelType: filter.filterType === 'aiModel' ? (filter.modelType || 'image') : undefined,
             category,

@@ -12,8 +12,8 @@ import { memo, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Filter } from '../electron.d';
 import { stepLabel } from '../hooks/useChainPreview';
-import { stepNumber } from '../utils/lutSteps';
-import { stageLink, stageSourceId, stagesAbove } from '../utils/stageSource';
+import { chainsReadable, nameChain, stageLink, stageSourceId, stagesAbove } from '../utils/stageSource';
+import { stepTag } from '../../electron/chainGraph';
 import { encodeReferenceVideo, referenceVideoName } from '../../electron/referenceVideo';
 
 const BOX = 'rounded-md border border-ink-800 bg-ink-950/40 p-2 space-y-1.5';
@@ -126,6 +126,30 @@ const ReferenceFileNote = memo(() => {
   );
 });
 
+/** How a side chain is lined up with the step reading it, folded like FrameCountNote. */
+const SideChainNote = memo(() => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className={`${PROSE} flex items-center gap-1 text-ink-600 hover:text-ink-400 transition-colors`}
+      >
+        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        Matched by time, so the frame rate can differ
+      </button>
+      {open && (
+        <p className={`${PROSE} text-ink-500 mt-1 pl-4`}>
+          Each frame gets the side chain's frame nearest it in time. Line the video up inside the
+          side chain — Trim to drop a lead-in, IVTC, Crop to match the framing.
+        </p>
+      )}
+    </div>
+  );
+});
+
 interface StageSourceCardProps {
   filter: Filter;
   filters: Filter[];
@@ -150,6 +174,10 @@ export const StageSourceCard = memo<StageSourceCardProps>(({
   // something else.
   const chosenElsewhere = 'step' in link && !offered.some(step => step.id === link.step.id) ? link.step : null;
   const video = link.state === 'file' ? link.video : null;
+  const chains = chainsReadable(filters, filter);
+  // The same for a side chain that stopped working after it was picked.
+  const chainElsewhere = 'chain' in link && !chains.some(chain => chain.id === link.chain.id) ? link : null;
+  const inSideChain = Boolean(filter.chain);
 
   const choose = async (value: string) => {
     if (value === CHOSEN_FILE) return;
@@ -172,18 +200,29 @@ export const StageSourceCard = memo<StageSourceCardProps>(({
         title={video?.path}
         className={SELECT}
       >
-        <option value="">The source, before any filter</option>
+        <option value="">{inSideChain ? "This side chain's video, before any filter" : 'The source, before any filter'}</option>
         {(offered.length > 0 || chosenElsewhere) && (
           <optgroup label="The picture at an earlier step">
             {offered.map(step => (
               <option key={step.id} value={step.id}>
-                Step {stepNumber(filters, step.id)}, {stepLabel(step)}
+                Step {stepTag(filters, step.id)}, {stepLabel(step)}
               </option>
             ))}
             {chosenElsewhere && (
               <option value={chosenElsewhere.id}>
-                Step {stepNumber(filters, chosenElsewhere.id)}, {stepLabel(chosenElsewhere)}
+                Step {stepTag(filters, chosenElsewhere.id)}, {stepLabel(chosenElsewhere)}
               </option>
+            )}
+          </optgroup>
+        )}
+        {(chains.length > 0 || chainElsewhere) && (
+          <optgroup label="Side chains">
+            {chains.map(chain => {
+              const named = nameChain(filters, chain);
+              return <option key={chain.id} value={chain.id}>{named.letter}. {named.label}</option>;
+            })}
+            {chainElsewhere && (
+              <option value={chainElsewhere.chain.id}>{chainElsewhere.letter}. {chainElsewhere.label}</option>
             )}
           </optgroup>
         )}
@@ -218,6 +257,24 @@ export const StageSourceCard = memo<StageSourceCardProps>(({
         </>
       )}
       {link.state === 'ready' && <FrameCountNote />}
+      {link.state === 'chain' && <SideChainNote />}
+      {link.state === 'chainOff' && (
+        <Warning>
+          Side chain {link.letter}, {link.label}, is turned off or has no video chosen, so there is no picture to read.
+        </Warning>
+      )}
+      {link.state === 'chainLoop' && (
+        <Warning>
+          {inSideChain
+            ? `A side chain can only read one that starts above it. Side chain ${link.letter} does not.`
+            : `Side chain ${link.letter} cannot be read from here.`}
+        </Warning>
+      )}
+      {link.state === 'otherChain' && (
+        <Warning>
+          Step {link.tag}, {link.label}, is inside another chain. Pick that whole side chain instead; its last step is what it hands on.
+        </Warning>
+      )}
       {link.state === 'missing' && (
         <Warning>The step this was reading from is gone. Pick another, or the source.</Warning>
       )}
@@ -226,18 +283,18 @@ export const StageSourceCard = memo<StageSourceCardProps>(({
       )}
       {link.state === 'disabled' && (
         <Warning>
-          Step {link.number}, {link.label}, is turned off, so there is no picture there to read.
+          Step {link.tag}, {link.label}, is turned off, so there is no picture there to read.
         </Warning>
       )}
       {link.state === 'below' && (
         <Warning>
-          Step {link.number}, {link.label}, is below this one. A step can only read the picture from
+          Step {link.tag}, {link.label}, is below this one. A step can only read the picture from
           one above it — move this below it, or pick another.
         </Warning>
       )}
       {link.state === 'silent' && (
         <Warning>
-          Step {link.number}, {link.label},{' '}
+          Step {link.tag}, {link.label},{' '}
           {link.step.filterType === 'aiModel'
             ? 'has no model chosen, so it produces no picture to read.'
             : 'is empty, so it produces no picture to read.'}

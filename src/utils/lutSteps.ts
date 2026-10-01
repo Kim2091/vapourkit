@@ -30,6 +30,7 @@ import { planBetween, type StepPlan } from './chainLut';
 import { stepLabels } from '../hooks/useChainPreview';
 import type { SkippedStep } from './lut';
 import type { Filter } from '../electron.d';
+import { isMainChainStep } from '../../electron/chainGraph';
 
 export const CREATE_LUT = 'Create LUT';
 
@@ -39,8 +40,10 @@ export const LOADS_LUT = new Set(['Load LUT', 'Apply LUT']);
 export const isMarker = (filter: Filter) => filter.preset === CREATE_LUT;
 export const isLoader = (filter: Filter) => LOADS_LUT.has(filter.preset || '');
 
+// The main chain only. A side chain has its own numbering (stepTag) and its
+// own preview outputs, well clear of these.
 const enabledInOrder = (filters: Filter[]) =>
-  filters.filter(filter => filter.enabled).sort((a, b) => a.order - b.order);
+  filters.filter(filter => filter.enabled && isMainChainStep(filter)).sort((a, b) => a.order - b.order);
 
 /**
  * The number the filter panel prints beside a step.
@@ -50,7 +53,7 @@ const enabledInOrder = (filters: Filter[]) =>
  * for the preview to count, not for anyone to read.
  */
 export function stepNumber(filters: Filter[], id: string): number {
-  const at = [...filters].sort((a, b) => a.order - b.order).findIndex(filter => filter.id === id);
+  const at = filters.filter(isMainChainStep).sort((a, b) => a.order - b.order).findIndex(filter => filter.id === id);
   return at < 0 ? 0 : at + 1;
 }
 

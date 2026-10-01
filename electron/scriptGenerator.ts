@@ -10,6 +10,16 @@ import { BACKENDS, normalizeBackendForPlatform, resolveFilterBackend, type Backe
 import { getProvider } from './providers/registry';
 import type { InferenceProvider } from './providers/types';
 import { parseReferenceVideo } from './referenceVideo';
+import {
+  layoutChains,
+  resolveReference,
+  SIDE_CHAIN_OUTPUT_BASE,
+  sideChainLabel,
+  sideChainLetter,
+  sideChainRuns,
+  stepTag,
+  type Chain,
+} from './chainGraph';
 
 export type ModelType = 'vsr' | 'image';
 
@@ -40,10 +50,15 @@ const STAGES = 'VK_STAGES';
 export interface Filter {
   id: string;
   enabled: boolean;
-  filterType: 'aiModel' | 'custom';
+  /** 'videoSource' is a Load Video step, which heads a side chain (chainGraph.ts). */
+  filterType: 'aiModel' | 'custom' | 'videoSource';
   preset: string;
   code: string;
   order: number;
+  /** A Load Video step's file. */
+  sourcePath?: string;
+  /** The Load Video step whose side chain this step is in; absent for the main chain. */
+  chain?: string;
   modelPath?: string;
   modelType?: 'vsr' | 'image';
   /** Inference backend override for this filter; 'auto' or unset inherits the app default. */
@@ -168,42 +183,80 @@ export class VapourSynthScriptGenerator {
   }
 
   /**
-   * vk_reference_video(), the picture a step reads when it names a file.
+   * vk_paired_by_time() and vk_reference_video(): a picture from another
+   * timeline, lined up with the step reading it.
    *
-   * The file is another release of the same footage, and two releases rarely
-   * share a frame rate: a telecined 29.97 DVD remux against a 23.976 encode of
-   * the same disc is the ordinary case. So frames are paired by time, not by
-   * number. Each frame of `like` (the clip at the reading step, after any IVTC
-   * or trim above it) gets the reference frame nearest its timestamp, counted
-   * from where the source's segment starts, then moved by `offset` reference
-   * frames. Pairing by number put a 29.97 source 2,000 frames away from its
-   * 23.976 reference by the six-minute mark.
+   * Another video — a side chain's, or a file named directly — is another
+   * release of the same footage, and two releases rarely share a frame rate:
+   * a telecined 29.97 DVD remux against a 23.976 encode of the same disc is
+   * the ordinary case. So frames are paired by time, not by number. Each frame
+   * of `like` (the clip at the reading step, after any IVTC or trim above it)
+   * gets the frame of `ref` nearest its timestamp, counted from `first` — where
+   * the reading chain's segment starts, in its source's frames — then moved by
+   * `offset` frames of `ref`. Pairing by number put a 29.97 source 2,000
+   * frames away from its 23.976 reference by the six-minute mark.
    *
    * Past either end the nearest frame is held, so a reference a few frames
    * short of the source still works. A clip with no constant frame rate falls
    * back to pairing by number, which is all there is to go on.
    */
-  private generateReferenceVideoHelper(first: number): string {
+  private generatePairingHelpers(): string {
     return [
-      'def vk_reference_video(path, offset, like):',
-      '    import os as _vk_os',
+      'def vk_paired_by_time(ref, like, first=0, offset=0):',
       '    from fractions import Fraction as _vk_Fraction',
-      '    if not _vk_os.path.isfile(path):',
-      '        raise ValueError("The reference video " + path + " is not there any more. Pick it again.")',
-      '    ref = core.bs.VideoSource(source=path, cachemode=3)',
       '    if offset >= ref.num_frames:',
-      '        raise ValueError("The reference offset %d is past the end of %s, which has %d frames." % (offset, _vk_os.path.basename(path), ref.num_frames))',
+      '        raise ValueError("The reference offset %d is past its end; it has %d frames." % (offset, ref.num_frames))',
       '    last = ref.num_frames - 1',
       '    if original_clip.fps_num and like.fps_num and ref.fps_num:',
-      `        start = _vk_Fraction(${first}) / original_clip.fps`,
+      '        start = _vk_Fraction(first) / original_clip.fps',
       '        def _at(n):',
       '            return offset + int((start + _vk_Fraction(n) / like.fps) * ref.fps + _vk_Fraction(1, 2))',
       '    else:',
       '        def _at(n):',
-      `            return offset + ${first} + n`,
+      '            return offset + first + n',
       '    timing = {"fpsnum": like.fps_num, "fpsden": like.fps_den} if like.fps_num else {}',
       '    base = core.std.BlankClip(ref, length=like.num_frames, **timing)',
       '    return core.std.FrameEval(base, lambda n: ref[min(max(_at(n), 0), last)])',
+      '',
+      'def vk_reference_video(path, offset, like, first=0):',
+      '    import os as _vk_os',
+      '    if not _vk_os.path.isfile(path):',
+      '        raise ValueError("The reference video " + path + " is not there any more. Pick it again.")',
+      '    return vk_paired_by_time(core.bs.VideoSource(source=path, cachemode=3), like, first, offset)',
+      '',
+      '',
+    ].join('\n');
+  }
+
+  /**
+   * vk_open_video(), a side chain's source, prepared the way the template
+   * prepares the main one: the same colour tagging when the app overwrites it,
+   * then the same 16-bit YUV working format, so every filter meets the same
+   * kind of picture in either chain. The template's own settings are read
+   * where it defined them, with its defaults when a customised template does
+   * not define one.
+   */
+  private generateOpenVideoHelper(): string {
+    return [
+      'def vk_open_video(path):',
+      '    import os as _vk_os',
+      '    if not _vk_os.path.isfile(path):',
+      '        raise ValueError("The side chain video " + path + " is not there any more. Choose it again on its Load Video step.")',
+      '    v = core.bs.VideoSource(source=path, cachemode=3)',
+      '    _g = globals()',
+      '    _matrix, _primaries, _transfer = _g.get("default_matrix", "709"), _g.get("default_primaries", "709"), _g.get("default_transfer", "709")',
+      '    if _g.get("overwrite_matrix", False) and v.format.color_family != vs.RGB:',
+      '        if _g.get("matrix_709", True):',
+      '            v = core.std.SetFrameProps(v, _Matrix=vs.MATRIX_BT709, _Transfer=vs.TRANSFER_BT709, _Primaries=vs.PRIMARIES_BT709, _ColorRange=vs.RANGE_LIMITED)',
+      '        else:',
+      '            v = core.std.SetFrameProps(v, _Matrix=vs.MATRIX_ST170_M, _Transfer=vs.TRANSFER_BT601, _Primaries=vs.PRIMARIES_ST170_M, _ColorRange=vs.RANGE_LIMITED)',
+      '    fmt = core.query_video_format(vs.YUV, vs.INTEGER, _g.get("default_depth", 16), v.format.subsampling_w, v.format.subsampling_h)',
+      '    if v.format.id != fmt.id:',
+      '        if v.format.color_family == vs.RGB:',
+      '            v = core.resize.Point(v, format=fmt.id, primaries_in_s="709", transfer_in_s="709", matrix_s=_matrix, primaries_s=_primaries, transfer_s=_transfer)',
+      '        else:',
+      '            v = core.resize.Point(v, format=fmt.id, matrix_in_s=_matrix, primaries_in_s=_primaries, transfer_in_s=_transfer)',
+      '    return v',
       '',
       '',
     ].join('\n');
@@ -228,29 +281,51 @@ export class VapourSynthScriptGenerator {
     variable: string,
     emitted: Set<string>,
     allFilters: Filter[],
+    first: number,
   ): string {
     const id = this.stageIdOf(filter, variable);
-    if (!id) return 'original_clip';
-    const video = parseReferenceVideo(id);
-    if (video) return `vk_reference_video(${pyString(video.path)}, ${video.offset}, clip)`;
-    if (emitted.has(id)) return `${STAGES}[${pyString(id)}]`;
-
+    const reference = resolveReference(allFilters, filter, id);
     const here = filter.preset || 'A custom filter';
-    const target = allFilters.find(candidate => candidate.id === id);
-    if (!target) {
-      return `vk_stage_missing(${pyString(`${here} reads the picture from a step that is no longer in the chain.`)})`;
-    }
+    const missing = (why: string) => `vk_stage_missing(${pyString(`${here} reads the picture from ${why}.`)})`;
+    const step = (target: Filter) => `step ${stepTag(allFilters, target.id)}, ${target.preset || 'a custom filter'}`;
+    const chain = (target: Chain<Filter>) => {
+      const at = layoutChains(allFilters).side.findIndex(candidate => candidate.id === target.id);
+      return `side chain ${sideChainLetter(Math.max(at, 0))}, ${sideChainLabel(target)}`;
+    };
 
-    const at = [...allFilters].sort((a, b) => a.order - b.order).findIndex(f => f.id === id) + 1;
-    const named = `step ${at}, ${target.preset || 'a custom filter'}`;
-    const why = target.id === filter.id
-      ? 'itself'
-      : !target.enabled
-        ? `${named}, which is turned off`
-        : target.order >= filter.order
-          ? `${named}, which comes after it — a step can only read the picture from one above it`
-          : `${named}, which produces no picture of its own`;
-    return `vk_stage_missing(${pyString(`${here} reads the picture from ${why}.`)})`;
+    switch (reference.state) {
+      case 'source':
+        return 'original_clip';
+      case 'file':
+        return `vk_reference_video(${pyString(reference.video.path)}, ${reference.video.offset}, clip, ${first})`;
+      case 'chain':
+        // Its own timeline: lined up by time with the clip reading it.
+        return emitted.has(id)
+          ? `vk_paired_by_time(${STAGES}[${pyString(id)}], clip, ${first})`
+          : missing(`${chain(reference.chain)}, which produced no picture`);
+      case 'ready':
+        // Emitted is the authority, not the resolution: a step that resolved
+        // but wrote nothing is still nothing to read.
+        return emitted.has(id)
+          ? `${STAGES}[${pyString(id)}]`
+          : missing(`${step(reference.step)}, which produces no picture of its own`);
+      case 'chainOff':
+        return missing(`${chain(reference.chain)}, which is turned off or has no video chosen`);
+      case 'chainLoop':
+        return missing(`${chain(reference.chain)}, which starts below its own side chain — a side chain can only read one above it`);
+      case 'missing':
+        return missing('a step that is no longer in the chain');
+      case 'self':
+        return missing('itself');
+      case 'otherChain':
+        return missing(`${step(reference.step)}, which is inside another chain — only a whole side chain can be read from outside it`);
+      case 'disabled':
+        return missing(`${step(reference.step)}, which is turned off`);
+      case 'below':
+        return missing(`${step(reference.step)}, which comes after it — a step can only read the picture from one above it`);
+      case 'silent':
+        return missing(`${step(reference.step)}, which produces no picture of its own`);
+    }
   }
 
   /**
@@ -391,7 +466,17 @@ export class VapourSynthScriptGenerator {
 
     // Process filters sequentially
     const filters = config.filters || [];
-    const enabledFilters = filters.filter(f => f.enabled).sort((a, b) => a.order - b.order);
+    // The list is linear; what runs is a graph (chainGraph.ts). Side chains
+    // that run, each its own short list, then the main chain. Steps of a side
+    // chain that does not run, and steps whose side chain is gone, run nowhere.
+    const layout = layoutChains(filters);
+    const sideChains = layout.side.filter(sideChainRuns);
+    const enabledMain = layout.main.steps.filter(f => f.enabled);
+    const enabledFilters = [...sideChains.flatMap(chain => chain.steps.filter(f => f.enabled)), ...enabledMain];
+    // Where the main chain's segment starts, in its source's frames: what a
+    // picture from another timeline is lined up against. Side chains are
+    // never trimmed, so for them it is always 0.
+    const mainFirst = !config.validationMode && config.segment?.enabled ? config.segment.startFrame : 0;
 
     const backendHelper = this.generateBackendHelper(defaultBackend);
     let filterCode = '';
@@ -422,12 +507,12 @@ export class VapourSynthScriptGenerator {
       }
     }
 
-    if (this.readsReferenceVideo(enabledFilters)) {
-      // Where the source's trimmed start sits in its own frames; the rest of
-      // the cut follows from matching the clip frame by frame in time.
-      const first = !config.validationMode && config.segment?.enabled ? config.segment.startFrame : 0;
-      filterCode += '# A step below matches against a separate video file\n';
-      filterCode += this.generateReferenceVideoHelper(first);
+    if (sideChains.length > 0 || this.readsReferenceVideo(enabledFilters)) {
+      filterCode += '# Pictures from another video, lined up by time with the step reading them\n';
+      filterCode += this.generatePairingHelpers();
+    }
+    if (sideChains.length > 0) {
+      filterCode += this.generateOpenVideoHelper();
     }
 
     // For vs-view previews, name output tabs via vsview's set_output API and
@@ -455,7 +540,7 @@ export class VapourSynthScriptGenerator {
     // on to all of them would make every chain pay for a feature only some use.
     const wantedStages = this.referencedStageIds(enabledFilters);
     const emittedStages = new Set<string>();
-    if (wantedStages.size > 0) {
+    if (wantedStages.size > 0 || sideChains.length > 0) {
       filterCode += '# Pictures kept for a step below that reads them\n';
       filterCode += `${STAGES} = {}\n`;
       filterCode += 'def vk_stage_missing(message):\n';
@@ -464,8 +549,8 @@ export class VapourSynthScriptGenerator {
 
     let previewOutputIndex = 0;
 
-    for (let i = 0; i < enabledFilters.length; i++) {
-      const filter = enabledFilters[i];
+    /** One step's code, and its picture kept when something names it. */
+    const emitStep = (filter: Filter, first: number): string | null => {
       let stageLabel: string | null = null;
 
       if (filter.filterType === 'aiModel' && filter.modelPath) {
@@ -486,7 +571,7 @@ export class VapourSynthScriptGenerator {
         filterCode += '# Custom Filter: ' + (filter.preset || 'Unnamed') + '\n';
         filterCode += this.renderCustomFilterCode(
           filter,
-          variable => this.renderStageReference(filter, variable, emittedStages, filters),
+          variable => this.renderStageReference(filter, variable, emittedStages, filters, first),
         ) + '\n\n';
         stageLabel = filter.preset || 'Custom Filter';
       }
@@ -499,12 +584,44 @@ export class VapourSynthScriptGenerator {
         filterCode += `${STAGES}[${pyString(filter.id)}] = clip\n\n`;
         emittedStages.add(filter.id);
       }
+      return stageLabel;
+    };
 
+    // Side chains run first, in the order their Load Videos sit, so anything
+    // below can read them. Each borrows `clip` and `original_clip` for its own
+    // video and hands both back, so a filter inside one — VIVTC rebinding
+    // original_clip, a colour fix reading it — acts on the side chain's own
+    // source without knowing it is in one. Its last picture is kept under the
+    // Load Video's id, which is the id a step reading the chain stores.
+    for (const chain of sideChains) {
+      const head = chain.head!;
+      filterCode += `# Side chain ${sideChainLetter(layout.side.indexOf(chain))}: ${sideChainLabel(chain)}\n`;
+      filterCode += '_vk_main = (clip, original_clip)\n';
+      filterCode += `clip = vk_open_video(${pyString(head.sourcePath!)})\n`;
+      filterCode += 'original_clip = clip\n\n';
+      for (const filter of chain.steps.filter(f => f.enabled)) emitStep(filter, 0);
+      filterCode += `${STAGES}[${pyString(head.id)}] = clip\n`;
+      filterCode += 'clip, original_clip = _vk_main\n\n';
+      emittedStages.add(head.id);
+    }
+
+    for (const filter of enabledMain) {
+      const stageLabel = emitStep(filter, mainFirst);
       // Register an output after each stage that actually emitted code
       if (config.generatePreviewOutputs && stageLabel !== null) {
         previewOutputIndex++;
         filterCode += `_vk_set_output(clip, ${previewOutputIndex}, ${pyString(`${previewOutputIndex}. ${stageLabel}`)})\n\n`;
       }
+    }
+
+    // One tab per side chain, its last picture, clear of the main chain's
+    // numbering (SIDE_CHAIN_OUTPUT_BASE) so adding one renumbers nothing.
+    if (config.generatePreviewOutputs) {
+      sideChains.forEach((chain, at) => {
+        const label = `${sideChainLetter(layout.side.indexOf(chain))}. ${sideChainLabel(chain)}`;
+        filterCode += `_vk_set_output(${STAGES}[${pyString(chain.id)}], ${SIDE_CHAIN_OUTPUT_BASE + at}, ${pyString(label)})\n`;
+      });
+      if (sideChains.length > 0) filterCode += '\n';
     }
 
     // Replace all placeholders

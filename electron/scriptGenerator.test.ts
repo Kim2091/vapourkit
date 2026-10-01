@@ -535,14 +535,90 @@ describe('a step that reads the picture from another step', () => {
     expect(script).toContain('who = ""');
   });
 
+  describe('side chains', () => {
+    const load = (order: number, sourcePath = 'D:\\dvd\\ep01.mkv'): Filter => ({
+      ...customFilter(order, 'Load Video', ''),
+      id: `load-${order}`,
+      filterType: 'videoSource',
+      sourcePath,
+    });
+    const inChain = (filter: Filter, chain: string): Filter => ({ ...filter, chain });
+
+    it('runs the side chain first on its own video, keeps its end, and hands clip back', async () => {
+      const script = await generate([
+        load(0),
+        inChain({ ...customFilter(1, 'Crop', 'clip = core.std.Crop(clip, 6, 6)'), id: 'crop-1' }, 'load-0'),
+        customFilter(2, 'VIVTC', 'clip = ivtc(clip)'),
+        reader(3, 'load-0'),
+      ]);
+
+      const at = (text: string) => script.indexOf(text);
+      expect(script).toContain('def vk_open_video(path):');
+      expect(script).toContain('clip = vk_open_video("D:\\\\dvd\\\\ep01.mkv")');
+      expect(at('_vk_main = (clip, original_clip)')).toBeLessThan(at('core.std.Crop(clip, 6, 6)'));
+      expect(at('core.std.Crop(clip, 6, 6)')).toBeLessThan(at('VK_STAGES["load-0"] = clip'));
+      expect(at('VK_STAGES["load-0"] = clip')).toBeLessThan(at('clip, original_clip = _vk_main'));
+      expect(at('clip, original_clip = _vk_main')).toBeLessThan(at('clip = ivtc(clip)'));
+      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 0)');
+    });
+
+    it('numbers main-chain preview tabs as before and puts the side chain at 1000', async () => {
+      const script = await generate([
+        load(0),
+        inChain({ ...customFilter(1, 'Crop'), id: 'crop-1' }, 'load-0'),
+        customFilter(2, 'CAS Sharpen'),
+      ]);
+
+      expect(script).toContain('_vk_set_output(clip, 1, "1. CAS Sharpen")');
+      expect(script).not.toContain('"2. Crop"');
+      expect(script).toContain('_vk_set_output(VK_STAGES["load-0"], 1000, "A. ep01.mkv")');
+    });
+
+    it('runs nothing for a Load Video that is off or has no file, and says so to a reader', async () => {
+      const script = await generate([
+        { ...load(0), enabled: false },
+        inChain({ ...customFilter(1, 'Crop', 'clip = core.std.Crop(clip, 6, 6)'), id: 'crop-1' }, 'load-0'),
+        reader(2, 'load-0'),
+      ], false);
+
+      expect(script).not.toContain('vk_open_video(');
+      expect(script).not.toContain('core.std.Crop(clip, 6, 6)');
+      expect(script).toContain('which is turned off or has no video chosen');
+    });
+
+    it('runs nothing whose Load Video is gone', async () => {
+      const script = await generate([
+        inChain({ ...customFilter(1, 'Crop', 'clip = core.std.Crop(clip, 6, 6)'), id: 'crop-1' }, 'load-gone'),
+        customFilter(2, 'CAS Sharpen'),
+      ], false);
+
+      expect(script).not.toContain('core.std.Crop(clip, 6, 6)');
+    });
+
+    it('lines a side chain up from the segment start for the main chain only', async () => {
+      const generator = new VapourSynthScriptGenerator('win32');
+      const scriptPath = await generator.generateScript({
+        inputVideo: 'C:\\videos\\input.mkv',
+        enginePath: '',
+        pluginsPath: 'C:\\plugins',
+        filters: [load(0), reader(1, 'load-0')],
+        segment: { enabled: true, startFrame: 500, endFrame: -1 },
+      });
+      const script = await fs.readFile(scriptPath, 'utf-8');
+      await fs.remove(scriptPath);
+
+      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 500)');
+    });
+  });
+
   describe('naming a video file instead of a step', () => {
     const file = encodeReferenceVideo({ path: 'D:\\dvd\\ep01 "remux".mkv', offset: 12 });
 
     it('opens the file through the helper, offset and all, and keeps no stage for it', async () => {
       const script = await generate([customFilter(0, 'CAS Sharpen'), reader(1, file)], false);
 
-      expect(script).toContain('def vk_reference_video(path, offset, like):');
-      expect(script).toContain('reference = vk_reference_video("D:\\\\dvd\\\\ep01 \\"remux\\".mkv", 12, clip)');
+      expect(script).toContain('def vk_reference_video(path, offset, like, first=0):');
+      expect(script).toContain('reference = vk_reference_video("D:\\\\dvd\\\\ep01 \\"remux\\".mkv", 12, clip, 0)');
       expect(script).not.toContain('VK_STAGES');
       expect(script.indexOf('def vk_reference_video')).toBeLessThan(script.indexOf('reference = vk_reference_video'));
     });
@@ -566,7 +642,7 @@ describe('a step that reads the picture from another step', () => {
       await fs.remove(scriptPath);
 
       expect(script).toContain('original_clip = core.std.Trim(original_clip, first=100, last=249)');
-      expect(script).toContain('start = _vk_Fraction(100) / original_clip.fps');
+      expect(script).toMatch(/reference = vk_reference_video(.*, 12, clip, 100)/);
     });
 
     it('starts the validation window at the beginning', async () => {
@@ -582,7 +658,7 @@ describe('a step that reads the picture from another step', () => {
       const script = await fs.readFile(scriptPath, 'utf-8');
       await fs.remove(scriptPath);
 
-      expect(script).toContain('start = _vk_Fraction(0) / original_clip.fps');
+      expect(script).toMatch(/reference = vk_reference_video(.*, 12, clip, 0)/);
     });
   });
 });

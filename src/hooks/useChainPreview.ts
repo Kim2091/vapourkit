@@ -8,6 +8,9 @@
 // Labels come from the filter list here rather than from the script. The app
 // built the chain, so it already knows what each step is called.
 
+import {
+  isMainChainStep, layoutChains, SIDE_CHAIN_OUTPUT_BASE, sideChainLabel, sideChainLetter, sideChainRuns,
+} from '../../electron/chainGraph';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BackendId,
@@ -192,6 +195,9 @@ function modelLabel(modelPath: string): string {
  * which step that was — and stepLabels only indexes the enabled ones.
  */
 export function stepLabel(filter: Filter): string {
+  if (filter.filterType === 'videoSource') {
+    return filter.sourcePath ? filter.sourcePath.split(/[\/]/).pop() || filter.sourcePath : 'Load Video';
+  }
   return filter.filterType === 'aiModel' && filter.modelPath
     ? modelLabel(filter.modelPath)
     : filter.preset || 'Custom filter';
@@ -207,8 +213,22 @@ export function stepLabel(filter: Filter): string {
  * have to agree either way.
  */
 export function stepLabels(filters: Filter[]): string[] {
-  const enabled = filters.filter(f => f.enabled).sort((a, b) => a.order - b.order);
+  const enabled = filters.filter(f => f.enabled && isMainChainStep(f)).sort((a, b) => a.order - b.order);
   return ['Source', ...enabled.map(stepLabel)];
+}
+
+/**
+ * The tab label for any preview output, side chains included. A side chain
+ * hands the preview one output, its last picture, from SIDE_CHAIN_OUTPUT_BASE
+ * up in the order the chains run (see the generator).
+ */
+export function outputLabel(filters: Filter[], labels: string[], index: number): string {
+  if (index < SIDE_CHAIN_OUTPUT_BASE) return labels[index] ?? `Step ${index}`;
+  const { side } = layoutChains(filters);
+  const running = side.filter(sideChainRuns);
+  const chain = running[index - SIDE_CHAIN_OUTPUT_BASE];
+  if (!chain) return `Side chain ${index - SIDE_CHAIN_OUTPUT_BASE + 1}`;
+  return `${sideChainLetter(side.indexOf(chain))}. ${sideChainLabel(chain)}`;
 }
 
 /**
@@ -223,6 +243,10 @@ function chainKey(options: UseChainPreviewOptions, liveParameters: string | null
     .sort((a, b) => a.order - b.order)
     .map(f => ({
       t: f.filterType,
+      // Where a step runs and what a Load Video opens change the pixels as
+      // surely as its code does.
+      ch: f.chain,
+      src: f.sourcePath,
       p: f.preset,
       c: f.code,
       m: f.modelPath,
@@ -348,9 +372,9 @@ export function useChainPreview(options: UseChainPreviewOptions): UseChainPrevie
   const steps = useMemo<ChainPreviewStep[]>(
     () => outputs.map(output => ({
       ...output,
-      label: labels[output.index] ?? `Step ${output.index}`,
+      label: outputLabel(filters, labels, output.index),
     })),
-    [outputs, labels],
+    [outputs, labels, filters],
   );
 
   const fail = useCallback((message: string, phase: ChainPreviewErrorPhase) => {

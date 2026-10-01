@@ -20,12 +20,17 @@ export function registerWorkflowHandlers() {
           description: workflow.description || '',
         },
         filters: workflow.filters.map((f: any) => ({
+          // Carried so step references and side chains still point at the
+          // right steps once the import hands out new ids. Never read as an id.
+          id: f.id || undefined,
           name: f.name,
           code: f.code,
           description: f.description || '',
           enabled: f.enabled,
           order: f.order,
           filterType: f.filterType || 'custom',
+          sourcePath: f.sourcePath || undefined,
+          chain: f.chain || undefined,
           modelPath: f.modelPath || undefined,
           modelType: f.modelType || undefined,
           // Per-filter overrides round-trip with the workflow
@@ -100,12 +105,15 @@ export function registerWorkflowHandlers() {
             ? f.category[0]
             : (f.category || undefined);
           return {
+            id: typeof f.id === 'string' ? f.id : undefined,
             name: f.name,
             code: f.code,
             description: f.description || undefined,
             enabled: f.enabled,
             order: f.order,
             filterType: f.filterType || 'custom',
+            sourcePath: typeof f.sourcePath === 'string' ? f.sourcePath : undefined,
+            chain: typeof f.chain === 'string' ? f.chain : undefined,
             modelPath: f.modelPath || undefined,
             modelType: f.modelType || undefined,
             backend: f.backend || undefined,

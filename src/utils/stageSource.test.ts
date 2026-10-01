@@ -46,11 +46,11 @@ describe('what a stage reference is pointed at', () => {
   });
 
   it('names an enabled step above it by the number the panel prints', () => {
-    expect(link('sharpen')).toMatchObject({ state: 'ready', number: 1, label: 'CAS Sharpen' });
+    expect(link('sharpen')).toMatchObject({ state: 'ready', tag: '1', label: 'CAS Sharpen' });
   });
 
   it('labels a model step by its model, the way the rail does', () => {
-    expect(link('uplift')).toMatchObject({ state: 'ready', number: 2, label: '4x-AnimeSharp' });
+    expect(link('uplift')).toMatchObject({ state: 'ready', tag: '2', label: '4x-AnimeSharp' });
   });
 
   it('names a video file outside the chain, with its offset', () => {
@@ -64,7 +64,7 @@ describe('what a stage reference is pointed at', () => {
 
   it('says the step is turned off', () => {
     const off = link('sharpen', f => f.map(s => s.id === 'sharpen' ? { ...s, enabled: false } : s));
-    expect(off).toMatchObject({ state: 'disabled', number: 1 });
+    expect(off).toMatchObject({ state: 'disabled', tag: '1' });
   });
 
   it('says the step is below, which is the reordering case', () => {
@@ -72,17 +72,17 @@ describe('what a stage reference is pointed at', () => {
     // stored id changed; what changed is that it now points downhill — and the
     // sharpen is step 2 now, because that is where the person can see it.
     const moved = link('sharpen', f => f.map(s => s.id === 'fix' ? { ...s, order: -1 } : s));
-    expect(moved).toMatchObject({ state: 'below', number: 2 });
+    expect(moved).toMatchObject({ state: 'below', tag: '2' });
   });
 
   it('says a step with no model chosen produces nothing to read', () => {
     const empty = link('uplift', f => f.map(s => s.id === 'uplift' ? { ...s, modelPath: undefined } : s));
-    expect(empty).toMatchObject({ state: 'silent', number: 2 });
+    expect(empty).toMatchObject({ state: 'silent', tag: '2' });
   });
 
   it('says a custom step with an empty body produces nothing to read', () => {
     const empty = link('sharpen', f => f.map(s => s.id === 'sharpen' ? { ...s, code: '   ' } : s));
-    expect(empty).toMatchObject({ state: 'silent', number: 1 });
+    expect(empty).toMatchObject({ state: 'silent', tag: '1' });
   });
 
   it('refuses a step naming itself', () => {
