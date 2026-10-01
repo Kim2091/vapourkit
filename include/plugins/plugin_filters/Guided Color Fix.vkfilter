@@ -1,0 +1,41 @@
+name = "Guided Color Fix"
+code = """
+# Corrects the colour of the picture against a step whose colour is right -
+# by default the source, before any filter. Put it after an upscaler or a
+# restoration that shifted the colour. Unlike the wavelet fix, which pulls the
+# whole picture's low frequencies toward the reference, this is a model
+# (PACC V4): it learns a smooth colour transform of the picture itself, so
+# flat areas stay flat and halos or bleed in the reference are not copied in.
+#
+# The reference can be any size; it is resized to half the picture's size,
+# the pairing the model was trained on. It must have the same frame count.
+
+model       = "2x_bndl_anicc"  # The shipped model, or a path to your own PACC V4 .onnx, .safetensors or .pth.
+fp16        = True
+num_streams = 1
+backend     = "auto"  # "tensorrt", "directml", "migraphx", or "auto" to use Vapourkit's global setting.
+
+reference   = {{stage:source_id}}
+
+
+import vs_guidedcolorfix
+backend = vk_backend(backend, fp16=fp16, num_streams=num_streams)
+clip = vs_guidedcolorfix.guided_color_fix(clip, reference, model=model, backend=backend)"""
+category = [ "Color Modification", "Restoration" ]
+description = "AI colour correction: matches the picture's colour to the source, or a step you pick, while keeping its detail. Ships the 2x_bndl_anicc model (CC BY-NC-SA 4.0)."
+
+[variables.source_id]
+type = "string"
+default = ""
+hidden = true
+description = "The step whose colour this matches against, by id. Empty means the source, before any filter. Set by the dropdown on the card."
+
+[editor]
+type = "stageSource"
+label = "Match the colour of"
+
+[editor.variables]
+source = "source_id"
+
+[metadata]
+createdAt = "2026-10-01T00:00:00.000Z"

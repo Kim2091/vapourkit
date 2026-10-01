@@ -76,6 +76,7 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 
 ### Filters
 - **New: Grain Synth.** Adds film grain fitted to real sources, with two models: `mega_v1` (stronger, harsher) and `real_v5` (softer). Apply it after upscaling, at the final resolution. The grain is the same on every render of a frame, and it runs on CUDA with TensorRT or on the CPU otherwise
+- **New: Guided Color Fix.** An AI colour correction (PACC V4) that matches an upscale's or restoration's colour to the source, or to any step you pick, while keeping its detail. Ships the `2x_bndl_anicc` model (CC BY-NC-SA 4.0), and also takes your own PACC V4 `.onnx`, `.safetensors` or `.pth`. Runs on every inference backend: about 9 fps at 1080p and 2 fps at 4K with TensorRT fp16 on an RTX 5080 Laptop
 - Every shipped filter is now checked against the real VapourSynth core, at both ends of the clip. **All 151 build and render**
 - 37 filters that failed to build now work, most of them broken by upstream renames: Detail/Luma/Ridge/Difference/Normalize Mask, MC_Degrain, Binarize Mask, Maximum/Minimum and their combinations, Clense, Grain Stabilize, EEDI3, Warp Sharp, Temporal Median, SpotLess, the four descalers, Undistort, and more
 - Also fixed: QTGMC (Old) on every preset, Guided Filter (refused every real source), Read Image, GradFun3, Add Duplicates, Replace Multiple Frames, LUTDeCrawl (now works at 10-bit instead of 8)

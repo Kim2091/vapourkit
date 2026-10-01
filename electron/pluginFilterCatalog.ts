@@ -128,6 +128,7 @@ export const LINUX_PLUGIN_FILTERS = {
   // PyPI so its archive dependency stays visible during future reviews.
   bundledScripts: [
     'Deep Deinterlace.vkfilter',        // vs_deepdeinterlace + torch
+    'Guided Color Fix.vkfilter',        // vs_guidedcolorfix + vs-mlrt; torch only to convert a user checkpoint
   ],
 } as const;
 
@@ -136,7 +137,7 @@ export const LINUX_PLUGIN_FILTERS = {
  * Nightly builds can share an Electron app version, so appVersion alone cannot
  * tell an existing installation that its bundled catalog needs reconciliation.
  */
-export const LINUX_PLUGIN_FILTER_CATALOG_REVISION = 3;
+export const LINUX_PLUGIN_FILTER_CATALOG_REVISION = 4;
 
 const LINUX_PLUGIN_FILTER_SET = new Set<string>(Object.values(LINUX_PLUGIN_FILTERS).flat());
 

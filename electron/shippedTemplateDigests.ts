@@ -380,6 +380,9 @@ export const SHIPPED_TEMPLATE_DIGESTS: Readonly<Record<string, readonly string[]
   "Grain Synth.vkfilter": [
     '3402de346f2c84f7e6d744dde816b1170d38df22b391eb3fbe1052f04447d2de',
   ],
+  "Guided Color Fix.vkfilter": [
+    '3e16bd597f7fa2fc1568ce7bf4001d5accb24ab3d411593d55ba0ab9bebef0ba',
+  ],
   "Guided Filter.vkfilter": [
     '59af76bc8a799eba02e6f2d8fffbb1f242d8dc2af788a669e7bc068f4076d607',
     'b09d2a11658110c1ad5fd3a727bbb128ae559027a183ce9d94fd041dd929a04b',
