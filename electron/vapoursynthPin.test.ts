@@ -20,6 +20,7 @@ vi.mock('electron', async () => {
 import { VAPOURSYNTH_PIP_SPEC, VAPOURSYNTH_VERSION } from './constants';
 import {
   compareReleaseVersions,
+  findProjectsNeedingNewerCore,
   isNewerThanPin,
   readInstalledVapourSynthVersion,
   releaseSegments,
@@ -114,3 +115,49 @@ describe('readInstalledVapourSynthVersion', () => {
     expect(await readInstalledVapourSynthVersion(path.join(sitePackages, 'nope'))).toBeNull();
   });
 });
+
+describe('findProjectsNeedingNewerCore', () => {
+  let sitePackages: string;
+
+  beforeEach(async () => {
+    sitePackages = await fs.mkdtemp(path.join(os.tmpdir(), 'vk-vsdeps-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(sitePackages, { recursive: true, force: true });
+  });
+
+  const dist = async (name: string, ...requires: string[]) => {
+    const dir = path.join(sitePackages, name);
+    await fs.mkdir(dir, { recursive: true });
+    const headers = ['Metadata-Version: 2.4', `Name: ${name.split('-')[0]}`, ...requires.map(r => `Requires-Dist: ${r}`)];
+    await fs.writeFile(path.join(dir, 'METADATA'), [...headers, '', 'Requires-Dist: vapoursynth>=99 (in the description)'].join('\r\n'));
+  };
+
+  it('finds the plugin that came out with R80', async () => {
+    await dist('vapoursynth-80.dist-info');
+    await dist('vapoursynth_bestsource-22.dist-info', 'VapourSynth>=80');
+    await dist('vapoursynth_ffms2-5.3.0.dist-info', 'vapoursynth>=74');
+    await dist('vsjetpack-2.2.0.dist-info', 'vapoursynth>=78', 'vapoursynth-bestsource>=17.0');
+    expect(await findProjectsNeedingNewerCore(sitePackages, '79')).toEqual(['vapoursynth-bestsource']);
+  });
+
+  it('reads old-style parentheses, markers and strict floors', async () => {
+    await dist('a_plugin-1.dist-info', 'vapoursynth (>=80)');
+    await dist('b_plugin-1.dist-info', 'vapoursynth>=80; sys_platform == "win32"');
+    await dist('c_plugin-1.dist-info', 'vapoursynth>79');
+    await dist('d_plugin-1.dist-info', 'vapoursynth>78');
+    expect((await findProjectsNeedingNewerCore(sitePackages, '79')).sort()).toEqual(['a-plugin', 'b-plugin', 'c-plugin']);
+  });
+
+  it('ignores optional requirements and look-alike names', async () => {
+    await dist('e_plugin-1.dist-info', 'vapoursynth>=80; extra == "new"');
+    await dist('f_plugin-1.dist-info', 'vapoursynth-bestsource>=80');
+    expect(await findProjectsNeedingNewerCore(sitePackages, '79')).toEqual([]);
+  });
+
+  it('returns nothing when site-packages does not exist', async () => {
+    expect(await findProjectsNeedingNewerCore(path.join(sitePackages, 'nope'))).toEqual([]);
+  });
+});
+

@@ -16,6 +16,7 @@
 // version, and a directory listing costs nothing next to spawning Python.
 
 import { promises as fs } from 'fs';
+import * as path from 'path';
 import { VAPOURSYNTH_VERSION } from './constants';
 import { projectNameFromDistInfo } from './pythonEnvIntegrity';
 
@@ -84,4 +85,62 @@ export async function readInstalledVapourSynthVersion(sitePackages: string): Pro
   }
 
   return null;
+}
+
+// `Requires-Dist: VapourSynth>=80`, old-style `vapoursynth (>=80)`, and either
+// with a marker after `;`. The name has to end where the specifiers start, so
+// vapoursynth-bestsource and friends never match.
+const CORE_REQUIREMENT = /^Requires-Dist:\s*vapoursynth(?=[\s(<>=!~;]|$)\s*\(?\s*([^;)]*)/i;
+
+/**
+ * The projects in site-packages whose metadata needs a core newer than the pin.
+ *
+ * Plugin wheels released alongside a core declare it as a floor: bestsource 22
+ * came out the day R80 did, requires VapourSynth>=80 and registers its
+ * functions with API R4.3, so on R79 it fails to load and `core.bs` is gone.
+ * Putting the core back alone leaves these behind - pip only warns about the
+ * conflict - so they are named alongside the pin and pip steps them down to
+ * the last release that works with it.
+ *
+ * Only `>=` and `>` floors are read: that is what every wheel here declares,
+ * and an operator not understood is left alone rather than acted on every
+ * launch. Extras-only requirements are skipped.
+ */
+export async function findProjectsNeedingNewerCore(
+  sitePackages: string,
+  pin: string = VAPOURSYNTH_VERSION,
+): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(sitePackages);
+  } catch {
+    return [];
+  }
+
+  const projects: string[] = [];
+  for (const entry of entries) {
+    const project = projectNameFromDistInfo(entry);
+    if (!project || project === 'vapoursynth') continue;
+
+    let metadata: string;
+    try {
+      metadata = await fs.readFile(path.join(sitePackages, entry, 'METADATA'), 'utf8');
+    } catch {
+      continue;
+    }
+
+    for (const line of metadata.split(/\r?\n/)) {
+      if (line.trim() === '') break; // the headers end at the first blank line
+      const match = CORE_REQUIREMENT.exec(line);
+      if (!match || /extra\s*==/.test(line)) continue;
+      const floor = /(>=?)\s*([^,\s]+)/.exec(match[1]);
+      if (!floor) continue;
+      const comparison = compareReleaseVersions(floor[2], pin);
+      if (comparison !== null && (floor[1] === '>' ? comparison >= 0 : comparison > 0)) {
+        projects.push(project);
+        break;
+      }
+    }
+  }
+  return projects;
 }

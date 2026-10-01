@@ -41,7 +41,7 @@ import { runCommand, getBundledBasePath, resolveSupportedPythonCommand } from '.
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
 import { migrateLegacyPortableLayout } from './legacyCleanup';
-import { isNewerThanPin, readInstalledVapourSynthVersion } from './vapoursynthPin';
+import { findProjectsNeedingNewerCore, isNewerThanPin, readInstalledVapourSynthVersion } from './vapoursynthPin';
 import {
   hasPluginFilterTemplates,
   LINUX_PLUGIN_FILTER_CATALOG_REVISION,
@@ -256,6 +256,8 @@ export class DependencyManager {
    * Only NEWER is corrected. Older installs are the ones the `--upgrade` in
    * setup already moves forward, and a core below the pin at least predates
    * the ABI break the pin is guarding; a core above it is unverified ground.
+   * Plugins whose metadata needs a newer core go along with it, so they are
+   * stepped down too (findProjectsNeedingNewerCore).
    *
    * Non-fatal: a failed reinstall (offline, index down) logs and lets the app
    * start on the core that is there rather than trapping it on the setup
@@ -276,12 +278,24 @@ export class DependencyManager {
     }
 
     logger.dependency(`VapourSynth version: ${installed} (pinned to ${VAPOURSYNTH_VERSION})`);
-    if (!isNewerThanPin(installed)) {
+    const coreTooNew = isNewerThanPin(installed);
+    // Checked even when the core is on the pin: a launch from before this
+    // check put the core back and left these plugins broken on it.
+    const dependents = await findProjectsNeedingNewerCore(PATHS.SITE_PACKAGES).catch((error) => {
+      logger.error('Could not read plugin requirements on the VapourSynth core:', error);
+      return [] as string[];
+    });
+    if (!coreTooNew && dependents.length === 0) {
       return;
     }
 
-    const message = `Reinstalling VapourSynth ${VAPOURSYNTH_VERSION} (found ${installed})...`;
+    const message = coreTooNew
+      ? `Reinstalling VapourSynth ${VAPOURSYNTH_VERSION} (found ${installed})...`
+      : `Matching plugins to VapourSynth ${VAPOURSYNTH_VERSION}: ${dependents.join(', ')}...`;
     logger.dependency(message);
+    if (dependents.length > 0) {
+      logger.dependency(`Plugins that need a newer VapourSynth: ${dependents.join(', ')}`);
+    }
     this.sendProgress({
       type: 'python-setup',
       component: 'VapourSynth',
@@ -289,19 +303,37 @@ export class DependencyManager {
       message,
     });
 
+    const pinBack = (projects: string[]) => runCommand(PATHS.PYTHON, [
+      '-m', 'pip', 'install', '--no-warn-script-location',
+      '--cache-dir', PATHS.PIP_CACHE,
+      ...PIP_NETWORK_ARGS,
+      // The plugin phase installs from these too, so a dependent may live there.
+      ...(projects.length > 0 ? PYPI_EXTRA_INDEX_ARGS : []),
+      // `==` is not satisfied by a newer core, so pip uninstalls it and
+      // installs the pin, no --force-reinstall needed. Each dependent named
+      // beside it is no longer satisfied by its installed release under that
+      // pin, so pip steps it down to one that is; nothing else moves.
+      VAPOURSYNTH_PIP_SPEC,
+      ...projects,
+    ], undefined, undefined, { step: `Reinstalling VapourSynth ${VAPOURSYNTH_VERSION}` });
+
     try {
-      // `==` is not satisfied by the newer core, so pip uninstalls it and
-      // installs the pin — no --force-reinstall needed, and its dependencies
-      // stay where they are.
-      await runCommand(PATHS.PYTHON, [
-        '-m', 'pip', 'install', '--no-warn-script-location',
-        '--cache-dir', PATHS.PIP_CACHE,
-        ...PIP_NETWORK_ARGS,
-        VAPOURSYNTH_PIP_SPEC,
-      ], undefined, undefined, { step: `Reinstalling VapourSynth ${VAPOURSYNTH_VERSION}` });
-      logger.dependency(`VapourSynth pinned back to ${VAPOURSYNTH_VERSION}`);
+      await pinBack(dependents);
+      logger.dependency(`VapourSynth pinned back to ${VAPOURSYNTH_VERSION}` +
+        (dependents.length > 0 ? ` with ${dependents.join(', ')}` : ''));
     } catch (error) {
-      logger.error(`Failed to pin VapourSynth back to ${VAPOURSYNTH_VERSION}:`, error);
+      logger.error(`Failed to pin VapourSynth back to ${VAPOURSYNTH_VERSION}` +
+        (dependents.length > 0 ? ` with ${dependents.join(', ')}` : '') + ':', error);
+      // A dependent with no release that works on the pin fails the whole
+      // resolve; the core on its own is still worth putting back.
+      if (coreTooNew && dependents.length > 0) {
+        try {
+          await pinBack([]);
+          logger.dependency(`VapourSynth pinned back to ${VAPOURSYNTH_VERSION} (plugins left as they were)`);
+        } catch (coreError) {
+          logger.error(`Failed to pin VapourSynth back to ${VAPOURSYNTH_VERSION}:`, coreError);
+        }
+      }
     }
   }
 
