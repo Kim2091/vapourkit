@@ -1,5 +1,6 @@
 // electron/errorMessageHandler.ts
 import { logger } from './logger';
+import { API3_UNSUPPORTED, describeCoreTooNew } from './vapoursynthCore';
 
 /**
  * Utility class for handling and formatting error messages from subprocess output
@@ -23,6 +24,12 @@ export class ErrorMessageHandler {
     if (/vsmigx: failed to preload .*amdhip64/i.test(stderr)) {
       return 'MIGraphX could not start the AMD HIP runtime. This GPU or driver is not supported by MIGraphX ' +
         '(it needs an RX 6800 / RDNA3 or newer GPU and a current AMD driver). Switch the inference backend to DirectML or NCNN.';
+    }
+
+    // A core past the pin fails with "No attribute with the name ort exists",
+    // which names the wrong cause; see vapoursynthPin.ts.
+    if (API3_UNSUPPORTED.test(stderr)) {
+      return describeCoreTooNew();
     }
 
     // Common error patterns to look for (in order of priority)

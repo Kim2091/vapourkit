@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatVapourSynthValidationError } from './vapourSynthErrorFormatter';
+import { describeCoreTooNew } from './vapoursynthCore';
 
 describe('formatVapourSynthValidationError', () => {
   it('removes API3 plugin deprecation notices while preserving the actual error', () => {
@@ -32,6 +33,20 @@ describe('formatVapourSynthValidationError', () => {
 
     expect(formatVapourSynthValidationError(output)).toBe(
       'VapourSynth failed before producing output. Check the log for details.',
+    );
+  });
+
+  it('explains a core past the pin instead of the misleading missing-namespace error', () => {
+    const output = [
+      'Warning: Plugin c:\\vk\\plugins\\EEDI2.dll uses API 3, which is no longer supported.',
+      'Critical: Plugin c:\\vk\\plugins\\ort\\vsort.dll uses API 3, which is no longer supported.',
+      'Script evaluation failed:',
+      'Python exception: No attribute with the name ort exists. Did you mistype a plugin namespace or forget to install a plugin?',
+    ].join('\r\n');
+
+    expect(formatVapourSynthValidationError(output)).toBe(
+      `${describeCoreTooNew()}\n\nScript evaluation failed:\n` +
+      'Python exception: No attribute with the name ort exists. Did you mistype a plugin namespace or forget to install a plugin?',
     );
   });
 });
