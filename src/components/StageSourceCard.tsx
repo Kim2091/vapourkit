@@ -113,13 +113,13 @@ const ReferenceFileNote = memo(() => {
         className={`${PROSE} flex items-center gap-1 text-ink-600 hover:text-ink-400 transition-colors`}
       >
         {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        Matched frame for frame from the offset
+        Matched by time, so the frame rate can differ
       </button>
       {open && (
         <p className={`${PROSE} text-ink-500 mt-1 pl-4`}>
-          The video has to be the same footage at the same frame rate and framing; its size does not
-          matter. It is cut to the same segment as the source. Frames past the source's end are
-          dropped, and if it runs short, its last frame is held.
+          Each frame gets the reference frame nearest it in time, so a 23.976 encode can guide a
+          29.97 DVD. For telecined sources, IVTC first for an exact match. The framing has to be
+          the same; the size does not. Past either end its nearest frame is held.
         </p>
       )}
     </div>

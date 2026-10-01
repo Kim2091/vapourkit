@@ -170,37 +170,40 @@ export class VapourSynthScriptGenerator {
   /**
    * vk_reference_video(), the picture a step reads when it names a file.
    *
-   * The file is a second copy of the footage, so it has to be cut exactly as
-   * the source was: offset first, which is in the file's own frame numbers,
-   * then the same segment or validation trim, then fitted to the source's
-   * length. A reference a few frames short is the usual case between two
-   * releases and is padded with its last frame; refusing it would make the
-   * feature unusable for the job it is for.
+   * The file is another release of the same footage, and two releases rarely
+   * share a frame rate: a telecined 29.97 DVD remux against a 23.976 encode of
+   * the same disc is the ordinary case. So frames are paired by time, not by
+   * number. Each frame of `like` (the clip at the reading step, after any IVTC
+   * or trim above it) gets the reference frame nearest its timestamp, counted
+   * from where the source's segment starts, then moved by `offset` reference
+   * frames. Pairing by number put a 29.97 source 2,000 frames away from its
+   * 23.976 reference by the six-minute mark.
+   *
+   * Past either end the nearest frame is held, so a reference a few frames
+   * short of the source still works. A clip with no constant frame rate falls
+   * back to pairing by number, which is all there is to go on.
    */
-  private generateReferenceVideoHelper(trim: { first: number; last?: number }): string {
-    const cut = trim.last === undefined ? `[${trim.first}:]` : `[${trim.first}:${trim.last + 1}]`;
+  private generateReferenceVideoHelper(first: number): string {
     return [
-      'def vk_reference_video(path, offset=0):',
+      'def vk_reference_video(path, offset, like):',
       '    import os as _vk_os',
+      '    from fractions import Fraction as _vk_Fraction',
       '    if not _vk_os.path.isfile(path):',
       '        raise ValueError("The reference video " + path + " is not there any more. Pick it again.")',
       '    ref = core.bs.VideoSource(source=path, cachemode=3)',
       '    if offset >= ref.num_frames:',
       '        raise ValueError("The reference offset %d is past the end of %s, which has %d frames." % (offset, _vk_os.path.basename(path), ref.num_frames))',
-      '    if offset > 0:',
-      '        ref = ref[offset:]',
-      '    elif offset < 0:',
-      '        ref = ref[0] * -offset + ref',
-      `    if ref.num_frames <= ${trim.first}:`,
-      `        raise ValueError("The reference video ends before frame ${trim.first}, where this segment starts.")`,
-      `    ref = ref${cut}`,
-      '    if ref.num_frames > original_clip.num_frames:',
-      '        ref = ref[:original_clip.num_frames]',
-      '    elif ref.num_frames < original_clip.num_frames:',
-      '        ref = ref + ref[-1] * (original_clip.num_frames - ref.num_frames)',
-      '    if original_clip.fps_num:',
-      '        ref = core.std.AssumeFPS(ref, src=original_clip)',
-      '    return ref',
+      '    last = ref.num_frames - 1',
+      '    if original_clip.fps_num and like.fps_num and ref.fps_num:',
+      `        start = _vk_Fraction(${first}) / original_clip.fps`,
+      '        def _at(n):',
+      '            return offset + int((start + _vk_Fraction(n) / like.fps) * ref.fps + _vk_Fraction(1, 2))',
+      '    else:',
+      '        def _at(n):',
+      `            return offset + ${first} + n`,
+      '    timing = {"fpsnum": like.fps_num, "fpsden": like.fps_den} if like.fps_num else {}',
+      '    base = core.std.BlankClip(ref, length=like.num_frames, **timing)',
+      '    return core.std.FrameEval(base, lambda n: ref[min(max(_at(n), 0), last)])',
       '',
       '',
     ].join('\n');
@@ -229,7 +232,7 @@ export class VapourSynthScriptGenerator {
     const id = this.stageIdOf(filter, variable);
     if (!id) return 'original_clip';
     const video = parseReferenceVideo(id);
-    if (video) return `vk_reference_video(${pyString(video.path)}, ${video.offset})`;
+    if (video) return `vk_reference_video(${pyString(video.path)}, ${video.offset}, clip)`;
     if (emitted.has(id)) return `${STAGES}[${pyString(id)}]`;
 
     const here = filter.preset || 'A custom filter';
@@ -420,13 +423,11 @@ export class VapourSynthScriptGenerator {
     }
 
     if (this.readsReferenceVideo(enabledFilters)) {
-      const trim = config.validationMode
-        ? { first: 0, last: Math.ceil((config.sourceFps || 30) * 5) - 1 }
-        : config.segment?.enabled
-          ? { first: config.segment.startFrame, last: config.segment.endFrame === -1 ? undefined : config.segment.endFrame - 1 }
-          : { first: 0 };
+      // Where the source's trimmed start sits in its own frames; the rest of
+      // the cut follows from matching the clip frame by frame in time.
+      const first = !config.validationMode && config.segment?.enabled ? config.segment.startFrame : 0;
       filterCode += '# A step below matches against a separate video file\n';
-      filterCode += this.generateReferenceVideoHelper(trim);
+      filterCode += this.generateReferenceVideoHelper(first);
     }
 
     // For vs-view previews, name output tabs via vsview's set_output API and
