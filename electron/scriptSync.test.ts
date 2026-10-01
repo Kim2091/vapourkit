@@ -12,7 +12,7 @@ vi.mock('electron', async () => {
 });
 vi.mock('./logger', () => ({ logger: new Proxy({}, { get: () => vi.fn() }) }));
 
-import { planScriptSync, syncScriptSources, type ScriptLedgerEntry } from './scriptSync';
+import { planScriptSync, staleScriptSources, syncScriptSources, type ScriptLedgerEntry } from './scriptSync';
 import { SCRIPT_SOURCE_MANIFEST } from './scriptSourceManifest';
 import { BUNDLED_SCRIPT_ARCHIVES, HYBRID_SCRIPTS_COMMIT, HYBRID_SCRIPTS_SOURCE, isSupersededScript, type ScriptSourceManifestEntry } from './scriptSources';
 
@@ -165,5 +165,22 @@ describe('the shipped script manifest', () => {
       const digest = crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, 'include', 'scripts', archive))).digest('hex');
       expect(SCRIPT_SOURCE_MANIFEST[archive]?.version, `${archive} changed - run: npx tsx scripts/generateScriptManifest.ts`).toBe(digest);
     }
+  });
+});
+
+describe('staleScriptSources', () => {
+  const manifest = { 'hybrid-scripts': { version: 'h2' }, 'extra_scripts.7z': { version: 'e2' } };
+
+  it('is empty when every source is at the shipped version', () => {
+    expect(staleScriptSources({ 'hybrid-scripts': { version: 'h2' }, 'extra_scripts.7z': { version: 'e2' } }, manifest)).toEqual([]);
+  });
+
+  it('names a source a same-version rebuild changed', () => {
+    expect(staleScriptSources({ 'hybrid-scripts': { version: 'h2' }, 'extra_scripts.7z': { version: 'e1' } }, manifest))
+      .toEqual(['extra_scripts.7z']);
+  });
+
+  it('counts a source with no ledger entry as stale', () => {
+    expect(staleScriptSources({}, manifest)).toEqual(['hybrid-scripts', 'extra_scripts.7z']);
   });
 });

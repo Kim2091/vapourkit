@@ -21,7 +21,7 @@ import {
 } from './constants';
 import { readInstalledProjects, unmetRequirements } from './launchRequirements';
 import { getBackendsForVendor, getNoDepsPackages, getPypiPackages } from './vendorPackages';
-import { syncInstalledScripts } from './scriptSync';
+import { staleScriptSources, syncInstalledScripts } from './scriptSync';
 import { downloadToFile } from './download';
 import { APP_OWNED_PLUGIN_ARCHIVES, shouldExtractBundledPluginArchives } from './bundledPluginArchives';
 import { CORE_SETUP_REQUIRED_BYTES, CORE_SETUP_REQUIRED_TEMP_BYTES, runInstallPreflight } from './installPreflight';
@@ -712,11 +712,28 @@ export class DependencyManager {
           logger.error('Failed to update bundled files on version change:', updateError);
           // Non-fatal: don't block startup
         }
-      } else if (!isEmptyDraft(report)) {
-        // Packages topped up on a launch after the update itself (the first
-        // attempt was offline, say) still belong in the report.
-        await mergeUpdateReport(report, currentVersion, currentVersion).catch(error =>
-          logger.warn('Could not record the package install in the update report:', error));
+      } else {
+        // Same version, but a rebuild under it can still ship changed scripts
+        // (a same-day nightly); only then is the install's copy synced.
+        if (configManager.getPluginsGpuVendor()) {
+          try {
+            const stale = staleScriptSources((await readLedger()).scripts);
+            if (stale.length > 0) {
+              logger.dependency(`vs-scripts behind this build: ${stale.join(', ')} - syncing`);
+              const scripts = await syncInstalledScripts('update');
+              report.scriptsUpdated.push(...scripts.updated, ...scripts.removed);
+              report.scriptsKept.push(...scripts.keptEdited);
+            }
+          } catch (error) {
+            logger.warn('Could not sync vs-scripts with this build (retried next launch):', error);
+          }
+        }
+        if (!isEmptyDraft(report)) {
+          // Packages topped up on a launch after the update itself (the first
+          // attempt was offline, say) still belong in the report.
+          await mergeUpdateReport(report, currentVersion, currentVersion).catch(error =>
+            logger.warn('Could not record the package install in the update report:', error));
+        }
       }
     }
 

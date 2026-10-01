@@ -4,7 +4,7 @@ import type { ScriptSourceManifestEntry } from './scriptSources';
 
 export const SCRIPT_SOURCE_MANIFEST: Readonly<Record<string, ScriptSourceManifestEntry>> = {
   "extra_scripts.7z": {
-    version: 'a5c1eb30214d02c1f0b839f3f9f225ff5c75e015e62b55954a947add159317f2',
+    version: '3bb1f10b97cb2068df2ea289dee964323860a680e4768ddeae628ff0ceb409a5',
     files: {
       "basic_resize.py": '6b68dc759707e553a6190192489684b65e1cc1edbcc3d06784f106533c7136d2',
       "upscale-script.py": 'f0448d030f9569017a72d192fc46b4537f2229aa64088ab9d728f3e378b0c984',
@@ -30,7 +30,7 @@ export const SCRIPT_SOURCE_MANIFEST: Readonly<Record<string, ScriptSourceManifes
       "vs_grainsynth/arch.py": '1543972f52481e61d14cc7b9f4e84565aa7ca06c9a7b9fda804f7d1ec2f8b31a',
       "vs_grainsynth/models/mega_v1.pth": '180eb5d6b3e806ff5f64ffa6490d59f2e924966ed31932713cb85fc5d8af829b',
       "vs_grainsynth/models/real_v5.pth": 'c00e0120b4f394d75ff9d0e8134fdd9d855512b1f909abdd8afd6cdb76df0b86',
-      "vsmlrt.py": '654199b7c5176e0a89d881e806a88fdcba2025c444a2f77a53f1c0bb2d608ebd',
+      "vsmlrt.py": '20f76cd0f95d49ddaee0bff3160119cfe20af63f5f299b02a4d133a741343775',
     },
   },
   "hybrid-scripts": {

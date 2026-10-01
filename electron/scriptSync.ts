@@ -204,6 +204,23 @@ export async function syncScriptSources(options: ScriptSyncOptions): Promise<Scr
 }
 
 /**
+ * The script sources whose installed version is not the one this build ships.
+ *
+ * Launch syncs scripts on an app version change, but builds can share a
+ * version - nightlies rebuilt the same day all read 2.1.0-nightly.<date> - and
+ * one of them can still ship a changed archive. Comparing the ledger with the
+ * manifest costs nothing, where a sync hashes every installed script. A source
+ * with no ledger entry counts as stale, so an install that has scripts but
+ * predates the ledger gets one written.
+ */
+export function staleScriptSources(
+  ledgerScripts: Readonly<Record<string, { version: string }>>,
+  manifest: Readonly<Record<string, { version: string }>> = SCRIPT_SOURCE_MANIFEST,
+): string[] {
+  return Object.keys(manifest).filter(source => ledgerScripts[source]?.version !== manifest[source].version);
+}
+
+/**
  * Syncs this install's vs-scripts against the ledger and records the result.
  * `install` is plugin install and Reinstall; `update` is launch after an app
  * update, which never overwrites an edit.
