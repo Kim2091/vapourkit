@@ -124,6 +124,38 @@ export async function runCommand(
 /**
  * Setup VapourSynth environment variables
  */
+/**
+ * The system ROCm library folder on Linux, when there is one.
+ *
+ * The MIGraphX plugin (vapoursynth-mlrt-migx) links libmigraphx_c.so.3 and
+ * libamdhip64.so.7 from the system ROCm install, which lives in
+ * $ROCM_PATH/lib (default /opt/rocm/lib). That folder is often not in the
+ * loader cache, only added to LD_LIBRARY_PATH by a shell profile that an
+ * AppImage started from the desktop never reads, so the plugin fails to load
+ * on a machine that has MIGraphX installed.
+ */
+export function rocmLibraryDir(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  exists: (dir: string) => boolean = fs.existsSync,
+): string | null {
+  if (platform !== 'linux') return null;
+  const dir = path.join(env['ROCM_PATH'] || '/opt/rocm', 'lib');
+  return exists(dir) ? dir : null;
+}
+
+/**
+ * Appends the system ROCm library folder to a library path, last so it never
+ * shadows anything the environment already resolves. Unchanged when there is
+ * no ROCm or the folder is already listed.
+ */
+export function withRocmLibraryPath(current: string | undefined, rocmDir: string | null): string | undefined {
+  if (!rocmDir) return current;
+  const entries = (current ?? '').split(':').filter(Boolean);
+  if (entries.includes(rocmDir)) return current;
+  return [...entries, rocmDir].join(':');
+}
+
 export function setupVSEnvironment(pythonPath?: string): NodeJS.ProcessEnv {
   const env = { ...process.env };
 
@@ -141,6 +173,11 @@ export function setupVSEnvironment(pythonPath?: string): NodeJS.ProcessEnv {
   // Setup VapourSynth plugin paths
   env['VS_PLUGINS_PATH'] = PATHS.PLUGINS;
   env['VAPOURSYNTH_PLUGINS_PATH'] = PATHS.PLUGINS;
+
+  const libraryPath = withRocmLibraryPath(env['LD_LIBRARY_PATH'], rocmLibraryDir(env));
+  if (libraryPath !== undefined) {
+    env['LD_LIBRARY_PATH'] = libraryPath;
+  }
 
   return env;
 }

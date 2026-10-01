@@ -13,7 +13,7 @@ vi.mock('electron', async () => {
 
 import { applyPluginCompatibilityFixes } from './legacyCleanup';
 
-describe('applyPluginCompatibilityFixes: Linux HIP conflict', () => {
+describe('applyPluginCompatibilityFixes: Linux bundled ROCm', () => {
   let plugins: string;
 
   beforeEach(async () => {
@@ -27,20 +27,25 @@ describe('applyPluginCompatibilityFixes: Linux HIP conflict', () => {
   const folder = (name: string) => fs.mkdir(path.join(plugins, name), { recursive: true });
   const exists = (name: string) => fs.access(path.join(plugins, name)).then(() => true, () => false);
 
-  it('drops bm3dhip when a dfttest2 HIP build is beside it on Linux', async () => {
+  it('drops every plugin that bundles its own ROCm on Linux', async () => {
     await folder('bm3dhip');
     await folder('dfttest2_hip');
     await folder('dfttest2_hiprtc');
+    await folder('dfttest2_cpu');
+    await folder('migx');
     await applyPluginCompatibilityFixes('amd', plugins, 'linux');
     expect(await exists('bm3dhip')).toBe(false);
-    expect(await exists('dfttest2_hip')).toBe(true);
-    expect(await exists('dfttest2_hiprtc')).toBe(true);
+    expect(await exists('dfttest2_hip')).toBe(false);
+    expect(await exists('dfttest2_hiprtc')).toBe(false);
+    // The CPU fallback and the system-ROCm MIGraphX plugin stay
+    expect(await exists('dfttest2_cpu')).toBe(true);
+    expect(await exists('migx')).toBe(true);
   });
 
-  it('keeps bm3dhip when nothing conflicts with it', async () => {
-    await folder('bm3dhip');
+  it('drops one even on its own, since system ROCm collides with it too', async () => {
+    await folder('dfttest2_hiprtc');
     await applyPluginCompatibilityFixes('amd', plugins, 'linux');
-    expect(await exists('bm3dhip')).toBe(true);
+    expect(await exists('dfttest2_hiprtc')).toBe(false);
   });
 
   it('leaves Windows alone, where DLLs do not interpose', async () => {

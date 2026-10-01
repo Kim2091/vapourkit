@@ -132,29 +132,30 @@ const CRASHING_PLUGIN_FILES: string[] = [
 ];
 
 /**
- * Plugin folders that cannot share a Linux process: bm3dhip and dfttest2's HIP
- * builds each vendor a complete ROCm stack (amdhip64, amd_comgr, libclang-cpp,
- * libLLVM) under different auditwheel-hashed names, so the loader keeps both.
- * ELF symbol interposition then has the second libclang-cpp register its
- * analyses into the first one's registry, and LLVM aborts the whole process:
- * "LLVM ERROR: support is already registered for analysis:
- * AnalysisName(PointerFlowAnalysisResult)". Windows DLLs do not interpose,
- * which is why this only shows on Linux.
+ * Plugin folders that vendor their own ROCm stack, removed on Linux.
  *
- * vsjetpack's [amd] extra installs all three. bm3dhip goes: no shipped filter
- * uses BM3D, while the DFTTest2 template picks dfttest2's HIP build, and BM3D
- * through vsjetpack still has bm3dcpu.
+ * bm3dhip and dfttest2's hip and hiprtc builds each bundle amdhip64,
+ * amd_comgr, libclang-cpp and libLLVM under auditwheel-hashed names, so the
+ * loader keeps every copy. ELF symbol interposition then has a second
+ * libclang-cpp register its analyses into the first one's registry, and LLVM
+ * aborts the whole process: "LLVM ERROR: support is already registered for
+ * analysis: AnalysisName(PointerFlowAnalysisResult)". bm3dhip collides with
+ * dfttest2's copy, and dfttest2's collides with the system ROCm that the
+ * MIGraphX backend loads, so no bundled stack can stay. Windows DLLs do not
+ * interpose, which is why this only shows on Linux.
+ *
+ * vsjetpack's [amd] extra installs all three. Nothing is lost that has no
+ * fallback: no shipped filter uses BM3D, BM3D through vsjetpack has bm3dcpu,
+ * and dfttest2 falls back to dfttest2_cpu. dfttest2_hip did not even load on
+ * the machine that reported this (its bundled librocfft is not page-aligned).
  */
-const LINUX_HIP_CONFLICT = {
-  remove: 'bm3dhip',
-  keptFor: ['dfttest2_hip', 'dfttest2_hiprtc'],
-};
+const LINUX_BUNDLED_ROCM_PLUGINS: string[] = ['bm3dhip', 'dfttest2_hip', 'dfttest2_hiprtc'];
 
 /**
  * Post-install plugin compatibility fixes:
  *
  * 1. Removes bundled plugin builds known to abort VapourSynth at autoload,
- *    and on Linux the HIP plugin whose ROCm stack collides with another's.
+ *    and on Linux the HIP plugins whose bundled ROCm stacks collide.
  * 2. Resolves the vs-mlrt ONNX Runtime duplicate for the machine's GPU vendor.
  *    Both vapoursynth-mlrt-ort (CPU/DirectML) and vapoursynth-mlrt-ort-cuda
  *    ship a vsort.dll, and autoload walks alphabetically, so whichever folder
@@ -180,16 +181,15 @@ export async function applyPluginCompatibilityFixes(
   await removeEntries(pluginsDir, CRASHING_PLUGIN_FILES, 'crashing plugin');
 
   if (platform === 'linux') {
-    const conflictDir = path.join(pluginsDir, LINUX_HIP_CONFLICT.remove);
-    const keptPresent = await Promise.all(
-      LINUX_HIP_CONFLICT.keptFor.map(name => fs.pathExists(path.join(pluginsDir, name))));
-    if (keptPresent.some(Boolean) && await fs.pathExists(conflictDir)) {
+    for (const name of LINUX_BUNDLED_ROCM_PLUGINS) {
+      const dir = path.join(pluginsDir, name);
+      if (!await fs.pathExists(dir)) continue;
       try {
-        await fs.remove(conflictDir);
-        logger.info(`Removed the ${LINUX_HIP_CONFLICT.remove} plugin folder: its ROCm stack aborts VapourSynth ` +
-          `alongside dfttest2's HIP build on Linux`);
+        await fs.remove(dir);
+        logger.info(`Removed the ${name} plugin folder: its bundled ROCm stack aborts VapourSynth ` +
+          'alongside another ROCm on Linux');
       } catch (error) {
-        logger.warn(`Failed to remove the conflicting ${LINUX_HIP_CONFLICT.remove} plugin folder:`, error);
+        logger.warn(`Failed to remove the ${name} plugin folder:`, error);
       }
     }
   }

@@ -30,6 +30,7 @@ vi.mock('./logger', () => ({
 }));
 
 import { spawn, spawnSync } from 'child_process';
+import * as path from 'path';
 import { accessSync, statSync } from 'fs';
 import {
   isCommandAvailable,
@@ -38,6 +39,8 @@ import {
   resolveSupportedPythonCommand,
   runCommand,
   CommandError,
+  rocmLibraryDir,
+  withRocmLibraryPath,
 } from './utils';
 
 const mockSpawn = vi.mocked(spawn);
@@ -251,5 +254,33 @@ describe('Python host resolution', () => {
     proc.emit('close', 0);
 
     await expect(version).resolves.toBe('3.14');
+  });
+});
+
+describe('rocmLibraryDir', () => {
+  it('finds the default ROCm lib folder on Linux', () => {
+    expect(rocmLibraryDir({}, 'linux', dir => dir === path.join('/opt/rocm', 'lib'))).toBe(path.join('/opt/rocm', 'lib'));
+  });
+
+  it('follows ROCM_PATH', () => {
+    expect(rocmLibraryDir({ ROCM_PATH: '/usr/lib/rocm' }, 'linux', () => true)).toBe(path.join('/usr/lib/rocm', 'lib'));
+  });
+
+  it('is null without ROCm, and always off Linux', () => {
+    expect(rocmLibraryDir({}, 'linux', () => false)).toBeNull();
+    expect(rocmLibraryDir({}, 'win32', () => true)).toBeNull();
+  });
+});
+
+describe('withRocmLibraryPath', () => {
+  it('appends ROCm after what is already there', () => {
+    expect(withRocmLibraryPath('/tmp/.mount_x/usr/lib', '/opt/rocm/lib')).toBe('/tmp/.mount_x/usr/lib:/opt/rocm/lib');
+    expect(withRocmLibraryPath(undefined, '/opt/rocm/lib')).toBe('/opt/rocm/lib');
+  });
+
+  it('leaves the path alone when ROCm is absent or already listed', () => {
+    expect(withRocmLibraryPath('/a:/opt/rocm/lib', '/opt/rocm/lib')).toBe('/a:/opt/rocm/lib');
+    expect(withRocmLibraryPath('/a', null)).toBe('/a');
+    expect(withRocmLibraryPath(undefined, null)).toBeUndefined();
   });
 });
