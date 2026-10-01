@@ -176,6 +176,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDefaultOutputFolder: (folder: string | null) => ipcRenderer.invoke('set-default-output-folder', folder),
 
   // Descriptive naming
+  getRocmSetting: () => ipcRenderer.invoke('get-rocm-setting'),
+  setRocmSetting: (setting: { mode: string; customRoot?: string }) => ipcRenderer.invoke('set-rocm-setting', setting),
   getDescriptiveNamingEnabled: () => ipcRenderer.invoke('get-descriptive-naming-enabled'),
   setDescriptiveNamingEnabled: (enabled: boolean) => ipcRenderer.invoke('set-descriptive-naming-enabled', enabled),
 

@@ -251,8 +251,11 @@ export class VapourSynthScriptGenerator {
     code += "    # vs-mlrt plugin it finds, which a pip install doesn't have\n";
     code += this.platform === 'win32'
       ? `    _vk_vsmlrt.migraphx_driver_path = ${pyString(PATHS.MIGX_DRIVER_WIN.replace(/\\/g, '/'))}\n`
+      // The ROCm chosen in Settings names its own driver (rocmEnvironment.ts),
+      // so a driver from another ROCm earlier on PATH cannot pair with its libraries
       : '    import os as _vk_os, shutil as _vk_shutil\n' +
-        '    _vk_vsmlrt.migraphx_driver_path = _vk_shutil.which("migraphx-driver") or ' +
+        '    _vk_vsmlrt.migraphx_driver_path = _vk_os.environ.get("VK_MIGRAPHX_DRIVER") or ' +
+        '_vk_shutil.which("migraphx-driver") or ' +
         '_vk_os.path.join(_vk_os.environ.get("ROCM_PATH", "/opt/rocm"), "bin", "migraphx-driver")\n';
     code += 'except Exception:\n';
     code += '    pass\n\n';

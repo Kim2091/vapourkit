@@ -5,6 +5,7 @@ import { logger } from './logger';
 import { configManager } from './configManager';
 import { VS_MLRT_VERSION, PATHS } from './constants';
 import { VsMlrtManager } from './vsMlrtManager';
+import { describeRocm, type RocmMode, type RocmSetting } from './rocmEnvironment';
 
 // Cache for log file reading - stores last file size for change detection
 let lastLogSize = 0;
@@ -137,6 +138,22 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     logger.info(`Setting descriptive naming enabled: ${enabled}`);
     await configManager.setDescriptiveNamingEnabled(enabled);
     return { success: true };
+  });
+
+  // Which ROCm the MIGraphX backend runs against (Linux; rocmEnvironment.ts).
+  // Both return the setting with what it resolves to, for the status line.
+  ipcMain.handle('get-rocm-setting', async () => {
+    const setting = configManager.getRocmSetting();
+    return { setting, status: describeRocm(setting) };
+  });
+
+  ipcMain.handle('set-rocm-setting', async (event, setting: RocmSetting) => {
+    const mode: RocmMode = ['auto', 'environment', 'custom'].includes(setting?.mode) ? setting.mode : 'auto';
+    const customRoot = typeof setting?.customRoot === 'string' ? setting.customRoot : undefined;
+    const clean: RocmSetting = { mode, ...(customRoot ? { customRoot } : {}) };
+    logger.info(`Setting ROCm installation: ${mode}${customRoot ? ` (${customRoot})` : ''}`);
+    await configManager.setRocmSetting(clean);
+    return { setting: clean, status: describeRocm(clean) };
   });
 
   ipcMain.handle('get-encoding-settings-expanded', async () => {

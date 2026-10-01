@@ -391,6 +391,8 @@ describe('inference backend selection', () => {
 
     const linux = await generate([customFilter(0, 'CAS Sharpen')], false, 'ncnn', undefined, 'linux');
     expect(linux).toContain('_vk_shutil.which("migraphx-driver")');
+    // The ROCm picked in Settings wins over whatever is first on PATH
+    expect(linux).toContain('migraphx_driver_path = _vk_os.environ.get("VK_MIGRAPHX_DRIVER") or _vk_shutil.which');
     expect(linux).toContain('_vk_os.environ.get("ROCM_PATH", "/opt/rocm")');
   });
 

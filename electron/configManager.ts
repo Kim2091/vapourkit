@@ -7,6 +7,7 @@ import { getBundledBasePath } from './utils';
 import type { ModelType } from './scriptGenerator';
 import type { GpuVendor } from './gpuDetection';
 import type { DiscordRichPresenceSettings } from './discordRichPresence';
+import { DEFAULT_ROCM_SETTING, setRocmSetting, type RocmSetting } from './rocmEnvironment';
 
 // Single source of truth for FFmpeg default arguments
 export const DEFAULT_FFMPEG_ARGS = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1';
@@ -58,6 +59,8 @@ interface AppConfig {
   appVersion?: string;
   /** Revision of the Linux bundled filter policy last reconciled on this install. */
   linuxPluginFilterCatalogRevision?: number;
+  /** Which ROCm the MIGraphX backend runs against on Linux (rocmEnvironment.ts). */
+  rocm?: RocmSetting;
   models: {
     [modelName: string]: {
       useFp32: boolean;
@@ -127,6 +130,7 @@ export class ConfigManager {
       logger.error('Error loading config:', error);
       this.config = DEFAULT_CONFIG;
     }
+    setRocmSetting(this.config.rocm);
   }
 
   private async migrateConfigWithStock(userConfig: Record<string, unknown>): Promise<AppConfig> {
@@ -449,6 +453,16 @@ export class ConfigManager {
 
   async setDefaultOutputFolder(folder: string | null): Promise<void> {
     this.config.defaultOutputFolder = folder ?? undefined;
+    await this.save();
+  }
+
+  getRocmSetting(): RocmSetting {
+    return this.config.rocm ?? DEFAULT_ROCM_SETTING;
+  }
+
+  async setRocmSetting(setting: RocmSetting): Promise<void> {
+    this.config.rocm = setting;
+    setRocmSetting(setting);
     await this.save();
   }
 

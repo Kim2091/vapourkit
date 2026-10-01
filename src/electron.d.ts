@@ -3,6 +3,27 @@ import type { BackendId, FilterBackend } from '../electron/providers/descriptors
 
 export type { BackendId, FilterBackend };
 
+export type RocmMode = 'auto' | 'environment' | 'custom';
+
+export interface RocmSetting {
+  mode: RocmMode;
+  customRoot?: string;
+}
+
+export interface RocmStatus {
+  supported: boolean;
+  root: string | null;
+  migraphxVersion: string | null;
+  hasMigraphxLibrary: boolean;
+  hasMigraphxDriver: boolean;
+  summary: string;
+}
+
+export interface RocmSettingResult {
+  setting: RocmSetting;
+  status: RocmStatus;
+}
+
 export interface ElectronAPI {
   // Dependency management
   platform: NodeJS.Platform;
@@ -185,6 +206,9 @@ export interface ElectronAPI {
   setDefaultOutputFolder: (folder: string | null) => Promise<{ success: boolean }>;
 
   // Descriptive naming
+  /** Which ROCm the MIGraphX backend runs against (Linux only), with what it resolves to */
+  getRocmSetting: () => Promise<RocmSettingResult>;
+  setRocmSetting: (setting: RocmSetting) => Promise<RocmSettingResult>;
   getDescriptiveNamingEnabled: () => Promise<{ enabled: boolean }>;
   setDescriptiveNamingEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
 

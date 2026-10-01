@@ -2,6 +2,7 @@ import { memo, useState, useEffect } from 'react';
 import { Settings, Info, Terminal, FolderOpen, X, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive, Palette, MessageCircle, PackageCheck, ChevronRight } from 'lucide-react';
 import type { BackendId, DiscordRichPresenceSettings, UpdateReportSnapshot } from '../electron.d';
 import { BACKENDS } from '../utils/backends';
+import { RocmSettingsSection } from './RocmSettingsSection';
 import { DEFAULT_ACCENT_COLOR } from '../hooks/useAccentColor';
 import { DEFAULT_MAIN_COLOR } from '../hooks/useMainColor';
 
@@ -293,6 +294,9 @@ export const SettingsModal = memo<SettingsModalProps>(({
                   </div>
                 </div>
               </section>
+
+              {/* ROCm install for the MIGraphX backend (Linux only; renders nothing elsewhere) */}
+              <RocmSettingsSection />
 
               {/* Accent Color Section */}
               <section className="mt-2 border-t border-ink-700">

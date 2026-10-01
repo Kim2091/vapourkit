@@ -3,7 +3,8 @@ import * as fs from 'fs-extra';
 import { spawn } from 'child_process';
 import { PATHS, PYPI_EXTRA_INDEX_ARGS, VSVIEW_MIN_VERSION } from './constants';
 import { logger } from './logger';
-import { rocmLibraryDir, setupVSEnvironment } from './utils';
+import { setupVSEnvironment } from './utils';
+import { resolveRocmRoot } from './rocmEnvironment';
 import { isUpdateAvailable } from './updateChecker';
 
 /**
@@ -32,11 +33,11 @@ export class VsViewManager {
     ]) {
       delete guiEnvironment[variable];
     }
-    // The AppImage's loader paths go, but the system ROCm folder is the
-    // user's own and the MIGraphX plugin needs it (see rocmLibraryDir).
-    const rocmDir = rocmLibraryDir(environment);
-    if (rocmDir) {
-      guiEnvironment['LD_LIBRARY_PATH'] = rocmDir;
+    // The AppImage's loader paths go, but the ROCm install chosen in Settings
+    // is the user's own and the MIGraphX plugin needs it (rocmEnvironment.ts)
+    const rocmRoot = resolveRocmRoot(undefined, environment);
+    if (rocmRoot) {
+      guiEnvironment['LD_LIBRARY_PATH'] = path.join(rocmRoot, 'lib');
     }
     return guiEnvironment;
   }
