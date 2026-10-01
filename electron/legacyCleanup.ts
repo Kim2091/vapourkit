@@ -132,9 +132,29 @@ const CRASHING_PLUGIN_FILES: string[] = [
 ];
 
 /**
+ * Plugin folders that cannot share a Linux process: bm3dhip and dfttest2's HIP
+ * builds each vendor a complete ROCm stack (amdhip64, amd_comgr, libclang-cpp,
+ * libLLVM) under different auditwheel-hashed names, so the loader keeps both.
+ * ELF symbol interposition then has the second libclang-cpp register its
+ * analyses into the first one's registry, and LLVM aborts the whole process:
+ * "LLVM ERROR: support is already registered for analysis:
+ * AnalysisName(PointerFlowAnalysisResult)". Windows DLLs do not interpose,
+ * which is why this only shows on Linux.
+ *
+ * vsjetpack's [amd] extra installs all three. bm3dhip goes: no shipped filter
+ * uses BM3D, while the DFTTest2 template picks dfttest2's HIP build, and BM3D
+ * through vsjetpack still has bm3dcpu.
+ */
+const LINUX_HIP_CONFLICT = {
+  remove: 'bm3dhip',
+  keptFor: ['dfttest2_hip', 'dfttest2_hiprtc'],
+};
+
+/**
  * Post-install plugin compatibility fixes:
  *
- * 1. Removes bundled plugin builds known to abort VapourSynth at autoload.
+ * 1. Removes bundled plugin builds known to abort VapourSynth at autoload,
+ *    and on Linux the HIP plugin whose ROCm stack collides with another's.
  * 2. Resolves the vs-mlrt ONNX Runtime duplicate for the machine's GPU vendor.
  *    Both vapoursynth-mlrt-ort (CPU/DirectML) and vapoursynth-mlrt-ort-cuda
  *    ship a vsort.dll, and autoload walks alphabetically, so whichever folder
@@ -154,9 +174,25 @@ const CRASHING_PLUGIN_FILES: string[] = [
  */
 export async function applyPluginCompatibilityFixes(
   vendor: GpuVendor = 'nvidia',
-  pluginsDir: string = PATHS.PLUGINS
+  pluginsDir: string = PATHS.PLUGINS,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<void> {
   await removeEntries(pluginsDir, CRASHING_PLUGIN_FILES, 'crashing plugin');
+
+  if (platform === 'linux') {
+    const conflictDir = path.join(pluginsDir, LINUX_HIP_CONFLICT.remove);
+    const keptPresent = await Promise.all(
+      LINUX_HIP_CONFLICT.keptFor.map(name => fs.pathExists(path.join(pluginsDir, name))));
+    if (keptPresent.some(Boolean) && await fs.pathExists(conflictDir)) {
+      try {
+        await fs.remove(conflictDir);
+        logger.info(`Removed the ${LINUX_HIP_CONFLICT.remove} plugin folder: its ROCm stack aborts VapourSynth ` +
+          `alongside dfttest2's HIP build on Linux`);
+      } catch (error) {
+        logger.warn(`Failed to remove the conflicting ${LINUX_HIP_CONFLICT.remove} plugin folder:`, error);
+      }
+    }
+  }
 
   const ortCudaPlugin = path.join(pluginsDir, 'ort-cuda', IS_WINDOWS ? 'vsort.dll' : 'libvsort.so');
   const ortCudaDir = path.join(pluginsDir, 'ort-cuda');

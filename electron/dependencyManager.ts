@@ -40,7 +40,7 @@ import {
 import { runCommand, getBundledBasePath, resolveSupportedPythonCommand } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
-import { migrateLegacyPortableLayout } from './legacyCleanup';
+import { applyPluginCompatibilityFixes, migrateLegacyPortableLayout } from './legacyCleanup';
 import { findProjectsNeedingNewerCore, isNewerThanPin, readInstalledVapourSynthVersion } from './vapoursynthPin';
 import {
   hasPluginFilterTemplates,
@@ -612,6 +612,14 @@ export class DependencyManager {
         await this.configureVapourSynthForVenv();
       }
       await this.enforceVapourSynthPin();
+      // The post-install plugin fixes, at launch too, so a fix added in a
+      // release reaches installs that do not reinstall. Only with the vendor
+      // the plugin phase recorded: the fixes decide which ort build to keep.
+      const fixVendor = configManager.getPluginsGpuVendor();
+      if (fixVendor) {
+        await applyPluginCompatibilityFixes(fixVendor).catch((error) =>
+          logger.warn('Plugin compatibility fixes failed at launch:', error));
+      }
       await this.ensurePackageRequirements(report);
     }
 
