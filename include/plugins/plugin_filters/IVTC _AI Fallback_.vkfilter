@@ -1,0 +1,33 @@
+name = "IVTC (AI Fallback)"
+category = [ "Deinterlacing", "Telecine" ]
+code = """
+# Inverse telecine back to film, with Deep Deinterlace only where it fails.
+# Full Docs: https://github.com/vapoursynth/vivtc
+
+tff          = True    # Field order: True is top field first.
+deinterlacer = [1, 1]  # Deep Deinterlace for frames IVTC cannot rebuild: 1 (DDD) or 2 (DeF), luma and chroma.
+
+
+import vs_deepdeinterlace
+_match = core.resize.Bicubic(clip, format=vs.YUV420P8) if clip.format.id != vs.YUV420P8 else clip
+
+# Rebuild the film frames from matching fields. Matched on an 8-bit copy,
+# output from the full-quality clip.
+_matched = core.vivtc.VFM(_match, order=1 if tff else 0, clip2=clip)
+_flags = core.vivtc.VFM(_match, order=1 if tff else 0)
+
+# Frames VFM could not rebuild cleanly come out flagged _Combed. Only those
+# are replaced, by Deep Deinterlace's first field of the same frame; the
+# deinterlacer runs on no other frame.
+_use_cuda = VK_BACKEND == "tensorrt"
+_deint = vs_deepdeinterlace.YUV(clip, tff=tff, deinterlacer=deinterlacer, device="cuda" if _use_cuda else "cpu", fp16=_use_cuda)
+_deint = core.std.SelectEvery(_deint, 2, 0)
+_deint = core.resize.Point(_deint, format=clip.format.id) if _deint.format.id != clip.format.id else _deint
+_fixed = core.std.FrameEval(_matched, lambda n, f: _deint if f.props.get("_Combed", 0) else _matched, prop_src=_flags)
+
+# Drop the pulldown's repeated frame in each group of five: 29.97 to 23.976.
+clip = core.vivtc.VDecimate(_flags, clip2=_fixed)"""
+description = "Inverse telecine for film on DVD: rebuilds the original 23.976 frames losslessly, and uses Deep Deinterlace only on frames the field matching cannot fix. Better than deinterlacing a telecined source and dropping frames. Uses CUDA with TensorRT, CPU otherwise."
+
+[metadata]
+createdAt = "2026-10-02T00:00:00.000Z"

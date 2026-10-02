@@ -398,6 +398,9 @@ export const SHIPPED_TEMPLATE_DIGESTS: Readonly<Record<string, readonly string[]
     '69ca45e79dc05d4f526c33237efcef3235bc714eb3638db66a4068dba9e38313',
     'dfe1b463fff4b2a39613a325967825865a5b941c41614d2ec268d08845960d16',
   ],
+  "IVTC _AI Fallback_.vkfilter": [
+    '562ccd5e2bc1091c7d82d0da5fd1db70641729926c0415046a079dd411b6afc7',
+  ],
   "Initialize Clip.vkfilter": [
     '4dac32f74383445782f37999fe640cf1a69046a918a947ae33e54fd54c0c45e8',
   ],
@@ -845,6 +848,7 @@ export const SHIPPED_TEMPLATE_DIGESTS: Readonly<Record<string, readonly string[]
     'f25cb3138659c421362370d1b479c2a463d825803ba7e8a50194dd159cc01117',
   ],
   "VIVTC.vkfilter": [
+    '3007f496155ba3add1aacd2a434bc0036cffada1f9f433b710cbc7368feb5697',
     '59b4d4c62f7053dd4ffc2d2e33f23a218c86aab294340174968cba8d77fbf40d',
   ],
   "Vinverse.vkfilter": [
