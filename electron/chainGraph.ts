@@ -27,6 +27,36 @@ import { parseReferenceVideo, type ReferenceVideo } from './referenceVideo';
 
 export type StepKind = 'aiModel' | 'custom' | 'videoSource';
 
+/**
+ * How a Load Video's file lines up with the main source, as include/
+ * align_videos.py measured it: reference time = speed × main time + the
+ * offset of the section that main time falls in. Sections exist because two
+ * releases are not always the same cut; one section is the usual case.
+ *
+ * Measured against one main video, named in `alignedTo`. Against any other —
+ * a different file loaded, another job in a batch — it is not applied, and
+ * the side chain is paired by time as an unaligned one is.
+ */
+export interface SideChainAlignment {
+  alignedTo: string;
+  speed: number;
+  /** In main-video seconds; the first starts at 0. */
+  sections: { from: number; offset: number }[];
+  /** Moments that agreed / were clear enough to match / were tried. */
+  matched: number;
+  usable: number;
+  samples: number;
+}
+
+/** Whether two paths name the same file, as the OS that wrote them compares them. */
+export function samePath(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+  // Windows paths compare without case; a POSIX path never has a drive letter.
+  const windows = /^[A-Za-z]:\//.test(norm(a));
+  return windows ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
+}
+
 /** The fields of a step this file reads. Both Filter types satisfy it. */
 export interface GraphStep {
   id: string;

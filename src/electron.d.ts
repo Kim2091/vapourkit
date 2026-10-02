@@ -1,7 +1,8 @@
 // src/electron.d.ts
 import type { BackendId, FilterBackend } from '../electron/providers/descriptors';
+import type { SideChainAlignment } from '../electron/chainGraph';
 
-export type { BackendId, FilterBackend };
+export type { BackendId, FilterBackend, SideChainAlignment };
 
 export type RocmMode = 'auto' | 'environment' | 'custom';
 
@@ -40,6 +41,13 @@ export interface ElectronAPI {
   selectVideoFile: () => Promise<string[] | null>;
   /** One video file, for a step that matches against footage outside the chain. */
   selectReferenceVideo: () => Promise<string | null>;
+  /** Measures how a Load Video's file lines up with the main video (include/align_videos.py). */
+  alignSideChain: (params: { id: string; mainPath: string; refPath: string }) => Promise<
+    | { success: true; alignment: SideChainAlignment }
+    | { success: false; error: string; cancelled?: boolean }
+  >;
+  cancelAlign: (id: string) => Promise<{ success: boolean }>;
+  onAlignProgress: (callback: (progress: { id: string; progress: number; message: string }) => void) => () => void;
   selectOnnxFile: () => Promise<string | null>;
   selectTemplateFile: () => Promise<string | null>;
   getVideoInfo: (filePath: string) => Promise<VideoInfo>;
@@ -652,6 +660,8 @@ export interface Filter {
   order: number;
   /** A Load Video step's file. */
   sourcePath?: string;
+  /** A Load Video's measured timing against the main source (electron/chainGraph.ts). */
+  align?: SideChainAlignment;
   /** The Load Video step whose side chain this step is in; absent for the main chain. */
   chain?: string;
   modelPath?: string;
@@ -856,6 +866,7 @@ export interface WorkflowData {
     filterType: 'aiModel' | 'custom' | 'videoSource';
     /** A Load Video step's file. Absolute, so a workflow moved to another machine names it as it was. */
     sourcePath?: string;
+    align?: SideChainAlignment;
     /** The exported id of the Load Video step heading this step's side chain. */
     chain?: string;
     modelPath?: string;

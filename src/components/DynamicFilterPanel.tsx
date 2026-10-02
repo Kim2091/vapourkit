@@ -39,6 +39,8 @@ interface DynamicFilterPanelProps {
   onOpenFilterEditor?: (filter: Filter) => void;
   /** What the chain's LUT steps can do, and the state of doing it. */
   lut?: LutPanelActions;
+  /** The main video, which a side chain is aligned against. */
+  mainVideoPath?: string;
 }
 
 /**
@@ -111,6 +113,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   onModelsUpdated,
   onOpenFilterEditor,
   lut,
+  mainVideoPath,
 }: DynamicFilterPanelProps) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -927,7 +930,10 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                     onRemove={() => handleRemoveFilter(filter.id)}
                     onRename={(name) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, preset: name } : f))}
                     onPickVideo={() => window.electronAPI.selectReferenceVideo()}
-                    onChooseVideo={(path) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, sourcePath: path } : f))}
+                    // A new file makes the old alignment a measurement of something else.
+                    onChooseVideo={(path) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, sourcePath: path, align: undefined } : f))}
+                    mainVideoPath={mainVideoPath}
+                    onAligned={(align) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, align } : f))}
                     dragProps={{
                       draggable: !isProcessing,
                       onDragStart: (e) => handleDragStart(e, filter.id),

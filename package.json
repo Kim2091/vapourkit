@@ -82,6 +82,7 @@
             "include/vapoursynth_template.vpy",
             "include/build_trt_engine.py",
             "include/preview_server.py",
+            "include/align_videos.py",
             "include/stock-app-config.json",
             "package.json",
             "!data/**/*"
@@ -95,6 +96,7 @@
             "include/vapoursynth_template.vpy",
             "include/build_trt_engine.py",
             "include/preview_server.py",
+            "include/align_videos.py",
             "include/stock-app-config.json",
             "node_modules/7zip-bin/**/*"
         ],

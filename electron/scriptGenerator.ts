@@ -18,7 +18,9 @@ import {
   sideChainLetter,
   sideChainRuns,
   stepTag,
+  samePath,
   type Chain,
+  type SideChainAlignment,
 } from './chainGraph';
 
 export type ModelType = 'vsr' | 'image';
@@ -57,6 +59,8 @@ export interface Filter {
   order: number;
   /** A Load Video step's file. */
   sourcePath?: string;
+  /** A Load Video's measured timing against the main source. */
+  align?: SideChainAlignment;
   /** The Load Video step whose side chain this step is in; absent for the main chain. */
   chain?: string;
   modelPath?: string;
@@ -257,6 +261,23 @@ export class VapourSynthScriptGenerator {
       '        else:',
       '            v = core.resize.Point(v, format=fmt.id, matrix_in_s=_matrix, primaries_in_s=_primaries, transfer_in_s=_transfer)',
       '    return v',
+      '',
+      '# An aligned side chain\'s video, put on the main source\'s timeline: frame n',
+      '# is the moment at main frame n, by the mapping align_videos.py measured',
+      '# (reference time = speed * main time + the offset of that time\'s section).',
+      'def vk_conform(ref, speed, sections):',
+      '    if not (vk_source.fps_num and ref.fps_num):',
+      '        return ref',
+      '    src_fps, ref_fps, last = float(vk_source.fps), float(ref.fps), ref.num_frames - 1',
+      '    def _at(n):',
+      '        t = n / src_fps',
+      '        offset = sections[0][1]',
+      '        for start, value in sections:',
+      '            if t >= start:',
+      '                offset = value',
+      '        return min(max(int((speed * t + offset) * ref_fps + 0.5), 0), last)',
+      '    base = core.std.BlankClip(ref, length=vk_source.num_frames, fpsnum=vk_source.fps_num, fpsden=vk_source.fps_den)',
+      '    return core.std.FrameEval(base, lambda n: ref[_at(n)])',
       '',
       '',
     ].join('\n');
@@ -481,6 +502,18 @@ export class VapourSynthScriptGenerator {
     const backendHelper = this.generateBackendHelper(defaultBackend);
     let filterCode = '';
 
+    // An alignment is measured against one main video; against another (a
+    // different file, a batch job) it says nothing, and the side chain is
+    // paired by time like an unaligned one.
+    const alignmentOf = (chain: Chain<Filter>) => {
+      const align = chain.head?.align;
+      return align && align.sections.length > 0 && samePath(align.alignedTo, config.inputVideo) ? align : undefined;
+    };
+    if (sideChains.some(alignmentOf)) {
+      filterCode += '# The main source as loaded, before any trim: what an aligned side chain is put on\n';
+      filterCode += 'vk_source = original_clip\n\n';
+    }
+
     // Add validation mode trimming (first 5 seconds only)
     if (config.validationMode) {
       // Calculate frames for 5 seconds based on source FPS (default to 30 if unknown)
@@ -598,6 +631,11 @@ export class VapourSynthScriptGenerator {
       filterCode += `# Side chain ${sideChainLetter(layout.side.indexOf(chain))}: ${sideChainLabel(chain)}\n`;
       filterCode += '_vk_main = (clip, original_clip)\n';
       filterCode += `clip = vk_open_video(${pyString(head.sourcePath!)})\n`;
+      const align = alignmentOf(chain);
+      if (align) {
+        const sections = align.sections.map(sec => `(${sec.from}, ${sec.offset})`).join(', ');
+        filterCode += `clip = vk_conform(clip, ${align.speed}, [${sections}])\n`;
+      }
       filterCode += 'original_clip = clip\n\n';
       for (const filter of chain.steps.filter(f => f.enabled)) emitStep(filter, 0);
       filterCode += `${STAGES}[${pyString(head.id)}] = clip\n`;

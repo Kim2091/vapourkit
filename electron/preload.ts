@@ -19,6 +19,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Video operations
   selectVideoFile: () => ipcRenderer.invoke('select-video-file'),
   selectReferenceVideo: () => ipcRenderer.invoke('select-reference-video'),
+  alignSideChain: (params: { id: string; mainPath: string; refPath: string }) => ipcRenderer.invoke('align-side-chain', params),
+  cancelAlign: (id: string) => ipcRenderer.invoke('cancel-align', id),
+  onAlignProgress: (callback: (progress: { id: string; progress: number; message: string }) => void) => {
+    const listener = (_event: unknown, progress: { id: string; progress: number; message: string }) => callback(progress);
+    ipcRenderer.on('align-progress', listener);
+    return () => { ipcRenderer.removeListener('align-progress', listener); };
+  },
   selectOnnxFile: () => ipcRenderer.invoke('select-onnx-file'),
   selectTemplateFile: () => ipcRenderer.invoke('select-template-file'),
   getVideoInfo: (filePath: string) => ipcRenderer.invoke('get-video-info', filePath),

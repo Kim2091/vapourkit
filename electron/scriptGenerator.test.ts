@@ -595,6 +595,35 @@ describe('a step that reads the picture from another step', () => {
       expect(script).not.toContain('core.std.Crop(clip, 6, 6)');
     });
 
+    it('puts an aligned side chain on the main source timeline, sections and all', async () => {
+      const aligned: Filter = {
+        ...load(0),
+        align: {
+          alignedTo: 'C:\\videos\\input.mkv', speed: 1,
+          sections: [{ from: 0, offset: 0.0202 }, { from: 582.492, offset: -19.9379 }],
+          matched: 24, usable: 26, samples: 40,
+        },
+      };
+      const script = await generate([aligned, reader(1, 'load-0')], false);
+
+      expect(script).toContain('vk_source = original_clip');
+      expect(script).toContain('def vk_conform(ref, speed, sections):');
+      expect(script).toContain('clip = vk_conform(clip, 1, [(0, 0.0202), (582.492, -19.9379)])');
+      expect(script.indexOf('vk_source = original_clip')).toBeLessThan(script.indexOf('clip = vk_open_video('));
+    });
+
+    it('ignores an alignment measured against another video', async () => {
+      const elsewhere: Filter = {
+        ...load(0),
+        align: { alignedTo: 'C:\\videos\\other.mkv', speed: 1, sections: [{ from: 0, offset: 2 }], matched: 9, usable: 9, samples: 40 },
+      };
+      const script = await generate([elsewhere, reader(1, 'load-0')], false);
+
+      expect(script).not.toContain('clip = vk_conform(');
+      expect(script).not.toContain('vk_source = original_clip');
+      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 0)');
+    });
+
     it('lines a side chain up from the segment start for the main chain only', async () => {
       const generator = new VapourSynthScriptGenerator('win32');
       const scriptPath = await generator.generateScript({

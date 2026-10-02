@@ -1,3 +1,4 @@
+import { registerAlignHandlers } from './alignHandlers';
 import { BrowserWindow } from 'electron';
 import { registerDialogHandlers } from './dialogHandlers';
 import { registerModelHandlers } from './modelHandlers';
@@ -42,4 +43,5 @@ export function registerAllIpcHandlers(
   registerDiscordRichPresenceHandlers();
   registerDlssRuntimeHandlers();
   registerUpdateReportHandlers(dependencyManager);
+  registerAlignHandlers();
 }

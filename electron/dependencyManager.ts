@@ -1117,7 +1117,7 @@ export class DependencyManager {
    * about the protocol, fails at runtime — so neither preserves local edits.
    */
   private async syncGeneratedConfigFiles(bundledBasePath: string): Promise<void> {
-    for (const name of ['vapoursynth_template.vpy', 'preview_server.py']) {
+    for (const name of ['vapoursynth_template.vpy', 'preview_server.py', 'align_videos.py']) {
       const bundledPath = path.join(bundledBasePath, 'include', name);
       if (!await fs.pathExists(bundledPath)) continue;
       await fs.copy(bundledPath, path.join(PATHS.CONFIG, name), { overwrite: true });

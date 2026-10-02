@@ -74,6 +74,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         onModelsUpdated={onModelsUpdated}
         onOpenFilterEditor={onOpenFilterEditor}
         lut={lut}
+        mainVideoPath={videoInfo?.path}
       />
     </>
   );
