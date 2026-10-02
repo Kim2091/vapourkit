@@ -870,6 +870,7 @@ export const SHIPPED_TEMPLATE_DIGESTS: Readonly<Record<string, readonly string[]
   ],
   "sRestore.vkfilter": [
     '0cf1d24540f3cc29a4947bcc652cac220996d739a2450ee2a8afbe7fe97acc19',
+    'a92f70abb25ec0302bbdce3dc5bb41cdaf0b401cb0c21eb95ae872aeb4ff1187',
     'd9f74151539ab56131f231b15dbd1d4628f196f62a533dc522de86b3f483733c',
   ],
 };

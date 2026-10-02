@@ -3,6 +3,10 @@ category = ["Hybrid", "Frame Rate"]
 code = """
 # Restore original framerate from telecined/decimated content
 # From hybrid_filters/srestore.py
+
+# The frame rate to restore. None restores 25 fps from a 59.94 or 29.97 clip:
+# right for a PAL show converted to NTSC, wrong for NTSC film, which is 24000/1001.
+frate = 24000/1001
 import sys
 sys.path.insert(0, r'hybrid_filters')
 
@@ -27,8 +31,8 @@ if 'vsutil' not in sys.modules:
 
 from srestore import sRestoreMUVs
 
-clip = sRestoreMUVs(clip, frate=None, omode=6, mode=2, thresh=16)"""
-description = "Restores original framerate by detecting and removing duplicate frames"
+clip = sRestoreMUVs(clip, frate=frate, omode=6, mode=2, thresh=16)"""
+description = "Restores the original frame rate by dropping duplicate and blended frames, e.g. after a bob deinterlacer. Defaults to NTSC film (23.976); set frate = None for a PAL show converted to NTSC (25)."
 
 [metadata]
 createdAt = "2026-02-01T00:00:00.000Z"

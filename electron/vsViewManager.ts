@@ -288,11 +288,18 @@ export class VsViewManager {
         child.stderr?.on('data', (data) => {
           const text = data.toString();
           errorOutput += text;
-          logger.error(`[vs-view] ${text.trimEnd()}`);
+          // vs-view writes its ordinary progress and plugin warnings to stderr;
+          // whether the launch failed is decided by the exit below, not here.
+          logger.info(`[vs-view] ${text.trimEnd()}`);
         });
         
         child.on('exit', (code, signal) => {
           exited = true;
+          // Past the startup window, an exit is the person closing it.
+          if (settled) {
+            logger.info(`vs-view closed (${signal ? `signal ${signal}` : `code ${code}`})`);
+            return;
+          }
           const details = (errorOutput || output).trim();
           const status = signal ? `signal ${signal}` : `code ${code}`;
           const errorMsg = details
