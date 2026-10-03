@@ -85,16 +85,25 @@ const AlignStatus = memo<{
   }
   const speed = Math.abs(align.speed - 1) > 1e-6 ? ` · speed ×${align.speed.toFixed(4)}` : '';
   const sure = `${align.matched} of ${align.usable} clear moments agree`;
-  if (align.sections.length === 1) {
-    return <p className={`${line} text-ink-400`}>Lined up {signed(align.sections[0].offset)}{speed} · {sure}</p>;
-  }
-  const cuts = align.sections.slice(1).map(section => clock(section.from)).join(', ');
+  const when = align.sections.length === 1
+    ? <>Lined up {signed(align.sections[0].offset)}</>
+    : <>{align.sections.length} sections, the releases differ at {align.sections.slice(1).map(section => clock(section.from)).join(', ')}</>;
   return (
     <p className={`${line} text-ink-400`}>
-      {align.sections.length} sections, the releases differ at {cuts}{speed} · {sure}
+      {when}{speed} · {framingNote(align.framing)} · {sure}
     </p>
   );
 });
+
+/** How far the side chain's picture had to move to sit on the main one. */
+function framingNote(framing: SideChainAlignment['framing']): string {
+  if (framing === undefined) return 'framing not measured (align again)';
+  if (framing === null || framing.length === 0) return 'framing could not be measured';
+  const moved = Math.max(...framing.map(f => Math.max(
+    Math.abs(f.left), Math.abs(f.top), Math.abs(f.left + f.width - 1), Math.abs(f.top + f.height - 1))));
+  const amount = moved < 0.002 ? 'same framing' : `reframed up to ${(moved * 100).toFixed(1)}%`;
+  return framing.length > 1 ? `${amount}, changes at ${framing.slice(1).map(f => clock(f.from)).join(', ')}` : amount;
+}
 
 const ICON_BUTTON = 'p-1 rounded flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 

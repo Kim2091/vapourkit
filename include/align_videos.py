@@ -34,6 +34,15 @@ How, and why this way:
   on an offset. Each run is a section; where one ends and the next begins is
   narrowed down to a quarter second by asking which offset fits the frames
   in between. The mapping is then one speed and an offset per section.
+
+* Then where. Releases are framed differently: a few percent more or less
+  cropped, sat a few lines higher. Guided colour correction takes the
+  reference's shapes literally, so that shows as colour off the lines. Once
+  the timing is known, matched moments are compared tile by tile (phase
+  correlation of edge maps, so grading does not count), and a scale and a
+  shift per axis fitted through the tiles' shifts. Framing can change
+  partway (a part B scanned separately), so samples split into framing
+  sections the way timing does.
 """
 
 from __future__ import annotations
@@ -58,6 +67,14 @@ GROUP_TOLERANCE = 0.25     # seconds: offsets this close are one timing
 # Common release speed ratios, so a duration ratio a hair off one of them is
 # read as that ratio rather than as an accident of how long each file runs.
 KNOWN_SPEEDS = (1.0, 25 / (24000 / 1001), (24000 / 1001) / 25, 24 / (24000 / 1001), (24000 / 1001) / 24)
+
+# Framing: both pictures are drawn on this grid, whatever their size or pixel
+# aspect, and compared in tiles of TILE pixels.
+GEO_W, GEO_H, TILE = 512, 384, 128
+GEO_SAMPLES = 96
+GEO_MIN_MATCH = 0.6        # a sample's frames must be this alike to be measured
+GEO_MIN_PEAK = 0.08        # a tile's correlation peak must stand this high to count
+GEO_TOLERANCE = 0.005      # framings no edge of which moves further than this (fraction of the frame) are one
 
 
 def emit(**fields) -> None:
@@ -203,6 +220,209 @@ def section_boundary(main: Edges, ref: Edges, speed: float, lo: float, hi: float
     return round((lo + hi) / 2, 3)
 
 
+def _matrix_kwargs(clip: vs.VideoNode) -> dict:
+    return {} if clip.format.color_family == vs.RGB else {"matrix_in_s": "709"}
+
+
+def _edge_map(a: np.ndarray) -> np.ndarray:
+    gy, gx = np.gradient(a)
+    g = np.hypot(gx, gy)
+    p = np.pad(g, 1, mode="edge")
+    h, w = g.shape
+    return sum(p[dy:dy + h, dx:dx + w] for dy in range(3) for dx in range(3)) / 9.0
+
+
+def _phase_shift(a: np.ndarray, b: np.ndarray) -> tuple[float, float, float]:
+    """(dy, dx, peak): a(y, x) looks like b(y + dy, x + dx), to a tenth of a pixel."""
+    window = np.outer(np.hanning(a.shape[0]), np.hanning(a.shape[1]))
+    fa = np.fft.fft2((a - a.mean()) * window)
+    fb = np.fft.fft2((b - b.mean()) * window)
+    cross = fa * np.conj(fb)
+    surface = np.fft.ifft2(cross / (np.abs(cross) + 1e-9)).real
+    y, x = np.unravel_index(int(np.argmax(surface)), surface.shape)
+    h, w = surface.shape
+
+    def vertex(m1: float, c: float, p1: float) -> float:
+        denom = m1 - 2 * c + p1
+        return 0.5 * (m1 - p1) / denom if abs(denom) > 1e-12 else 0.0
+
+    fy = vertex(surface[(y - 1) % h, x], surface[y, x], surface[(y + 1) % h, x])
+    fx = vertex(surface[y, (x - 1) % w], surface[y, x], surface[y, (x + 1) % w])
+    sy = y + fy - (h if y > h // 2 else 0)
+    sx = x + fx - (w if x > w // 2 else 0)
+    # The peak sits at the shift that moves b onto a; looking up b there is the opposite way.
+    return -sy, -sx, float(surface[y, x])
+
+
+class Framing:
+    """Where the main video's picture sits in the reference's.
+
+    A framing is (left, top, width, height) as fractions of the reference:
+    the part of the reference that shows what the whole main frame shows.
+    (0, 0, 1, 1) is the same framing.
+    """
+
+    def __init__(self, main_clip: vs.VideoNode, ref_clip: vs.VideoNode) -> None:
+        self.main_clip, self.ref_clip = main_clip, ref_clip
+        self.main_grid = core.resize.Bicubic(main_clip, GEO_W, GEO_H, format=vs.GRAYS, **_matrix_kwargs(main_clip))
+        self.main_cache: dict[int, np.ndarray] = {}
+
+    def main_edges(self, n: int) -> np.ndarray:
+        if n not in self.main_cache:
+            self.main_cache[n] = _edge_map(np.asarray(self.main_grid.get_frame(n)[0], dtype=np.float32))
+        return self.main_cache[n]
+
+    def ref_edges(self, m: int, framing) -> np.ndarray:
+        left, top, width, height = framing
+        rw, rh = self.ref_clip.width, self.ref_clip.height
+        grid = core.resize.Bicubic(self.ref_clip[m], GEO_W, GEO_H, format=vs.GRAYS,
+                                   src_left=left * rw, src_top=top * rh, src_width=width * rw, src_height=height * rh,
+                                   **_matrix_kwargs(self.ref_clip))
+        return _edge_map(np.asarray(grid.get_frame(0)[0], dtype=np.float32))
+
+    def likeness(self, n: int, m: int, framing) -> float:
+        a, b = self.main_edges(n), self.ref_edges(m, framing)
+        a, b = a - a.mean(), b - b.mean()
+        return float((a * b).sum() / (np.sqrt((a * a).sum() * (b * b).sum()) + 1e-9))
+
+    def measure(self, n: int, m: int):
+        """The framing of reference frame m against main frame n, or None if it cannot be told."""
+        a = self.main_edges(n)
+        # A first guess good to a few pixels: one scale for both axes and a
+        # whole-frame shift, the scale whose correlation peaks highest.
+        best = None
+        for scale in np.arange(0.90, 1.1001, 0.01):
+            framing = ((1 - scale) / 2, (1 - scale) / 2, scale, scale)
+            dy, dx, peak = _phase_shift(a, self.ref_edges(m, framing))
+            if best is None or peak > best[0]:
+                best = (peak, (framing[0] + scale * dx / GEO_W, framing[1] + scale * dy / GEO_H, scale, scale))
+        framing = best[1]
+        # Then tile by tile: a shift per tile, fitted per axis as scale and offset.
+        for _ in range(3):
+            b = self.ref_edges(m, framing)
+            rows = []
+            for ty in range(0, GEO_H - TILE + 1, TILE):
+                for tx in range(0, GEO_W - TILE + 1, TILE):
+                    dy, dx, peak = _phase_shift(a[ty:ty + TILE, tx:tx + TILE], b[ty:ty + TILE, tx:tx + TILE])
+                    if peak >= GEO_MIN_PEAK and abs(dy) < TILE / 4 and abs(dx) < TILE / 4:
+                        rows.append(((tx + TILE / 2) / GEO_W, (ty + TILE / 2) / GEO_H, dx / GEO_W, dy / GEO_H, peak))
+            if len(rows) < 6 or len({r[0] for r in rows}) < 2 or len({r[1] for r in rows}) < 2:
+                return None
+            r = np.array(rows)
+            ax = _robust_line(r[:, 0], r[:, 2], r[:, 4], 1.5 / GEO_W)
+            ay = _robust_line(r[:, 1], r[:, 3], r[:, 4], 1.5 / GEO_H)
+            if ax is None or ay is None:
+                return None
+            left, top, width, height = framing
+            framing = (left + width * ax[1], top + height * ay[1], width * (1 + ax[0]), height * (1 + ay[0]))
+        if not (0.7 < framing[2] < 1.4 and 0.7 < framing[3] < 1.4):
+            return None
+        return framing
+
+
+def _robust_line(x: np.ndarray, d: np.ndarray, weight: np.ndarray, tolerance: float):
+    """(slope, intercept) of d against x, refitted once without the outliers."""
+    keep = np.ones(len(x), dtype=bool)
+    for _ in range(2):
+        if keep.sum() < 3 or len(set(x[keep])) < 2:
+            return None
+        slope, intercept = np.polyfit(x[keep], d[keep], 1, w=weight[keep])
+        keep = np.abs(d - (slope * x + intercept)) <= tolerance
+    return float(slope), float(intercept)
+
+
+def _framing_gap(f, g) -> float:
+    """The furthest any edge of the frame moves between framings f and g, as a fraction of the frame."""
+    return max(abs(f[0] - g[0]), abs(f[0] + f[2] - g[0] - g[2]), abs(f[1] - g[1]), abs(f[1] + f[3] - g[1] - g[3]))
+
+
+def _centre(run: list[tuple[float, tuple]]) -> tuple:
+    return tuple(float(v) for v in np.median([f for _, f in run], axis=0))
+
+
+def _group_framings(samples: list[tuple[float, tuple]]) -> list[list[tuple[float, tuple]]]:
+    """Samples split into runs of time that agree on a framing.
+
+    One sample is good to a pixel or two, and a scene with little line art
+    can be further off, so a sample that disagrees is a stray unless the two
+    after it agree with it: only then does a new framing begin.
+    """
+    runs: list[list[tuple[float, tuple]]] = []
+    i = 0
+    while i < len(samples):
+        if runs and _framing_gap(samples[i][1], _centre(runs[-1])) <= GEO_TOLERANCE:
+            runs[-1].append(samples[i])
+            i += 1
+            continue
+        group = samples[i:i + 3]
+        if len(group) == 3 and all(_framing_gap(f, _centre(group)) <= GEO_TOLERANCE for _, f in group):
+            if runs and _framing_gap(_centre(group), _centre(runs[-1])) <= GEO_TOLERANCE:
+                runs[-1].extend(group)
+            else:
+                runs.append(list(group))
+            i += 3
+            continue
+        i += 1
+    return runs
+
+
+def measure_framing(main: Edges, ref: Edges, main_clip: vs.VideoNode, ref_clip: vs.VideoNode,
+                    speed: float, sections: list[dict]):
+    """Framing sections, [{"from", "left", "top", "width", "height"}], or None if no moment could be measured."""
+    framing = Framing(main_clip, ref_clip)
+    main_duration = main.frames / main.fps
+
+    def ref_frame(t: float) -> int:
+        offset = sections[0]["offset"]
+        for section in sections:
+            if t >= section["from"]:
+                offset = section["offset"]
+        return ref.frame_at(speed * t + offset)
+
+    samples = []
+    for i in range(GEO_SAMPLES):
+        t = main_duration * (0.03 + 0.94 * i / (GEO_SAMPLES - 1))
+        emit(progress=0.93 + 0.06 * i / GEO_SAMPLES, message=f"Measuring the framing at {i + 1} of {GEO_SAMPLES} moments")
+        n = main.frame_at(t)
+        # The reference frame most like it, a held drawing or telecine either side.
+        m0 = ref_frame(t)
+        m = max(range(max(0, m0 - 2), min(ref.frames, m0 + 3)), key=lambda k: float((main[n] * ref[k]).sum()))
+        if float((main[n] * ref[m]).sum()) < GEO_MIN_MATCH:
+            continue
+        measured = framing.measure(n, m)
+        if measured is not None:
+            samples.append((t, measured))
+
+    runs = _group_framings(samples)
+    if not runs:
+        return None
+    centres = [_centre(run) for run in runs]
+
+    def score(t: float, f) -> float:
+        total = 0.0
+        for k in range(3):
+            tk = t + k * TRIPLE_SPAN
+            total += framing.likeness(main.frame_at(tk), ref_frame(tk), f)
+        return total
+
+    out = []
+    for k, centre in enumerate(centres):
+        start = 0.0
+        if k > 0:
+            lo, hi = runs[k - 1][-1][0], runs[k][0][0]
+            for _ in range(12):
+                mid = (lo + hi) / 2
+                if score(mid, centre) > score(mid, centres[k - 1]):
+                    hi = mid
+                else:
+                    lo = mid
+            start = round((lo + hi) / 2, 3)
+        left, top, width, height = centre
+        out.append({"from": start, "left": round(left, 5), "top": round(top, 5),
+                    "width": round(width, 5), "height": round(height, 5)})
+    return out
+
+
 def align(main_clip: vs.VideoNode, ref_clip: vs.VideoNode) -> dict:
     main = Edges(main_clip)
     ref = Edges(ref_clip)
@@ -275,11 +495,14 @@ def align(main_clip: vs.VideoNode, ref_clip: vs.VideoNode) -> dict:
         start = section_boundary(main, ref, a, runs[k - 1][-1][0], runs[k][0][0], offsets[k - 1], offsets[k])
         sections.append({"from": start, "offset": round(offsets[k], 4)})
 
+    framing = measure_framing(main, ref, main_clip, ref_clip, a, sections)
+
     matched = sum(len(run) for run in runs)
     residuals = [abs(q - (a * p + offsets[k])) * ref.fps for k, run in enumerate(runs) for p, q in run]
     return {
         "speed": a,
         "sections": sections,
+        "framing": framing,
         "matched": matched,
         "usable": len(points),
         "samples": FINE_SAMPLES,

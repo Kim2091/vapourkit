@@ -265,19 +265,29 @@ export class VapourSynthScriptGenerator {
       '# An aligned side chain\'s video, put on the main source\'s timeline: frame n',
       '# is the moment at main frame n, by the mapping align_videos.py measured',
       '# (reference time = speed * main time + the offset of that time\'s section).',
-      'def vk_conform(ref, speed, sections):',
+      '# Each framing (from, left, top, width, height) is the part of the video, as',
+      '# fractions of it, that shows the whole main frame; it is cut out and drawn',
+      '# at the video\'s own size, so the picture sits where the main one does.',
+      'def vk_conform(ref, speed, sections, framing=()):',
+      '    w, h = ref.width, ref.height',
+      '    framed = [(start, core.resize.Bicubic(ref, w, h, src_left=left * w, src_top=top * h, src_width=fw * w, src_height=fh * h))',
+      '              for start, left, top, fw, fh in framing] or [(0, ref)]',
       '    if not (vk_source.fps_num and ref.fps_num):',
-      '        return ref',
+      '        return framed[0][1]',
       '    src_fps, ref_fps, last = float(vk_source.fps), float(ref.fps), ref.num_frames - 1',
-      '    def _at(n):',
+      '    def _pick(n):',
       '        t = n / src_fps',
       '        offset = sections[0][1]',
       '        for start, value in sections:',
       '            if t >= start:',
       '                offset = value',
-      '        return min(max(int((speed * t + offset) * ref_fps + 0.5), 0), last)',
+      '        picture = framed[0][1]',
+      '        for start, c in framed:',
+      '            if t >= start:',
+      '                picture = c',
+      '        return picture[min(max(int((speed * t + offset) * ref_fps + 0.5), 0), last)]',
       '    base = core.std.BlankClip(ref, length=vk_source.num_frames, fpsnum=vk_source.fps_num, fpsden=vk_source.fps_den)',
-      '    return core.std.FrameEval(base, lambda n: ref[_at(n)])',
+      '    return core.std.FrameEval(base, _pick)',
       '',
       '',
     ].join('\n');
@@ -634,7 +644,10 @@ export class VapourSynthScriptGenerator {
       const align = alignmentOf(chain);
       if (align) {
         const sections = align.sections.map(sec => `(${sec.from}, ${sec.offset})`).join(', ');
-        filterCode += `clip = vk_conform(clip, ${align.speed}, [${sections}])\n`;
+        const framing = (align.framing ?? []).map(f => `(${f.from}, ${f.left}, ${f.top}, ${f.width}, ${f.height})`).join(', ');
+        filterCode += framing
+          ? `clip = vk_conform(clip, ${align.speed}, [${sections}], [${framing}])\n`
+          : `clip = vk_conform(clip, ${align.speed}, [${sections}])\n`;
       }
       filterCode += 'original_clip = clip\n\n';
       for (const filter of chain.steps.filter(f => f.enabled)) emitStep(filter, 0);

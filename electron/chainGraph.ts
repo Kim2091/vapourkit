@@ -37,11 +37,26 @@ export type StepKind = 'aiModel' | 'custom' | 'videoSource';
  * a different file loaded, another job in a batch — it is not applied, and
  * the side chain is paired by time as an unaligned one is.
  */
+export interface SideChainFraming {
+  from: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface SideChainAlignment {
   alignedTo: string;
   speed: number;
   /** In main-video seconds; the first starts at 0. */
   sections: { from: number; offset: number }[];
+  /**
+   * Where the main frame sits in the side chain's video, per stretch of main
+   * time: the part of the video (fractions of it) showing the whole main
+   * frame. Null when no moment could be measured; absent from alignments made
+   * before it was measured.
+   */
+  framing?: SideChainFraming[] | null;
   /** Moments that agreed / were clear enough to match / were tried. */
   matched: number;
   usable: number;

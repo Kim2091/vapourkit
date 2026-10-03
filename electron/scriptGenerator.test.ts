@@ -607,9 +607,26 @@ describe('a step that reads the picture from another step', () => {
       const script = await generate([aligned, reader(1, 'load-0')], false);
 
       expect(script).toContain('vk_source = original_clip');
-      expect(script).toContain('def vk_conform(ref, speed, sections):');
+      expect(script).toContain('def vk_conform(ref, speed, sections, framing=()):');
       expect(script).toContain('clip = vk_conform(clip, 1, [(0, 0.0202), (582.492, -19.9379)])');
       expect(script.indexOf('vk_source = original_clip')).toBeLessThan(script.indexOf('clip = vk_open_video('));
+    });
+
+    it('reframes an aligned side chain onto the main picture', async () => {
+      const aligned: Filter = {
+        ...load(0),
+        align: {
+          alignedTo: 'C:\\videos\\input.mkv', speed: 1, sections: [{ from: 0, offset: 0.0385 }],
+          framing: [
+            { from: 0, left: -0.01215, top: -0.00054, width: 1.01766, height: 1.02001 },
+            { from: 710.211, left: -0.0113, top: 0.01014, width: 1.01701, height: 1.01665 },
+          ],
+          matched: 25, usable: 25, samples: 40,
+        },
+      };
+      const script = await generate([aligned, reader(1, 'load-0')], false);
+
+      expect(script).toContain('clip = vk_conform(clip, 1, [(0, 0.0385)], [(0, -0.01215, -0.00054, 1.01766, 1.02001), (710.211, -0.0113, 0.01014, 1.01701, 1.01665)])');
     });
 
     it('ignores an alignment measured against another video', async () => {
