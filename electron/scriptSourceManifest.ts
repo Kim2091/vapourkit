@@ -4,7 +4,7 @@ import type { ScriptSourceManifestEntry } from './scriptSources';
 
 export const SCRIPT_SOURCE_MANIFEST: Readonly<Record<string, ScriptSourceManifestEntry>> = {
   "extra_scripts.7z": {
-    version: '960c7f5fa8ff04a7af55d722ab5ad12a6b28ba2c5eb5fe0152401aa70dc9693d',
+    version: 'da1b7690bfa47d12dc8b5cbea0a4fb5b671a4f2b8f73656151d7b2e19d734e85',
     files: {
       "basic_resize.py": '6b68dc759707e553a6190192489684b65e1cc1edbcc3d06784f106533c7136d2',
       "upscale-script.py": 'f0448d030f9569017a72d192fc46b4537f2229aa64088ab9d728f3e378b0c984',
@@ -30,7 +30,7 @@ export const SCRIPT_SOURCE_MANIFEST: Readonly<Record<string, ScriptSourceManifes
       "vs_grainsynth/arch.py": '1543972f52481e61d14cc7b9f4e84565aa7ca06c9a7b9fda804f7d1ec2f8b31a',
       "vs_grainsynth/models/mega_v1.pth": '180eb5d6b3e806ff5f64ffa6490d59f2e924966ed31932713cb85fc5d8af829b',
       "vs_grainsynth/models/real_v5.pth": 'c00e0120b4f394d75ff9d0e8134fdd9d855512b1f909abdd8afd6cdb76df0b86',
-      "vs_guidedcolorfix/__init__.py": '28221b70deb585880586d3778c3b477b9b7802e3e79ffbc36d3abaf95f90707f',
+      "vs_guidedcolorfix/__init__.py": 'fe7bf5eae70d1885c13230b821bb807d7a05291acc0fca992fe0cbe27a080836',
       "vs_guidedcolorfix/arch.py": 'b9d2a44d626a8cbf8ad2ff36e14643f6494fedb7df09c60324e4670d0a539353',
       "vs_guidedcolorfix/models/2x_bndl_anicc.onnx": '5af0a4cc81a5dc25e3abb5cced42708fd850477877082311689cf167d70efcb2',
       "vs_guidedcolorfix/models/LICENSE.txt": 'd3be5115c9c751a0d595a207aeaac86dd7148f09af9f8579e0ded4e29a41c8c0',
