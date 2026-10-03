@@ -43,6 +43,11 @@ How, and why this way:
   shift per axis fitted through the tiles' shifts. Framing can change
   partway (a part B scanned separately), so samples split into framing
   sections the way timing does.
+
+* On the GPU when there is one. Frames are fetched in parallel and measured
+  in batches with PyTorch (which every Vapourkit install has): edge maps,
+  each search window's scores as one product, the framing's scale sweep and
+  tiles as batched FFTs. The same arithmetic runs on the CPU without a GPU.
 """
 
 from __future__ import annotations
@@ -51,9 +56,12 @@ import json
 import sys
 
 import numpy as np
+import torch
+import torch.nn.functional as F
 import vapoursynth as vs
 
 core = vs.core
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 THUMB_W, THUMB_H = 128, 96
 TRIPLE_SPAN = 0.4          # seconds between the three frames of a fingerprint
@@ -81,51 +89,89 @@ def emit(**fields) -> None:
     print(json.dumps(fields), flush=True)
 
 
+def _blur3(x: torch.Tensor) -> torch.Tensor:
+    """3x3 box blur of a stack of images (N, H, W), edges repeated."""
+    return F.avg_pool2d(F.pad(x[:, None], (1, 1, 1, 1), mode="replicate"), 3, stride=1)[:, 0]
+
+
+def _gradient(x: torch.Tensor) -> torch.Tensor:
+    gy, gx = torch.gradient(x, dim=(1, 2))
+    return torch.hypot(gx, gy)
+
+
+def _fetch(clip: vs.VideoNode, indices: list[int]) -> torch.Tensor:
+    """Plane 0 of the given frames, fetched in parallel, as a stack on DEVICE."""
+    futures = [clip.get_frame_async(k) for k in indices]
+    stack = np.stack([np.asarray(f.result()[0], dtype=np.float32) for f in futures])
+    return torch.from_numpy(stack).to(DEVICE)
+
+
 class Edges:
-    """Blurred, normalised edge maps of one video's frames, cached by index."""
+    """Blurred, unit-length edge maps of one video's frames, cached by index."""
+
+    CACHE = 6000
+    BATCH = 256
 
     def __init__(self, clip: vs.VideoNode) -> None:
         kwargs = {} if clip.format.color_family == vs.RGB else {"matrix_in_s": "709"}
-        if clip.format.color_family != vs.RGB and "_Matrix" not in clip.get_frame(0).props:
-            kwargs = {"matrix_in_s": "709"}
         small = core.resize.Bicubic(clip, THUMB_W, THUMB_H, format=vs.GRAYS, **kwargs)
         self.clip = small
         self.fps = float(clip.fps) if clip.fps_num else 24000 / 1001
         self.frames = clip.num_frames
-        self.cache: dict[int, np.ndarray] = {}
+        self.cache: dict[int, torch.Tensor] = {}
 
-    def __getitem__(self, n: int) -> np.ndarray:
-        n = min(max(n, 0), self.frames - 1)
-        hit = self.cache.get(n)
-        if hit is not None:
-            return hit
-        a = np.asarray(self.clip.get_frame(n)[0], dtype=np.float32)
-        gy, gx = np.gradient(a)
-        g = np.hypot(gx, gy)
-        # A 3x3 box blur, twice: forgiving of a few pixels of crop or combing.
-        for _ in range(2):
-            p = np.pad(g, 1, mode="edge")
-            g = sum(p[dy:dy + THUMB_H, dx:dx + THUMB_W] for dy in range(3) for dx in range(3)) / 9.0
-        g = g - g.mean()
-        norm = float(np.sqrt((g * g).sum()))
-        out = g / norm if norm > 1e-6 else g * 0.0
-        self.cache[n] = out
-        if len(self.cache) > 6000:
+    def clamp(self, n: int) -> int:
+        return min(max(n, 0), self.frames - 1)
+
+    def load(self, indices) -> None:
+        """Measure every frame of indices not measured yet, in parallel batches."""
+        need = sorted({self.clamp(n) for n in indices} - self.cache.keys())
+        if len(self.cache) + len(need) > self.CACHE:
             self.cache.clear()
-        return out
+            need = sorted({self.clamp(n) for n in indices})
+        for at in range(0, len(need), self.BATCH):
+            chunk = need[at:at + self.BATCH]
+            with torch.inference_mode():
+                g = _gradient(_fetch(self.clip, chunk))
+                # A 3x3 box blur, twice: forgiving of a few pixels of crop or combing.
+                g = _blur3(_blur3(g)).flatten(1)
+                g = g - g.mean(dim=1, keepdim=True)
+                norm = torch.sqrt((g * g).sum(dim=1, keepdim=True))
+                g = torch.where(norm > 1e-6, g / norm.clamp_min(1e-6), torch.zeros_like(g))
+            for n, row in zip(chunk, g):
+                self.cache[n] = row
+
+    def __getitem__(self, n: int) -> torch.Tensor:
+        n = self.clamp(n)
+        if n not in self.cache:
+            self.load([n])
+        return self.cache[n]
+
+    def stack(self, indices: list[int]) -> torch.Tensor:
+        self.load(indices)
+        return torch.stack([self.cache[self.clamp(n)] for n in indices])
 
     def frame_at(self, t: float) -> int:
         return int(round(t * self.fps))
 
 
+def _triple(main: Edges, ref: Edges, t_main: float, speed: float):
+    """The three main frames of a fingerprint from t_main, and each one's reference frame step."""
+    return [(main.frame_at(t_main + k * TRIPLE_SPAN), int(round(k * TRIPLE_SPAN * speed * ref.fps))) for k in range(3)]
+
+
 def fingerprint_score(main: Edges, ref: Edges, t_main: float, m0: int, speed: float) -> float:
     """Mean edge correlation of three frames, main from t_main, ref from frame m0."""
-    total = 0.0
-    for k in range(3):
-        a = main[main.frame_at(t_main + k * TRIPLE_SPAN)]
-        b = ref[m0 + int(round(k * TRIPLE_SPAN * speed * ref.fps))]
-        total += float((a * b).sum())
-    return total / 3.0
+    return float(sum(torch.dot(main[n], ref[m0 + step]) for n, step in _triple(main, ref, t_main, speed))) / 3.0
+
+
+def fingerprint_scores(main: Edges, ref: Edges, t_main: float, starts: list[int], speed: float) -> np.ndarray:
+    """fingerprint_score for every reference start frame at once."""
+    total = None
+    for n, step in _triple(main, ref, t_main, speed):
+        part = ref.stack([m + step for m in starts]) @ main[n]
+        total = part if total is None else total + part
+    return (total / 3.0).cpu().numpy()
 
 
 def search(main: Edges, ref: Edges, t_main: float, guess: float, window: float, speed: float):
@@ -134,7 +180,7 @@ def search(main: Edges, ref: Edges, t_main: float, guess: float, window: float, 
     hi = min(ref.frames - 1, ref.frame_at(guess + window))
     if hi - lo < 4:
         return None
-    scores = np.array([fingerprint_score(main, ref, t_main, m, speed) for m in range(lo, hi + 1)])
+    scores = fingerprint_scores(main, ref, t_main, list(range(lo, hi + 1)), speed)
     best = int(scores.argmax())
     # The runner-up must be a different moment, not the same held drawing.
     away = int(round(0.25 * ref.fps))
@@ -196,6 +242,8 @@ def refine_offset(main: Edges, ref: Edges, speed: float, run: list[tuple[float, 
     far more precisely than its median does.
     """
     step = 0.25 / ref.fps
+    ref.load(ref.frame_at(speed * t + centre + k * step) + s
+             for t, _ in run for k in range(-16, 17) for _, s in _triple(main, ref, t, speed))
     best, best_score = centre, -np.inf
     for k in range(-16, 17):
         off = centre + k * step
@@ -224,34 +272,37 @@ def _matrix_kwargs(clip: vs.VideoNode) -> dict:
     return {} if clip.format.color_family == vs.RGB else {"matrix_in_s": "709"}
 
 
-def _edge_map(a: np.ndarray) -> np.ndarray:
-    gy, gx = np.gradient(a)
-    g = np.hypot(gx, gy)
-    p = np.pad(g, 1, mode="edge")
-    h, w = g.shape
-    return sum(p[dy:dy + h, dx:dx + w] for dy in range(3) for dx in range(3)) / 9.0
+def _edge_map(a: torch.Tensor) -> torch.Tensor:
+    """Edge strength of a stack of images (N, H, W), blurred once."""
+    return _blur3(_gradient(a))
 
 
-def _phase_shift(a: np.ndarray, b: np.ndarray) -> tuple[float, float, float]:
-    """(dy, dx, peak): a(y, x) looks like b(y + dy, x + dx), to a tenth of a pixel."""
-    window = np.outer(np.hanning(a.shape[0]), np.hanning(a.shape[1]))
-    fa = np.fft.fft2((a - a.mean()) * window)
-    fb = np.fft.fft2((b - b.mean()) * window)
-    cross = fa * np.conj(fb)
-    surface = np.fft.ifft2(cross / (np.abs(cross) + 1e-9)).real
-    y, x = np.unravel_index(int(np.argmax(surface)), surface.shape)
-    h, w = surface.shape
+def _phase_shifts(a: torch.Tensor, b: torch.Tensor):
+    """(dy, dx, peak) per pair of a stack: a(y, x) looks like b(y + dy, x + dx), to a tenth of a pixel."""
+    count, h, w = b.shape
+    window = torch.outer(torch.hann_window(h, periodic=False, device=b.device, dtype=torch.float64),
+                         torch.hann_window(w, periodic=False, device=b.device, dtype=torch.float64))
+    a, b = a.double().expand(count, h, w), b.double()
+    fa = torch.fft.fft2((a - a.mean(dim=(1, 2), keepdim=True)) * window)
+    fb = torch.fft.fft2((b - b.mean(dim=(1, 2), keepdim=True)) * window)
+    cross = fa * torch.conj(fb)
+    surface = torch.fft.ifft2(cross / (cross.abs() + 1e-9)).real
+    at = surface.flatten(1).argmax(dim=1)
+    y, x = at // w, at % w
+    rows = torch.arange(count, device=b.device)
 
-    def vertex(m1: float, c: float, p1: float) -> float:
+    def vertex(m1, c, p1):
         denom = m1 - 2 * c + p1
-        return 0.5 * (m1 - p1) / denom if abs(denom) > 1e-12 else 0.0
+        return torch.where(denom.abs() > 1e-12, 0.5 * (m1 - p1) / torch.where(denom.abs() > 1e-12, denom, torch.ones_like(denom)),
+                           torch.zeros_like(denom))
 
-    fy = vertex(surface[(y - 1) % h, x], surface[y, x], surface[(y + 1) % h, x])
-    fx = vertex(surface[y, (x - 1) % w], surface[y, x], surface[y, (x + 1) % w])
-    sy = y + fy - (h if y > h // 2 else 0)
-    sx = x + fx - (w if x > w // 2 else 0)
+    centre = surface[rows, y, x]
+    fy = vertex(surface[rows, (y - 1) % h, x], centre, surface[rows, (y + 1) % h, x])
+    fx = vertex(surface[rows, y, (x - 1) % w], centre, surface[rows, y, (x + 1) % w])
+    sy = y + fy - torch.where(y > h // 2, h, 0)
+    sx = x + fx - torch.where(x > w // 2, w, 0)
     # The peak sits at the shift that moves b onto a; looking up b there is the opposite way.
-    return -sy, -sx, float(surface[y, x])
+    return (-sy).cpu().numpy(), (-sx).cpu().numpy(), centre.cpu().numpy()
 
 
 class Framing:
@@ -265,47 +316,65 @@ class Framing:
     def __init__(self, main_clip: vs.VideoNode, ref_clip: vs.VideoNode) -> None:
         self.main_clip, self.ref_clip = main_clip, ref_clip
         self.main_grid = core.resize.Bicubic(main_clip, GEO_W, GEO_H, format=vs.GRAYS, **_matrix_kwargs(main_clip))
-        self.main_cache: dict[int, np.ndarray] = {}
+        # The reference is drawn onto the grid whole first (filtered, so a
+        # downscale does not alias), then each framing samples that: a
+        # framing is a few percent either way, so it needs no filtering.
+        self.ref_grid = core.resize.Bicubic(ref_clip, GEO_W, GEO_H, format=vs.GRAYS, **_matrix_kwargs(ref_clip))
+        self.main_cache: dict[int, torch.Tensor] = {}
+        self.ref_cache: dict[int, torch.Tensor] = {}
+        u = (torch.arange(GEO_W, device=DEVICE, dtype=torch.float32) + 0.5) / GEO_W
+        v = (torch.arange(GEO_H, device=DEVICE, dtype=torch.float32) + 0.5) / GEO_H
+        self.v, self.u = torch.meshgrid(v, u, indexing="ij")
 
-    def main_edges(self, n: int) -> np.ndarray:
+    def main_edges(self, n: int) -> torch.Tensor:
         if n not in self.main_cache:
-            self.main_cache[n] = _edge_map(np.asarray(self.main_grid.get_frame(n)[0], dtype=np.float32))
+            self.main_cache[n] = _edge_map(_fetch(self.main_grid, [n]))[0]
         return self.main_cache[n]
 
-    def ref_edges(self, m: int, framing) -> np.ndarray:
-        left, top, width, height = framing
-        rw, rh = self.ref_clip.width, self.ref_clip.height
-        grid = core.resize.Bicubic(self.ref_clip[m], GEO_W, GEO_H, format=vs.GRAYS,
-                                   src_left=left * rw, src_top=top * rh, src_width=width * rw, src_height=height * rh,
-                                   **_matrix_kwargs(self.ref_clip))
-        return _edge_map(np.asarray(grid.get_frame(0)[0], dtype=np.float32))
+    def ref_edges(self, m: int, framings) -> torch.Tensor:
+        """Edge maps of reference frame m under each framing, as a stack (N, H, W)."""
+        if m not in self.ref_cache:
+            self.ref_cache = {m: _fetch(self.ref_grid, [m])[None]}
+        grids = []
+        for left, top, width, height in framings:
+            x = 2 * (left + width * self.u) - 1
+            y = 2 * (top + height * self.v) - 1
+            grids.append(torch.stack([x, y], dim=-1))
+        grid = torch.stack(grids)
+        picture = self.ref_cache[m].expand(len(framings), -1, -1, -1)
+        warped = F.grid_sample(picture, grid, mode="bicubic", padding_mode="border", align_corners=False)[:, 0]
+        return _edge_map(warped)
 
     def likeness(self, n: int, m: int, framing) -> float:
-        a, b = self.main_edges(n), self.ref_edges(m, framing)
+        a, b = self.main_edges(n), self.ref_edges(m, [framing])[0]
         a, b = a - a.mean(), b - b.mean()
-        return float((a * b).sum() / (np.sqrt((a * a).sum() * (b * b).sum()) + 1e-9))
+        return float((a * b).sum() / (torch.sqrt((a * a).sum() * (b * b).sum()) + 1e-9))
 
     def measure(self, n: int, m: int):
         """The framing of reference frame m against main frame n, or None if it cannot be told."""
+        with torch.inference_mode():
+            return self._measure(n, m)
+
+    def _measure(self, n: int, m: int):
         a = self.main_edges(n)
         # A first guess good to a few pixels: one scale for both axes and a
         # whole-frame shift, the scale whose correlation peaks highest.
-        best = None
-        for scale in np.arange(0.90, 1.1001, 0.01):
-            framing = ((1 - scale) / 2, (1 - scale) / 2, scale, scale)
-            dy, dx, peak = _phase_shift(a, self.ref_edges(m, framing))
-            if best is None or peak > best[0]:
-                best = (peak, (framing[0] + scale * dx / GEO_W, framing[1] + scale * dy / GEO_H, scale, scale))
-        framing = best[1]
+        scales = np.arange(0.90, 1.1001, 0.01)
+        framings = [((1 - s) / 2, (1 - s) / 2, s, s) for s in scales]
+        dy, dx, peak = _phase_shifts(a, self.ref_edges(m, framings))
+        i = int(np.argmax(peak))
+        s = scales[i]
+        framing = (framings[i][0] + s * dx[i] / GEO_W, framings[i][1] + s * dy[i] / GEO_H, s, s)
         # Then tile by tile: a shift per tile, fitted per axis as scale and offset.
+        corners = [(ty, tx) for ty in range(0, GEO_H - TILE + 1, TILE) for tx in range(0, GEO_W - TILE + 1, TILE)]
+        a_tiles = torch.stack([a[ty:ty + TILE, tx:tx + TILE] for ty, tx in corners])
         for _ in range(3):
-            b = self.ref_edges(m, framing)
-            rows = []
-            for ty in range(0, GEO_H - TILE + 1, TILE):
-                for tx in range(0, GEO_W - TILE + 1, TILE):
-                    dy, dx, peak = _phase_shift(a[ty:ty + TILE, tx:tx + TILE], b[ty:ty + TILE, tx:tx + TILE])
-                    if peak >= GEO_MIN_PEAK and abs(dy) < TILE / 4 and abs(dx) < TILE / 4:
-                        rows.append(((tx + TILE / 2) / GEO_W, (ty + TILE / 2) / GEO_H, dx / GEO_W, dy / GEO_H, peak))
+            b = self.ref_edges(m, [framing])[0]
+            b_tiles = torch.stack([b[ty:ty + TILE, tx:tx + TILE] for ty, tx in corners])
+            dys, dxs, peaks = _phase_shifts(a_tiles, b_tiles)
+            rows = [((tx + TILE / 2) / GEO_W, (ty + TILE / 2) / GEO_H, dx / GEO_W, dy / GEO_H, peak)
+                    for (ty, tx), dy, dx, peak in zip(corners, dys, dxs, peaks)
+                    if peak >= GEO_MIN_PEAK and abs(dy) < TILE / 4 and abs(dx) < TILE / 4]
             if len(rows) < 6 or len({r[0] for r in rows}) < 2 or len({r[1] for r in rows}) < 2:
                 return None
             r = np.array(rows)
@@ -386,8 +455,8 @@ def measure_framing(main: Edges, ref: Edges, main_clip: vs.VideoNode, ref_clip: 
         n = main.frame_at(t)
         # The reference frame most like it, a held drawing or telecine either side.
         m0 = ref_frame(t)
-        m = max(range(max(0, m0 - 2), min(ref.frames, m0 + 3)), key=lambda k: float((main[n] * ref[k]).sum()))
-        if float((main[n] * ref[m]).sum()) < GEO_MIN_MATCH:
+        m = max(range(max(0, m0 - 2), min(ref.frames, m0 + 3)), key=lambda k: float(torch.dot(main[n], ref[k])))
+        if float(torch.dot(main[n], ref[m])) < GEO_MIN_MATCH:
             continue
         measured = framing.measure(n, m)
         if measured is not None:
