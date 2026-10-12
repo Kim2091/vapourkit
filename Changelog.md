@@ -74,6 +74,10 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - Fixed several filter instances breaking each other (e.g. a preview and an encode at once)
 - The official DLL is Blackwell-only. The filter no longer claims RTX 20 to 40 series can't work with it
 
+### Queue
+- **Fixed: filters disappearing after a restart.** Opening the queue sets the project's chain aside and editing a queue item shows that item's chain; the set-aside copy was only kept in memory, so restarting with the queue open and closing it left the item's chain in place of the project's. It is now kept across restarts
+- **Fixed: queue item settings reverting.** Edits made just before closing the app are now saved as it closes (they were saved on a delay that closing cut short); selecting a completed item no longer drops the last edit to the item being edited; an item's encoding settings (FFmpeg arguments, processing format, colorimetry) are loaded when it is selected instead of being overwritten by the current ones; and undo no longer reaches back into a different item's chain
+
 ### Filters
 - **New: Grain Synth.** Adds film grain fitted to real sources, with two models: `mega_v1` (stronger, harsher) and `real_v5` (softer). Apply it after upscaling, at the final resolution. The grain is the same on every render of a frame, and it runs on CUDA with TensorRT or on the CPU otherwise
 - **New: IVTC (AI Fallback).** Inverse telecine for film on DVD that rebuilds the original 23.976 frames losslessly and runs Deep Deinterlace only on the frames field matching leaves combed (credits laid over film on video, edits that break the cadence). On a telecined Hokuto no Ken episode that is about 1 frame in 400, so it runs at IVTC speed. Use it instead of deinterlacing to 59.94 and dropping frames

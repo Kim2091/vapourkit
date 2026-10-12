@@ -175,6 +175,16 @@ export function useFilterHistory(initialFilters: Filter[]) {
     lastRecordedRef.current = JSON.stringify(history.present);
   }, [history.present]);
 
+  /**
+   * Start over at state, with nothing to undo or redo: for switching to a
+   * different chain (a queue item, the project's own), where undo must not
+   * reach back into the chain that was there before.
+   */
+  const resetHistory = useCallback((state: Filter[]) => {
+    setHistory({ past: [], present: state, future: [] });
+    lastRecordedRef.current = JSON.stringify(state);
+  }, []);
+
   return {
     filters: history.present,
     recordState,
@@ -183,5 +193,6 @@ export function useFilterHistory(initialFilters: Filter[]) {
     canUndo,
     canRedo,
     clearHistory,
+    resetHistory,
   };
 }

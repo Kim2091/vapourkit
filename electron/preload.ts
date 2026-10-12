@@ -257,6 +257,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Queue operations
   getQueue: () => ipcRenderer.invoke('get-queue'),
   saveQueue: (queue: any[]) => ipcRenderer.invoke('save-queue', queue),
+  saveQueueSync: (queue: any[]) => ipcRenderer.sendSync('save-queue-sync', queue),
   clearQueue: () => ipcRenderer.invoke('clear-queue'),
   
   // vs-mlrt version management

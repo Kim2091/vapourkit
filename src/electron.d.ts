@@ -299,6 +299,8 @@ export interface ElectronAPI {
   // Queue operations
   getQueue: () => Promise<QueueItem[]>;
   saveQueue: (queue: QueueItem[]) => Promise<{ success: boolean; error?: string }>;
+  /** Blocks until written: for saving while the window closes. */
+  saveQueueSync: (queue: QueueItem[]) => { success: boolean; error?: string };
   clearQueue: () => Promise<{ success: boolean; error?: string }>;
   
   // vs-mlrt version management

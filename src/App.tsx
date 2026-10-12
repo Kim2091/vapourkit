@@ -162,7 +162,7 @@ function App() {
   const { templates: filterTemplates, saveTemplate, deleteTemplate, restoreTemplates, loadTemplates } = useFilterTemplates(isSetupComplete);
   
   // State management hooks
-  const { filters, handleSetFilters, canUndo, canRedo, handleUndo, handleRedo } = useFilterConfig(isSetupComplete, addConsoleLog);
+  const { filters, handleSetFilters, replaceFilters, canUndo, canRedo, handleUndo, handleRedo } = useFilterConfig(isSetupComplete, addConsoleLog);
   const [activeFilterEditorId, setActiveFilterEditorId] = useState<string | null>(null);
   const { colorimetrySettings, handleColorimetryChange } = useColorimetry(isSetupComplete, addConsoleLog);
   const {
@@ -203,8 +203,11 @@ function App() {
   const [isLaunchingPreviewer, setIsLaunchingPreviewer] = useState(false);
   const [previewerStatus, setPreviewerStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  // Pre-queue workflow state to restore when queue is closed
-  const [preQueueWorkflow, setPreQueueWorkflow] = useState<{
+  // The project as it was when the queue opened, put back when it closes.
+  // Kept in localStorage as well: the queue stays open across a restart, and
+  // while it is open the window shows (and saves) a queue item's chain, so a
+  // snapshot only in memory left that chain in place of the project's for good.
+  type PreQueueWorkflow = {
     videoPath: string | null;
     outputPath: string | null;
     selectedModel: string | null;
@@ -213,7 +216,28 @@ function App() {
     defaultBackend: BackendId;
     numStreams: number;
     segment: SegmentSelection;
-  } | null>(null);
+    ffmpegArgs?: string;
+    processingFormat?: string;
+    videoCompareArgs?: string;
+    colorimetry?: any;
+  };
+  const [preQueueWorkflow, setPreQueueWorkflowState] = useState<PreQueueWorkflow | null>(() => {
+    try {
+      const saved = localStorage.getItem('preQueueWorkflow');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setPreQueueWorkflow = (snapshot: PreQueueWorkflow | null) => {
+    setPreQueueWorkflowState(snapshot);
+    try {
+      if (snapshot) localStorage.setItem('preQueueWorkflow', JSON.stringify(snapshot));
+      else localStorage.removeItem('preQueueWorkflow');
+    } catch {
+      // Storage full or blocked: the in-memory snapshot still covers this session.
+    }
+  };
 
   // Queue store (data + UI state)
   const queueStore = useQueueStore({ onLog: addConsoleLog, descriptiveNamingEnabled });
@@ -377,13 +401,18 @@ function App() {
     setIsProcessingQueueItem: queueStore.setIsProcessingQueueItem,
     setIsQueueStopping: queueStore.setIsQueueStopping,
     setSelectedModel,
-    setFilters: handleSetFilters,
+    setFilters: replaceFilters,
     setOutputFormat: handleUpdateOutputFormat,
+    setFfmpegArgs: handleUpdateFfmpegArgs,
+    setProcessingFormat: handleUpdateProcessingFormat,
+    setVideoCompareArgs: handleUpdateVideoCompareArgs,
+    setColorimetry: handleColorimetryChange,
     setDefaultBackend,
     updateNumStreams,
     setSegment,
     updateQueueItem,
     updateItemWorkflow,
+    flushQueue: queueStore.flushQueue,
     requeueItem,
     loadVideoInfo,
     setOutputPath,
@@ -546,6 +575,10 @@ function App() {
         defaultBackend,
         numStreams,
         segment: { ...segment },
+        ffmpegArgs,
+        processingFormat,
+        videoCompareArgs,
+        colorimetry: colorimetrySettings,
       });
       
       // If a video is loaded, add it to the queue
@@ -560,7 +593,20 @@ function App() {
           setSelectedModel(preQueueWorkflow.selectedModel);
         }
         if (JSON.stringify(preQueueWorkflow.filters) !== JSON.stringify(filters)) {
-          handleSetFilters(preQueueWorkflow.filters);
+          replaceFilters(preQueueWorkflow.filters);
+        }
+        // Editing a queue item loads its encoding settings too; put the project's back.
+        if (preQueueWorkflow.ffmpegArgs !== undefined && preQueueWorkflow.ffmpegArgs !== ffmpegArgs) {
+          handleUpdateFfmpegArgs(preQueueWorkflow.ffmpegArgs);
+        }
+        if (preQueueWorkflow.processingFormat !== undefined && preQueueWorkflow.processingFormat !== processingFormat) {
+          handleUpdateProcessingFormat(preQueueWorkflow.processingFormat);
+        }
+        if (preQueueWorkflow.videoCompareArgs !== undefined && preQueueWorkflow.videoCompareArgs !== videoCompareArgs) {
+          handleUpdateVideoCompareArgs(preQueueWorkflow.videoCompareArgs);
+        }
+        if (preQueueWorkflow.colorimetry && JSON.stringify(preQueueWorkflow.colorimetry) !== JSON.stringify(colorimetrySettings)) {
+          handleColorimetryChange(preQueueWorkflow.colorimetry);
         }
         if (preQueueWorkflow.outputFormat !== outputFormat) {
           handleUpdateOutputFormat(preQueueWorkflow.outputFormat);

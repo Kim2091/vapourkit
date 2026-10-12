@@ -206,27 +206,50 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
     ));
   }, []);
 
+  /** prev with itemId's workflow updated (shared by edits and the save on close). */
+  const withItemWorkflow = useCallback((
+    prev: QueueItem[],
+    itemId: string,
+    workflow: Partial<QueueItem['workflow']>
+  ) => prev.map(item => {
+    if (item.id !== itemId) return item;
+    const merged = { ...item.workflow, ...workflow };
+    // An auto-named output follows the edit, so a duplicated item that is
+    // then given a different chain gets its own file instead of overwriting
+    // the original's (#2). A path the user picked is left alone.
+    let outputPath = item.outputPath;
+    if (item.outputPath === autoOutputPath(item.videoPath, item.workflow, descriptiveNamingEnabled)) {
+      outputPath = uniqueOutputPath(
+        autoOutputPath(item.videoPath, merged, descriptiveNamingEnabled),
+        prev.filter(other => other.id !== itemId).map(other => other.outputPath),
+      );
+    }
+    return { ...item, outputPath, workflow: merged };
+  }), [descriptiveNamingEnabled]);
+
   const updateItemWorkflow = useCallback((
     itemId: string,
     workflow: Partial<QueueItem['workflow']>
   ) => {
-    setQueue(prev => prev.map(item => {
-      if (item.id !== itemId) return item;
-      const merged = { ...item.workflow, ...workflow };
-      // An auto-named output follows the edit, so a duplicated item that is
-      // then given a different chain gets its own file instead of overwriting
-      // the original's (#2). A path the user picked is left alone.
-      let outputPath = item.outputPath;
-      if (item.outputPath === autoOutputPath(item.videoPath, item.workflow, descriptiveNamingEnabled)) {
-        outputPath = uniqueOutputPath(
-          autoOutputPath(item.videoPath, merged, descriptiveNamingEnabled),
-          prev.filter(other => other.id !== itemId).map(other => other.outputPath),
-        );
-      }
-      return { ...item, outputPath, workflow: merged };
-    }));
+    setQueue(prev => withItemWorkflow(prev, itemId, workflow));
     onLog(`Updated workflow for queue item`);
-  }, [onLog, descriptiveNamingEnabled]);
+  }, [onLog, withItemWorkflow]);
+
+  /**
+   * Write the queue now, synchronously, with an edit still waiting to be
+   * auto-saved folded in: for when the window closes, which would otherwise
+   * drop whatever the debounced saves had not written yet.
+   */
+  const latestQueueRef = useRef<QueueItem[]>(queue);
+  latestQueueRef.current = queue;
+  const flushQueue = useCallback((pending?: { itemId: string; workflow: Partial<QueueItem['workflow']> }) => {
+    if (!hasLoadedInitially.current) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    const toSave = pending
+      ? withItemWorkflow(latestQueueRef.current, pending.itemId, pending.workflow)
+      : latestQueueRef.current;
+    window.electronAPI.saveQueueSync(toSave);
+  }, [withItemWorkflow]);
 
   const clearQueue = useCallback(async () => {
     try {
@@ -326,6 +349,7 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
     removeFromQueue,
     updateQueueItem,
     updateItemWorkflow,
+    flushQueue,
     clearQueue,
     clearCompletedItems,
     reorderQueue,

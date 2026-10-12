@@ -1,6 +1,6 @@
 // src/hooks/useQueueOperations.ts - Queue user operations (merged from useQueueHandlers + useQueueEditing)
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { BackendId, QueueItem, SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { normalizeBackendForCurrentPlatform } from '../utils/backends';
@@ -31,13 +31,19 @@ interface UseQueueOperationsOptions {
   setIsProcessingQueueItem: (processing: boolean) => void;
   setIsQueueStopping: (stopping: boolean) => void;
   setSelectedModel: (model: string) => void;
+  /** Swaps in a queue item's chain: saved, and a fresh start for undo. */
   setFilters: (filters: any[]) => void;
   setOutputFormat: (format: string) => void;
+  setFfmpegArgs: (args: string) => void;
+  setProcessingFormat: (format: string) => void;
+  setVideoCompareArgs: (args: string) => void;
+  setColorimetry: (colorimetry: any) => void;
   setDefaultBackend: (backend: BackendId) => void;
   updateNumStreams: (streams: number) => void;
   setSegment: (segment: SegmentSelection) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
   updateItemWorkflow: (id: string, workflow: any) => void;
+  flushQueue: (pending?: { itemId: string; workflow: any }) => void;
   requeueItem: (id: string) => void;
   loadVideoInfo: (path: string) => Promise<void>;
   setOutputPath: (path: string) => void;
@@ -98,11 +104,16 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     setSelectedModel,
     setFilters,
     setOutputFormat,
+    setFfmpegArgs,
+    setProcessingFormat,
+    setVideoCompareArgs,
+    setColorimetry,
     setDefaultBackend,
     updateNumStreams,
     setSegment,
     updateQueueItem,
     updateItemWorkflow,
+    flushQueue,
     requeueItem,
     loadVideoInfo,
     setOutputPath,
@@ -129,6 +140,24 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     return () => clearTimeout(timeoutId);
   }, [editingQueueItemId, selectedModel, filters, ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, defaultBackend, numStreams, segment, colorimetry, updateItemWorkflow]);
 
+  // The auto-save above waits half a second and the queue's own save two;
+  // closing the window inside either dropped the edit. Write it all now.
+  const snapshotNow = () => snapshotWorkflow({
+    selectedModel, filters, ffmpegArgs, processingFormat,
+    outputFormat, videoCompareArgs, defaultBackend, numStreams,
+    segment, colorimetry,
+  });
+  const latestRef = useRef({ editingQueueItemId, snapshotNow });
+  latestRef.current = { editingQueueItemId, snapshotNow };
+  useEffect(() => {
+    const onClose = () => {
+      const { editingQueueItemId: editing, snapshotNow: snapshot } = latestRef.current;
+      flushQueue(editing ? { itemId: editing, workflow: snapshot() } : undefined);
+    };
+    window.addEventListener('beforeunload', onClose);
+    return () => window.removeEventListener('beforeunload', onClose);
+  }, [flushQueue]);
+
   // Close editing mode when queue panel closes
   useEffect(() => {
     if (!showQueue && editingQueueItemId) {
@@ -139,6 +168,27 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
 
   // --- Handlers (from useQueueHandlers) ---
 
+  /** Put every setting a queue item carries into the main window, so what is shown is what is saved back. */
+  const loadItemSettings = (workflow: QueueItem['workflow']) => {
+    setSelectedModel(workflow.selectedModel || '');
+    setFilters(workflow.filters);
+    setOutputFormat(workflow.outputFormat);
+    setDefaultBackend(workflowBackend(workflow));
+    updateNumStreams(workflow.numStreams);
+    // Older items may not carry these; they keep the current values then.
+    if (typeof workflow.ffmpegArgs === 'string') setFfmpegArgs(workflow.ffmpegArgs);
+    if (typeof workflow.processingFormat === 'string') setProcessingFormat(workflow.processingFormat);
+    if (typeof workflow.videoCompareArgs === 'string') setVideoCompareArgs(workflow.videoCompareArgs);
+    if (workflow.colorimetry) setColorimetry(workflow.colorimetry);
+  };
+
+  /** Save the item being edited before the window shows something else. */
+  const saveEditedItem = () => {
+    if (!editingQueueItemId) return;
+    updateItemWorkflow(editingQueueItemId, snapshotNow());
+    onLog(`Auto-saved changes to queue item`);
+  };
+
   const handleSelectQueueItem = async (itemId: string): Promise<void> => {
     const item = queue.find(q => q.id === itemId);
     if (!item) return;
@@ -147,16 +197,15 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     if (item.status === 'completed') {
       if (loadCompletedVideo && setCompletedVideoPath) {
         try {
+          // Leaving the item being edited: its last edit may still be
+          // waiting on the auto-save, which closing editing would cancel.
+          saveEditedItem();
           await loadVideoInfo(item.videoPath);
           setOutputPath(item.outputPath);
           setCompletedVideoPath(item.outputPath);
           await loadCompletedVideo(item.outputPath);
 
-          setSelectedModel(item.workflow.selectedModel || '');
-          setFilters(item.workflow.filters);
-          setOutputFormat(item.workflow.outputFormat);
-          setDefaultBackend(workflowBackend(item.workflow));
-          updateNumStreams(item.workflow.numStreams);
+          loadItemSettings(item.workflow);
 
           if (item.workflow.segment?.enabled) {
             setSegment(item.workflow.segment);
@@ -176,22 +225,11 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     if (item.status !== 'pending') return;
 
     // Auto-save current workflow to the currently editing queue item if any
-    if (editingQueueItemId) {
-      updateItemWorkflow(editingQueueItemId, snapshotWorkflow({
-        selectedModel, filters, ffmpegArgs, processingFormat,
-        outputFormat, videoCompareArgs, defaultBackend, numStreams,
-        segment, colorimetry,
-      }));
-      onLog(`Auto-saved changes to queue item`);
-    }
+    saveEditedItem();
 
     // Load the selected queue item's workflow into main window
     setEditingQueueItemId(itemId);
-    setSelectedModel(item.workflow.selectedModel || '');
-    setFilters(item.workflow.filters);
-    setOutputFormat(item.workflow.outputFormat);
-    setDefaultBackend(workflowBackend(item.workflow));
-    updateNumStreams(item.workflow.numStreams);
+    loadItemSettings(item.workflow);
 
     try {
       await loadVideoInfo(item.videoPath);

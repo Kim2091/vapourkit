@@ -22,6 +22,7 @@ export function useFilterConfig(
     canUndo,
     canRedo,
     clearHistory,
+    resetHistory,
   } = useFilterHistory(initialFilters);
 
   const [filters, setFilters] = useState<Filter[]>(historyFilters);
@@ -60,6 +61,14 @@ export function useFilterConfig(
     recordState(value);
   }, [recordState]);
 
+  // Swap in a different chain (a queue item's, or the project's back again):
+  // saved like any change, but a fresh start for undo.
+  const replaceFilters = useCallback((value: Filter[]) => {
+    setFilters(value);
+    localStorage.setItem('filters', JSON.stringify(value));
+    resetHistory(value);
+  }, [resetHistory]);
+
   // Undo handler
   const handleUndo = useCallback(() => {
     const previousState = undo();
@@ -91,6 +100,7 @@ export function useFilterConfig(
     filters,
     setFilters,
     handleSetFilters,
+    replaceFilters,
     canUndo,
     canRedo,
     handleUndo,
