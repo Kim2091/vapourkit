@@ -77,6 +77,20 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 ### Queue
 - **Fixed: filters disappearing after a restart.** Opening the queue sets the project's chain aside and editing a queue item shows that item's chain; the set-aside copy was only kept in memory, so restarting with the queue open and closing it left the item's chain in place of the project's. It is now kept across restarts
 - **Fixed: queue item settings reverting.** Edits made just before closing the app are now saved as it closes (they were saved on a delay that closing cut short); selecting a completed item no longer drops the last edit to the item being edited; an item's encoding settings (FFmpeg arguments, processing format, colorimetry) are loaded when it is selected instead of being overwritten by the current ones; and undo no longer reaches back into a different item's chain
+- **Fixed: closing the queue while editing an item saved the project's chain and settings into that item**, and reset the project's segment
+- **Fixed: adding several videos at once opened the queue without setting the project aside**, so closing it kept a queue item's chain as the project's
+- Restarting while editing a queue item picks the editing back up, instead of showing the item's settings with nowhere for edits to go
+- The queue is saved promptly while it runs: an item finishing, starting or failing is written at once, and progress at least every 10 s. A crash mid-batch no longer re-encodes finished items
+- Items that are processing or done no longer take edits, so what is stored is what was rendered
+- **Fixed: the settings and queue files could be corrupted, then replaced with defaults.** Saves made in quick succession (selecting a queue item writes five) could interleave into invalid JSON, and the next start silently started over. Writes are now atomic and ordered, and a file that cannot be read is moved aside (`*.unreadable-<time>.json`) rather than saved over
+
+### Workflows
+- A loaded workflow can still be cleared after a restart (its "before" state is kept), and clearing it puts the backend back too
+- Workflow files now carry the default backend
+- Align and Generate LUT apply their result to the chain as it is when they finish, keeping edits made meanwhile; if a different chain was loaded in between, they leave it alone and say so
+- Code typed into a step and not yet committed is saved when the app closes
+- Importing filters, saving or renaming a template, or importing a .vkfilter asks before replacing an existing template with the same name
+- Simple mode no longer rewrites custom `-vf` or `-map_metadata` arguments to the defaults when the codec, quality or preset is changed
 
 ### Filters
 - **New: Grain Synth.** Adds film grain fitted to real sources, with two models: `mega_v1` (stronger, harsher) and `real_v5` (softer). Apply it after upscaling, at the final resolution. The grain is the same on every render of a frame, and it runs on CUDA with TensorRT or on the CPU otherwise

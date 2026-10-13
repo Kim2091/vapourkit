@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import type { BackendId, QueueItem, SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { normalizeBackendForCurrentPlatform } from '../utils/backends';
+import { onBeforeClose } from '../utils/beforeClose';
 
 /** Reads a queue item's backend, migrating the legacy useDirectML field on the fly. */
 function workflowBackend(workflow: QueueItem['workflow']): BackendId {
@@ -16,6 +17,8 @@ interface UseQueueOperationsOptions {
   showQueue: boolean;
   selectedModel: string | null;
   filters: any[];
+  /** The chain including changes not rendered yet (a code edit committed as the window closes). */
+  getLatestFilters: () => any[];
   ffmpegArgs: string;
   processingFormat: string;
   outputFormat: string;
@@ -87,6 +90,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     showQueue,
     selectedModel,
     filters,
+    getLatestFilters,
     ffmpegArgs,
     processingFormat,
     outputFormat,
@@ -149,14 +153,12 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
   });
   const latestRef = useRef({ editingQueueItemId, snapshotNow });
   latestRef.current = { editingQueueItemId, snapshotNow };
-  useEffect(() => {
-    const onClose = () => {
-      const { editingQueueItemId: editing, snapshotNow: snapshot } = latestRef.current;
-      flushQueue(editing ? { itemId: editing, workflow: snapshot() } : undefined);
-    };
-    window.addEventListener('beforeunload', onClose);
-    return () => window.removeEventListener('beforeunload', onClose);
-  }, [flushQueue]);
+  useEffect(() => onBeforeClose('save', () => {
+    const { editingQueueItemId: editing, snapshotNow: snapshot } = latestRef.current;
+    // The chain from getLatestFilters: a step's code still being typed is
+    // committed in the phase before this one, after the last render.
+    flushQueue(editing ? { itemId: editing, workflow: { ...snapshot(), filters: structuredClone(getLatestFilters()) } } : undefined);
+  }), [flushQueue, getLatestFilters]);
 
   // Close editing mode when queue panel closes
   useEffect(() => {
@@ -248,6 +250,8 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
   };
 
   const handleStartQueue = (): void => {
+    // The item being edited may be the first to run; give it its last edit.
+    saveEditedItem();
     setIsQueueStarted(true);
     onLog('=== Starting queue processing ===');
   };
@@ -322,6 +326,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
   };
 
   return {
+    saveEditedItem,
     handleSelectQueueItem,
     handleStartQueue,
     handleStopQueue,

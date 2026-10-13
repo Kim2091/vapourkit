@@ -22,6 +22,8 @@ interface ModelSelectionPanelProps {
   onRestoreTemplates?: () => Promise<string[]>;
   onOpenFilterEditor?: (filter: Filter) => void;
   lut?: LutPanelActions;
+  beginStepPatch?: (stepId: string) => (patch: (step: Filter) => Filter) => boolean;
+  chainEpoch?: number;
 }
 
 export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
@@ -43,6 +45,8 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
   onModelsUpdated,
   onOpenFilterEditor,
   lut,
+  beginStepPatch,
+  chainEpoch,
 }: ModelSelectionPanelProps) => {
   return (
     <>
@@ -74,6 +78,8 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         onModelsUpdated={onModelsUpdated}
         onOpenFilterEditor={onOpenFilterEditor}
         lut={lut}
+        beginStepPatch={beginStepPatch}
+        chainEpoch={chainEpoch}
         mainVideoPath={videoInfo?.path}
       />
     </>

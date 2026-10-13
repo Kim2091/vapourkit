@@ -1,11 +1,13 @@
 // src/hooks/useWorkflow.ts
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { BackendId, Filter, FilterTemplate, WorkflowData, SegmentSelection, ColorimetrySettings } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
 import { isBackendId, normalizeBackendForCurrentPlatform } from '../utils/backends';
 import { notify } from '../utils/notifications';
 import { remapStepReferences } from '../utils/stepReferences';
+
+const LOADED_WORKFLOW_KEY = 'loadedWorkflow';
 
 interface ImportWorkflowModalState {
   isOpen: boolean;
@@ -24,9 +26,12 @@ interface ImportWorkflowModalState {
 
 interface WorkflowState {
   currentWorkflow: string | null;
+  /** What the workflow was loaded into: 'project', or the queue item being edited. */
+  context?: string;
   previousFilters: Filter[];
   previousModel: string | null;
   previousEncodingSettings?: {
+    defaultBackend?: BackendId;
     ffmpegArgs: string;
     processingFormat: string;
     outputFormat: string;
@@ -63,6 +68,8 @@ interface UseWorkflowProps {
   updateNumStreams?: (streams: number) => void;
   setSegment?: (segment: SegmentSelection) => void;
   handleColorimetryChange?: (settings: ColorimetrySettings) => void;
+  /** What the window is showing: 'project', or the id of the queue item being edited. */
+  context?: string;
 }
 
 interface UseWorkflowReturn {
@@ -104,12 +111,30 @@ export function useWorkflow({
   updateNumStreams,
   setSegment,
   handleColorimetryChange,
+  context = 'project',
 }: UseWorkflowProps): UseWorkflowReturn {
-  const [workflowState, setWorkflowState] = useState<WorkflowState>({
-    currentWorkflow: null,
-    previousFilters: [],
-    previousModel: null,
+  // Kept in localStorage as well as in state. Loading a workflow writes its
+  // chain and settings where they are saved, so after a restart they are the
+  // project's; if what they replaced lived only in memory, Clear went with it
+  // and the settings from before the workflow were lost for good.
+  const [workflowState, setWorkflowState] = useState<WorkflowState>(() => {
+    try {
+      const saved = localStorage.getItem(LOADED_WORKFLOW_KEY);
+      if (saved) return JSON.parse(saved) as WorkflowState;
+    } catch {
+      // Unreadable: start with no workflow loaded, as before this was kept.
+    }
+    return { currentWorkflow: null, previousFilters: [], previousModel: null };
   });
+
+  useEffect(() => {
+    try {
+      if (workflowState.currentWorkflow) localStorage.setItem(LOADED_WORKFLOW_KEY, JSON.stringify(workflowState));
+      else localStorage.removeItem(LOADED_WORKFLOW_KEY);
+    } catch {
+      // Storage full or blocked: Clear still works for this session.
+    }
+  }, [workflowState]);
 
   const [importModalState, setImportModalState] = useState<ImportWorkflowModalState>({
     isOpen: false,
@@ -130,12 +155,15 @@ export function useWorkflow({
   const saveCurrentState = useCallback(() => {
     setWorkflowState(prev => ({
       ...prev,
+      context,
       previousFilters: deepCopyFilters(filters),
       previousModel: selectedModel,
       previousEncodingSettings: ffmpegArgs !== undefined && processingFormat !== undefined && 
         outputFormat !== undefined && videoCompareArgs !== undefined && 
         numStreams !== undefined && segment !== undefined && colorimetry !== undefined
         ? {
+            // Loading a workflow sets the backend too, so Clear has to put it back.
+            defaultBackend,
             ffmpegArgs,
             processingFormat,
             outputFormat,
@@ -148,7 +176,7 @@ export function useWorkflow({
     }));
     addConsoleLog('Saved current settings before loading workflow');
   }, [filters, selectedModel, deepCopyFilters, addConsoleLog, ffmpegArgs, processingFormat, 
-      outputFormat, videoCompareArgs, numStreams, segment, colorimetry]);
+      outputFormat, videoCompareArgs, numStreams, segment, colorimetry, defaultBackend, context]);
 
   /**
    * Load a workflow from file
@@ -167,8 +195,11 @@ export function useWorkflow({
 
       const workflow = result.workflow;
 
-      // Only save previous settings if no workflow is currently active
-      if (!workflowState.currentWorkflow) {
+      // Only save previous settings if no workflow is currently active here.
+      // One loaded into another context (the project, a different queue item)
+      // kept that context's settings, which are not what this one replaces.
+      const activeHere = workflowState.currentWorkflow && (workflowState.context ?? 'project') === context;
+      if (!activeHere) {
         saveCurrentState();
       } else {
         addConsoleLog(`Replacing active workflow "${workflowState.currentWorkflow}" with "${workflow.name}"`);
@@ -278,6 +309,8 @@ export function useWorkflow({
     }
   }, [
     workflowState.currentWorkflow,
+    workflowState.context,
+    context,
     saveCurrentState,
     setFilters,
     deepCopyFilters,
@@ -303,6 +336,15 @@ export function useWorkflow({
       return;
     }
 
+    // What Clear puts back is what the workflow replaced where it was loaded.
+    // Putting that into whatever the window shows now would hand one queue
+    // item's chain to another, or to the project.
+    if ((workflowState.context ?? 'project') !== context) {
+      const where = (workflowState.context ?? 'project') === 'project' ? 'the project' : 'a queue item';
+      notify.warning('Workflow loaded elsewhere', `"${workflowName}" was loaded into ${where}. Open that to clear it.`);
+      return;
+    }
+
     // Restore previous state using deep copies
     const restoredFilters = deepCopyFilters(workflowState.previousFilters);
     setFilters(restoredFilters);
@@ -314,6 +356,7 @@ export function useWorkflow({
     // Restore previous encoding settings if available
     if (workflowState.previousEncodingSettings) {
       const prev = workflowState.previousEncodingSettings;
+      if (prev.defaultBackend && setDefaultBackend) setDefaultBackend(prev.defaultBackend);
       if (setFfmpegArgs) setFfmpegArgs(prev.ffmpegArgs);
       if (setProcessingFormat) setProcessingFormat(prev.processingFormat);
       if (setOutputFormat) setOutputFormat(prev.outputFormat);
@@ -334,6 +377,8 @@ export function useWorkflow({
     addConsoleLog(`Cleared workflow "${workflowName}" and restored previous settings`);
   }, [
     workflowState,
+    context,
+    setDefaultBackend,
     setFilters,
     setSelectedModel,
     deepCopyFilters,
@@ -483,6 +528,18 @@ export function useWorkflow({
     }[]
   ): Promise<void> => {
     try {
+      // Saving a template under a name that is taken replaces that template,
+      // which may be a built-in the user edited or one of their own. Ask.
+      const taken = selectedFilters
+        .map(filter => filter.name)
+        .filter(name => filterTemplates?.some(template => template.name === name));
+      if (taken.length > 0 && !confirm(
+        `These filters already exist and would be replaced by the workflow's version:\n\n- ${taken.join('\n- ')}\n\nReplace them?`,
+      )) {
+        addConsoleLog('Import cancelled: it would have replaced existing filters');
+        return;
+      }
+
       // Save selected filters as templates
       for (const filter of selectedFilters) {
         await window.electronAPI.saveFilterTemplate({
@@ -510,10 +567,12 @@ export function useWorkflow({
       addConsoleLog(`Error saving imported filters: ${getErrorMessage(error)}`);
       notify.error('Import Error', getErrorMessage(error));
     }
-  }, [addConsoleLog, refreshFilterTemplates, closeImportModal]);
+  }, [addConsoleLog, refreshFilterTemplates, closeImportModal, filterTemplates]);
 
   return {
-    currentWorkflow: workflowState.currentWorkflow,
+    // Named only where it was loaded: a workflow loaded into a queue item is
+    // not what the project shows once the queue closes, and the reverse.
+    currentWorkflow: (workflowState.context ?? 'project') === context ? workflowState.currentWorkflow : null,
     handleLoadWorkflow,
     handleClearWorkflow,
     handleExportWorkflow,

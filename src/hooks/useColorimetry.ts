@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ColorimetrySettings } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 
@@ -10,16 +10,21 @@ export function useColorimetry(isSetupComplete: boolean, onLog: (message: string
     defaultPrimaries: '709',
     defaultTransfer: '709'
   });
+  const [isLoaded, setIsLoaded] = useState(false);
+  // Set since mount: the load below must not put the older value back over it.
+  const changedRef = useRef(false);
 
   // Load colorimetry settings
   useEffect(() => {
     const loadColorimetrySettings = async () => {
       try {
         const settings = await window.electronAPI.getColorimetrySettings();
-        setColorimetrySettings(settings);
+        if (!changedRef.current) setColorimetrySettings(settings);
         onLog('Colorimetry settings loaded');
       } catch (error) {
         onLog(`Error loading colorimetry settings: ${getErrorMessage(error)}`);
+      } finally {
+        setIsLoaded(true);
       }
     };
 
@@ -29,6 +34,7 @@ export function useColorimetry(isSetupComplete: boolean, onLog: (message: string
   }, [isSetupComplete, onLog]);
 
   const handleColorimetryChange = async (settings: ColorimetrySettings) => {
+    changedRef.current = true;
     setColorimetrySettings(settings);
     try {
       await window.electronAPI.setColorimetrySettings(settings);
@@ -39,6 +45,7 @@ export function useColorimetry(isSetupComplete: boolean, onLog: (message: string
   };
 
   return {
+    isLoaded,
     colorimetrySettings,
     handleColorimetryChange,
   };

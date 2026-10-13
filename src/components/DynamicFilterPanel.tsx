@@ -7,6 +7,7 @@ import { Section, SectionButton } from './Section';
 import { FilterSelectorModal } from './FilterSelectorModal';
 import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
+import { onBeforeClose } from '../utils/beforeClose';
 import { CreateLutCard, LoadLutCard } from './LutStepCards';
 import { StageSourceCard } from './StageSourceCard';
 import { LoadVideoCard } from './LoadVideoCard';
@@ -39,6 +40,10 @@ interface DynamicFilterPanelProps {
   onOpenFilterEditor?: (filter: Filter) => void;
   /** What the chain's LUT steps can do, and the state of doing it. */
   lut?: LutPanelActions;
+  /** Apply a long job's result to a step as the chain is when it ends (useFilterConfig). */
+  beginStepPatch?: (stepId: string) => (patch: (step: Filter) => Filter) => boolean;
+  /** Changes when a different chain is swapped in (a queue item's, the project's). */
+  chainEpoch?: number;
   /** The main video, which a side chain is aligned against. */
   mainVideoPath?: string;
 }
@@ -101,7 +106,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   defaultBackend = 'tensorrt',
   defaultNumStreams = 2,
   showBackendOverrides = false,
-  onFiltersChange,
+  onFiltersChange: onFiltersChangeProp,
   onSaveTemplate,
   onDeleteTemplate,
   onRestoreTemplates,
@@ -113,6 +118,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   onModelsUpdated,
   onOpenFilterEditor,
   lut,
+  beginStepPatch,
+  chainEpoch = 0,
   mainVideoPath,
 }: DynamicFilterPanelProps) => {
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -154,12 +161,46 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const previousExpandedCountRef = useRef<number>(expandedFilters.size);
   const previousProcessingRef = useRef<boolean>(isProcessing);
 
+  // Code typed into a step and not committed yet, by step id. A step's code
+  // is committed when its editor loses focus (so the script is not rebuilt on
+  // every keystroke), which leaves the typing exposed in between: to the chain
+  // changing underneath it, and to the window closing.
+  const dirtyCodeRef = useRef(new Map<string, string>());
+  const pendingRef = useRef(pendingFilters);
+  pendingRef.current = pendingFilters;
+
+  /** Every commit goes through here; whatever was typed is in it. */
+  const onFiltersChange = (updated: Filter[]) => {
+    dirtyCodeRef.current.clear();
+    onFiltersChangeProp(updated);
+  };
+  const commitRef = useRef(onFiltersChangeProp);
+  commitRef.current = onFiltersChangeProp;
+
+  // Closing the window does not take focus from the editor first, so commit
+  // the typing before the queue and chain are written on the way out.
+  useEffect(() => onBeforeClose('commit', () => {
+    if (dirtyCodeRef.current.size === 0) return;
+    dirtyCodeRef.current.clear();
+    commitRef.current(pendingRef.current);
+  }), []);
+
   // Sync pending filters when filters prop changes from outside. Normalized,
   // because a list from a workflow or an older version may not be in the
   // order the rail shows chains in, and every handler here relies on it.
+  // Typing not yet committed stays on its step when the change comes from
+  // elsewhere (a finished Align or LUT, an imported model), but not when a
+  // different chain was swapped in, where the same id is another item's step.
+  const syncedEpochRef = useRef(chainEpoch);
   useEffect(() => {
-    setPendingFilters(normalizeChainOrder(filters));
-  }, [filters]);
+    if (syncedEpochRef.current !== chainEpoch) {
+      syncedEpochRef.current = chainEpoch;
+      dirtyCodeRef.current.clear();
+    }
+    const dirty = dirtyCodeRef.current;
+    setPendingFilters(normalizeChainOrder(filters).map(filter =>
+      dirty.has(filter.id) ? { ...filter, code: dirty.get(filter.id)! } : filter));
+  }, [filters, chainEpoch]);
 
   // Handle focus restoration when processing state changes
   useEffect(() => {
@@ -411,6 +452,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   };
 
   const handleCodeChange = (id: string, code: string) => {
+    dirtyCodeRef.current.set(id, code);
     const updatedFilters = pendingFilters.map(f =>
       f.id === id ? { ...f, code } : f
     );
@@ -418,6 +460,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   };
 
   const handleCodeBlur = () => {
+    dirtyCodeRef.current.clear();
     // Apply pending changes when user deselects the textarea
     if (JSON.stringify(pendingFilters) !== JSON.stringify(filters)) {
       onFiltersChange(pendingFilters);
@@ -494,9 +537,20 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   };
 
 
+  /**
+   * Saving a template under a name another template has replaces that one's
+   * file, which may be a built-in the user edited or one of their own. Ask
+   * first. except is the name being saved over on purpose (the step's own).
+   */
+  const confirmReplaceTemplate = (name: string, except?: string): boolean => {
+    if (name === except || !filterTemplates.some(template => template.name === name)) return true;
+    return confirm(`A filter called "${name}" already exists. Replace it?`);
+  };
+
   const handleSaveTemplate = async (filterId: string) => {
     const filter = pendingFilters.find(f => f.id === filterId);
     if (onSaveTemplate && presetName.trim() && filter) {
+      if (!confirmReplaceTemplate(presetName.trim(), filter.preset)) return;
       const success = await onSaveTemplate({
         name: presetName.trim(),
         code: filter.code,
@@ -527,7 +581,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       }
 
       const template = result.template;
-      
+      if (!confirmReplaceTemplate(template.name)) return;
+
       if (onSaveTemplate) {
         await onSaveTemplate(template);
       }
@@ -557,7 +612,8 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
 
   const handleEditTemplate = async (oldName: string, updatedTemplate: FilterTemplate): Promise<boolean> => {
     if (!onSaveTemplate) return false;
-    
+    if (oldName !== updatedTemplate.name && !confirmReplaceTemplate(updatedTemplate.name)) return false;
+
     try {
       // Save under the new name first: deleting the old one first lost the
       // template outright whenever the save then failed.
@@ -933,7 +989,17 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
                     // A new file makes the old alignment a measurement of something else.
                     onChooseVideo={(path) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, sourcePath: path, align: undefined } : f))}
                     mainVideoPath={mainVideoPath}
-                    onAligned={(align) => commitOrder(pendingFilters.map(f => f.id === filter.id ? { ...f, align } : f))}
+                    onAlignStart={() => {
+                      if (beginStepPatch) {
+                        const commit = beginStepPatch(filter.id);
+                        return (align) => commit(f => ({ ...f, align }));
+                      }
+                      return (align) => {
+                        if (!pendingRef.current.some(f => f.id === filter.id)) return false;
+                        commitOrder(pendingRef.current.map(f => f.id === filter.id ? { ...f, align } : f));
+                        return true;
+                      };
+                    }}
                     dragProps={{
                       draggable: !isProcessing,
                       onDragStart: (e) => handleDragStart(e, filter.id),

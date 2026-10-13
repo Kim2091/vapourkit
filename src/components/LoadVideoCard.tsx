@@ -32,7 +32,13 @@ interface LoadVideoCardProps {
   onChooseVideo: (path: string) => void;
   /** The main video, which Align measures this one against. */
   mainVideoPath?: string;
-  onAligned: (alignment: SideChainAlignment) => void;
+  /**
+   * Called as Align starts. The aligner runs for seconds to minutes while the
+   * chain stays editable, so what this returns applies the result to the chain
+   * as it is when Align finishes; false means the step is gone or another
+   * chain was swapped in, and the result was not applied.
+   */
+  onAlignStart: () => (alignment: SideChainAlignment) => boolean;
   dragProps: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
 }
 
@@ -108,7 +114,7 @@ function framingNote(framing: SideChainAlignment['framing']): string {
 const ICON_BUTTON = 'p-1 rounded flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 
 export const LoadVideoCard = memo<LoadVideoCardProps>(({
-  filter, tag, stepCount, folded, disabled, onFold, onToggle, onRemove, onRename, onPickVideo, onChooseVideo, mainVideoPath, onAligned, dragProps,
+  filter, tag, stepCount, folded, disabled, onFold, onToggle, onRemove, onRename, onPickVideo, onChooseVideo, mainVideoPath, onAlignStart, dragProps,
 }) => {
   const [open, setOpen] = useState(false);
   const [aligning, setAligning] = useState<{ progress: number; message: string } | null>(null);
@@ -124,10 +130,14 @@ export const LoadVideoCard = memo<LoadVideoCardProps>(({
     if (!mainVideoPath || !filter.sourcePath) return;
     setAlignError(null);
     setAligning({ progress: 0, message: 'Starting' });
+    const deliver = onAlignStart();
     const outcome = await window.electronAPI.alignSideChain({ id: filter.id, mainPath: mainVideoPath, refPath: filter.sourcePath });
     setAligning(null);
-    if (outcome.success) onAligned(outcome.alignment);
-    else if (!outcome.cancelled) setAlignError(outcome.error);
+    if (outcome.success) {
+      if (!deliver(outcome.alignment)) {
+        setAlignError('The chain was switched or this step removed while aligning, so the result was not applied. Run Align again.');
+      }
+    } else if (!outcome.cancelled) setAlignError(outcome.error);
   };
   // Typed as a draft and committed on blur or Enter, so the script is not
   // regenerated around every keystroke.

@@ -12,10 +12,10 @@
 // recomputed from the ledger whenever they are asked for, so they can never
 // disagree with the files on disk.
 
-import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { PATHS } from './constants';
+import { writeJsonAtomic } from './jsonFile';
 import { logger } from './logger';
 import type { LedgerEntry } from './templateReconcile';
 import type { ScriptLedgerEntry } from './scriptSync';
@@ -73,34 +73,6 @@ export function isEmptyDraft(draft: UpdateReportDraft): boolean {
 
 const ledgerPath = () => path.join(PATHS.CONFIG, 'installed-components.json');
 const reportPath = () => path.join(PATHS.CONFIG, 'update-report.json');
-
-/**
- * Written beside and renamed into place, so a crash mid-write cannot leave
- * half a file. A plain rename replaces the old file in one step; fs-extra's
- * move with overwrite deletes it first, and a read landing in that gap - the
- * notice opening as the report is marked seen - finds nothing.
- */
-async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
-  await fs.ensureDir(path.dirname(file));
-  // Unique per write, so two writers can never rename each other's file.
-  const temp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  await fs.writeJson(temp, value, { spaces: 2 });
-  // Windows refuses to replace a file another handle has open; a reader
-  // holds it for a moment only.
-  for (let attempt = 1; ; attempt++) {
-    try {
-      await fs.rename(temp, file);
-      return;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (attempt >= 5 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) {
-        await fs.remove(temp).catch(() => undefined);
-        throw error;
-      }
-      await new Promise(resolve => setTimeout(resolve, 50 * attempt));
-    }
-  }
-}
 
 export async function readLedger(): Promise<InstallLedger> {
   try {

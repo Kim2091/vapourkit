@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { BackendId, QueueItem, Filter, SegmentSelection } from '../electron.d';
 import { autoOutputPath, uniqueOutputPath } from '../utils/queueOutputPath';
 import { normalizeBackendForCurrentPlatform } from '../utils/backends';
+import { queueSaveDelay, queueShape } from '../utils/queueSaveTiming';
+
+const EDITING_ITEM_KEY = 'editingQueueItemId';
 
 interface UseQueueStoreProps {
   onLog: (message: string) => void;
@@ -13,7 +16,28 @@ interface UseQueueStoreProps {
 export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQueueStoreProps) {
   // --- UI state (from useQueueState) ---
   const [showQueue, setShowQueueRaw] = useState(false);
-  const [editingQueueItemId, setEditingQueueItemId] = useState<string | null>(null);
+  const [isShowQueueLoaded, setIsShowQueueLoaded] = useState(false);
+  const [editingQueueItemId, setEditingQueueItemIdRaw] = useState<string | null>(null);
+  // The item being edited when the app last closed. Editing puts the item's
+  // chain and encoding settings in the window, and those are saved, so after a
+  // restart the window still shows them: App re-enters editing that item
+  // rather than leave it on screen with nowhere for edits to go.
+  const [resumeEditingId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(EDITING_ITEM_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const setEditingQueueItemId = useCallback((id: string | null) => {
+    setEditingQueueItemIdRaw(id);
+    try {
+      if (id) localStorage.setItem(EDITING_ITEM_KEY, id);
+      else localStorage.removeItem(EDITING_ITEM_KEY);
+    } catch {
+      // Storage blocked: editing still works for this session.
+    }
+  }, []);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [isQueueStarted, setIsQueueStarted] = useState(false);
   const [isQueueStopping, setIsQueueStopping] = useState(false);
@@ -32,6 +56,8 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
         setShowQueueRaw(result.show);
       } catch (error) {
         onLog(`Error loading queue state: ${error}`);
+      } finally {
+        setIsShowQueueLoaded(true);
       }
     };
     loadState();
@@ -103,29 +129,42 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
     loadQueue();
   }, [loadQueue]);
 
-  // Auto-save queue whenever it changes (debounced)
+  // Auto-save queue whenever it changes: debounced, but never for longer than
+  // a cap, and at once when items are added, removed, moved or change status
+  // (utils/queueSaveTiming.ts says why).
   const queueForSaveRef = useRef<QueueItem[]>([]);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedShapeRef = useRef<string | null>(null);
+  const pendingSinceRef = useRef<number | null>(null);
+  // A change that must be saved at once stays urgent until it is, even if a
+  // progress update reschedules the timer first.
+  const urgentRef = useRef(false);
 
   useEffect(() => {
-    if (hasLoadedInitially.current && !isLoadingQueue) {
-      queueForSaveRef.current = queue;
+    if (!hasLoadedInitially.current || isLoadingQueue) return;
+    queueForSaveRef.current = queue;
 
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
+    const shape = queueShape(queue);
+    if (savedShapeRef.current !== null && shape !== savedShapeRef.current) urgentRef.current = true;
+    savedShapeRef.current = shape;
+    const now = Date.now();
+    if (pendingSinceRef.current === null) pendingSinceRef.current = now;
 
-      saveTimeoutRef.current = setTimeout(() => {
-        saveQueue(queueForSaveRef.current);
-      }, 2000);
-
-      return () => {
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current);
-        }
-      };
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      pendingSinceRef.current = null;
+      urgentRef.current = false;
+      saveQueue(queueForSaveRef.current);
+    }, queueSaveDelay(urgentRef.current, pendingSinceRef.current, now));
   }, [queue, isLoadingQueue, saveQueue]);
+
+  // Unmounting drops the timer; closing the window is covered by flushQueue.
+  useEffect(() => () => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+  }, []);
 
   // --- Queue CRUD operations ---
 
@@ -213,6 +252,9 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
     workflow: Partial<QueueItem['workflow']>
   ) => prev.map(item => {
     if (item.id !== itemId) return item;
+    // An item that has started (or finished) was encoded with the settings it
+    // had then; an edit landing now would describe a render that never ran.
+    if (item.status !== 'pending') return item;
     const merged = { ...item.workflow, ...workflow };
     // An auto-named output follows the edit, so a duplicated item that is
     // then given a different chain gets its own file instead of overwriting
@@ -245,6 +287,8 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
   const flushQueue = useCallback((pending?: { itemId: string; workflow: Partial<QueueItem['workflow']> }) => {
     if (!hasLoadedInitially.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = null;
+    pendingSinceRef.current = null;
     const toSave = pending
       ? withItemWorkflow(latestQueueRef.current, pending.itemId, pending.workflow)
       : latestQueueRef.current;
@@ -330,7 +374,9 @@ export function useQueueStore({ onLog, descriptiveNamingEnabled = true }: UseQue
   return {
     // UI state
     showQueue,
+    isShowQueueLoaded,
     editingQueueItemId,
+    resumeEditingId,
     isProcessingQueue,
     isQueueStarted,
     isQueueStopping,

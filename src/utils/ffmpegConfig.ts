@@ -213,8 +213,12 @@ function hasCustomFlags(args: string): boolean {
     .replace(/-qp_p\s+\d+/, '')
     .replace(/-qp_b\s+\d+/, '')
     .replace(/-global_quality\s+\d+/, '')
-    .replace(/-vf\s+\S+/, '')
-    .replace(/-map_metadata\s+\d+/, '')
+    // Only the exact colour tags and metadata mapping generateFfmpegArgs
+    // writes. Any other -vf (HDR or PAL tags, a scale, a filter chain) or
+    // -map_metadata is the user's: counted as standard, the next quality or
+    // preset change in simple mode replaced it with these.
+    .replace(/-vf\s+setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709(?!\S)/, '')
+    .replace(/-map_metadata\s+1(?!\S)/, '')
     .trim();
   
   // If there's anything left beyond whitespace, it's custom

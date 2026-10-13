@@ -55,6 +55,11 @@ export function registerWorkflowHandlers() {
           video_compare_args: workflow.encodingSettings.videoCompareArgs,
           num_streams: workflow.encodingSettings.numStreams,
         };
+        // Optional: workflows written before it was saved load with the
+        // backend the app already has.
+        if (workflow.encodingSettings.defaultBackend) {
+          tomlData.encoding_settings.default_backend = workflow.encodingSettings.defaultBackend;
+        }
 
         // Add segment if provided
         if (workflow.encodingSettings.segment) {
@@ -136,6 +141,10 @@ export function registerWorkflowHandlers() {
           outputFormat: data.encoding_settings.output_format,
           videoCompareArgs: data.encoding_settings.video_compare_args,
           numStreams: data.encoding_settings.num_streams,
+          // Checked against the known backends where it is applied (useWorkflow).
+          defaultBackend: typeof data.encoding_settings.default_backend === 'string'
+            ? data.encoding_settings.default_backend
+            : undefined,
         };
 
         // Parse segment if present

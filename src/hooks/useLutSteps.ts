@@ -67,7 +67,12 @@ export type LutJob =
 
 interface UseLutStepsOptions {
   filters: Filter[];
-  setFilters: (filters: Filter[]) => void;
+  /**
+   * Start a job on one step. The function it returns applies the result to
+   * that step as the chain is when the job finishes, or reports false when the
+   * step is gone or another chain has been swapped in (useFilterConfig).
+   */
+  beginStepPatch: (stepId: string) => (patch: (step: Filter) => Filter) => boolean;
   videoInfo: VideoInfo | null;
   segment: SegmentSelection;
   playheadFrame: number | null;
@@ -88,7 +93,7 @@ const framesOf = (filter: Filter) => Number(filter.parameters?.frames ?? 5) || 5
 
 export function useLutSteps(options: UseLutStepsOptions) {
   const {
-    filters, setFilters, videoInfo, segment, playheadFrame,
+    filters, beginStepPatch, videoInfo, segment, playheadFrame,
     currentWorkflow, samplePair, previewOpen, addConsoleLog,
   } = options;
 
@@ -192,6 +197,9 @@ export function useLutSteps(options: UseLutStepsOptions) {
     if (link.state !== 'ready' || link.method.kind === 'nothing') return;
 
     setJob(loadId, { status: 'working' });
+    // Measuring can take a while, and the chain may be edited meanwhile; the
+    // table is written into the step as it is then, not as it was now.
+    const commit = beginStepPatch(loadId);
     try {
       const size = sizeOf(loader);
       const name = `Restore ${link.place}`;
@@ -231,15 +239,20 @@ export function useLutSteps(options: UseLutStepsOptions) {
       const installed = await window.electronAPI.installLut(fileSafe(name), writeCube(lut, lut.title));
       if (!installed.success) throw new Error(installed.error);
 
+      // The fingerprint of the chain the table was made from: if the steps
+      // between changed while it was made, the step shows it as out of date.
       const key = restoreFingerprint(filters, link, size);
-      setFilters(filters.map(item => item.id === loadId
-        ? { ...item, parameters: { ...item.parameters, lut_path: installed.path, generated_key: key } }
-        : item));
+      const applied = commit(item => ({
+        ...item, parameters: { ...item.parameters, lut_path: installed.path, generated_key: key },
+      }));
+      if (!applied) {
+        throw new Error('The chain was switched or this step removed while the table was being made, so it was not applied.');
+      }
       setJob(loadId, { status: 'ready', result: made });
     } catch (caught) {
       setJob(loadId, { status: 'failed', error: getErrorMessage(caught) });
     }
-  }, [filters, currentWorkflow, resolvePlan, measure, setFilters, addConsoleLog, setJob]);
+  }, [filters, currentWorkflow, resolvePlan, measure, beginStepPatch, addConsoleLog, setJob]);
 
   /**
    * Save what the chain does to colour above a Create LUT as a file.

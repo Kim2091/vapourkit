@@ -134,6 +134,7 @@ function App() {
   const { accentColor, setAccentColor, resetAccentColor } = useAccentColor();
   const { mainColor, setMainColor, resetMainColor } = useMainColor();
   const { 
+    isLoaded: isProcessingConfigLoaded,
     ffmpegArgs, 
     processingFormat,
     outputFormat,
@@ -162,9 +163,12 @@ function App() {
   const { templates: filterTemplates, saveTemplate, deleteTemplate, restoreTemplates, loadTemplates } = useFilterTemplates(isSetupComplete);
   
   // State management hooks
-  const { filters, handleSetFilters, replaceFilters, canUndo, canRedo, handleUndo, handleRedo } = useFilterConfig(isSetupComplete, addConsoleLog);
+  const {
+    filters, handleSetFilters, replaceFilters, beginStepPatch, getLatestFilters, chainEpoch,
+    canUndo, canRedo, handleUndo, handleRedo,
+  } = useFilterConfig(isSetupComplete, addConsoleLog);
   const [activeFilterEditorId, setActiveFilterEditorId] = useState<string | null>(null);
-  const { colorimetrySettings, handleColorimetryChange } = useColorimetry(isSetupComplete, addConsoleLog);
+  const { isLoaded: isColorimetryLoaded, colorimetrySettings, handleColorimetryChange } = useColorimetry(isSetupComplete, addConsoleLog);
   const {
     showConsole,
     setShowConsole,
@@ -365,7 +369,9 @@ function App() {
     descriptiveNamingEnabled,
     onAddToQueue: (videoPaths, workflow, outputPath) => {
       addToQueue(videoPaths, workflow, outputPath);
-      queueStore.setShowQueue(true);
+      // Adding several videos opens the queue; it has to set the project
+      // aside like the queue button does, or closing it has nothing to put back.
+      openQueue();
     },
     onLoadVideoInfo: loadVideoInfo,
     onLog: addConsoleLog,
@@ -373,6 +379,7 @@ function App() {
 
   // Queue operations hook (handlers + editing effects)
   const {
+    saveEditedItem,
     handleSelectQueueItem,
     handleStartQueue,
     handleStopQueue,
@@ -386,6 +393,7 @@ function App() {
     showQueue: queueStore.showQueue,
     selectedModel,
     filters,
+    getLatestFilters,
     ffmpegArgs,
     processingFormat,
     outputFormat,
@@ -477,6 +485,8 @@ function App() {
     updateNumStreams,
     setSegment,
     handleColorimetryChange,
+    // A workflow loaded into a queue item is that item's to clear, not the project's.
+    context: queueStore.editingQueueItemId ?? 'project',
   });
 
   // Model import hook
@@ -560,86 +570,176 @@ function App() {
     }
   );
   
-  // Handle queue toggle - save/restore workflow state
-  const handleToggleQueue = async () => {
-    const newShowQueue = !queueStore.showQueue;
-    
-    if (newShowQueue) {
-      // Opening queue - save current workflow state
-      setPreQueueWorkflow({
-        videoPath: videoInfo?.path || null,
-        outputPath: outputPath,
-        selectedModel,
-        filters: structuredClone(filters), // Deep copy
-        outputFormat,
-        defaultBackend,
-        numStreams,
-        segment: { ...segment },
-        ffmpegArgs,
-        processingFormat,
-        videoCompareArgs,
-        colorimetry: colorimetrySettings,
-      });
-      
-      // If a video is loaded, add it to the queue
-      if (videoInfo && outputPath) {
-        handleAddCurrentVideoToQueue(videoInfo.path, outputPath);
-      }
-    } else {
-      // Closing queue - restore pre-queue workflow
-      if (preQueueWorkflow) {
-        // Restore all settings
-        if (preQueueWorkflow.selectedModel !== selectedModel) {
-          setSelectedModel(preQueueWorkflow.selectedModel);
-        }
-        if (JSON.stringify(preQueueWorkflow.filters) !== JSON.stringify(filters)) {
-          replaceFilters(preQueueWorkflow.filters);
-        }
-        // Editing a queue item loads its encoding settings too; put the project's back.
-        if (preQueueWorkflow.ffmpegArgs !== undefined && preQueueWorkflow.ffmpegArgs !== ffmpegArgs) {
-          handleUpdateFfmpegArgs(preQueueWorkflow.ffmpegArgs);
-        }
-        if (preQueueWorkflow.processingFormat !== undefined && preQueueWorkflow.processingFormat !== processingFormat) {
-          handleUpdateProcessingFormat(preQueueWorkflow.processingFormat);
-        }
-        if (preQueueWorkflow.videoCompareArgs !== undefined && preQueueWorkflow.videoCompareArgs !== videoCompareArgs) {
-          handleUpdateVideoCompareArgs(preQueueWorkflow.videoCompareArgs);
-        }
-        if (preQueueWorkflow.colorimetry && JSON.stringify(preQueueWorkflow.colorimetry) !== JSON.stringify(colorimetrySettings)) {
-          handleColorimetryChange(preQueueWorkflow.colorimetry);
-        }
-        if (preQueueWorkflow.outputFormat !== outputFormat) {
-          handleUpdateOutputFormat(preQueueWorkflow.outputFormat);
-        }
-        if (preQueueWorkflow.defaultBackend !== defaultBackend) {
-          setDefaultBackend(preQueueWorkflow.defaultBackend);
-        }
-        if (preQueueWorkflow.numStreams !== numStreams) {
-          updateNumStreams(preQueueWorkflow.numStreams);
-        }
-        if (JSON.stringify(preQueueWorkflow.segment) !== JSON.stringify(segment)) {
-          setSegment(preQueueWorkflow.segment);
-        }
-        
-        // Restore video and output path
-        if (preQueueWorkflow.videoPath) {
-          await loadVideoInfo(preQueueWorkflow.videoPath);
-          if (preQueueWorkflow.outputPath) {
-            setOutputPath(preQueueWorkflow.outputPath);
-          }
-        } else {
-          // No video was loaded - clear current video
-          setVideoInfo(null);
-          setOutputPath('');
-        }
-        
-        setPreQueueWorkflow(null);
-      }
+  // Whether the queue is open, as of the last open or close asked for. The
+  // state only flips a render later, and adding several videos asks once per
+  // video, so this is what keeps the project from being set aside twice.
+  const queueOpenRef = useRef(false);
+  useEffect(() => {
+    queueOpenRef.current = queueStore.showQueue;
+  }, [queueStore.showQueue]);
+
+  /**
+   * Open the queue, setting the project aside to be put back when it closes.
+   *
+   * Every way of opening the queue comes through here. Adding several videos
+   * used to open it directly, with nothing set aside, so editing a queue item
+   * and closing the queue left that item's chain as the project's for good.
+   */
+  const openQueue = (options: { addCurrentVideo?: boolean } = {}) => {
+    if (queueOpenRef.current) return;
+    queueOpenRef.current = true;
+    setPreQueueWorkflow({
+      videoPath: videoInfo?.path || null,
+      outputPath: outputPath,
+      selectedModel,
+      filters: structuredClone(filters), // Deep copy
+      outputFormat,
+      defaultBackend,
+      numStreams,
+      segment: { ...segment },
+      ffmpegArgs,
+      processingFormat,
+      videoCompareArgs,
+      colorimetry: colorimetrySettings,
+    });
+    queueStore.setShowQueue(true);
+
+    // If a video is loaded, add it to the queue
+    if (options.addCurrentVideo && videoInfo && outputPath) {
+      handleAddCurrentVideoToQueue(videoInfo.path, outputPath);
     }
-    
-    queueStore.setShowQueue(newShowQueue);
   };
-  
+
+  // The project's segment, held while its video loads back in: the effect
+  // below resets the segment whenever the video changes, and would otherwise
+  // reset the one just put back.
+  const pendingSegmentRef = useRef<{ path: string; segment: SegmentSelection; loaded: boolean } | null>(null);
+
+  /**
+   * Put the project's settings back in the window, and its video too when
+   * asked. Without the video it is for the queue staying open with nothing
+   * being edited, which is meant to show the project.
+   */
+  const restoreProject = async (snapshot: PreQueueWorkflow, options: { video: boolean }) => {
+    if (snapshot.selectedModel !== selectedModel) {
+      setSelectedModel(snapshot.selectedModel);
+    }
+    if (JSON.stringify(snapshot.filters) !== JSON.stringify(filters)) {
+      replaceFilters(snapshot.filters);
+    }
+    // Editing a queue item loads its encoding settings too; put the project's back.
+    if (snapshot.ffmpegArgs !== undefined && snapshot.ffmpegArgs !== ffmpegArgs) {
+      handleUpdateFfmpegArgs(snapshot.ffmpegArgs);
+    }
+    if (snapshot.processingFormat !== undefined && snapshot.processingFormat !== processingFormat) {
+      handleUpdateProcessingFormat(snapshot.processingFormat);
+    }
+    if (snapshot.videoCompareArgs !== undefined && snapshot.videoCompareArgs !== videoCompareArgs) {
+      handleUpdateVideoCompareArgs(snapshot.videoCompareArgs);
+    }
+    if (snapshot.colorimetry && JSON.stringify(snapshot.colorimetry) !== JSON.stringify(colorimetrySettings)) {
+      handleColorimetryChange(snapshot.colorimetry);
+    }
+    if (snapshot.outputFormat !== outputFormat) {
+      handleUpdateOutputFormat(snapshot.outputFormat);
+    }
+    if (snapshot.defaultBackend !== defaultBackend) {
+      setDefaultBackend(snapshot.defaultBackend);
+    }
+    if (snapshot.numStreams !== numStreams) {
+      updateNumStreams(snapshot.numStreams);
+    }
+
+    if (!options.video) {
+      if (videoInfo?.path === snapshot.videoPath) setSegment(snapshot.segment);
+      return;
+    }
+
+    // Restore video and output path
+    if (snapshot.videoPath) {
+      pendingSegmentRef.current = { path: snapshot.videoPath, segment: snapshot.segment, loaded: false };
+      try {
+        await loadVideoInfo(snapshot.videoPath);
+        if (snapshot.outputPath) {
+          setOutputPath(snapshot.outputPath);
+        }
+      } catch (error) {
+        addConsoleLog(`Could not reload the project's video: ${getErrorMessage(error)}`);
+      }
+      if (pendingSegmentRef.current) pendingSegmentRef.current.loaded = true;
+      setSegment(snapshot.segment);
+    } else {
+      // No video was loaded - clear current video
+      setVideoInfo(null);
+      setOutputPath('');
+      setSegment(snapshot.segment);
+    }
+  };
+
+  /** Close the queue and put the project back as it was when the queue opened. */
+  const closeQueue = async () => {
+    queueOpenRef.current = false;
+    // Leave the item being edited before anything in the window changes. Its
+    // last edit may still be waiting on the auto-save, and while it counts as
+    // being edited the auto-save writes whatever the window shows into it:
+    // putting the project back used to land in the item while the project's
+    // video loaded.
+    saveEditedItem();
+    queueStore.setEditingQueueItemId(null);
+    queueStore.setShowQueue(false);
+
+    const snapshot = preQueueWorkflow;
+    if (snapshot) {
+      await restoreProject(snapshot, { video: true });
+      setPreQueueWorkflow(null);
+    }
+  };
+
+  const handleToggleQueue = async () => {
+    if (queueStore.showQueue) await closeQueue();
+    else openQueue({ addCurrentVideo: true });
+  };
+
+  // The item being edited stopped being editable: it started processing (it
+  // is encoded with the settings it had then, so later edits would describe a
+  // render that never ran), or it was removed. Leave it and show the project,
+  // which is what the open queue shows when nothing is being edited.
+  const editedItemStatus = queueStore.editingQueueItemId
+    ? queue.find(item => item.id === queueStore.editingQueueItemId)?.status ?? 'removed'
+    : null;
+  useEffect(() => {
+    if (!editedItemStatus || editedItemStatus === 'pending') return;
+    addConsoleLog(editedItemStatus === 'removed'
+      ? 'The queue item being edited was removed; showing the project'
+      : 'The queue item being edited has started processing; showing the project');
+    queueStore.setEditingQueueItemId(null);
+    if (preQueueWorkflow) void restoreProject(preQueueWorkflow, { video: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editedItemStatus]);
+
+  // Editing a queue item puts its settings in the window, and those are saved,
+  // so a restart in the middle of an edit comes back showing them. Go back to
+  // editing that item once everything its settings would race has loaded; if
+  // it can no longer be edited, show the project instead.
+  const resumeTriedRef = useRef(false);
+  useEffect(() => {
+    if (resumeTriedRef.current) return;
+    if (!isSetupComplete || queueStore.isLoadingQueue || !queueStore.isShowQueueLoaded
+      || !isProcessingConfigLoaded || !isColorimetryLoaded) return;
+    resumeTriedRef.current = true;
+
+    const id = queueStore.resumeEditingId;
+    if (!id) return;
+    const item = queue.find(candidate => candidate.id === id);
+    if (queueStore.showQueue && item?.status === 'pending') {
+      addConsoleLog(`Resumed editing queue item: ${item.videoName}`);
+      void handleSelectQueueItem(id);
+      return;
+    }
+    queueStore.setEditingQueueItemId(null);
+    if (queueStore.showQueue && preQueueWorkflow) void restoreProject(preQueueWorkflow, { video: false });
+  });
+
   // Output resolution validation hook (manual trigger only)
   const { isValidating, validationStatus, validationError, validateWorkflow, cancelValidation, clearValidationStatus } = useOutputResolution({
     videoInfo,
@@ -662,6 +762,14 @@ function App() {
   useEffect(() => {
     // Don't reset segment when we're editing a queue item - the segment will be restored from the queue item's workflow
     if (videoInfo && !queueStore.editingQueueItemId) {
+      // The project's video coming back as the queue closes keeps the project's segment.
+      const pending = pendingSegmentRef.current;
+      if (pending && pending.path === videoInfo.path) {
+        pendingSegmentRef.current = null;
+        setSegment(pending.segment);
+        return;
+      }
+      if (pending?.loaded) pendingSegmentRef.current = null;
       setSegment({
         enabled: false,
         startFrame: 0,
@@ -669,7 +777,6 @@ function App() {
       });
     }
   }, [videoInfo?.path, queueStore.editingQueueItemId]);
-
   // App-level side effects (update check, vs-mlrt version check, error handlers, focus recovery)
   const { closeModalWithFocusRestore } = useAppEffects({
     isSetupComplete,
@@ -1090,7 +1197,7 @@ function App() {
   // fresh closure every time App is.
   const lutSteps = useLutSteps({
     filters,
-    setFilters: handleSetFilters,
+    beginStepPatch,
     videoInfo,
     segment,
     playheadFrame,
@@ -1687,6 +1794,8 @@ function App() {
                     onRestoreTemplates={restoreTemplates}
                     onOpenFilterEditor={handleOpenFilterEditor}
                     lut={lutPanel}
+                    beginStepPatch={beginStepPatch}
+                    chainEpoch={chainEpoch}
                   />
 
                   {/* Output Settings */}

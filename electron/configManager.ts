@@ -4,6 +4,7 @@ import * as path from 'path';
 import { PATHS } from './constants';
 import { logger } from './logger';
 import { getBundledBasePath } from './utils';
+import { JsonFileWriter, readJsonOrSetAside } from './jsonFile';
 import type { ModelType } from './scriptGenerator';
 import type { GpuVendor } from './gpuDetection';
 import type { DiscordRichPresenceSettings } from './discordRichPresence';
@@ -109,33 +110,61 @@ const DEFAULT_CONFIG: AppConfig = {
   models: {}
 };
 
+/** A fresh copy: the defaults object must never become the live config and be mutated. */
+const defaultConfig = (): AppConfig => structuredClone(DEFAULT_CONFIG);
+
 export class ConfigManager {
-  private config: AppConfig = DEFAULT_CONFIG;
+  private config: AppConfig = defaultConfig();
+  private readonly writer = new JsonFileWriter(() => CONFIG_FILE);
+  /** Saves still in flight, so a reload reads what they wrote rather than racing them. */
+  private pending = new Set<Promise<void>>();
 
   async load(): Promise<void> {
+    await Promise.allSettled([...this.pending]);
     try {
       await fs.ensureDir(PATHS.CONFIG);
-      
-      if (await fs.pathExists(CONFIG_FILE)) {
-        const data = await fs.readFile(CONFIG_FILE, 'utf-8');
-        const userConfig = JSON.parse(data) as Record<string, unknown>;
-        const migratedConfig = await this.migrateConfigWithStock(userConfig);
-        this.config = migratedConfig;
-        logger.info('Config loaded successfully');
-      } else {
-        logger.info('No config file found, using defaults (will be created during setup)');
-        // Don't save here - let initializeUserConfig() copy the stock config with pre-packed models
+      const read = await readJsonOrSetAside<Record<string, unknown>>(CONFIG_FILE);
+      switch (read.kind) {
+        case 'ok':
+          this.writer.unblock();
+          this.config = await this.migrateConfigWithStock(read.value);
+          logger.info('Config loaded successfully');
+          break;
+        case 'missing':
+          this.writer.unblock();
+          logger.info('No config file found, using defaults (will be created during setup)');
+          // Don't save here - let initializeUserConfig() copy the stock config with pre-packed models
+          break;
+        case 'corrupt':
+          // Starting from defaults is only safe once the old file is kept
+          // somewhere: the first save would otherwise replace every model's
+          // metadata and setting the user had with the defaults.
+          this.config = defaultConfig();
+          if (read.setAsideTo) {
+            this.writer.unblock();
+            logger.error(`Config file was not valid JSON; moved it to ${read.setAsideTo} and started from defaults:`, read.error);
+          } else {
+            this.writer.block('the config file could not be read or moved aside');
+            logger.error('Config file was not valid JSON and could not be moved aside; not saving over it this session:', read.error);
+          }
+          break;
+        case 'unreadable':
+          this.config = defaultConfig();
+          this.writer.block('the config file could not be read');
+          logger.error('Config file could not be read; using defaults without saving over it this session:', read.error);
+          break;
       }
     } catch (error) {
       logger.error('Error loading config:', error);
-      this.config = DEFAULT_CONFIG;
+      this.config = defaultConfig();
+      this.writer.block('loading the config failed');
     }
     setRocmSetting(this.config.rocm);
   }
 
   private async migrateConfigWithStock(userConfig: Record<string, unknown>): Promise<AppConfig> {
     const stockConfig = await this.loadBundledStockConfig();
-    const defaultConfigRecord = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    const defaultConfigRecord = defaultConfig() as unknown as Record<string, unknown>;
 
     if (!stockConfig) {
       return this.deepMerge(defaultConfigRecord, userConfig) as unknown as AppConfig;
@@ -155,7 +184,7 @@ export class ConfigManager {
       try {
         const backupPath = path.join(PATHS.CONFIG, `app-config.backup-${Date.now()}.json`);
         await fs.copy(CONFIG_FILE, backupPath);
-        await fs.writeFile(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+        await this.writer.write(merged);
         logger.info(`Migrated app config using stock defaults (backup: ${backupPath})`);
       } catch (writeError) {
         // Log but don't throw — the in-memory merged config is still valid.
@@ -262,12 +291,19 @@ export class ConfigManager {
     return this.isObject(value) ? value : {};
   }
 
+  /**
+   * Every setter saves the whole config, often several in a row, so the
+   * writer takes this call's snapshot now and lets only the newest one stay.
+   */
   async save(): Promise<void> {
+    const write = this.writer.write(this.config)
+      .then(() => logger.debug('Config saved successfully'))
+      .catch(error => logger.error('Error saving config:', error));
+    this.pending.add(write);
     try {
-      await fs.writeFile(CONFIG_FILE, JSON.stringify(this.config, null, 2), 'utf-8');
-      logger.debug('Config saved successfully');
-    } catch (error) {
-      logger.error('Error saving config:', error);
+      await write;
+    } finally {
+      this.pending.delete(write);
     }
   }
 

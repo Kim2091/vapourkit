@@ -343,3 +343,35 @@ describe('round-tripping hardware args', () => {
     expect(parsed.codec).toBe('custom');
   });
 });
+
+describe('colour tags and metadata mapping the user wrote', () => {
+  const DEFAULT_ARGS = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1';
+
+  it('treats the default args as standard', () => {
+    expect(parseFfmpegArgs(DEFAULT_ARGS).codec).toBe('h264');
+    expect(generateFfmpegArgs(parseFfmpegArgs(DEFAULT_ARGS))).toBe(DEFAULT_ARGS);
+  });
+
+  it('keeps an HDR -vf instead of rewriting it to bt709', () => {
+    const hdr = '-c:v libx265 -preset slow -crf 16 -vf setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc -map_metadata 1';
+    const parsed = parseFfmpegArgs(hdr);
+    expect(parsed.codec).toBe('custom');
+    expect(generateFfmpegArgs(parsed)).toBe(hdr);
+  });
+
+  it('keeps any other -vf', () => {
+    const scaled = '-c:v libx264 -preset medium -crf 18 -vf scale=1920:-2 -map_metadata 1';
+    expect(generateFfmpegArgs(parseFfmpegArgs(scaled))).toBe(scaled);
+  });
+
+  it('keeps a different -map_metadata', () => {
+    const args = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 0';
+    expect(parseFfmpegArgs(args).codec).toBe('custom');
+    expect(generateFfmpegArgs(parseFfmpegArgs(args))).toBe(args);
+  });
+
+  it('does not take a longer -vf that starts like the default for the default', () => {
+    const args = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,scale=1280:-2 -map_metadata 1';
+    expect(parseFfmpegArgs(args).codec).toBe('custom');
+  });
+});
