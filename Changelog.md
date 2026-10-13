@@ -85,6 +85,7 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - **Fixed: the settings and queue files could be corrupted, then replaced with defaults.** Saves made in quick succession (selecting a queue item writes five) could interleave into invalid JSON, and the next start silently started over. Writes are now atomic and ordered, and a file that cannot be read is moved aside (`*.unreadable-<time>.json`) rather than saved over
 
 ### Workflows
+- **New: edit a filter in place.** An Edit button on a step's card (and the pencil in the filter picker) opens one dialog for the filter's name, categories, description and code, and saves it as the same filter, no deleting and re-importing, no duplicate. Steps using it follow a rename, and get the new code unless their own code was changed
 - A loaded workflow can still be cleared after a restart (its "before" state is kept), and clearing it puts the backend back too
 - Workflow files now carry the default backend
 - Align and Generate LUT apply their result to the chain as it is when they finish, keeping edits made meanwhile; if a different chain was loaded in between, they leave it alone and say so

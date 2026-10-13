@@ -1,10 +1,11 @@
 import { Fragment, memo, useState, useEffect, useRef } from 'react';
-import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Crop, Palette, Film } from 'lucide-react';
+import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Crop, Palette, Film, Edit3 } from 'lucide-react';
 import type { BackendId, FilterBackend, Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { BACKENDS, getBackendDescriptor, resolveFilterBackend } from '../utils/backends';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import { Section, SectionButton } from './Section';
 import { FilterSelectorModal } from './FilterSelectorModal';
+import { TemplateEditDialog } from './TemplateEditDialog';
 import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
 import { ask } from '../utils/dialogs';
@@ -127,6 +128,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [expandedFilters, setExpandedFilters] = useState<Set<string>>(new Set());
   const [showSaveDialog, setShowSaveDialog] = useState<string | null>(null);
+  // The template open in the Edit Filter dialog from a step's card.
+  const [editingTemplate, setEditingTemplate] = useState<FilterTemplate | null>(null);
   const [presetName, setPresetName] = useState('');
   const [presetDescription, setPresetDescription] = useState('');
   const [presetCategories, setPresetCategories] = useState<string[]>([]);
@@ -623,6 +626,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     if (!onSaveTemplate) return false;
     if (oldName !== updatedTemplate.name && !(await confirmReplaceTemplate(updatedTemplate.name))) return false;
 
+    const previousCode = filterTemplates.find(template => template.name === oldName)?.code;
     try {
       // Save under the new name first: deleting the old one first lost the
       // template outright whenever the save then failed.
@@ -631,11 +635,15 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
         await onDeleteTemplate(oldName);
       }
       
-      if (success && oldName !== updatedTemplate.name) {
-        // Update any filters using the old template name to use the new name
-        const updatedFilters = pendingFilters.map(f =>
-          f.preset === oldName ? { ...f, preset: updatedTemplate.name } : f
-        );
+      if (success) {
+        // Steps using it follow: the new name, and the new code where the step
+        // still had the template's code unchanged. A step whose code was
+        // edited keeps it; that edit is the user's, not the template's.
+        const updatedFilters = pendingFilters.map(f => {
+          if (f.preset !== oldName) return f;
+          const followsCode = previousCode !== undefined && f.code === previousCode;
+          return { ...f, preset: updatedTemplate.name, ...(followsCode ? { code: updatedTemplate.code } : {}) };
+        });
         if (JSON.stringify(updatedFilters) !== JSON.stringify(pendingFilters)) {
           setPendingFilters(updatedFilters);
           onFiltersChange(updatedFilters);
@@ -1311,6 +1319,16 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                               </button>
                             </>
                           )}
+                          {filter.preset && onSaveTemplate && filterTemplates.some(t => t.name === filter.preset) && (
+                            <button
+                              onClick={() => setEditingTemplate(filterTemplates.find(t => t.name === filter.preset) ?? null)}
+                              disabled={isProcessing}
+                              title={`Edit the “${filter.preset}” filter: rename it, or change its code, description or categories`}
+                              className={`${PICKER_ACTION} text-ink-400 hover:text-accent-400 hover:border-ink-700`}
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          )}
                           {filter.preset && onDeleteTemplate && (
                             <button
                               onClick={() => handleDeleteTemplate(filter.preset!, filter.id)}
@@ -1562,6 +1580,15 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
           );
         })}
     </Section>
+
+      {/* Edit Filter, opened from a step's card */}
+      {editingTemplate && (
+        <TemplateEditDialog
+          template={editingTemplate}
+          onSave={updated => handleEditTemplate(editingTemplate.name, updated)}
+          onClose={() => setEditingTemplate(null)}
+        />
+      )}
 
       {/* Filter Selector Modal */}
       {showFilterSelector && (

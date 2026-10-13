@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, Star, Clock, Filter as FilterIcon, Check, Trash2, Edit3, Plus } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
+import { TemplateEditDialog } from './TemplateEditDialog';
 import { ask } from '../utils/dialogs';
 
 interface FilterSelectorModalProps {
@@ -93,10 +94,6 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
   const [editingTemplate, setEditingTemplate] = useState<FilterTemplate | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editCategories, setEditCategories] = useState<string[]>([]);
-  const [newCategoryInput, setNewCategoryInput] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -297,32 +294,16 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
 
   const handleEditTemplate = (template: FilterTemplate) => {
     setEditingTemplate(template);
-    setEditName(template.name);
-    setEditDescription(template.description || '');
-    // Support both single category and multiple categories
-    const categories = Array.isArray(template.category)
-      ? template.category
-      : (template.category ? [template.category] : []);
-    setEditCategories(categories);
-    setNewCategoryInput('');
   };
 
-  const handleSaveEdit = async () => {
-    if (!onEditTemplate || !editingTemplate || !editName.trim()) return;
-
-    const updatedTemplate: FilterTemplate = {
-      ...editingTemplate,
-      name: editName.trim(),
-      description: editDescription.trim() || undefined,
-      category: editCategories.length > 0 ? editCategories : undefined,
-    };
-
-    const success = await onEditTemplate(editingTemplate.name, updatedTemplate);
+  const handleSaveEdit = async (updatedTemplate: FilterTemplate): Promise<boolean> => {
+    if (!onEditTemplate || !editingTemplate) return false;
+    const oldName = editingTemplate.name;
+    const success = await onEditTemplate(oldName, updatedTemplate);
     if (success) {
       // Update favorites and recent with new name if applicable
-      const oldName = editingTemplate.name;
-      const newName = editName.trim();
-      
+      const newName = updatedTemplate.name;
+
       if (oldName !== newName) {
         setFavorites(prev => {
           const next = new Set(prev);
@@ -337,9 +318,9 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
           }
           return next;
         });
-        
+
         setRecentFilters(prev => {
-          const updated = prev.map(rf => 
+          const updated = prev.map(rf =>
             rf.name === oldName ? { ...rf, name: newName } : rf
           );
           try {
@@ -350,159 +331,20 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
           return updated;
         });
       }
-      
-      setEditingTemplate(null);
-      setEditName('');
-      setEditDescription('');
-      setEditCategories([]);
-      setNewCategoryInput('');
     }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingTemplate(null);
-    setEditName('');
-    setEditDescription('');
-    setEditCategories([]);
-    setNewCategoryInput('');
+    return success;
   };
 
   if (!isOpen) return null;
 
   return (
     <>
-      {/* Edit Dialog Overlay */}
       {editingTemplate && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={handleCancelEdit}
-        >
-          <div
-            className="bg-ink-900 border border-ink-750 rounded-lg shadow-2xl shadow-black/60 w-[500px] max-w-[90vw]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-10 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800 rounded-t-lg overflow-hidden">
-              <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <Edit3 className="w-4 h-4 text-ink-500" />
-                <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Edit Template</h3>
-              </div>
-              <button
-                onClick={handleCancelEdit}
-                aria-label="Close edit dialog"
-                className="w-7 h-7 self-center rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3">
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Template Name <span className="text-bad-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Enter template name"
-                  className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Categories
-                </label>
-                <div className="space-y-2">
-                  {/* Display existing categories */}
-                  {editCategories.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {editCategories.map((cat, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center gap-1 h-[18px] px-1.5 bg-accent-500/10 border border-accent-500/40 rounded text-accent-300 text-[10px]"
-                        >
-                          {cat}
-                          <button
-                            onClick={() => setEditCategories(prev => prev.filter((_, i) => i !== index))}
-                            className="hover:text-bad-400 transition-colors"
-                            type="button"
-                            aria-label={`Remove category ${cat}`}
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {/* Add new category input */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newCategoryInput}
-                      onChange={(e) => setNewCategoryInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newCategoryInput.trim()) {
-                          e.preventDefault();
-                          if (!editCategories.includes(newCategoryInput.trim())) {
-                            setEditCategories([...editCategories, newCategoryInput.trim()]);
-                          }
-                          setNewCategoryInput('');
-                        }
-                      }}
-                      placeholder="Add category (press Enter)"
-                      className="flex-1 min-w-0 h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (newCategoryInput.trim() && !editCategories.includes(newCategoryInput.trim())) {
-                          setEditCategories([...editCategories, newCategoryInput.trim()]);
-                          setNewCategoryInput('');
-                        }
-                      }}
-                      disabled={!newCategoryInput.trim()}
-                      className="h-7 px-2.5 rounded inline-flex items-center text-[11.5px] font-semibold bg-accent-500 border border-accent-500 text-accent-ink hover:bg-accent-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  placeholder="Describe what this filter does..."
-                  rows={3}
-                  className="w-full bg-ink-850 border border-ink-750 rounded px-2 py-1.5 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500 resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 px-4 py-3 border-t border-ink-800">
-              <button
-                onClick={handleSaveEdit}
-                disabled={!editName.trim()}
-                className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-accent-500 border border-accent-500 text-accent-ink hover:bg-accent-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Save Changes
-              </button>
-              <button
-                onClick={handleCancelEdit}
-                className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <TemplateEditDialog
+          template={editingTemplate}
+          onSave={handleSaveEdit}
+          onClose={() => setEditingTemplate(null)}
+        />
       )}
 
       {/* Main Modal */}
