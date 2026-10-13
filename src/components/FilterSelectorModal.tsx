@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, Star, Clock, Filter as FilterIcon, Check, Trash2, Edit3, Plus } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
+import { ask } from '../utils/dialogs';
 
 interface FilterSelectorModalProps {
   isOpen: boolean;
@@ -259,7 +260,12 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
   const handleDeleteTemplate = async (templateName: string) => {
     if (!onDeleteTemplate) return;
     
-    if (!confirm(`Delete template "${templateName}"?\n\nThis action cannot be undone.`)) {
+    if (!(await ask({
+      title: 'Delete template',
+      message: `Delete template "${templateName}"?\n\nThis cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    }))) {
       return;
     }
 

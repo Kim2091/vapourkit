@@ -1,10 +1,11 @@
 // OutputSettingsPanel.tsx
 import { memo, useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Sliders, Gauge } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sliders, Gauge, Info } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
 import type { Codec, Preset, Encoder } from '../utils/ffmpegConfig';
 import { PrivacyText } from './PrivacyVeil';
 import { Section, SectionButton } from './Section';
+import { ask } from '../utils/dialogs';
 import {
   parseFfmpegArgs,
   generateFfmpegArgs,
@@ -83,8 +84,32 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   // Parse current config from args (for simple mode display)
   const config = parseFfmpegArgs(ffmpegArgs);
 
+  // Arguments the simple controls cannot show (a filter chain, HDR tags, a
+  // bitrate) are shown as they are, in advanced mode, whatever mode was last
+  // picked: simple mode would display made-up values and its controls would
+  // do nothing.
+  const argsAreCustom = config.codec === 'custom';
+  const showAdvanced = advancedMode || argsAreCustom;
+
   // When entering advanced mode, store the current args
-  const handleToggleAdvancedMode = () => {
+  const handleToggleAdvancedMode = async () => {
+    if (argsAreCustom) {
+      // Simple mode cannot hold these arguments, so going there replaces them.
+      const replace = await ask({
+        title: 'Switch to simple mode',
+        message: 'These FFmpeg arguments include options the simple controls cannot show. '
+          + 'Simple mode replaces them with standard H.264 settings.',
+        confirmLabel: 'Replace them',
+        tone: 'danger',
+      });
+      if (!replace) return;
+      setStoredAdvancedArgs(ffmpegArgs);
+      const preset = getDefaultPreset('software', 'h264');
+      const crf = getRecommendedCrfRange('h264', 'software').default;
+      onFfmpegArgsChange(generateFfmpegArgs({ codec: 'h264', encoder: 'software', preset, crf }));
+      setAdvancedMode(false);
+      return;
+    }
     if (!advancedMode) {
       // Entering advanced mode - if we have stored advanced args, restore them
       // Otherwise, keep the current args as the starting point
@@ -245,7 +270,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             <span className="text-[12.5px] text-ink-300 group-hover:text-ink-100 transition-colors">
               Encoding
             </span>
-            {!advancedMode && (
+            {!showAdvanced && (
               <>
                 <span className="text-xs text-accent-500 bg-accent-500/10 px-2 py-0.5 rounded">
                   {config.codec === 'custom' ? 'H264' : config.codec.toUpperCase()}
@@ -257,7 +282,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                 )}
               </>
             )}
-            {advancedMode && (
+            {showAdvanced && (
               <span className="text-xs text-accent-500 bg-accent-500/10 px-2 py-0.5 rounded">
                 Custom
               </span>
@@ -275,7 +300,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
         <div className="px-4 pb-3 border-t border-ink-900 pt-3">
           <div className="space-y-3">
           {/* Simple Mode */}
-          {!advancedMode && (
+          {!showAdvanced && (
             <>
             {/* Codec Selection */}
             <div>
@@ -463,7 +488,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
         )}
 
         {/* Advanced Mode - Raw FFmpeg Args */}
-        {advancedMode && (
+        {showAdvanced && (
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
@@ -474,7 +499,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                 onClick={handleToggleAdvancedMode}
                 disabled={isProcessing}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
-                  advancedMode
+                  showAdvanced
                     ? 'bg-accent-500/20 text-accent-500 border border-accent-500/30 hover:bg-accent-500/30'
                     : 'bg-ink-900 text-ink-400 border border-ink-700 hover:border-ink-600 hover:text-ink-300'
                 }`}
@@ -483,6 +508,12 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                 Advanced
               </button>
             </div>
+            {argsAreCustom && (
+              <p className="flex items-start gap-1.5 text-[10.5px] leading-snug text-ink-400 mb-1.5">
+                <Info className="w-3 h-3 mt-px flex-shrink-0 text-ink-500" />
+                Shown as text because these arguments include options the simple controls can't show.
+              </p>
+            )}
             <textarea
               value={ffmpegArgs}
               onChange={(e) => {

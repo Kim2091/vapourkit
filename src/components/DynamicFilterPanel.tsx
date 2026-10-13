@@ -7,6 +7,7 @@ import { Section, SectionButton } from './Section';
 import { FilterSelectorModal } from './FilterSelectorModal';
 import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
+import { ask } from '../utils/dialogs';
 import { onBeforeClose } from '../utils/beforeClose';
 import { CreateLutCard, LoadLutCard } from './LutStepCards';
 import { StageSourceCard } from './StageSourceCard';
@@ -542,15 +543,20 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
    * file, which may be a built-in the user edited or one of their own. Ask
    * first. except is the name being saved over on purpose (the step's own).
    */
-  const confirmReplaceTemplate = (name: string, except?: string): boolean => {
+  const confirmReplaceTemplate = async (name: string, except?: string): Promise<boolean> => {
     if (name === except || !filterTemplates.some(template => template.name === name)) return true;
-    return confirm(`A filter called "${name}" already exists. Replace it?`);
+    return ask({
+      title: 'Replace filter',
+      message: `A filter called "${name}" already exists. Replace it?`,
+      confirmLabel: 'Replace',
+      tone: 'danger',
+    });
   };
 
   const handleSaveTemplate = async (filterId: string) => {
     const filter = pendingFilters.find(f => f.id === filterId);
     if (onSaveTemplate && presetName.trim() && filter) {
-      if (!confirmReplaceTemplate(presetName.trim(), filter.preset)) return;
+      if (!(await confirmReplaceTemplate(presetName.trim(), filter.preset))) return;
       const success = await onSaveTemplate({
         name: presetName.trim(),
         code: filter.code,
@@ -581,7 +587,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       }
 
       const template = result.template;
-      if (!confirmReplaceTemplate(template.name)) return;
+      if (!(await confirmReplaceTemplate(template.name))) return;
 
       if (onSaveTemplate) {
         await onSaveTemplate(template);
@@ -595,9 +601,12 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const handleDeleteTemplate = async (name: string, filterId: string) => {
     // One click used to delete the file outright, and an update never puts a
     // deleted built-in filter back, so a stray click lost it for good.
-    if (!confirm(`Delete template "${name}"?
-
-A built-in filter can be restored from the bottom of the filter picker.`)) {
+    if (!(await ask({
+      title: 'Delete template',
+      message: `Delete template "${name}"?\n\nA built-in filter can be restored from the bottom of the filter picker.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    }))) {
       return;
     }
     if (onDeleteTemplate) {
@@ -612,7 +621,7 @@ A built-in filter can be restored from the bottom of the filter picker.`)) {
 
   const handleEditTemplate = async (oldName: string, updatedTemplate: FilterTemplate): Promise<boolean> => {
     if (!onSaveTemplate) return false;
-    if (oldName !== updatedTemplate.name && !confirmReplaceTemplate(updatedTemplate.name)) return false;
+    if (oldName !== updatedTemplate.name && !(await confirmReplaceTemplate(updatedTemplate.name))) return false;
 
     try {
       // Save under the new name first: deleting the old one first lost the

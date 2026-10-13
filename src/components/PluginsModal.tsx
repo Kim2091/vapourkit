@@ -1,4 +1,5 @@
 import { memo, useState, useEffect } from 'react';
+import { ask } from '../utils/dialogs';
 import {
   CheckCircle,
   ChevronDown,
@@ -148,12 +149,14 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
     return startOperation(() => window.electronAPI.installPluginDependencies(mode), 'Installation failed');
   };
 
-  const handleCompleteReinstall = () => {
-    if (!confirm(
-      'Complete reinstall?\n\n'
-      + 'Every plugin package is removed and downloaded again, and every built-in filter and script goes back to how Vapourkit ships it. '
-      + 'Filters and scripts you edited are backed up to data\\config first. Your own filters are not touched.',
-    )) return;
+  const handleCompleteReinstall = async () => {
+    if (!(await ask({
+      title: 'Complete reinstall',
+      message: 'Every plugin package is removed and downloaded again, and every built-in filter and script goes back to how Vapourkit ships it. '
+        + 'Filters and scripts you edited are backed up to data\\config first. Your own filters are not touched.',
+      confirmLabel: 'Reinstall',
+      tone: 'danger',
+    }))) return;
     void handleInstallDependencies('complete');
   };
 

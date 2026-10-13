@@ -90,7 +90,8 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - Align and Generate LUT apply their result to the chain as it is when they finish, keeping edits made meanwhile; if a different chain was loaded in between, they leave it alone and say so
 - Code typed into a step and not yet committed is saved when the app closes
 - Importing filters, saving or renaming a template, or importing a .vkfilter asks before replacing an existing template with the same name
-- Simple mode no longer rewrites custom `-vf` or `-map_metadata` arguments to the defaults when the codec, quality or preset is changed
+- Encoding arguments the simple controls can't show (a filter chain, HDR tags, a bitrate) now open in advanced mode with a note saying why, instead of simple mode showing made-up values; going back to simple mode asks before replacing them
+- Confirmations (delete, replace, overwrite, reinstall) use the app's own dialog instead of the system one, veiled in privacy mode; Escape cancels, and destructive ones start on Cancel
 
 ### Filters
 - **New: Grain Synth.** Adds film grain fitted to real sources, with two models: `mega_v1` (stronger, harsher) and `real_v5` (softer). Apply it after upscaling, at the final resolution. The grain is the same on every render of a frame, and it runs on CUDA with TensorRT or on the CPU otherwise

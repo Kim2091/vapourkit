@@ -3,6 +3,7 @@ import type { BackendId, VideoInfo, UpscaleProgress, Filter, SegmentSelection } 
 import { getBackendDescriptor } from '../utils/backends';
 import { getErrorMessage } from '../types/errors';
 import { notify } from '../utils/notifications';
+import { ask } from '../utils/dialogs';
 import { generateOutputSuffix } from '../utils/generateOutputSuffix';
 
 interface UseVideoProcessingProps {
@@ -340,9 +341,12 @@ export function useVideoProcessing({
       try {
         const fileExists = await window.electronAPI.fileExists(outputPath);
         if (fileExists) {
-          const shouldOverwrite = window.confirm(
-            `The file "${outputPath}" already exists.\n\nDo you want to overwrite it?`
-          );
+          const shouldOverwrite = await ask({
+            title: 'Overwrite output',
+            message: `The file "${outputPath}" already exists.\n\nOverwrite it?`,
+            confirmLabel: 'Overwrite',
+            tone: 'danger',
+          });
           if (!shouldOverwrite) {
             onLog('Processing canceled - output file already exists');
             return;

@@ -5,6 +5,7 @@ import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
 import { isBackendId, normalizeBackendForCurrentPlatform } from '../utils/backends';
 import { notify } from '../utils/notifications';
+import { ask } from '../utils/dialogs';
 import { remapStepReferences } from '../utils/stepReferences';
 
 const LOADED_WORKFLOW_KEY = 'loadedWorkflow';
@@ -533,9 +534,12 @@ export function useWorkflow({
       const taken = selectedFilters
         .map(filter => filter.name)
         .filter(name => filterTemplates?.some(template => template.name === name));
-      if (taken.length > 0 && !confirm(
-        `These filters already exist and would be replaced by the workflow's version:\n\n- ${taken.join('\n- ')}\n\nReplace them?`,
-      )) {
+      if (taken.length > 0 && !(await ask({
+        title: 'Replace filters',
+        message: `These filters already exist and would be replaced by the workflow's version:\n\n- ${taken.join('\n- ')}\n\nReplace them?`,
+        confirmLabel: 'Replace',
+        tone: 'danger',
+      }))) {
         addConsoleLog('Import cancelled: it would have replaced existing filters');
         return;
       }

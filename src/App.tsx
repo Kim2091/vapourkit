@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { NotificationContainer } from './components/NotificationContainer';
+import { ConfirmDialogHost } from './components/ConfirmDialogHost';
 import { notify } from './utils/notifications';
 import { QueuePanel } from './components/QueuePanel';
 import { AppModals } from './components/AppModals';
@@ -1540,6 +1541,7 @@ function App() {
   return (
     <div className="h-screen flex bg-ink-950 overflow-hidden">
       <NotificationContainer />
+      <ConfirmDialogHost privacyMode={privacyMode} />
 
       {/* Tool rail — full height, left edge */}
       <AppRail

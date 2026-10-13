@@ -1,6 +1,8 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, Star, Clock, Cpu, Check, Trash2, Edit3, Download } from 'lucide-react';
 import type { BackendId, ModelFile } from '../electron.d';
+import { ask } from '../utils/dialogs';
+import { notify } from '../utils/notifications';
 import { getModelDisplayName, filterModels, getPortableModelName } from '../utils/modelUtils';
 import { getBackendDescriptor } from '../utils/backends';
 
@@ -319,7 +321,12 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   };
 
   const handleDeleteModel = async (model: ModelFile) => {
-    if (!confirm(`Delete model "${model.name}"?\n\nThis action cannot be undone.`)) {
+    if (!(await ask({
+      title: 'Delete model',
+      message: `Delete model "${model.name}"?\n\nThis cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    }))) {
       return;
     }
 
@@ -410,7 +417,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             trimmedName
           );
           if (!renameResult.success) {
-            alert(renameResult.error || 'Failed to rename model');
+            notify.error('Rename failed', renameResult.error || 'Failed to rename model');
             setIsSavingEdit(false);
             return;
           }
@@ -418,7 +425,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
           metadataId = renameResult.newId!;
         } catch (renameError) {
           console.error('Failed to rename model:', renameError);
-          alert('Failed to rename model. Please restart the app and try again.');
+          notify.error('Rename failed', 'Failed to rename model. Please restart the app and try again.');
           setIsSavingEdit(false);
           return;
         }
