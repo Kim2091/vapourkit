@@ -16,7 +16,7 @@ vi.mock('./ffmpegManager', () => ({
 }));
 vi.mock('./configManager', () => ({ configManager: {} }));
 vi.mock('./ffmpegSettingsManager', () => ({
-  FFmpegSettingsManager: { loadFFmpegConfig: async () => ({ videoArgs: [] }) },
+  FFmpegSettingsManager: { loadFFmpegConfig: vi.fn(async () => ({ videoArgs: [] })) },
 }));
 vi.mock('./processLifecycle', () => ({
   createWorkloadSpawnOptions: (o: unknown) => o,
@@ -24,52 +24,49 @@ vi.mock('./processLifecycle', () => ({
 }));
 
 let releaseProbe: (info: object) => void = () => {};
-vi.mock('./videoMetadataExtractor', () => ({
-  VideoMetadataExtractor: {
-    validateVideoForUpscaling: async () => ({ valid: true }),
-    getVideoMetadata: async () => ({ hasAudio: false, hasSubtitles: false, dar: null, duration: null, audioStreams: 0, subtitleStreams: 0 }),
-  },
-}));
 vi.mock('./vapourSynthInfoExtractor', () => ({
   VapourSynthInfoExtractor: class {
     onBuildStatus?: unknown;
     cancelAll() {
-      releaseProbe({ resolution: null, fps: null, fpsString: null, error: 'killed' });
+      releaseProbe({ frames: 0, resolution: null, fps: null, fpsString: null, error: 'killed' });
     }
     getOutputInfo() {
       return new Promise(resolve => { releaseProbe = resolve; });
     }
-    getFrameCount() {
-      return Promise.resolve(10);
-    }
   },
 }));
 
-import { UpscaleExecutor } from './upscaleExecutor';
+import { UpscaleExecutor, type RunProbes } from './upscaleExecutor';
+import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 
-const okInfo = { resolution: '64x64', fps: 24, fpsString: '24/1', pixelFormat: 'YUV420P8', error: null };
+const okInfo = { frames: 10, resolution: '64x64', fps: 24, fpsString: '24/1', pixelFormat: 'YUV420P8', error: null };
+const source = { hasAudio: false, hasSubtitles: false, dar: null, duration: null, audioStreams: 0, subtitleStreams: 0 };
+const probes = (output: RunProbes['output'] = okInfo): RunProbes => ({ source, output });
 
 describe('stopping an upscale before it spawns', () => {
   beforeEach(() => spawn.mockReset());
 
   it.each(['cancel', 'kill'] as const)('%s during the graph probe starts nothing', async (stop) => {
     const executor = new UpscaleExecutor('/vs/vspipe', '/py');
-    const run = executor.execute('/s.vpy', '/out.mkv', '/in.mkv', 10);
-    // Let execute() reach the probe.
-    await new Promise(resolve => setTimeout(resolve, 0));
+    const probe = executor.getOutputInfo('/s.vpy');
     executor[stop]();
+    const output = await probe;
 
-    await expect(run).rejects.toThrow('Canceled');
+    await expect(executor.execute('/s.vpy', '/out.mkv', '/in.mkv', probes(output))).rejects.toThrow('Canceled');
     expect(spawn).not.toHaveBeenCalled();
     expect(executor.isStopped).toBe(true);
   });
 
-  it('a stop that lands after the probe still starts nothing', async () => {
+  it.each(['cancel', 'kill'] as const)('%s while execute() is still preparing starts nothing', async (stop) => {
+    let releaseConfig: (() => void) | null = null;
+    vi.mocked(FFmpegSettingsManager.loadFFmpegConfig).mockImplementationOnce(
+      () => new Promise(resolve => { releaseConfig = () => resolve({ videoArgs: [] } as never); }),
+    );
     const executor = new UpscaleExecutor('/vs/vspipe', '/py');
-    const run = executor.execute('/s.vpy', '/out.mkv', '/in.mkv', 10);
-    await new Promise(resolve => setTimeout(resolve, 0));
-    releaseProbe(okInfo);
-    executor.kill();
+    const run = executor.execute('/s.vpy', '/out.mkv', '/in.mkv', probes());
+    await vi.waitFor(() => expect(releaseConfig).not.toBeNull());
+    executor[stop]();
+    releaseConfig!();
 
     await expect(run).rejects.toThrow('Canceled');
     expect(spawn).not.toHaveBeenCalled();
@@ -78,15 +75,13 @@ describe('stopping an upscale before it spawns', () => {
   it('a stopped executor refuses a new run', async () => {
     const executor = new UpscaleExecutor('/vs/vspipe', '/py');
     executor.cancel();
-    await expect(executor.execute('/s.vpy', '/out.mkv', '/in.mkv', 10)).rejects.toThrow('Canceled');
+    await expect(executor.execute('/s.vpy', '/out.mkv', '/in.mkv', probes())).rejects.toThrow('Canceled');
     expect(spawn).not.toHaveBeenCalled();
   });
 
   it('reports a failed graph probe instead of starting the run', async () => {
     const executor = new UpscaleExecutor('/vs/vspipe', '/py');
-    const run = executor.execute('/s.vpy', '/out.mkv', '/in.mkv', 10);
-    await new Promise(resolve => setTimeout(resolve, 0));
-    releaseProbe({ ...okInfo, resolution: null, error: 'Python exception: no module' });
+    const run = executor.execute('/s.vpy', '/out.mkv', '/in.mkv', probes({ ...okInfo, resolution: null, error: 'Python exception: no module' }));
 
     await expect(run).rejects.toThrow('Python exception: no module');
     expect(spawn).not.toHaveBeenCalled();

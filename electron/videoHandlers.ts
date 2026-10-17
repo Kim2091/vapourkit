@@ -8,7 +8,7 @@ import { logger } from './logger';
 import { PATHS } from './constants';
 import { configManager } from './configManager';
 import { withLogSeparator } from './utils';
-import { extractVideoMetadata, getVideoFrameCount } from './videoUtils';
+import { extractVideoMetadata, getVideoFrameCount, probeVideo } from './videoUtils';
 import { formatBytes } from './ipcUtilities';
 import { handleValidated } from './ipcValidation';
 import { z } from 'zod';
@@ -373,9 +373,10 @@ export function registerVideoHandlers(
           itemLogger.write('=== End Script Content ===');
         } catch { /* ignore read errors */ }
 
-        // Get video metadata for fps (needed for audio segment trimming)
-        const videoMetadata = await extractVideoMetadata(videoPath);
-        const fps = videoMetadata.fps || 24;
+        // One ffmpeg probe serves both the fps (needed for audio segment
+        // trimming) and the stream layout the encode maps.
+        const sourceProbe = await probeVideo(videoPath);
+        const fps = sourceProbe.display.fps || 24;
         qlog(`Input video fps: ${fps}`);
 
         // Initialize executor
@@ -400,19 +401,21 @@ export function registerVideoHandlers(
           }
         };
 
-        // Get frame count and execute. Stream BestSource indexing progress so a
-        // cold cache doesn't look like a hang, and re-check the module slot after
-        // the await — cancel-upscale, kill-upscale, and the new-run cleanup at the
-        // top of this handler all null the module reference mid-flight.
+        // Evaluate the graph once for the frame count and output format. Stream
+        // BestSource indexing progress so a cold cache doesn't look like a hang,
+        // and re-check the module slot after the await — cancel-upscale,
+        // kill-upscale, and the new-run cleanup at the top of this handler all
+        // null the module reference mid-flight.
         qlog('Getting frame count');
         let lastIndexPct = -1;
-        const totalFrames = await executor.getFrameCount(scriptPath, (pct) => {
+        const outputInfo = await executor.getOutputInfo(scriptPath, (pct) => {
           if (pct !== lastIndexPct) {
             lastIndexPct = pct;
             qlog(`Indexing source: ${pct}%`);
           }
           mainWindow?.webContents.send('video-index-progress', { percentage: pct, complete: false });
         });
+        const totalFrames = outputInfo.frames;
         qlog(`Total frames to process: ${totalFrames}`);
 
         if (upscaleExecutor !== executor) {
@@ -425,7 +428,7 @@ export function registerVideoHandlers(
         mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
 
         qlog('Starting execution');
-        await executor.execute(scriptPath, outputPath, videoPath, totalFrames, segment?.enabled ? segment : undefined, fps, benchmarkMode);
+        await executor.execute(scriptPath, outputPath, videoPath, { source: sourceProbe.streams, output: outputInfo }, segment?.enabled ? segment : undefined, fps, benchmarkMode);
 
         // Cleanup
         qlog('Cleaning up script file');

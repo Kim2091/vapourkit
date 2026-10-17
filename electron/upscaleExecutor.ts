@@ -8,7 +8,7 @@ import { PATHS } from './constants';
 import { setupVSEnvironment, pollGpuStats, GpuStats } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { ErrorMessageHandler } from './errorMessageHandler';
-import { VideoMetadataExtractor, VideoMetadata } from './videoMetadataExtractor';
+import type { VideoMetadata } from './videoMetadataExtractor';
 import { VapourSynthInfoExtractor, OutputInfo } from './vapourSynthInfoExtractor';
 import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
 import { configManager } from './configManager';
@@ -19,6 +19,14 @@ export interface SegmentSelection {
   enabled: boolean;
   startFrame: number;
   endFrame: number; // -1 means end of video
+}
+
+/** Per-job probe results execute() runs from. */
+export interface RunProbes {
+  /** Stream layout from the source's ffmpeg probe; null when ffmpeg could not read it. */
+  source: VideoMetadata | null;
+  /** The script's output clip, from getOutputInfo(). */
+  output: OutputInfo;
 }
 
 export interface UpscaleProgress {
@@ -141,12 +149,12 @@ export class UpscaleExecutor {
     }
   }
 
-  async getFrameCount(scriptPath: string, onProgress?: (percentage: number) => void): Promise<number> {
-    return this.vsInfoExtractor.getFrameCount(scriptPath, onProgress);
-  }
-
-  async getOutputInfo(scriptPath: string): Promise<OutputInfo> {
-    return this.vsInfoExtractor.getOutputInfo(scriptPath);
+  /**
+   * Evaluates the script once with `vspipe -i`. cancel() and kill() stop it,
+   * and execute() then refuses to start.
+   */
+  async getOutputInfo(scriptPath: string, onProgress?: (percentage: number) => void): Promise<OutputInfo> {
+    return this.vsInfoExtractor.getOutputInfo(scriptPath, onProgress);
   }
 
   /** True once cancel() or kill() has been called; the executor never runs again. */
@@ -161,30 +169,40 @@ export class UpscaleExecutor {
     }
   }
 
-  async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<void> {
+  /**
+   * Runs vspipe into ffmpeg. `probes` are the results of the source's ffmpeg
+   * probe and of getOutputInfo() on this script, which the caller runs once
+   * for the whole job.
+   */
+  async execute(scriptPath: string, outputPath: string, inputPath: string, probes: RunProbes, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<void> {
+    // A stop during the caller's graph probe surfaces as a failed probe, so
+    // the stop is checked first.
     this.throwIfStopped();
+    const outputInfo = probes.output;
+    const totalFrames = outputInfo.frames;
     this.logExecutionStart(scriptPath, inputPath, outputPath, totalFrames);
     if (benchmarkMode) {
       logger.upscale('BENCHMARK MODE: Output will be discarded, measuring processing speed only');
     }
 
     await this.validateFiles(scriptPath, inputPath);
-    const metadata = await this.getVideoMetadata(inputPath);
+    await this.validateExecutables();
 
-    // Graph evaluation can run a minutes-long engine build, and a stop during
-    // it surfaces here as a failed probe.
-    const outputInfo = await this.getOutputInfo(scriptPath);
-    this.throwIfStopped();
     if (outputInfo.error) {
       const errorMsg = ErrorMessageHandler.formatUserErrorMessage('VapourSynth Error', outputInfo.error);
       logger.errorWithDialog('VapourSynth Error', errorMsg);
       throw new Error(errorMsg);
     }
+    if (!probes.source) {
+      const errorMsg = 'Failed to get video metadata: ffmpeg could not read the source';
+      logger.errorWithDialog('Upscale Error', errorMsg);
+      throw new Error(errorMsg);
+    }
+    const metadata = probes.source;
 
     await this.logScriptContent(scriptPath);
 
     const env = this.setupEnvironment();
-    await this.validateExecutables();
 
     const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
     const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, segment, fps, benchmarkMode);
@@ -238,22 +256,6 @@ export class UpscaleExecutor {
       throw new Error(error);
     }
 
-    // Validate video for upscaling compatibility
-    const validation = await VideoMetadataExtractor.validateVideoForUpscaling(inputPath);
-    if (!validation.valid) {
-      logger.errorWithDialog('Upscale Error', validation.error || 'Video validation failed');
-      throw new Error(validation.error || 'Video validation failed');
-    }
-  }
-
-  private async getVideoMetadata(inputPath: string): Promise<VideoMetadata> {
-    try {
-      return await VideoMetadataExtractor.getVideoMetadata(inputPath);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.errorWithDialog('Upscale Error', 'Failed to get video metadata: ' + errorMsg);
-      throw error;
-    }
   }
 
   private async logScriptContent(scriptPath: string) {

@@ -9,6 +9,8 @@ import { formatVapourSynthValidationError } from './vapourSynthErrorFormatter';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
 
 export interface OutputInfo {
+  /** Output frame count; 0 when it could not be read. */
+  frames: number;
   resolution: string | null;
   fps: number | null;
   fpsString: string | null;
@@ -75,14 +77,15 @@ export class VapourSynthInfoExtractor {
   }
 
   /**
-   * Gets the total frame count from a VapourSynth script.
-   * If onProgress is provided, BestSource indexing percentages parsed from stderr
-   * are forwarded so callers can surface them instead of looking hung on cold caches.
+   * Evaluates a VapourSynth script once with `vspipe -i` and returns its output
+   * clip's frame count, resolution, frame rate and format, or the error that
+   * stopped it. If onProgress is provided, BestSource indexing percentages
+   * parsed from stderr are forwarded so a cold cache does not look hung.
    */
-  async getFrameCount(scriptPath: string, onProgress?: (percentage: number) => void): Promise<number> {
-    logger.upscale(`Getting frame count from script: ${scriptPath}`);
+  async getOutputInfo(scriptPath: string, onProgress?: (percentage: number) => void): Promise<OutputInfo> {
+    logger.upscale(`Getting output info from script: ${scriptPath}`);
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const env = setupVSEnvironment(this.pythonPath);
 
       // Use vspipe -i to get info
@@ -122,74 +125,6 @@ export class VapourSynthInfoExtractor {
       vspipe.on('close', (code) => {
         buildTracker.reset();
         if (code === 0) {
-          const match = output.match(/Frames:\s*(\d+)/i);
-          if (match) {
-            const frames = parseInt(match[1], 10);
-            logger.upscale(`Detected ${frames} frames from vspipe info`);
-            resolve(frames);
-          } else {
-            logger.warn('Could not parse frame count from vspipe output');
-            logger.debug(`vspipe output: ${output}`);
-            resolve(0);
-          }
-        } else {
-          const actualError = ErrorMessageHandler.extractErrorMessage(stderrOutput);
-          logger.error(`vspipe info failed with code ${code}`);
-          logger.error(`Error: ${actualError}`);
-          logger.error(`Full output: ${output}`);
-          resolve(0);
-        }
-      });
-
-      vspipe.on('error', (error) => {
-        buildTracker.reset();
-        logger.error('vspipe info error:', error);
-        resolve(0);
-      });
-    });
-  }
-
-  /**
-   * Gets the output resolution and FPS from a VapourSynth script
-   */
-  async getOutputInfo(scriptPath: string): Promise<OutputInfo> {
-    logger.upscale(`Getting output info from script: ${scriptPath}`);
-    
-    return new Promise((resolve) => {
-      const env = setupVSEnvironment(this.pythonPath);
-
-      // Use vspipe -i to get info
-      const vspipe = spawn(this.vspipePath, ['-i', scriptPath, '-'], createWorkloadSpawnOptions({
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: env,
-        cwd: this.vsPath
-      }));
-
-      // Track the process for cleanup
-      this.trackProcess(vspipe);
-
-      let output = '';
-      let stderrOutput = '';
-      const buildTracker = this.newBuildTracker();
-
-      if (vspipe.stdout) {
-        vspipe.stdout.on('data', (data: Buffer) => {
-          output += data.toString();
-        });
-      }
-
-      if (vspipe.stderr) {
-        vspipe.stderr.on('data', (data: Buffer) => {
-          const text = data.toString();
-          output += text;
-          stderrOutput += text;
-          buildTracker.push(text);
-        });
-      }
-
-      vspipe.on('close', (code) => {
-        buildTracker.reset();
-        if (code === 0) {
           // Always log the full vspipe output for debugging
           logger.upscale('=== vspipe -i output ===');
           logger.upscale(output);
@@ -199,12 +134,21 @@ export class VapourSynthInfoExtractor {
           const heightMatch = output.match(/Height:\s*(\d+)/i);
           const fpsMatch = output.match(/FPS:\s*(\d+)\/(\d+)\s*\(([\d.]+)\s*fps\)/i);
           const formatMatch = output.match(/Format Name:\s*(\w+)/i);
+          const framesMatch = output.match(/Frames:\s*(\d+)/i);
           
           let resolution: string | null = null;
           let fps: number | null = null;
           let fpsString: string | null = null;
           let pixelFormat: string | null = null;
-          
+          let frames = 0;
+
+          if (framesMatch) {
+            frames = parseInt(framesMatch[1], 10);
+            logger.upscale(`Detected ${frames} frames from vspipe info`);
+          } else {
+            logger.warn('Could not parse frame count from vspipe output');
+          }
+
           if (widthMatch && heightMatch) {
             const width = parseInt(widthMatch[1], 10);
             const height = parseInt(heightMatch[1], 10);
@@ -233,7 +177,7 @@ export class VapourSynthInfoExtractor {
             logger.debug(`vspipe output: ${output}`);
           }
           
-          resolve({ resolution, fps, fpsString, pixelFormat });
+          resolve({ frames, resolution, fps, fpsString, pixelFormat });
         } else {
           logger.error(`vspipe info failed with code ${code}`);
           logger.error(`Full output: ${output}`);
@@ -241,14 +185,14 @@ export class VapourSynthInfoExtractor {
           // startup notices before it reaches the validation-error toast.
           const fullError = output.trim() || stderrOutput.trim() || 'Unknown error';
           const error = formatVapourSynthValidationError(fullError);
-          resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null, error });
+          resolve({ frames: 0, resolution: null, fps: null, fpsString: null, pixelFormat: null, error });
         }
       });
 
       vspipe.on('error', (error) => {
         buildTracker.reset();
         logger.error('vspipe info error:', error);
-        resolve({ resolution: null, fps: null, fpsString: null, pixelFormat: null, error: error.message });
+        resolve({ frames: 0, resolution: null, fps: null, fpsString: null, pixelFormat: null, error: error.message });
       });
     });
   }
