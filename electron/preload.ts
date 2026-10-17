@@ -203,8 +203,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setEncodingSettingsExpanded: (expanded: boolean) => ipcRenderer.invoke('set-encoding-settings-expanded', expanded),
 
   // Panel sizes
-  getPanelSizes: () => ipcRenderer.invoke('get-panel-sizes'),
-  setPanelSizes: (sizes: any) => ipcRenderer.invoke('set-panel-sizes', sizes),
   
   // Queue UI state
   getShowQueue: () => ipcRenderer.invoke('get-show-queue'),

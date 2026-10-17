@@ -236,8 +236,6 @@ export interface ElectronAPI {
   getDefaultVideoCompareArgs: () => Promise<{ args: string }>;
 
   // Panel sizes
-  getPanelSizes: () => Promise<{ leftPanel: number; rightPanel: number; queuePanel?: number }>;
-  setPanelSizes: (sizes: { leftPanel: number; rightPanel: number; queuePanel?: number }) => Promise<{ success: boolean }>;
   
   // Queue UI state
   getShowQueue: () => Promise<{ show: boolean }>;

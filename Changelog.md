@@ -35,6 +35,9 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
   - Plugin DLLs that vanish right after extraction are reported as antivirus quarantine, naming the folder to exclude, instead of failing later with a missing-plugin error
 - On Linux, setup runs `vapoursynth config`, which fixes "Failed to initialize VSScript" on first launch (not yet tested on a Linux machine)
 - **The dependency check runs once per launch.** It could run twice at once, and the two runs could spoil each other's files; this was the cause of the occasional "Failed to write the trtexec shim" in logs
+- **Only one thing changes the Python environment at a time.** The launch-time repairs, plugin installs, the vs-mlrt update and the vs-view install now take turns instead of running pip into the same environment at once. A plugin install that has to wait says *Waiting for another Python package operation…*
+- The vs-mlrt update retries a dropped connection and reports a failure in a plain sentence, as plugin installs do, instead of pip's raw output
+- Plugins read as not installed when any package the install asks for is missing. Before, only 9 of them were checked
 
 ### Colour grading
 - Colour grading is a step in the filter chain, so it can sit anywhere: before the model to fix the source, after it to finish the result, or both. Reorder or disable it like any other step
@@ -56,6 +59,7 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - Inspect can be cancelled while it's opening, even mid engine build
 - **Removed:** the "Preview selection" button, which rendered a segment to a temp file. Playback plus loop replaces it. Preview errors now show as a toast
 - Fixed the timeline seeking to the wrong moment on steps that change the clip length (e.g. a bob deinterlacer), and being off by the segment's in point
+- Opening Inspect evaluates the chain once instead of twice, so it opens sooner after a chain change, and an engine build still shows its banner. An error opening it shows the Python exception instead of vspipe's whole output
 
 ### MIGraphX backend (AMD)
 - New inference backend for AMD GPUs, built on vs-mlrt's MIGraphX plugin. Pick it from the backend menu, globally or per step. DirectML stays the default on AMD
@@ -82,6 +86,12 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - Restarting while editing a queue item picks the editing back up, instead of showing the item's settings with nowhere for edits to go
 - The queue is saved promptly while it runs: an item finishing, starting or failing is written at once, and progress at least every 10 s. A crash mid-batch no longer re-encodes finished items
 - Items that are processing or done no longer take edits, so what is stored is what was rendered
+- **Fixed: Stop during the start of a run was ignored.** Stopping while a run was still evaluating the chain (which includes building a TensorRT engine) let the encode start anyway, and it could no longer be stopped. It now stops. Quitting also stops an encode that is still shutting down, and any Align in progress
+- **Each queue item renders with its own FFmpeg arguments, processing format and colorimetry.** Before, every item used whatever the main window showed when it started
+- **Fixed: running the queue changed the project.** Starting an item loaded it into the main window, which reset the project's segment and could point the finished-video preview at the wrong file. The queue now shows the running item in its own panel and progress bar, and the progress bar moves (it stayed at 0)
+- Viewing a completed item no longer writes its settings into the project, and project edits made while the queue is open with nothing selected survive closing it
+- Stopping the queue no longer loads the stopped item's partial file or marks the item as failed
+- Choosing an output file while editing a queue item saves it to that item
 - **Fixed: the settings and queue files could be corrupted, then replaced with defaults.** Saves made in quick succession (selecting a queue item writes five) could interleave into invalid JSON, and the next start silently started over. Writes are now atomic and ordered, and a file that cannot be read is moved aside (`*.unreadable-<time>.json`) rather than saved over
 
 ### Workflows
@@ -93,6 +103,10 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - Importing filters, saving or renaming a template, or importing a .vkfilter asks before replacing an existing template with the same name
 - Encoding arguments the simple controls can't show (a filter chain, HDR tags, a bitrate) now open in advanced mode with a note saying why, instead of simple mode showing made-up values; going back to simple mode asks before replacing them
 - Confirmations (delete, replace, overwrite, reinstall) use the app's own dialog instead of the system one, veiled in privacy mode; Escape cancels, and destructive ones start on Cancel
+- Escape closes only the topmost dialog. In the Edit Model dialog it closed the whole model picker
+- Renaming a model keeps it in Favourites and Recent
+- Ctrl+Shift+Z redoes, as well as Ctrl+Y
+- Crop, Color Grade and Crop (Auto) with edited settings or description are no longer replaced or removed silently by an update: the update notice asks, as it does for other edited filters
 
 ### Filters
 - **New: Grain Synth.** Adds film grain fitted to real sources, with two models: `mega_v1` (stronger, harsher) and `real_v5` (softer). Apply it after upscaling, at the final resolution. The grain is the same on every render of a frame, and it runs on CUDA with TensorRT or on the CPU otherwise
@@ -115,6 +129,9 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - The model licenses in About are up to date: AnimeJaNai V2 is listed, and AnimeJaNai HD V3 covers its Sharp1 variant
 - BF16 TensorRT engines no longer produce corrupt output
 - Model precision is read from the ONNX graph, so BF16 models import correctly. Auto-build now actually builds BF16 models as BF16
+- Editing a model offers the same precisions as importing it, taken from the backend instead of assuming TensorRT
+- Building a TensorRT engine no longer flashes a console window, and the import progress bar no longer jumps backwards
+- A render probes the video once and evaluates the chain once before encoding, instead of three and two times, so it starts sooner (most noticeably with a model that takes a while to load)
 - The quality slider now works on hardware encoders (NVENC, AMF, QSV). Before, it had no effect, and every quality setting produced the same few-Mbps output
 
 ### Other
@@ -131,6 +148,7 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - TensorRT no longer fails with "bits per sample mismatch" on models that take 32-bit input despite 16-bit weights, such as the bundled TSPAN models (#12)
 - The video picker shows MTS, M2TS, TS, M4V, MPG and VOB files, and has an All Files option (#9)
 - A duplicated queue item writes to its own file (`name-2.mp4`), and an automatically named output follows edits to its item's chain. Before, a duplicate overwrote the original's output (#2)
+  - This now also works with a default output folder set, which broke the renaming
 - New app icon, in the same teal as the rest of the app and the website
 - Descriptive output filenames now describe what actually ran
   - Steps are named in the order they run: an AI model by its own name (`2xbndlanimefilmv3`, not a scale guessed from the filename), and a filter by what it does (`deint`, `denoise`, `color`, `crop`…). Before, almost every filter was named by the first word of its title

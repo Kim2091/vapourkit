@@ -31,17 +31,6 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     return { success: true };
   });
 
-  ipcMain.handle('get-panel-sizes', async () => {
-    const sizes = configManager.getPanelSizes();
-    return sizes;
-  });
-
-  ipcMain.handle('set-panel-sizes', async (event, sizes: { leftPanel: number; rightPanel: number; queuePanel?: number }) => {
-    logger.debug(`Setting panel sizes: left=${sizes.leftPanel}, right=${sizes.rightPanel}, queue=${sizes.queuePanel}`);
-    await configManager.setPanelSizes(sizes);
-    return { success: true };
-  });
-
   ipcMain.handle('get-show-queue', async () => {
     const show = configManager.getShowQueue();
     return { show };

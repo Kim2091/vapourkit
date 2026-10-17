@@ -32,11 +32,6 @@ interface AppConfig {
     defaultPrimaries: '709' | '601';
     defaultTransfer: '709' | '170m';
   };
-  panelSizes?: {
-    leftPanel: number;
-    rightPanel: number;
-    queuePanel?: number;
-  };
   showQueue?: boolean;
   filterConfigurations?: Filter[];
   upscalePosition?: number;
@@ -85,11 +80,6 @@ const DEFAULT_CONFIG: AppConfig = {
     defaultMatrix: '709',
     defaultPrimaries: '709',
     defaultTransfer: '709'
-  },
-  panelSizes: {
-    leftPanel: 60,
-    rightPanel: 40,
-    queuePanel: 25
   },
   showQueue: false,
   filterConfigurations: [],
@@ -396,15 +386,6 @@ export class ConfigManager {
 
   async setColorimetrySettings(settings: { overwriteMatrix: boolean; matrix709: boolean; defaultMatrix: '709' | '170m'; defaultPrimaries: '709' | '601'; defaultTransfer: '709' | '170m' }): Promise<void> {
     this.config.colorimetry = settings;
-    await this.save();
-  }
-
-  getPanelSizes(): { leftPanel: number; rightPanel: number; queuePanel?: number } {
-    return this.config.panelSizes || DEFAULT_CONFIG.panelSizes!;
-  }
-
-  async setPanelSizes(sizes: { leftPanel: number; rightPanel: number; queuePanel?: number }): Promise<void> {
-    this.config.panelSizes = { ...this.config.panelSizes, ...sizes };
     await this.save();
   }
 

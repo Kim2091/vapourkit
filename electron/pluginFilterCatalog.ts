@@ -168,8 +168,3 @@ export function needsLinuxPluginFilterCatalogSync(
 ): boolean {
   return platform === 'linux' && storedRevision !== LINUX_PLUGIN_FILTER_CATALOG_REVISION;
 }
-
-/** The templates Linux must remove only when they still equal their bundled source. */
-export function selectUnsupportedLinuxPluginFilterTemplates(sourceFiles: readonly string[]): string[] {
-  return sourceFiles.filter(file => !LINUX_PLUGIN_FILTER_SET.has(file));
-}

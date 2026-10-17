@@ -7,7 +7,6 @@ import {
   LINUX_PLUGIN_FILTER_CATALOG_REVISION,
   needsLinuxPluginFilterCatalogSync,
   selectPluginFilterTemplates,
-  selectUnsupportedLinuxPluginFilterTemplates,
 } from './pluginFilterCatalog';
 
 describe('plugin filter catalog policy', () => {
@@ -39,13 +38,6 @@ describe('plugin filter catalog policy', () => {
     expect(selectPluginFilterTemplates(sourceFiles, 'darwin')).toEqual([]);
     expect(hasPluginFilterTemplates('darwin')).toBe(false);
     expect(hasPluginFilterTemplates('linux')).toBe(true);
-  });
-
-  it('identifies stale Linux catalog entries for safe migration', () => {
-    expect(selectUnsupportedLinuxPluginFilterTemplates(sourceFiles)).toEqual([
-      'CQTGMC.vkfilter',
-      'Custom.vkfilter',
-    ]);
   });
 
   it('keeps the allowlist free of duplicate filenames', () => {

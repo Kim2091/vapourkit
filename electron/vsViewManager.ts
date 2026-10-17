@@ -6,6 +6,7 @@ import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 import { resolveRocmRoot } from './rocmEnvironment';
 import { isUpdateAvailable } from './updateChecker';
+import { pipInstall, pipList, pipUninstall } from './pip';
 
 /**
  * Manager for vs-view - VapourSynth script previewer tool
@@ -47,162 +48,53 @@ export class VsViewManager {
    * An older install reports false so the launch path upgrades it.
    */
   static async isInstalled(): Promise<boolean> {
-    try {
-      const env = setupVSEnvironment();
-
-      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'list', '--format=json'], {
-        env,
-        cwd: PATHS.VS
-      });
-
-      return new Promise((resolve) => {
-        let output = '';
-
-        child.stdout?.on('data', (data) => {
-          output += data.toString();
-        });
-
-        child.on('close', (code) => {
-          if (code !== 0) {
-            resolve(false);
-            return;
-          }
-          try {
-            // Exact-name match: the plugin packages (vsview-comp, ...) also
-            // contain "vsview", so a substring check would false-positive
-            const packages: { name: string; version: string }[] = JSON.parse(output);
-            const vsview = packages.find(pkg => pkg.name.toLowerCase() === 'vsview');
-            if (!vsview) {
-              resolve(false);
-              return;
-            }
-            if (isUpdateAvailable(vsview.version, VSVIEW_MIN_VERSION)) {
-              logger.info(`vsview ${vsview.version} is older than required ${VSVIEW_MIN_VERSION}`);
-              resolve(false);
-              return;
-            }
-            resolve(true);
-          } catch (error) {
-            logger.error('Error parsing pip list output:', error);
-            resolve(false);
-          }
-        });
-
-        child.on('error', () => {
-          resolve(false);
-        });
-      });
-    } catch (error) {
-      logger.error('Error checking vs-view installation:', error);
+    const packages = await pipList();
+    if (!packages) return false;
+    // Exact-name match: the plugin packages (vsview-comp, ...) also
+    // contain "vsview", so a substring check would false-positive
+    const vsview = packages.find(pkg => pkg.name.toLowerCase() === 'vsview');
+    if (!vsview) return false;
+    if (isUpdateAvailable(vsview.version, VSVIEW_MIN_VERSION)) {
+      logger.info(`vsview ${vsview.version} is older than required ${VSVIEW_MIN_VERSION}`);
       return false;
     }
+    return true;
   }
-  
+
   /**
    * Install vs-view using pip
    */
   static async install(): Promise<{ success: boolean; error?: string }> {
     logger.info('Installing vs-view via pip...');
-    
-    try {
-      const env = setupVSEnvironment();
-
-      // vsview normally arrives with the main plugin install (vsview[full]);
-      // this is the fallback path when it's missing or below the version floor.
-      // Some of its dependencies are hosted on the JET wheels index rather
-      // than PyPI.
-      const child = spawn(PATHS.PYTHON, ['-m', 'pip', 'install', '--upgrade', '--no-warn-script-location', `vsview[full]>=${VSVIEW_MIN_VERSION}`, ...PYPI_EXTRA_INDEX_ARGS], {
-        env,
-        cwd: PATHS.VS,
-        stdio: 'pipe'
-      });
-      
-      return new Promise((resolve) => {
-        let errorOutput = '';
-        
-        child.stderr?.on('data', (data) => {
-          errorOutput += data.toString();
-          logger.info(data.toString());
-        });
-        
-        child.stdout?.on('data', (data) => {
-          logger.info(data.toString());
-        });
-        
-        child.on('close', (code) => {
-          if (code === 0) {
-            logger.info('vs-view installed successfully');
-            resolve({ success: true });
-          } else {
-            const error = `vs-view installation failed with code ${code}: ${errorOutput}`;
-            logger.error(error);
-            resolve({ success: false, error });
-          }
-        });
-        
-        child.on('error', (err) => {
-          const error = `Failed to install vs-view: ${err.message}`;
-          logger.error(error);
-          resolve({ success: false, error });
-        });
-      });
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error('Error installing vs-view:', error);
-      return { success: false, error: errorMsg };
+    // vsview normally arrives with the main plugin install (vsview[full]);
+    // this is the fallback path when it's missing or below the version floor.
+    // Some of its dependencies are hosted on the JET wheels index rather
+    // than PyPI.
+    const outcome = await pipInstall([`vsview[full]>=${VSVIEW_MIN_VERSION}`], {
+      step: 'Installing vs-view',
+      extraArgs: ['--upgrade', ...PYPI_EXTRA_INDEX_ARGS],
+    });
+    if (outcome.ok) {
+      logger.info('vs-view installed successfully');
+      return { success: true };
     }
+    return { success: false, error: outcome.failure?.summary ?? 'vs-view installation was cancelled' };
   }
-  
+
   /**
    * Detect a leftover vs-preview install from a prior build and uninstall it.
    * Runs before the vs-view install check so upgrading users migrate cleanly.
    */
   static async migrateFromVsPreview(): Promise<void> {
-    try {
-      const env = setupVSEnvironment();
+    const packages = await pipList();
+    if (!packages?.some(pkg => pkg.name.toLowerCase() === 'vspreview')) return;
 
-      const listChild = spawn(PATHS.PYTHON, ['-m', 'pip', 'list'], {
-        env,
-        cwd: PATHS.VS
-      });
-
-      const hasVsPreview = await new Promise<boolean>((resolve) => {
-        let output = '';
-        listChild.stdout?.on('data', (data) => { output += data.toString(); });
-        listChild.on('close', (code) => {
-          resolve(code === 0 && output.toLowerCase().includes('vspreview'));
-        });
-        listChild.on('error', () => resolve(false));
-      });
-
-      if (!hasVsPreview) return;
-
-      logger.info('Detected vs-preview from a prior build, uninstalling...');
-
-      const uninstallChild = spawn(PATHS.PYTHON, ['-m', 'pip', 'uninstall', '-y', 'vspreview'], {
-        env,
-        cwd: PATHS.VS,
-        stdio: 'pipe'
-      });
-
-      await new Promise<void>((resolve) => {
-        uninstallChild.stderr?.on('data', (data) => logger.info(data.toString()));
-        uninstallChild.stdout?.on('data', (data) => logger.info(data.toString()));
-        uninstallChild.on('close', (code) => {
-          if (code === 0) {
-            logger.info('vs-preview uninstalled successfully');
-          } else {
-            logger.warn(`vs-preview uninstall exited with code ${code}; continuing`);
-          }
-          resolve();
-        });
-        uninstallChild.on('error', (err) => {
-          logger.warn(`Failed to uninstall vs-preview: ${err.message}; continuing`);
-          resolve();
-        });
-      });
-    } catch (error) {
-      logger.warn('Error during vs-preview migration check, continuing:', error);
+    logger.info('Detected vs-preview from a prior build, uninstalling...');
+    const outcome = await pipUninstall(['vspreview'], { step: 'Uninstalling vs-preview' });
+    if (outcome.ok) {
+      logger.info('vs-preview uninstalled successfully');
+    } else {
+      logger.warn(`vs-preview uninstall failed (exit code ${outcome.exitCode}); continuing`);
     }
   }
 

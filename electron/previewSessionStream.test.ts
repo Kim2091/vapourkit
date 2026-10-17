@@ -23,6 +23,12 @@ vi.mock('./logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+// The fake child's pid is not a real process, so teardown must never reach taskkill.
+vi.mock('./processLifecycle', async importOriginal => ({
+  ...(await importOriginal<typeof import('./processLifecycle')>()),
+  terminateProcessTree: vi.fn(),
+}));
+
 import { PreviewSession, type StreamEvent } from './previewSession';
 import { PATHS } from './constants';
 
@@ -269,8 +275,6 @@ describe('engine builds while a script opens', () => {
 
     child.stderr.write('[vk-build] begin Compiling MIGraphX program\n');
     await settle();
-    // No pid, so dispose() has no real process tree to kill.
-    child.pid = undefined;
     session.dispose();
     child.emit('exit', null, 'SIGKILL');
 
