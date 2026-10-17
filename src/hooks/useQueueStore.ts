@@ -5,6 +5,7 @@ import type { QueueItem } from '../electron.d';
 import { newQueueItems, uniqueOutputPath, withItemWorkflow, type OutputNaming, type QueueEntry } from '../utils/queueOutputPath';
 import { normalizeBackendForCurrentPlatform } from '../utils/backends';
 import { queueSaveDelay, queueShape } from '../utils/queueSaveTiming';
+import { queueRunFlags, type QueueRunStatus } from '../utils/queueRun';
 
 interface UseQueueStoreProps {
   onLog: (message: string) => void;
@@ -17,10 +18,8 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
   // --- UI state (from useQueueState) ---
   const [showQueue, setShowQueueRaw] = useState(false);
   const [isShowQueueLoaded, setIsShowQueueLoaded] = useState(false);
-  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
-  const [isQueueStarted, setIsQueueStarted] = useState(false);
-  const [isQueueStopping, setIsQueueStopping] = useState(false);
-  const [isProcessingQueueItem, setIsProcessingQueueItem] = useState(false);
+  const [runStatus, setRunStatus] = useState<QueueRunStatus>('idle');
+  const [runningItemId, setRunningItemId] = useState<string | null>(null);
 
   // --- Queue data (from useQueueManagement) ---
   const [queue, setQueue] = useState<QueueEntry[]>([]);
@@ -232,10 +231,6 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
     });
   }, []);
 
-  const getNextPendingItem = useCallback((): QueueEntry | null => {
-    return queue.find(item => item.status === 'pending') || null;
-  }, [queue]);
-
   const getQueueStats = useCallback(() => {
     return {
       total: queue.length,
@@ -283,15 +278,12 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
     // UI state
     showQueue,
     isShowQueueLoaded,
-    isProcessingQueue,
-    isQueueStarted,
-    isQueueStopping,
-    isProcessingQueueItem,
+    runStatus,
+    runningItemId,
+    ...queueRunFlags(runStatus, runningItemId),
     setShowQueue,
-    setIsProcessingQueue,
-    setIsQueueStarted,
-    setIsQueueStopping,
-    setIsProcessingQueueItem,
+    setRunStatus,
+    setRunningItemId,
 
     // Queue data
     queue,
@@ -304,7 +296,6 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
     clearQueue,
     clearCompletedItems,
     reorderQueue,
-    getNextPendingItem,
     getQueueStats,
     requeueItem,
     duplicateQueueItem,

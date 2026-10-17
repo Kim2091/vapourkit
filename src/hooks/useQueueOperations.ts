@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import type { QueueItem } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { onBeforeClose } from '../utils/beforeClose';
+import type { QueueRunStatus } from '../utils/queueRun';
 
 interface UseQueueOperationsOptions {
   queue: QueueItem[];
@@ -11,11 +12,8 @@ interface UseQueueOperationsOptions {
   openItem: (id: string, workflow: QueueItem['workflow'], editable: boolean) => void;
   /** The edit still to save to the item being edited, for the save as the window closes. */
   pendingItemSave: () => { itemId: string; workflow: QueueItem['workflow'] } | undefined;
-  isProcessingQueueItem: boolean;
-  setIsQueueStarted: (started: boolean) => void;
-  setIsProcessingQueue: (processing: boolean) => void;
-  setIsProcessingQueueItem: (processing: boolean) => void;
-  setIsQueueStopping: (stopping: boolean) => void;
+  runningItemId: string | null;
+  setRunStatus: (status: QueueRunStatus) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
   flushQueue: (pending?: { itemId: string; workflow: Partial<QueueItem['workflow']> }) => void;
   requeueItem: (id: string) => void;
@@ -31,11 +29,8 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     queue,
     openItem,
     pendingItemSave,
-    isProcessingQueueItem,
-    setIsQueueStarted,
-    setIsProcessingQueue,
-    setIsProcessingQueueItem,
-    setIsQueueStopping,
+    runningItemId,
+    setRunStatus,
     updateQueueItem,
     flushQueue,
     requeueItem,
@@ -86,31 +81,23 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
   };
 
   const handleStartQueue = (): void => {
-    setIsQueueStarted(true);
+    setRunStatus('running');
     onLog('=== Starting queue processing ===');
   };
 
   const handleStopQueue = async (): Promise<void> => {
-    setIsQueueStopping(true);
+    setRunStatus('stopping');
     onLog('Stopping queue processing...');
 
     try {
-      if (isProcessingQueueItem) {
+      if (runningItemId) {
         await handleCancelUpscale();
       }
     } catch (error) {
       onLog(`Error stopping queue: ${getErrorMessage(error)}`);
     } finally {
-      setIsQueueStarted(false);
-      setIsProcessingQueue(false);
-      setIsProcessingQueueItem(false);
-
-      const processingItem = queue.find(item => item.status === 'processing');
-      if (processingItem) {
-        updateQueueItem(processingItem.id, { status: 'pending', progress: 0 });
-      }
-
-      setIsQueueStopping(false);
+      if (runningItemId) updateQueueItem(runningItemId, { status: 'pending', progress: 0 });
+      setRunStatus('idle');
       onLog('Queue stopped');
     }
   };

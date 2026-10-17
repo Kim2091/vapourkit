@@ -1,22 +1,20 @@
 // src/hooks/useQueueProcessing.ts - Automated queue processing logic
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { QueueItem } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { shouldRecordProgress, type RecordedProgress } from '../utils/queueProgress';
+import { nextRunStep, type QueueRunStatus } from '../utils/queueRun';
 
 interface UseQueueProcessingOptions {
   queue: QueueItem[];
-  isQueueStarted: boolean;
-  isQueueStopping: boolean;
-  isProcessingQueueItem: boolean;
-  isProcessingQueue: boolean;
+  runStatus: QueueRunStatus;
+  setRunStatus: (status: QueueRunStatus) => void;
+  /** The item rendering. The runner keeps it to itself: the window goes on showing whatever is being edited. */
+  runningItemId: string | null;
+  setRunningItemId: (id: string | null) => void;
   upscaleProgress: { percentage?: number } | null;
-  setIsProcessingQueue: (processing: boolean) => void;
-  setIsProcessingQueueItem: (processing: boolean) => void;
-  setIsQueueStarted: (started: boolean) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
-  getNextPendingItem: () => QueueItem | null;
   /**
    * Put an item's render settings in the config, which the main process reads
    * them from, before it renders; resolves once they are written.
@@ -30,65 +28,45 @@ interface UseQueueProcessingOptions {
 export function useQueueProcessing(options: UseQueueProcessingOptions) {
   const {
     queue,
-    isQueueStarted,
-    isQueueStopping,
-    isProcessingQueueItem,
-    isProcessingQueue,
+    runStatus,
+    setRunStatus,
+    runningItemId,
+    setRunningItemId,
     upscaleProgress,
-    setIsProcessingQueue,
-    setIsProcessingQueueItem,
-    setIsQueueStarted,
     updateQueueItem,
-    getNextPendingItem,
     beginItemRender,
     endItemRender,
     onLog,
   } = options;
 
-  // The item being rendered. The runner keeps it to itself: the window goes
-  // on showing whatever is being edited while the queue runs.
-  const [runningItemId, setRunningItemId] = useState<string | null>(null);
+  // The status as of now, for a render that ends after Stop was pressed.
+  const runStatusRef = useRef(runStatus);
+  runStatusRef.current = runStatus;
 
   const recordedProgressRef = useRef<RecordedProgress>({ at: 0, percentage: 0 });
   // The last progress event seen, so an item that starts is not given the
   // one its predecessor finished on.
   const seenProgressRef = useRef(upscaleProgress);
 
-  // Process queue sequentially
+  // One item at a time, in queue order, until none is pending.
   useEffect(() => {
-    const processNextInQueue = async () => {
-      // Don't start new item if already processing one, queue hasn't been started, or is stopping
-      if (isProcessingQueueItem || !isQueueStarted || isQueueStopping) return;
-      
-      const nextItem = getNextPendingItem();
-      if (!nextItem) {
-        // Queue finished
-        if (isProcessingQueue) {
-          setIsProcessingQueue(false);
-          setIsQueueStarted(false);
-          onLog('=== Queue processing completed ===');
-        }
-        return;
-      }
+    const step = nextRunStep(runStatus, runningItemId, queue);
+    if (step.kind === 'wait') return;
+    if (step.kind === 'finish') {
+      setRunStatus('idle');
+      onLog('=== Queue processing completed ===');
+      return;
+    }
 
-      // Mark as processing queue
-      if (!isProcessingQueue) {
-        setIsProcessingQueue(true);
-      }
+    const nextItem = step.item;
+    setRunningItemId(nextItem.id);
+    updateQueueItem(nextItem.id, { status: 'processing', progress: 0 });
+    recordedProgressRef.current = { at: 0, percentage: 0 };
 
-      // Set flag to prevent processing multiple items at once
-      setIsProcessingQueueItem(true);
-
-      // Update item status to processing
-      updateQueueItem(nextItem.id, { status: 'processing', progress: 0 });
-      setRunningItemId(nextItem.id);
-      recordedProgressRef.current = { at: 0, percentage: 0 };
-
+    void (async () => {
       try {
         await beginItemRender(nextItem.workflow);
         onLog(`Output will be: ${nextItem.outputPath}`);
-        
-        // Start processing with the item's workflow
         onLog(`Processing queue item: ${nextItem.videoName}`);
         if (nextItem.workflow.segment?.enabled) {
           onLog(`Segment: frames ${nextItem.workflow.segment.startFrame} to ${nextItem.workflow.segment.endFrame === -1 ? 'end' : nextItem.workflow.segment.endFrame}`);
@@ -104,12 +82,11 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
           nextItem.workflow.numStreams,
           nextItem.workflow.segment
         );
-        
+
         if (!result.success) {
           throw new Error(result.error || 'Processing failed');
         }
-        
-        // Mark as completed
+
         updateQueueItem(nextItem.id, {
           status: 'completed',
           progress: 100,
@@ -117,26 +94,23 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
         });
         onLog(`Completed: ${nextItem.videoName}`);
       } catch (error) {
-        // Mark as error
-        updateQueueItem(nextItem.id, {
-          status: 'error',
-          errorMessage: getErrorMessage(error),
-        });
+        // Stopping the queue cancels the render and puts the item back to
+        // pending; the failure that cancel causes is not the item's.
+        if (runStatusRef.current === 'running') {
+          updateQueueItem(nextItem.id, {
+            status: 'error',
+            errorMessage: getErrorMessage(error),
+          });
+        }
         onLog(`Error processing ${nextItem.videoName}: ${getErrorMessage(error)}`);
       } finally {
         endItemRender();
-        // Clear flag to allow next item to process
+        // Only now, after Stop too: a new run waits for this render to end.
         setRunningItemId(null);
-        setIsProcessingQueueItem(false);
       }
-    };
-
-    // Try to process next item when queue changes or item finishes processing
-    if (isQueueStarted && !isProcessingQueueItem && !isQueueStopping) {
-      processNextInQueue();
-    }
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, isProcessingQueueItem, isProcessingQueue, isQueueStarted, isQueueStopping]);
+  }, [queue, runStatus, runningItemId]);
 
   // The running item's progress, from the render's progress events.
   useEffect(() => {
