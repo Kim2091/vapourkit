@@ -7,10 +7,15 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseCube, writeCube, parse3dl, write3dl, parseLut, writeLut,
-  identityLut, sampleLut, lutIndex, bakeGradeToLut, to3d, LutParseError,
+  identityLut, sampleLut, lutIndex, bakeChainToLut, fillLattice, to3d, LutParseError,
   type Lut,
 } from './lut';
 import { gradePixel, GRADE_NEUTRAL, type GradeValues } from './colorGrade';
+
+/** A grade baked through the chain baker, as the exporter does it. */
+function bakeGrade(values: GradeValues, size: number, title?: string): Lut {
+  return bakeChainToLut([{ label: 'Grade', apply: rgb => gradePixel(rgb, values) }], [], size, title).lut;
+}
 
 /** A table whose output depends on exactly one input channel. */
 function rampOn(channel: 0 | 1 | 2, size: number): Lut {
@@ -38,7 +43,7 @@ const GRADE: GradeValues = {
 
 describe('.cube', () => {
   it('round-trips a table through text unchanged', () => {
-    const original = bakeGradeToLut(GRADE, 9, 'Round trip');
+    const original = bakeGrade(GRADE, 9, 'Round trip');
     const back = parseCube(writeCube(original));
     expect(back.kind).toBe('3d');
     expect(back.size).toBe(9);
@@ -142,7 +147,7 @@ describe('.3dl', () => {
   });
 
   it('crosses formats within its own quantisation', () => {
-    const original = bakeGradeToLut(GRADE, 9);
+    const original = bakeGrade(GRADE, 9);
     const crossed = parse3dl(write3dl(original, 16));
     for (let i = 0; i < original.data.length; i++) {
       expect(crossed.data[i]).toBeCloseTo(original.data[i], 4);
@@ -186,9 +191,9 @@ describe('sampleLut', () => {
   });
 });
 
-describe('bakeGradeToLut', () => {
+describe('baking a grade', () => {
   it('bakes a neutral grade to an identity table', () => {
-    const lut = bakeGradeToLut(GRADE_NEUTRAL, 17);
+    const lut = bakeGrade(GRADE_NEUTRAL, 17);
     const reference = identityLut(17);
     for (let i = 0; i < lut.data.length; i++) {
       expect(lut.data[i]).toBeCloseTo(reference.data[i], 6);
@@ -212,7 +217,7 @@ describe('bakeGradeToLut', () => {
     // and its mean error is a fortieth of a code value; 65 is there for
     // anyone who wants the clipped corners tighter.
     const worst = (size: number) => {
-      const lut = bakeGradeToLut(GRADE, size);
+      const lut = bakeGrade(GRADE, size);
       let peak = 0;
       const steps = 23; // coprime with the lattice sizes, so probes land off-node
       for (let i = 0; i <= steps; i++) {
@@ -239,9 +244,50 @@ describe('bakeGradeToLut', () => {
   });
 
   it('refuses a size no format can carry', () => {
-    expect(() => bakeGradeToLut(GRADE, 1)).toThrow(/not a usable cube size/);
-    expect(() => bakeGradeToLut(GRADE, 300)).toThrow(/not a usable cube size/);
-    expect(() => bakeGradeToLut(GRADE, 16.5)).toThrow(/not a usable cube size/);
+    expect(() => bakeGrade(GRADE, 1)).toThrow(/not a usable cube size/);
+    expect(() => bakeGrade(GRADE, 300)).toThrow(/not a usable cube size/);
+    expect(() => bakeGrade(GRADE, 16.5)).toThrow(/not a usable cube size/);
+  });
+});
+
+describe('fillLattice', () => {
+  it('visits every cell once, red fastest, at the triple lutIndex names', () => {
+    const size = 4;
+    const step = 1 / (size - 1);
+    const seen: number[] = [];
+    fillLattice(size, (_data, at, r, g, b) => {
+      expect(at).toBe(lutIndex(size, Math.round(r / step), Math.round(g / step), Math.round(b / step)));
+      seen.push(at);
+    });
+    expect(seen).toEqual(Array.from({ length: size ** 3 }, (_, i) => i * 3));
+  });
+
+  it('bakes a grade bit for bit as the per-cell triple loop it replaced', () => {
+    // The loop every bake used to spell out for itself, kept here as the
+    // reference: same colours, same order, same rounding to float32.
+    const reference = (values: GradeValues, size: number) => {
+      const data = new Float32Array(size * size * size * 3);
+      const step = 1 / (size - 1);
+      for (let b = 0; b < size; b++) {
+        for (let g = 0; g < size; g++) {
+          for (let r = 0; r < size; r++) {
+            const graded = gradePixel([r * step, g * step, b * step], values);
+            const at = lutIndex(size, r, g, b);
+            data[at] = graded[0];
+            data[at + 1] = graded[1];
+            data[at + 2] = graded[2];
+          }
+        }
+      }
+      return data;
+    };
+    for (const size of [2, 9, 17, 33]) {
+      for (const values of [GRADE, GRADE_NEUTRAL]) {
+        const baked = bakeGrade(values, size).data;
+        const expected = reference(values, size);
+        expect(Buffer.from(baked.buffer).equals(Buffer.from(expected.buffer))).toBe(true);
+      }
+    }
   });
 });
 
@@ -282,7 +328,7 @@ describe('.3dl value scaling', () => {
 
   it('round-trips a table that never reaches full scale', () => {
     for (const gain of [0.9, 0.2501, 0.2499, 0.06, 0.01]) {
-      const baked = bakeGradeToLut(darken(gain), 17);
+      const baked = bakeGrade(darken(gain), 17);
       const back = parse3dl(write3dl(baked, 12));
       let worst = 0;
       for (let i = 0; i < baked.data.length; i++) {
