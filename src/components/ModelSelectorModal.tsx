@@ -1,15 +1,13 @@
 import { memo, useState, useMemo } from 'react';
-import { Cpu, Trash2, Edit3, Download } from 'lucide-react';
+import { Cpu, Download } from 'lucide-react';
 import type { BackendId, ModelFile } from '../electron.d';
 import { ask } from '../utils/dialogs';
-import { notify } from '../utils/notifications';
 import { getModelDisplayName, filterModels, getPortableModelName } from '../utils/modelUtils';
 import { getBackendDescriptor } from '../utils/backends';
-import { ModalShell } from './ModalShell';
 import { PickerChip, PickerModal, PickerRow, PickerSidebarSection } from './PickerModal';
 import { groupByCategories, matchesQuery, sortByName } from './pickerFilters';
 import { useFavoritesAndRecents } from './useFavoritesAndRecents';
-import { CategoryChipsInput } from './CategoryChipsInput';
+import { ModelEditDialog } from './ModelEditDialog';
 import { toCategories } from '../utils/categories';
 
 interface ModelSelectorModalProps {
@@ -65,15 +63,6 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   const [selectedBackend, setSelectedBackend] = useState<'all' | 'tensorrt' | 'onnx'>('all');
   const { favorites, recents, toggleFavorite, addRecent, forget, rename } = useFavoritesAndRecents(STORE);
   const [editingModel, setEditingModel] = useState<ModelFile | null>(null);
-  const [editDisplayTag, setEditDisplayTag] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editCategories, setEditCategories] = useState<string[]>([]);
-  const [editModelType, setEditModelType] = useState<'vsr' | 'image'>('image');
-  const [editTemporalFrames, setEditTemporalFrames] = useState<number | undefined>(undefined);
-  const [editUseFp32, setEditUseFp32] = useState(false);
-  const [editUseBf16, setEditUseBf16] = useState(false);
-  const [editModelName, setEditModelName] = useState('');
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // All unique user-defined categories across all models
   const allExistingCategories = useMemo(() => {
@@ -204,7 +193,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
 
         // If we were editing this model, close the edit dialog
         if (editingModel?.path === model.path) {
-          handleCancelEdit();
+          setEditingModel(null);
         }
 
         await onModelsUpdated?.();
@@ -214,277 +203,23 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     }
   };
 
-  const handleEditModel = async (model: ModelFile) => {
-    setEditingModel(model);
-    setEditModelName(model.name);
-    setEditDisplayTag(model.displayTag || '');
-    setEditDescription(model.description || '');
-    const cats = toCategories(model.category);
-    setEditCategories(cats);
-    setEditModelType(model.modelType || 'image');
-    setEditTemporalFrames(undefined);
-    setEditUseFp32(false);
-    setEditUseBf16(false);
-
-    try {
-      const metadata = await window.electronAPI.getModelMetadata(model.metadataId || model.id);
-      if (metadata) {
-        setEditDisplayTag(metadata.displayTag || model.displayTag || '');
-        setEditDescription(metadata.description || model.description || '');
-        setEditCategories(toCategories(metadata.category, cats));
-        setEditModelType(metadata.modelType || model.modelType || 'image');
-        setEditTemporalFrames(metadata.temporalFrames);
-        setEditUseFp32(metadata.useFp32 || false);
-        setEditUseBf16(metadata.useBf16 || false);
-      }
-    } catch (error) {
-      console.error('Failed to load model metadata:', error);
-    }
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingModel) return;
-
-    try {
-      setIsSavingEdit(true);
-      let metadataId = editingModel.metadataId || editingModel.id;
-
-      // Handle rename if name changed
-      const trimmedName = editModelName.trim();
-      if (trimmedName && trimmedName !== editingModel.name) {
-        try {
-          const renameResult = await window.electronAPI.renameModel(
-            editingModel.path,
-            metadataId,
-            trimmedName
-          );
-          if (!renameResult.success) {
-            notify.error('Rename failed', renameResult.error || 'Failed to rename model');
-            setIsSavingEdit(false);
-            return;
-          }
-          if (renameResult.newPath) rename(editingModel.path, renameResult.newPath);
-          // Update metadataId to the new name for the metadata update below
-          metadataId = renameResult.newId!;
-        } catch (renameError) {
-          console.error('Failed to rename model:', renameError);
-          notify.error('Rename failed', 'Failed to rename model. Please restart the app and try again.');
-          setIsSavingEdit(false);
-          return;
-        }
-      }
-
-      const updates: Record<string, any> = {
-        displayTag: editDisplayTag.trim() || undefined,
-        description: editDescription.trim() || undefined,
-        category: editCategories.length > 0 ? editCategories : undefined,
-        modelType: editModelType,
-        temporalFrames: editModelType === 'vsr' ? editTemporalFrames : undefined,
-        useFp32: editUseFp32,
-        useBf16: editingModel.backend === 'tensorrt' ? editUseBf16 : false,
-      };
-
-      const result = await window.electronAPI.updateModelMetadata(metadataId, updates);
-      if (result.success) {
-        setEditingModel(null);
-        setEditModelName('');
-        setEditDisplayTag('');
-        setEditDescription('');
-        setEditCategories([]);
-        setEditModelType('image');
-        setEditTemporalFrames(undefined);
-        setEditUseFp32(false);
-        setEditUseBf16(false);
-        await onModelsUpdated?.();
-      }
-    } catch (error) {
-      console.error('Failed to update model metadata:', error);
-    } finally {
-      setIsSavingEdit(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingModel(null);
-    setEditModelName('');
-    setEditDisplayTag('');
-    setEditDescription('');
-    setEditCategories([]);
-    setEditModelType('image');
-    setEditTemporalFrames(undefined);
-    setEditUseFp32(false);
-    setEditUseBf16(false);
-    setIsSavingEdit(false);
-  };
-
   if (!isOpen) return null;
 
   return (
     <>
-      {/* Edit Dialog Overlay */}
       {editingModel && (
-        <ModalShell
-          title="Edit Model"
-          icon={Edit3}
-          onClose={handleCancelEdit}
-          closeLabel="Close edit dialog"
-          closeOnBackdrop
-          padded={false}
-          layer={60}
-          className="w-[500px] max-w-[90vw]"
-        >
-          <div className="p-4 space-y-3">
-            <div>
-              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                Model Name
-              </label>
-              <input
-                type="text"
-                value={editModelName}
-                onChange={(e) => setEditModelName(e.target.value)}
-                placeholder="Model name"
-                className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                Display Tag
-              </label>
-              <input
-                type="text"
-                value={editDisplayTag}
-                onChange={(e) => setEditDisplayTag(e.target.value)}
-                placeholder="Optional display name"
-                className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
-                autoFocus
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Model Type
-                </label>
-                <select
-                  value={editModelType}
-                  onChange={(e) => setEditModelType(e.target.value as 'vsr' | 'image')}
-                  className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-                >
-                  <option value="vsr">Video</option>
-                  <option value="image">Image</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Inference Precision
-                </label>
-                {editingModel.backend === 'tensorrt' ? (
-                  <select
-                    value={editUseFp32 ? 'fp32' : editUseBf16 ? 'bf16' : 'fp16'}
-                    onChange={(e) => {
-                      const precision = e.target.value;
-                      setEditUseFp32(precision === 'fp32');
-                      setEditUseBf16(precision === 'bf16');
-                    }}
-                    className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-                  >
-                    <option value="fp16">FP16 (RGBH)</option>
-                    <option value="bf16">BF16 (RGBH)</option>
-                    <option value="fp32">FP32 (RGBS)</option>
-                  </select>
-                ) : (
-                  <select
-                    value={editUseFp32 ? 'fp32' : 'fp16'}
-                    onChange={(e) => {
-                      setEditUseFp32(e.target.value === 'fp32');
-                      setEditUseBf16(false);
-                    }}
-                    className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-                  >
-                    <option value="fp16">FP16 (RGBH)</option>
-                    <option value="fp32">FP32 (RGBS)</option>
-                  </select>
-                )}
-              </div>
-            </div>
-
-            {editModelType === 'vsr' && (
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Temporal Frames
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="99"
-                  step="2"
-                  value={editTemporalFrames ?? 5}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value, 10);
-                    setEditTemporalFrames(Number.isNaN(value) ? undefined : value);
-                  }}
-                  className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-                />
-              </div>
-            )}
-
-            <div>
-              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                Categories
-              </label>
-              <CategoryChipsInput
-                className="space-y-2"
-                categories={editCategories}
-                onChange={setEditCategories}
-                suggestions={allExistingCategories}
-                placeholder="Search or add a category…"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                Description
-              </label>
-              <textarea
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Describe what this model does..."
-                rows={3}
-                className="w-full bg-ink-850 border border-ink-750 rounded px-2 py-1.5 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500 resize-none"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 px-4 py-3 border-t border-ink-800">
-            <button
-              onClick={() => {
-                if (editingModel) handleDeleteModel(editingModel);
-              }}
-              disabled={isSavingEdit}
-              className="w-8 h-8 rounded-md grid place-items-center border border-bad-500/50 text-bad-400 hover:bg-bad-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-              title="Delete model"
-              aria-label="Delete model"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleSaveEdit}
-              disabled={isSavingEdit || !editModelName.trim()}
-              className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-accent-500 border border-accent-500 text-accent-ink hover:bg-accent-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isSavingEdit ? 'Saving...' : 'Save Changes'}
-            </button>
-            <button
-              onClick={handleCancelEdit}
-              disabled={isSavingEdit}
-              className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Cancel
-            </button>
-          </div>
-        </ModalShell>
+        <ModelEditDialog
+          model={editingModel}
+          backendId={backendId}
+          categorySuggestions={allExistingCategories}
+          onClose={() => setEditingModel(null)}
+          onSaved={async () => {
+            setEditingModel(null);
+            await onModelsUpdated?.();
+          }}
+          onRenamed={rename}
+          onDelete={handleDeleteModel}
+        />
       )}
 
       <PickerModal
@@ -582,7 +317,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
             onSelect={handleSelectModel}
             isSelected={currentSelection === model.path}
             onDelete={handleDeleteModel}
-            onEdit={onEditModel || handleEditModel}
+            onEdit={onEditModel || setEditingModel}
           />
         )}
         noun="models"
