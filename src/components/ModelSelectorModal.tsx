@@ -1,5 +1,5 @@
-import { memo, useState, useRef, useMemo } from 'react';
-import { X, Cpu, Trash2, Edit3, Download } from 'lucide-react';
+import { memo, useState, useMemo } from 'react';
+import { Cpu, Trash2, Edit3, Download } from 'lucide-react';
 import type { BackendId, ModelFile } from '../electron.d';
 import { ask } from '../utils/dialogs';
 import { notify } from '../utils/notifications';
@@ -9,6 +9,8 @@ import { ModalShell } from './ModalShell';
 import { PickerChip, PickerModal, PickerRow, PickerSidebarSection } from './PickerModal';
 import { groupByCategories, matchesQuery, sortByName } from './pickerFilters';
 import { useFavoritesAndRecents } from './useFavoritesAndRecents';
+import { CategoryChipsInput } from './CategoryChipsInput';
+import { toCategories } from '../utils/categories';
 
 interface ModelSelectorModalProps {
   isOpen: boolean;
@@ -34,9 +36,7 @@ const BACKEND_LABELS = new Set(['onnx', 'tensorrt', 'trt', 'directml']);
 
 /** Filter out backend labels from a category value */
 function filterCategoryBadges(category: string | string[] | undefined): string[] {
-  if (!category) return [];
-  const cats = Array.isArray(category) ? category : [category];
-  return cats.filter(c => !BACKEND_LABELS.has(c.toLowerCase()));
+  return toCategories(category).filter(c => !BACKEND_LABELS.has(c.toLowerCase()));
 }
 
 const isEngineFile = (modelPath: string): boolean => /\.engine$/i.test(modelPath);
@@ -68,23 +68,18 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   const [editDisplayTag, setEditDisplayTag] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editCategories, setEditCategories] = useState<string[]>([]);
-  const [newCategoryInput, setNewCategoryInput] = useState('');
   const [editModelType, setEditModelType] = useState<'vsr' | 'image'>('image');
   const [editTemporalFrames, setEditTemporalFrames] = useState<number | undefined>(undefined);
   const [editUseFp32, setEditUseFp32] = useState(false);
   const [editUseBf16, setEditUseBf16] = useState(false);
   const [editModelName, setEditModelName] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const categoryInputRef = useRef<HTMLInputElement>(null);
-  const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   // All unique user-defined categories across all models
   const allExistingCategories = useMemo(() => {
     const catSet = new Set<string>();
     availableModels.forEach(m => {
-      const cats = Array.isArray(m.category) ? m.category : (m.category ? [m.category] : []);
-      cats.forEach(c => {
+      toCategories(m.category).forEach(c => {
         if (c && !BACKEND_LABELS.has(c.toLowerCase())) catSet.add(c);
       });
     });
@@ -224,25 +219,19 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     setEditModelName(model.name);
     setEditDisplayTag(model.displayTag || '');
     setEditDescription(model.description || '');
-    const cats = Array.isArray(model.category)
-      ? model.category
-      : (model.category ? [model.category] : []);
+    const cats = toCategories(model.category);
     setEditCategories(cats);
     setEditModelType(model.modelType || 'image');
     setEditTemporalFrames(undefined);
     setEditUseFp32(false);
     setEditUseBf16(false);
-    setNewCategoryInput('');
 
     try {
       const metadata = await window.electronAPI.getModelMetadata(model.metadataId || model.id);
       if (metadata) {
         setEditDisplayTag(metadata.displayTag || model.displayTag || '');
         setEditDescription(metadata.description || model.description || '');
-        const metadataCats = Array.isArray(metadata.category)
-          ? metadata.category
-          : (metadata.category ? [metadata.category] : cats);
-        setEditCategories(metadataCats);
+        setEditCategories(toCategories(metadata.category, cats));
         setEditModelType(metadata.modelType || model.modelType || 'image');
         setEditTemporalFrames(metadata.temporalFrames);
         setEditUseFp32(metadata.useFp32 || false);
@@ -302,7 +291,6 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
         setEditDisplayTag('');
         setEditDescription('');
         setEditCategories([]);
-        setNewCategoryInput('');
         setEditModelType('image');
         setEditTemporalFrames(undefined);
         setEditUseFp32(false);
@@ -322,23 +310,11 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     setEditDisplayTag('');
     setEditDescription('');
     setEditCategories([]);
-    setNewCategoryInput('');
     setEditModelType('image');
     setEditTemporalFrames(undefined);
     setEditUseFp32(false);
     setEditUseBf16(false);
     setIsSavingEdit(false);
-    setShowCategoryDropdown(false);
-  };
-
-  const handleAddCategory = (cat: string) => {
-    const trimmed = cat.trim();
-    if (trimmed && !editCategories.includes(trimmed)) {
-      setEditCategories(prev => [...prev, trimmed]);
-    }
-    setNewCategoryInput('');
-    setShowCategoryDropdown(false);
-    categoryInputRef.current?.focus();
   };
 
   if (!isOpen) return null;
@@ -458,115 +434,13 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
               <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
                 Categories
               </label>
-              <div className="space-y-2">
-                {/* Selected category chips */}
-                {editCategories.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {editCategories.map((cat, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center gap-1 h-[18px] px-1.5 bg-accent-500/10 border border-accent-500/40 rounded text-accent-300 text-[10px]"
-                      >
-                        {cat}
-                        <button
-                          onClick={() => setEditCategories(prev => prev.filter((_, i) => i !== index))}
-                          className="hover:text-bad-400 transition-colors"
-                          type="button"
-                          aria-label={`Remove category ${cat}`}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Combobox input */}
-                <div className="relative" ref={categoryDropdownRef}>
-                  <input
-                    ref={categoryInputRef}
-                    type="text"
-                    value={newCategoryInput}
-                    onChange={(e) => {
-                      setNewCategoryInput(e.target.value);
-                      setShowCategoryDropdown(true);
-                    }}
-                    onFocus={() => setShowCategoryDropdown(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const filtered = allExistingCategories.filter(
-                          c => !editCategories.includes(c) &&
-                            c.toLowerCase().includes(newCategoryInput.toLowerCase())
-                        );
-                        // Prefer exact match or first suggestion, else create new
-                        const exact = allExistingCategories.find(
-                          c => c.toLowerCase() === newCategoryInput.trim().toLowerCase()
-                        );
-                        if (exact) {
-                          handleAddCategory(exact);
-                        } else if (newCategoryInput.trim()) {
-                          handleAddCategory(newCategoryInput);
-                        } else if (filtered.length > 0) {
-                          handleAddCategory(filtered[0]);
-                        }
-                      } else if (e.key === 'Escape' && showCategoryDropdown) {
-                        e.stopPropagation();
-                        setShowCategoryDropdown(false);
-                      }
-                    }}
-                    onBlur={() => {
-                      // Delay so click on a dropdown item registers first
-                      setTimeout(() => setShowCategoryDropdown(false), 150);
-                    }}
-                    placeholder="Search or add a category…"
-                    className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
-                  />
-
-                  {/* Dropdown */}
-                  {showCategoryDropdown && (() => {
-                    const suggestions = allExistingCategories.filter(
-                      c => !editCategories.includes(c) &&
-                        c.toLowerCase().includes(newCategoryInput.toLowerCase())
-                    );
-                    const canCreate = newCategoryInput.trim() &&
-                      !allExistingCategories.some(c => c.toLowerCase() === newCategoryInput.trim().toLowerCase()) &&
-                      !editCategories.includes(newCategoryInput.trim());
-
-                    if (suggestions.length === 0 && !canCreate) return null;
-
-                    return (
-                      <div className="absolute z-10 top-full mt-1 w-full bg-ink-850 border border-ink-750 rounded-md shadow-xl shadow-black/50 overflow-hidden">
-                        {suggestions.length > 0 && (
-                          <div className="max-h-40 overflow-y-auto">
-                            {suggestions.map(cat => (
-                              <button
-                                key={cat}
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => handleAddCategory(cat)}
-                                className="w-full text-left px-2.5 py-1.5 text-[12px] text-ink-200 hover:bg-ink-800 hover:text-ink-100 transition-colors"
-                              >
-                                {cat}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {canCreate && (
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => handleAddCategory(newCategoryInput)}
-                            className="w-full text-left px-2.5 py-1.5 text-[12px] text-accent-300 hover:bg-ink-800 transition-colors border-t border-ink-800 flex items-center gap-1.5"
-                          >
-                            <span className="text-accent-400">+</span> Create &ldquo;{newCategoryInput.trim()}&rdquo;
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
+              <CategoryChipsInput
+                className="space-y-2"
+                categories={editCategories}
+                onChange={setEditCategories}
+                suggestions={allExistingCategories}
+                placeholder="Search or add a category…"
+              />
             </div>
             
             <div>

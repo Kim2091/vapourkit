@@ -2,6 +2,7 @@ import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { X, Check, Edit2, Filter, Search, CheckCircle } from 'lucide-react';
 import type { FilterEditor, FilterParameterValues, FilterVariables } from '../electron.d';
 import { useModalEscape } from './useModalEscape';
+import { toCategories } from '../utils/categories';
 
 interface FilterImportItem {
   originalName: string;
@@ -304,17 +305,11 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
                             {/* Categories */}
                             {item.category && (
                               <div className="flex flex-wrap gap-1 mt-2">
-                                {Array.isArray(item.category) ? (
-                                  item.category.map((cat, idx) => (
-                                    <span key={idx} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded">
-                                      {cat}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded">
-                                    {item.category}
+                                {toCategories(item.category).map((cat, idx) => (
+                                  <span key={idx} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded">
+                                    {cat}
                                   </span>
-                                )}
+                                ))}
                               </div>
                             )}
                           </div>
@@ -351,17 +346,11 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
                               <div className="flex items-center gap-2 flex-wrap mb-1">
                                 <h3 className="font-medium text-sm">{item.displayName}</h3>
                                 {/* Categories */}
-                                {Array.isArray(item.category) ? (
-                                  item.category.map((cat, idx) => (
-                                    <span key={idx} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded flex-shrink-0">
-                                      {cat}
-                                    </span>
-                                  ))
-                                ) : item.category ? (
-                                  <span className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded flex-shrink-0">
-                                    {item.category}
+                                {toCategories(item.category).map((cat, idx) => (
+                                  <span key={idx} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded flex-shrink-0">
+                                    {cat}
                                   </span>
-                                ) : null}
+                                ))}
                               </div>
                               {item.originalName !== item.displayName && (
                                 <div className="text-xs text-ink-500 truncate">

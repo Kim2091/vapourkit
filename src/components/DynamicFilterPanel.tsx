@@ -1,4 +1,4 @@
-import { Fragment, memo, useState, useEffect, useRef } from 'react';
+import { Fragment, memo, useState, useEffect, useMemo, useRef } from 'react';
 import { GripVertical, X, Plus, ChevronDown, ChevronUp, Save, Trash2, Download, Filter as LucideFilter, Info, Sparkles, ToggleLeft, ToggleRight, Copy, ChevronsDownUp, ChevronsUpDown, Crop, Palette, Film, Edit3 } from 'lucide-react';
 import type { BackendId, FilterBackend, Filter, FilterTemplate, ModelFile } from '../electron.d';
 import { BACKENDS, getBackendDescriptor, resolveFilterBackend } from '../utils/backends';
@@ -6,8 +6,10 @@ import { PythonCodeEditor } from './PythonCodeEditor';
 import { Section, SectionButton } from './Section';
 import { FilterSelectorModal } from './FilterSelectorModal';
 import { TemplateEditDialog } from './TemplateEditDialog';
+import { CategoryChipsInput } from './CategoryChipsInput';
 import { ModelSelectorModal } from './ModelSelectorModal';
 import { notify } from '../utils/notifications';
+import { toCategories } from '../utils/categories';
 import { ask } from '../utils/dialogs';
 import { onBeforeClose } from '../utils/beforeClose';
 import { CreateLutCard, LoadLutCard } from './LutStepCards';
@@ -133,7 +135,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const [presetName, setPresetName] = useState('');
   const [presetDescription, setPresetDescription] = useState('');
   const [presetCategories, setPresetCategories] = useState<string[]>([]);
-  const [newCategoryInput, setNewCategoryInput] = useState('');
   const [hoveredDragHandle, setHoveredDragHandle] = useState<string | null>(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyDuplicatedId, setNewlyDuplicatedId] = useState<string | null>(null);
@@ -142,25 +143,10 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   /** Side chains folded shut in the rail, by Load Video id. */
   const [collapsedChains, setCollapsedChains] = useState<Set<string>>(new Set());
 
-  // Group filter templates by category (templates can appear in multiple categories)
-  const groupedTemplates = filterTemplates.reduce((acc, template) => {
-    // Support both single category and multiple categories
-    const categories = Array.isArray(template.category) 
-      ? template.category 
-      : (template.category ? [template.category] : ['Uncategorized']);
-    
-    categories.forEach(category => {
-      const cat = category || 'Uncategorized';
-      if (!acc[cat]) {
-        acc[cat] = [];
-      }
-      // Avoid duplicates if template is already in this category
-      if (!acc[cat].find(t => t.name === template.name)) {
-        acc[cat].push(template);
-      }
-    });
-    return acc;
-  }, {} as Record<string, FilterTemplate[]>);
+  // Every category the templates use, offered when saving a step as a template.
+  const categorySuggestions = useMemo(() => [...new Set(filterTemplates.flatMap(template =>
+    toCategories(template.category, ['Uncategorized']).map(category => category || 'Uncategorized')
+  ))].sort(), [filterTemplates]);
   const [pendingFilters, setPendingFilters] = useState<Filter[]>(filters);
   const previousExpandedCountRef = useRef<number>(expandedFilters.size);
   const previousProcessingRef = useRef<boolean>(isProcessing);
@@ -572,7 +558,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
         setPresetName('');
         setPresetDescription('');
         setPresetCategories([]);
-        setNewCategoryInput('');
         setShowSaveDialog(null);
       }
     }
@@ -1051,7 +1036,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
               setPresetName('');
               setPresetDescription('');
               setPresetCategories([]);
-              setNewCategoryInput('');
               return;
             }
             setShowSaveDialog(filter.id);
@@ -1060,12 +1044,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
               : undefined;
             setPresetName(existing?.name ?? '');
             setPresetDescription(existing?.description ?? '');
-            setPresetCategories(
-              Array.isArray(existing?.category)
-                ? existing.category
-                : (existing?.category ? [existing.category] : [])
-            );
-            setNewCategoryInput('');
+            setPresetCategories(toCategories(existing?.category));
           };
 
           return (
@@ -1458,65 +1437,14 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                             />
                             
                             {/* Categories */}
-                            <div className="mb-2">
-                              {presetCategories.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mb-2">
-                                  {presetCategories.map((cat, index) => (
-                                    <span
-                                      key={index}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-600/20 border border-accent-500/50 rounded text-xs text-accent-300"
-                                    >
-                                      {cat}
-                                      <button
-                                        onClick={() => setPresetCategories(prev => prev.filter((_, i) => i !== index))}
-                                        className="hover:text-bad-400 transition-colors"
-                                        type="button"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              <div className="flex gap-1">
-                                <input
-                                  type="text"
-                                  placeholder="Add category (press Enter)"
-                                  value={newCategoryInput}
-                                  onChange={(e) => setNewCategoryInput(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && newCategoryInput.trim()) {
-                                      e.preventDefault();
-                                      if (!presetCategories.includes(newCategoryInput.trim())) {
-                                        setPresetCategories([...presetCategories, newCategoryInput.trim()]);
-                                      }
-                                      setNewCategoryInput('');
-                                    }
-                                  }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                  list="category-suggestions"
-                                  className="flex-1 bg-ink-900 border border-ink-600 rounded px-2 py-1 text-[12px] focus:outline-none focus:border-accent-500 transition-colors text-ink-200"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (newCategoryInput.trim() && !presetCategories.includes(newCategoryInput.trim())) {
-                                      setPresetCategories([...presetCategories, newCategoryInput.trim()]);
-                                      setNewCategoryInput('');
-                                    }
-                                  }}
-                                  disabled={!newCategoryInput.trim()}
-                                  className="px-2 bg-accent-600 hover:bg-accent-700 disabled:bg-ink-700 disabled:cursor-not-allowed text-white text-xs rounded transition-colors"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </button>
-                              </div>
-                              <datalist id="category-suggestions">
-                                {Object.keys(groupedTemplates).sort().map(category => (
-                                  <option key={category} value={category} />
-                                ))}
-                              </datalist>
-                            </div>
+                            <CategoryChipsInput
+                              className="mb-2"
+                              variant="compact"
+                              categories={presetCategories}
+                              onChange={setPresetCategories}
+                              suggestions={categorySuggestions}
+                              placeholder="Add category (press Enter)"
+                            />
                             
                             <input
                               type="text"
@@ -1540,7 +1468,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
                                   setPresetName('');
                                   setPresetDescription('');
                                   setPresetCategories([]);
-                                  setNewCategoryInput('');
                                 }}
                                 className="flex-1 bg-ink-700 hover:bg-ink-600 text-white text-[11.5px] py-1 rounded transition-colors"
                               >

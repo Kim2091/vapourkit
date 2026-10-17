@@ -6,6 +6,7 @@ import { PickerChip, PickerModal, PickerRow, PickerSidebarSection } from './Pick
 import { groupByCategories, matchesQuery, sortByName } from './pickerFilters';
 import { useFavoritesAndRecents } from './useFavoritesAndRecents';
 import { ask } from '../utils/dialogs';
+import { toCategories } from '../utils/categories';
 
 interface FilterSelectorModalProps {
   isOpen: boolean;
@@ -28,9 +29,7 @@ const STORE = {
 
 /** A template's categories; one without any is Uncategorized. */
 function sidebarCategories(template: FilterTemplate): string[] {
-  return Array.isArray(template.category)
-    ? template.category
-    : (template.category ? [template.category] : ['Uncategorized']);
+  return toCategories(template.category, ['Uncategorized']);
 }
 
 export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
@@ -258,16 +257,12 @@ const FilterItem = memo<FilterItemProps>(({
   onDelete,
   onEdit,
 }) => {
-  const categories = Array.isArray(template.category)
-    ? template.category
-    : (template.category ? [template.category] : []);
-
   return (
     <PickerRow
       title={template.name}
       badges={
         <>
-          {categories.map((cat, index) => (
+          {toCategories(template.category).map((cat, index) => (
             <PickerChip key={index}>{cat}</PickerChip>
           ))}
           {template.metadata?.tags?.slice(0, 3).map((tag, i) => (

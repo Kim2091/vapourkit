@@ -1,8 +1,10 @@
 import { memo, useState } from 'react';
-import { Edit3, X } from 'lucide-react';
+import { Edit3 } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import { ModalShell } from './ModalShell';
+import { CategoryChips, CategoryInput } from './CategoryChipsInput';
+import { toCategories } from '../utils/categories';
 
 interface TemplateEditDialogProps {
   template: FilterTemplate;
@@ -22,18 +24,9 @@ const INPUT = 'w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12
 export const TemplateEditDialog = memo<TemplateEditDialogProps>(({ template, onSave, onClose }) => {
   const [name, setName] = useState(template.name);
   const [description, setDescription] = useState(template.description || '');
-  const [categories, setCategories] = useState<string[]>(
-    Array.isArray(template.category) ? template.category : (template.category ? [template.category] : []),
-  );
-  const [newCategory, setNewCategory] = useState('');
+  const [categories, setCategories] = useState<string[]>(toCategories(template.category));
   const [code, setCode] = useState(template.code);
   const [saving, setSaving] = useState(false);
-
-  const addCategory = () => {
-    const value = newCategory.trim();
-    if (value && !categories.includes(value)) setCategories([...categories, value]);
-    setNewCategory('');
-  };
 
   const handleSave = async () => {
     if (!name.trim() || saving) return;
@@ -76,42 +69,15 @@ export const TemplateEditDialog = memo<TemplateEditDialogProps>(({ template, onS
           </div>
           <div>
             <label className={LABEL}>Categories</label>
-            <input
-              type="text"
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addCategory();
-                }
-              }}
-              onBlur={addCategory}
+            <CategoryInput
+              categories={categories}
+              onChange={setCategories}
               placeholder="Add a category (Enter)"
-              className={INPUT}
+              addOnBlur
             />
           </div>
         </div>
-        {categories.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 -mt-1">
-            {categories.map((category, index) => (
-              <span
-                key={category}
-                className="inline-flex items-center gap-1 h-[18px] px-1.5 bg-accent-500/10 border border-accent-500/40 rounded text-accent-300 text-[10px]"
-              >
-                {category}
-                <button
-                  type="button"
-                  onClick={() => setCategories(categories.filter((_, i) => i !== index))}
-                  className="hover:text-bad-400 transition-colors"
-                  aria-label={`Remove category ${category}`}
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
+        <CategoryChips categories={categories} onChange={setCategories} className="-mt-1" />
 
         <div>
           <label className={LABEL}>Description</label>
