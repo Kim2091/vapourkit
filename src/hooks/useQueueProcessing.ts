@@ -1,8 +1,9 @@
 // src/hooks/useQueueProcessing.ts - Automated queue processing logic
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { QueueItem } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
+import { shouldRecordProgress, type RecordedProgress } from '../utils/queueProgress';
 
 interface UseQueueProcessingOptions {
   queue: QueueItem[];
@@ -10,13 +11,10 @@ interface UseQueueProcessingOptions {
   isQueueStopping: boolean;
   isProcessingQueueItem: boolean;
   isProcessingQueue: boolean;
-  isProcessing: boolean;
   upscaleProgress: { percentage?: number } | null;
   setIsProcessingQueue: (processing: boolean) => void;
   setIsProcessingQueueItem: (processing: boolean) => void;
   setIsQueueStarted: (started: boolean) => void;
-  setVideoInfo: (info: any) => void;
-  setOutputPathOverride: (path: string | null) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
   getNextPendingItem: () => QueueItem | null;
   onLog: (message: string) => void;
@@ -29,17 +27,23 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
     isQueueStopping,
     isProcessingQueueItem,
     isProcessingQueue,
-    isProcessing,
     upscaleProgress,
     setIsProcessingQueue,
     setIsProcessingQueueItem,
     setIsQueueStarted,
-    setVideoInfo,
-    setOutputPathOverride,
     updateQueueItem,
     getNextPendingItem,
     onLog,
   } = options;
+
+  // The item being rendered. The runner keeps it to itself: the window goes
+  // on showing whatever is being edited while the queue runs.
+  const [runningItemId, setRunningItemId] = useState<string | null>(null);
+
+  const recordedProgressRef = useRef<RecordedProgress>({ at: 0, percentage: 0 });
+  // The last progress event seen, so an item that starts is not given the
+  // one its predecessor finished on.
+  const seenProgressRef = useRef(upscaleProgress);
 
   // Process queue sequentially
   useEffect(() => {
@@ -68,13 +72,10 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
 
       // Update item status to processing
       updateQueueItem(nextItem.id, { status: 'processing', progress: 0 });
-      
+      setRunningItemId(nextItem.id);
+      recordedProgressRef.current = { at: 0, percentage: 0 };
+
       try {
-        // Load video info and set output path for this item
-        const info = await window.electronAPI.getVideoInfo(nextItem.videoPath);
-        setVideoInfo(info);
-        setOutputPathOverride(nextItem.outputPath);
-        onLog(`Loaded queue item: ${nextItem.videoName}`);
         onLog(`Output will be: ${nextItem.outputPath}`);
         
         // Start processing with the item's workflow
@@ -114,6 +115,7 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
         onLog(`Error processing ${nextItem.videoName}: ${getErrorMessage(error)}`);
       } finally {
         // Clear flag to allow next item to process
+        setRunningItemId(null);
         setIsProcessingQueueItem(false);
       }
     };
@@ -125,30 +127,16 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, isProcessingQueueItem, isProcessingQueue, isQueueStarted, isQueueStopping]);
 
-  // Update queue item progress based on upscale progress
-  // Throttle progress updates to prevent excessive re-renders
-  const lastProgressUpdateRef = useRef<number>(0);
-  const lastProgressValueRef = useRef<number>(0);
-  
+  // The running item's progress, from the render's progress events.
   useEffect(() => {
-    if (isProcessing && isProcessingQueue && upscaleProgress) {
-      const processingItem = queue.find(item => item.status === 'processing');
-      if (processingItem && upscaleProgress.percentage !== undefined) {
-        const now = Date.now();
-        const progressDiff = Math.abs(upscaleProgress.percentage - lastProgressValueRef.current);
-        
-        // Only update if:
-        // 1. At least 1 second has passed since last update, OR
-        // 2. Progress has changed by at least 5%, OR
-        // 3. Progress is 100% (completion)
-        if (now - lastProgressUpdateRef.current >= 1000 || 
-            progressDiff >= 5 || 
-            upscaleProgress.percentage === 100) {
-          lastProgressUpdateRef.current = now;
-          lastProgressValueRef.current = upscaleProgress.percentage;
-          updateQueueItem(processingItem.id, { progress: upscaleProgress.percentage });
-        }
-      }
+    if (upscaleProgress === seenProgressRef.current) return;
+    seenProgressRef.current = upscaleProgress;
+    const percentage = upscaleProgress?.percentage;
+    if (!runningItemId || percentage === undefined) return;
+    const now = Date.now();
+    if (shouldRecordProgress(percentage, recordedProgressRef.current, now)) {
+      recordedProgressRef.current = { at: now, percentage };
+      updateQueueItem(runningItemId, { progress: percentage });
     }
-  }, [upscaleProgress, isProcessing, isProcessingQueue, queue, updateQueueItem]);
+  }, [upscaleProgress, runningItemId, updateQueueItem]);
 }

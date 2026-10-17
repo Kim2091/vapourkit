@@ -333,7 +333,9 @@ export function useVideoProcessing({
     setPreviewFrame(null);
     setCompletedVideoBlobUrl(null);
 
-    const partial = renderOutputRef.current || outputPath;
+    // Only a render started here has a partial file worth showing; a queue
+    // item's belongs to the queue, not to the video in the window.
+    const partial = renderOutputRef.current;
     renderOutputRef.current = null;
     if (partial) {
       setTimeout(async () => {
