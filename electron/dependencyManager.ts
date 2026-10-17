@@ -1,7 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
-import * as TOML from '@iarna/toml';
 import { app, BrowserWindow} from 'electron';
 import { ModelExtractor } from './modelExtractor';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
@@ -39,23 +38,21 @@ import { FFmpegManager } from './ffmpegManager';
 import { configManager } from './configManager';
 import { applyPluginCompatibilityFixes, migrateLegacyPortableLayout } from './legacyCleanup';
 import { findProjectsNeedingNewerCore, isNewerThanPin, readInstalledVapourSynthVersion } from './vapoursynthPin';
+import { LINUX_PLUGIN_FILTER_CATALOG_REVISION, needsLinuxPluginFilterCatalogSync } from './pluginFilterCatalog';
+import type { TemplateDecision } from './templateReconcile';
 import {
-  hasPluginFilterTemplates,
-  LINUX_PLUGIN_FILTER_CATALOG_REVISION,
-  needsLinuxPluginFilterCatalogSync,
-  selectPluginFilterTemplates,
-  selectUnsupportedLinuxPluginFilterTemplates,
-} from './pluginFilterCatalog';
-import { shippedTemplateDigest } from './shippedTemplateDigest';
-import { SHIPPED_TEMPLATE_DIGESTS } from './shippedTemplateDigests';
-import { isDecision, planTemplateReconcile, type TemplateDecision, type TemplateState } from './templateReconcile';
+  getMissingBundledTemplates,
+  getTemplateDecisions,
+  reconcileTemplates,
+  resolveTemplateDecision,
+  restoreMissingBundledTemplates,
+} from './templateInstaller';
 import {
   emptyReportDraft,
   isEmptyDraft,
   mergeUpdateReport,
   readLedger,
   writeLedger,
-  type InstallLedger,
   type UpdateReportDraft,
 } from './installLedger';
 import * as _7z from '7zip-min';
@@ -932,7 +929,7 @@ export class DependencyManager {
 
     // Seed new filter templates, and update or retire the ones the user has
     // not edited; edited ones are left for the post-update notice
-    await this.copyFilterTemplates(bundledBasePath, report);
+    await reconcileTemplates(bundledBasePath, report);
 
     await this.refreshAppOwnedPlugins(bundledBasePath, report);
 
@@ -1030,41 +1027,6 @@ export class DependencyManager {
     }
   }
 
-  /**
-   * SHA-256 of every shipped Color Grade `code` block whose maths the current
-   * app no longer matches.
-   *
-   * The grade is implemented three times over — this template, the WebGL
-   * shader, and the reference in colorGrade.ts — and they have to agree or the
-   * preview lies about the render. So when the maths changes, an untouched
-   * installed template has to come along. A user's own edits still win: only
-   * an exact match to something we shipped is replaced.
-   */
-  private static readonly SUPERSEDED_GRADE_CODE = new Set([
-    // Pre-2.0.1: gain and lift as two steps, which put white at
-    // gain + lift * (1 - gain), and a clamp to 1 before pow that threw away
-    // highlight headroom.
-    '741f8c831597afcdb1f00b09bf57fdcbcdb3aceeb2dc873ac4242dbc16555428',
-  ]);
-
-  private async upgradeSupersededGradeTemplate(sourcePath: string, destPath: string): Promise<boolean> {
-    try {
-      const template = TOML.parse(await fs.readFile(destPath, 'utf-8')) as { name?: string; code?: string };
-      if (template.name !== 'Color Grade' || !template.code) return false;
-
-      const code = template.code.replace(/\r\n?/g, '\n').trim();
-      const digest = crypto.createHash('sha256').update(code).digest('hex');
-      if (!DependencyManager.SUPERSEDED_GRADE_CODE.has(digest)) return false;
-
-      await fs.copy(sourcePath, destPath, { overwrite: true });
-      logger.dependency('Updated the unmodified Color Grade template to the current grade maths');
-      return true;
-    } catch (error) {
-      logger.warn('Could not inspect the existing Color Grade template for upgrade:', error);
-      return false;
-    }
-  }
-
   private async copyTemplateIfNeeded(userPath: string, bundledPath: string, logName: string): Promise<void> {
     if (!await fs.pathExists(userPath)) {
       if (await fs.pathExists(bundledPath)) {
@@ -1074,385 +1036,24 @@ export class DependencyManager {
     }
   }
 
-  /**
-   * Bundled Crop bodies that later releases replaced, by sha256 of the code
-   * with line endings normalized and trimmed.
-   *
-   * Crop shipped as vs_tiletools auto-crop until 2.0.0, lost it when the
-   * template was rewritten onto core std.Crop, and has it back now for the
-   * all-zero case. An install seeded during either of those releases is still
-   * carrying a Crop that silently does nothing when nothing is set.
-   */
-  private static readonly SUPERSEDED_CROP_CODE = new Set([
-    // vs_tiletools, but passing all four zeros, which is its manual mode. The
-    // comment above it promised auto-crop; the arguments prevented it.
-    '31c8ecddb66c63494f7aa0b22773f80b0662f2c85cbbb575f1274c5c7d619844',
-    // 2.0.0: the arguments dropped, so auto-crop worked — and raised on any
-    // chain with nothing above it to have done the padding.
-    '6be48f6f8ef228f95ca3d75cf57503ee5a951b7a212fb629925b9565337124df',
-    // The first std.Crop rewrite: plain numbers, no public variables, no editor.
-    'e0784187435aa7907c329baaa409bb2e17d93e07be43aa78ead6deafaa9ea8d6',
-    // The same maths, with the visual editor's {{crop_*}} variables added.
-    '849c96a9fc7975ade2890f127d4e484617ccc86297588451a6edb210e98c04da',
-  ]);
-
-  /**
-   * Filter templates normally preserve user edits across upgrades. Crop is the
-   * one safe exception: replace a body byte-for-byte identical to one we
-   * shipped, so an existing install picks up the visual editor and the
-   * restored auto-crop. A customized Crop never matches, and is left alone.
-   */
-  private async upgradeLegacyCropTemplate(sourcePath: string, destPath: string): Promise<boolean> {
-    try {
-      const template = TOML.parse(await fs.readFile(destPath, 'utf-8')) as { name?: string; code?: string };
-      if (template.name !== 'Crop' || !template.code) return false;
-
-      const code = template.code.replace(/\r\n?/g, '\n').trim();
-      const digest = crypto.createHash('sha256').update(code).digest('hex');
-      if (!DependencyManager.SUPERSEDED_CROP_CODE.has(digest)) return false;
-
-      await fs.copy(sourcePath, destPath, { overwrite: true });
-      logger.dependency('Updated the unmodified Crop template to the current bundled version');
-      return true;
-    } catch (error) {
-      logger.warn('Could not inspect the existing Crop template for upgrade:', error);
-      return false;
-    }
-  }
-
-  /**
-   * The bundled templates: the ones this platform seeds, by path, and the name
-   * of every one shipped on any platform.
-   */
-  private async bundledTemplates(bundledBasePath: string): Promise<{ selected: Map<string, string>; all: Set<string> }> {
-    const templateDirectories = [
-      path.join(bundledBasePath, 'include', 'filter_templates'),
-      ...(hasPluginFilterTemplates()
-        ? [path.join(bundledBasePath, 'include', 'plugins', 'plugin_filters')]
-        : []),
-    ];
-
-    const selected = new Map<string, string>();
-    const all = new Set<string>();
-    for (const templateDirectory of templateDirectories) {
-      if (!await fs.pathExists(templateDirectory)) {
-        logger.warn(`Bundled filter templates not found at: ${templateDirectory}`);
-        continue;
-      }
-
-      const sourceFiles = (await fs.readdir(templateDirectory)).filter(f => f.endsWith('.vkfilter'));
-      sourceFiles.forEach(file => all.add(file));
-      const isPluginCatalog = templateDirectory.endsWith(path.join('plugins', 'plugin_filters'));
-      const supported = isPluginCatalog ? selectPluginFilterTemplates(sourceFiles) : sourceFiles;
-      for (const file of supported) selected.set(file, path.join(templateDirectory, file));
-      logger.dependency(`Found ${supported.length} supported bundled filter template(s) in ${templateDirectory}`);
-    }
-    return { selected, all };
-  }
-
-  /** Every template file in a folder, by shippedTemplateDigest. */
-  private static async digestTemplates(files: Iterable<[string, string]>): Promise<Map<string, string>> {
-    const digests = new Map<string, string>();
-    for (const [file, filePath] of files) {
-      try {
-        digests.set(file, shippedTemplateDigest(await fs.readFile(filePath)));
-      } catch (error) {
-        logger.warn(`Could not read filter template ${file}:`, error);
-      }
-    }
-    return digests;
-  }
-
-  private async templateState(bundledBasePath: string, ledger: InstallLedger): Promise<{
-    state: TemplateState;
-    selected: Map<string, string>;
-  }> {
-    const { selected, all } = await this.bundledTemplates(bundledBasePath);
-    const installedFiles = await fs.pathExists(PATHS.FILTER_TEMPLATES)
-      ? (await fs.readdir(PATHS.FILTER_TEMPLATES)).filter(f => f.endsWith('.vkfilter'))
-      : [];
-
-    return {
-      selected,
-      state: {
-        bundled: await DependencyManager.digestTemplates(selected),
-        shippedAnywhere: all,
-        installed: await DependencyManager.digestTemplates(
-          installedFiles.map(file => [file, path.join(PATHS.FILTER_TEMPLATES, file)]),
-        ),
-        ledger: ledger.templates,
-        previousVersion: configManager.getAppVersion(),
-      },
-    };
-  }
-
-  /**
-   * Seeds, updates and retires filter templates against the install ledger;
-   * see templateReconcile.ts for the rules. What it does silently goes into
-   * `report` when given one; what needs the user is left for the post-update
-   * notice, which asks for it through getTemplateDecisions.
-   */
-  private async copyFilterTemplates(bundledBasePath: string, report?: UpdateReportDraft): Promise<void> {
-    logger.dependency('Reconciling filter templates');
-    await fs.ensureDir(PATHS.FILTER_TEMPLATES);
-
-    // Targeted migrations from before the ledger, which match on the code
-    // alone and so also catch a copy whose metadata alone was changed.
-    const { selected: bundledSources } = await this.bundledTemplates(bundledBasePath);
-    for (const [file, migrate] of [
-      ['Crop.vkfilter', this.upgradeLegacyCropTemplate],
-      ['Color Grade.vkfilter', this.upgradeSupersededGradeTemplate],
-    ] as const) {
-      const sourcePath = bundledSources.get(file);
-      const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
-      if (sourcePath && await fs.pathExists(destPath) && await migrate.call(this, sourcePath, destPath)) {
-        report?.templatesUpdated.push(file);
-      }
-    }
-    await this.removeUnsupportedLinuxTemplates(bundledBasePath);
-    await this.removeRetiredTemplates(report);
-
-    const ledger = await readLedger();
-    const { state, selected } = await this.templateState(bundledBasePath, ledger);
-    // A missing bundle would read every installed template as dropped.
-    if (selected.size === 0) {
-      logger.warn('No bundled filter templates found; leaving installed templates alone');
-      return;
-    }
-
-    const appVersion = app.getVersion();
-    let decisions = 0;
-    for (const action of planTemplateReconcile(state)) {
-      const destPath = path.join(PATHS.FILTER_TEMPLATES, action.file);
-      try {
-        switch (action.kind) {
-          case 'seed':
-          case 'restore':
-          case 'update':
-            // A file we could not read reads as absent; it may still hold an
-            // edit, so a seed or restore never writes over one that exists.
-            if (action.kind !== 'update' && await fs.pathExists(destPath)) {
-              logger.warn(`Filter template ${action.file} could not be read; leaving it as it is`);
-              break;
-            }
-            await fs.copy(selected.get(action.file)!, destPath, { overwrite: true });
-            ledger.templates[action.file] = { digest: state.bundled.get(action.file)!, appVersion };
-            (action.kind === 'update' ? report?.templatesUpdated : report?.templatesAdded)?.push(action.file);
-            if (action.kind === 'restore') {
-              // Recorded as installed, gone, and not deleted in the app: some
-              // other process removed it. Loud, so a log shows when it happens.
-              logger.warn(`Filter template ${action.file} was missing without being deleted in the app; restored it`);
-            } else {
-              logger.dependency(`${action.kind === 'seed' ? 'Copied' : 'Updated unmodified'} filter template: ${action.file}`);
-            }
-            break;
-          case 'remove':
-            await fs.remove(destPath);
-            delete ledger.templates[action.file];
-            report?.templatesRemoved.push(action.file);
-            logger.dependency(`Removed filter template no longer shipped: ${action.file}`);
-            break;
-          case 'record':
-            ledger.templates[action.file] = { digest: action.digest, appVersion };
-            break;
-          case 'forget':
-            delete ledger.templates[action.file];
-            break;
-          default:
-            decisions++;
-            logger.dependency(`Filter template needs a decision (${action.kind}): ${action.file}`);
-        }
-      } catch (error) {
-        logger.warn(`Could not ${action.kind} filter template ${action.file}:`, error);
-      }
-    }
-
-    await writeLedger(ledger);
-    logger.dependency(`Filter templates reconciled${decisions > 0 ? `; ${decisions} edited template(s) need a decision` : ''}`);
-  }
-
-  /**
-   * Version 2.0.0 briefly copied every Windows-authored plugin template to
-   * Linux. Remove only unchanged bundled files from that release; a user
-   * edit is deliberately kept as a custom template.
-   */
-  private async removeUnsupportedLinuxTemplates(bundledBasePath: string): Promise<void> {
-    if (process.platform !== 'linux') return;
-    const templateDirectory = path.join(bundledBasePath, 'include', 'plugins', 'plugin_filters');
-    if (!await fs.pathExists(templateDirectory)) return;
-
-    const sourceFiles = (await fs.readdir(templateDirectory)).filter(f => f.endsWith('.vkfilter'));
-    for (const file of selectUnsupportedLinuxPluginFilterTemplates(sourceFiles)) {
-      const sourcePath = path.join(templateDirectory, file);
-      const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
-      if (!await fs.pathExists(destPath)) continue;
-
-      // Any body the file has shipped with, line endings aside: a byte
-      // comparison against this release's copy kept a CRLF or older copy
-      // behind as a stray "custom" template.
-      const [source, destination] = await Promise.all([
-        fs.readFile(sourcePath),
-        fs.readFile(destPath),
-      ]);
-      const digest = shippedTemplateDigest(destination);
-      if (digest === shippedTemplateDigest(source) || SHIPPED_TEMPLATE_DIGESTS[file]?.includes(digest)) {
-        await fs.remove(destPath);
-        logger.dependency(`Removed unsupported Linux bundled filter template: ${file}`);
-      }
-    }
-  }
-
-  /**
-   * Built-in filters the user deleted in the app: shipped for this platform,
-   * marked deleted in the ledger, and not on disk. Launch never brings those
-   * back, so this is the way to get them back.
-   */
-  async getMissingBundledTemplates(): Promise<string[]> {
-    const { state } = await this.templateState(getBundledBasePath(), await readLedger());
-    return [...state.bundled.keys()]
-      .filter(file => !state.installed.has(file) && state.ledger[file]?.deletedByUser)
-      .sort();
+  /** Built-in filters the user deleted in the app; see templateInstaller.ts. */
+  getMissingBundledTemplates(): Promise<string[]> {
+    return getMissingBundledTemplates();
   }
 
   /** Puts back every built-in filter the install has deleted; answers the files restored. */
-  async restoreMissingBundledTemplates(): Promise<string[]> {
-    const missing = await this.getMissingBundledTemplates();
-    if (missing.length === 0) return [];
-    const ledger = await readLedger();
-    for (const file of missing) delete ledger.templates[file];
-    await writeLedger(ledger);
-    // With no ledger entry and no file, the reconcile seeds them.
-    await this.copyFilterTemplates(getBundledBasePath());
-    logger.dependency(`Restored ${missing.length} built-in filter template(s): ${missing.join(', ')}`);
-    return missing;
+  restoreMissingBundledTemplates(): Promise<string[]> {
+    return restoreMissingBundledTemplates();
   }
 
-  /** The edited templates the post-update notice asks about, with display names. */
-  async getTemplateDecisions(): Promise<TemplateDecision[]> {
-    const bundledBasePath = getBundledBasePath();
-    const { state } = await this.templateState(bundledBasePath, await readLedger());
-    if (state.bundled.size === 0) return [];
-
-    const decisions: TemplateDecision[] = [];
-    for (const action of planTemplateReconcile(state).filter(isDecision)) {
-      decisions.push({
-        file: action.file,
-        name: await DependencyManager.templateName(path.join(PATHS.FILTER_TEMPLATES, action.file)) ?? action.file.replace(/\.vkfilter$/, ''),
-        kind: action.kind,
-        replacement: action.kind === 'edited-dropped' && action.replacement
-          ? await DependencyManager.templateName(path.join(PATHS.FILTER_TEMPLATES, action.replacement)) ?? action.replacement.replace(/\.vkfilter$/, '')
-          : undefined,
-      });
-    }
-    return decisions;
+  /** The edited templates the post-update notice asks about. */
+  getTemplateDecisions(): Promise<TemplateDecision[]> {
+    return getTemplateDecisions();
   }
 
-  private static async templateName(filePath: string): Promise<string | undefined> {
-    try {
-      const parsed = TOML.parse(await fs.readFile(filePath, 'utf-8')) as { name?: unknown };
-      return typeof parsed.name === 'string' ? parsed.name : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
-   * Carries out the user's answer about one edited template. Anything that
-   * would lose their copy backs it up first, to config/template-backups.
-   */
-  async resolveTemplateDecision(file: string, choice: 'replace' | 'keep' | 'remove'): Promise<{ backupPath?: string }> {
-    if (path.basename(file) !== file || !file.endsWith('.vkfilter')) {
-      throw new Error(`Not a filter template: ${file}`);
-    }
-
-    const bundledBasePath = getBundledBasePath();
-    const ledger = await readLedger();
-    const { state, selected } = await this.templateState(bundledBasePath, ledger);
-    const action = planTemplateReconcile(state).find(candidate => candidate.file === file);
-    if (!action || !isDecision(action)) {
-      // Already settled, by an earlier click or an edit since the notice opened.
-      return {};
-    }
-
-    const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
-    const appVersion = app.getVersion();
-    const backup = async (): Promise<string> => {
-      const backupDir = path.join(PATHS.CONFIG, 'template-backups', `before-${appVersion}`);
-      await fs.ensureDir(backupDir);
-      const backupPath = path.join(backupDir, file);
-      await fs.copy(destPath, backupPath, { overwrite: true });
-      return backupPath;
-    };
-
-    let backupPath: string | undefined;
-    if (action.kind === 'edited-outdated' && choice === 'replace') {
-      backupPath = await backup();
-      await fs.copy(selected.get(file)!, destPath, { overwrite: true });
-      ledger.templates[file] = { digest: state.bundled.get(file)!, appVersion };
-    } else if (action.kind === 'edited-outdated' && choice === 'keep') {
-      // Their edit now counts as based on this release's body, so it is asked
-      // about again only when a later release changes it.
-      ledger.templates[file] = { digest: state.bundled.get(file)!, appVersion };
-    } else if (action.kind === 'edited-dropped' && choice === 'remove') {
-      backupPath = await backup();
-      await fs.remove(destPath);
-      delete ledger.templates[file];
-    } else if (action.kind === 'edited-dropped' && choice === 'keep') {
-      ledger.templates[file] = { digest: state.installed.get(file)!, appVersion, keptDropped: true };
-    } else {
-      throw new Error(`Cannot ${choice} ${file}: ${action.kind}`);
-    }
-
-    await writeLedger(ledger);
-    logger.dependency(`Filter template ${file}: ${choice}${backupPath ? ` (backup at ${backupPath})` : ''}`);
-    return { backupPath };
-  }
-
-  /**
-   * Templates a later release folded into another filter, with the sha256 of
-   * every body ever shipped under that name.
-   *
-   * Nothing else removes a template a user already has: seeding only copies
-   * what is absent, so a retired filter would sit in the list forever, doing
-   * the same job as the one that replaced it. A user's own edit never matches
-   * a shipped digest and is kept, becoming a custom template.
-   *
-   * Chains are unaffected either way — a saved step carries its own copy of the
-   * code, so one built on a retired template keeps working untouched.
-   */
-  private static readonly RETIRED_TEMPLATES: ReadonlyArray<{
-    file: string;
-    shipped: ReadonlySet<string>;
-    reason: string;
-  }> = [
-    {
-      file: 'Crop _auto_.vkfilter',
-      // The only body it ever had, from the release that split it out of Crop.
-      shipped: new Set(['ba5a851bbdc067320b1217b9750684834be3e8c01efb98af4279a28462ca863e']),
-      reason: 'Crop removes Pad and Modulus padding again when every edge is 0',
-    },
-  ];
-
-  private async removeRetiredTemplates(report?: UpdateReportDraft): Promise<void> {
-    for (const retired of DependencyManager.RETIRED_TEMPLATES) {
-      const destPath = path.join(PATHS.FILTER_TEMPLATES, retired.file);
-      try {
-        if (!await fs.pathExists(destPath)) continue;
-
-        const template = TOML.parse(await fs.readFile(destPath, 'utf-8')) as { code?: string };
-        if (!template.code) continue;
-
-        const code = template.code.replace(/\r\n?/g, '\n').trim();
-        const digest = crypto.createHash('sha256').update(code).digest('hex');
-        if (!retired.shipped.has(digest)) continue;
-
-        await fs.remove(destPath);
-        report?.templatesRemoved.push(retired.file);
-        logger.dependency(`Removed the retired ${retired.file} template: ${retired.reason}`);
-      } catch (error) {
-        logger.warn(`Could not inspect ${retired.file} for retirement:`, error);
-      }
-    }
+  /** Carries out the user's answer about one edited template. */
+  resolveTemplateDecision(file: string, choice: 'replace' | 'keep' | 'remove'): Promise<{ backupPath?: string }> {
+    return resolveTemplateDecision(file, choice);
   }
 
   private async initializeUserConfig(): Promise<void> {
@@ -1474,7 +1075,7 @@ export class DependencyManager {
     await this.syncGeneratedConfigFiles(bundledBasePath);
 
     // Copy filter templates from bundled location
-    await this.copyFilterTemplates(bundledBasePath);
+    await reconcileTemplates(bundledBasePath);
     
     logger.dependency('User configuration initialized');
 

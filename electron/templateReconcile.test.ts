@@ -120,11 +120,12 @@ describe('template reconcile', () => {
       .toEqual([{ kind: 'record', file: 'A.vkfilter', digest: 'a2' }]);
   });
 
-  it('leaves a template another platform ships to the catalog pass', () => {
-    expect(plan({
-      shippedAnywhere: new Set(['A.vkfilter', 'Old.vkfilter']),
-      installed: new Map([['A.vkfilter', 'a2'], ['Old.vkfilter', 'o1']]),
-    })).toEqual([{ kind: 'record', file: 'A.vkfilter', digest: 'a2' }]);
+  it('removes an untouched template shipped only for another platform, and keeps an edited one', () => {
+    const otherPlatform = { shippedAnywhere: new Set(['A.vkfilter', 'Old.vkfilter']) };
+    expect(plan({ ...otherPlatform, installed: new Map([['A.vkfilter', 'a2'], ['Old.vkfilter', 'o1']]) }))
+      .toEqual([{ kind: 'record', file: 'A.vkfilter', digest: 'a2' }, { kind: 'remove', file: 'Old.vkfilter' }]);
+    expect(plan({ ...otherPlatform, installed: new Map([['A.vkfilter', 'a2'], ['Old.vkfilter', 'mine']]), previousVersion: '2.0.0' }))
+      .toEqual([{ kind: 'record', file: 'A.vkfilter', digest: 'a2' }]);
   });
 
   it('forgets a ledger entry for a template that is gone for good', () => {

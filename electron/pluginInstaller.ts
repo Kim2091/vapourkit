@@ -9,7 +9,7 @@ import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
 import { canImportModules, pipInstall, pipList, pipUninstall, PipLockAbortedError, withPipLock, type ImportCheck } from './pip';
 import { shouldExtractBundledPluginArchives } from './bundledPluginArchives';
-import { hasPluginFilterTemplates, selectPluginFilterTemplates } from './pluginFilterCatalog';
+import { installPluginTemplates } from './templateInstaller';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
 import { VsMlrtModelsManager } from './vsMlrtModelsManager';
 import { MigxRuntimeManager } from './migxRuntimeManager';
@@ -54,8 +54,6 @@ import {
 } from './vendorPackages';
 import * as _7z from '7zip-min';
 import { extract7z } from './archive';
-import { readLedger, writeLedger } from './installLedger';
-import { shippedTemplateDigest } from './shippedTemplateDigest';
 
 /** A reinstall that keeps what the user changed, or one that restores everything shipped. */
 export type InstallMode = 'partial' | 'complete';
@@ -757,7 +755,11 @@ export class PluginInstaller {
 
       // Step 5: Copy filter templates (95-100% progress)
       logger.info('=== Step 5: Copying filter templates ===');
-      await this.copyFilterTemplates(mode);
+      await installPluginTemplates(mode, () => this.sendProgress({
+        type: 'installing',
+        progress: 95,
+        message: 'Copying filter templates...'
+      }));
 
       // Step 7: Reload backend to refresh models and configs
       logger.info('=== Step 7: Reloading backend ===');
@@ -1075,114 +1077,5 @@ export class PluginInstaller {
       logger.warn(`Plugin files missing right after extraction: ${missing.join(', ')}`);
       this.warn(warning, 40);
     }
-  }
-
-  private async copyFilterTemplates(mode: InstallMode = 'partial'): Promise<void> {
-    if (!hasPluginFilterTemplates()) {
-      logger.info('Bundled plugin filter templates are unavailable on this platform; skipping copy');
-      return;
-    }
-
-    logger.info('Copying filter templates from plugin_filters folder');
-    
-    // Get bundled plugin_filters path
-    const bundledBasePath = getBundledBasePath();
-    const pluginFiltersFolder = path.join(bundledBasePath, 'include', 'plugins', 'plugin_filters');
-    
-    if (!await fs.pathExists(pluginFiltersFolder)) {
-      logger.info('No plugin_filters folder found, skipping filter template copy');
-      return;
-    }
-
-    this.sendProgress({
-      type: 'installing',
-      progress: 95,
-      message: 'Copying filter templates...'
-    });
-
-    // Ensure the filter templates directory exists
-    await fs.ensureDir(PATHS.FILTER_TEMPLATES);
-
-    // Get all files in the plugin_filters folder
-    const sourceFiles = (await fs.readdir(pluginFiltersFolder))
-      .filter(file => file.endsWith('.vkfilter'));
-    const files = selectPluginFilterTemplates(sourceFiles);
-    
-    if (files.length === 0) {
-      logger.info('No filter templates found in plugin_filters folder');
-      return;
-    }
-
-    logger.info(`Found ${files.length} supported filter template(s) to copy`);
-
-    if (mode === 'complete') {
-      // The core templates too: complete means everything shipped.
-      const coreFolder = path.join(bundledBasePath, 'include', 'filter_templates');
-      const coreFiles = await fs.pathExists(coreFolder)
-        ? (await fs.readdir(coreFolder)).filter(file => file.endsWith('.vkfilter'))
-        : [];
-      await this.resetShippedTemplates([
-        ...coreFiles.map(file => path.join(coreFolder, file)),
-        ...files.map(file => path.join(pluginFiltersFolder, file)),
-      ]);
-      logger.info('Filter template copy completed');
-      return;
-    }
-
-    // Partial: only what is missing. Bringing an untouched template up to
-    // date, and asking about an edited one, is the launch reconcile's job. A
-    // template the user deleted stays deleted.
-    const ledger = await readLedger().catch(() => undefined);
-
-    for (const file of files) {
-      const sourcePath = path.join(pluginFiltersFolder, file);
-      const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
-      if (ledger?.templates[file]?.deletedByUser) continue;
-      
-      // Check if it's a file (not a directory)
-      const stats = await fs.stat(sourcePath);
-      if (stats.isFile() && !await fs.pathExists(destPath)) {
-        try {
-          await fs.copy(sourcePath, destPath, { overwrite: false });
-          logger.info(`Copied filter template: ${file}`);
-        } catch (error) {
-          logger.error(`Failed to copy filter template ${file}:`, error);
-          // Continue with other templates even if one fails
-        }
-      }
-    }
-    
-    logger.info('Filter template copy completed');
-  }
-
-  /**
-   * A complete reinstall: every shipped template back to stock. An
-   * edited copy goes to template-backups first, a deleted one comes back, and
-   * the ledger records each as ours and untouched. Templates of the user's
-   * own are other files and never touched.
-   */
-  private async resetShippedTemplates(sourcePaths: string[]): Promise<void> {
-    const ledger = await readLedger();
-    const backupDir = path.join(PATHS.CONFIG, 'template-backups', `reinstall-${new Date().toISOString().replace(/[:.]/g, '-')}`);
-    for (const sourcePath of sourcePaths) {
-      const file = path.basename(sourcePath);
-      const destPath = path.join(PATHS.FILTER_TEMPLATES, file);
-      try {
-        const source = await fs.readFile(sourcePath);
-        if (await fs.pathExists(destPath)) {
-          const current = await fs.readFile(destPath);
-          if (shippedTemplateDigest(current) !== shippedTemplateDigest(source)) {
-            await fs.ensureDir(backupDir);
-            await fs.writeFile(path.join(backupDir, file), current);
-            logger.info(`Backed up edited filter template before resetting it: ${file}`);
-          }
-        }
-        await fs.writeFile(destPath, source);
-        ledger.templates[file] = { digest: shippedTemplateDigest(source), appVersion: app.getVersion() };
-      } catch (error) {
-        logger.error(`Failed to reset filter template ${file}:`, error);
-      }
-    }
-    await writeLedger(ledger);
   }
 }

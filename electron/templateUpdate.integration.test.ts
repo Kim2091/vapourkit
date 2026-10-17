@@ -45,7 +45,7 @@ vi.mock('./configManager', () => ({
   configManager: { getAppVersion: () => '2.0.0' },
 }));
 
-import { DependencyManager } from './dependencyManager';
+import * as manager from './templateInstaller';
 import { emptyReportDraft, markTemplateDeletedByUser, readLedger } from './installLedger';
 
 const installed = path.join(root, 'data', 'config', 'filter-templates');
@@ -60,12 +60,6 @@ const hasTag = (() => {
 
 // Each step digests the real template tree; slow under a parallel run.
 describe.skipIf(!hasTag)('updating a 2.0.0 install', { timeout: 30_000 }, () => {
-  const manager = new DependencyManager() as unknown as {
-    copyFilterTemplates(base: string, report?: ReturnType<typeof emptyReportDraft>): Promise<void>;
-    getTemplateDecisions(): ReturnType<DependencyManager['getTemplateDecisions']>;
-    resolveTemplateDecision: DependencyManager['resolveTemplateDecision'];
-    restoreMissingBundledTemplates: DependencyManager['restoreMissingBundledTemplates'];
-  };
   const report = emptyReportDraft();
   const bundledQtgmc = path.join(root, 'include', 'plugins', 'plugin_filters', 'QTGMC _Old_.vkfilter');
 
@@ -90,7 +84,7 @@ describe.skipIf(!hasTag)('updating a 2.0.0 install', { timeout: 30_000 }, () => 
     fs.appendFileSync(path.join(installed, 'TFMBobN.vkfilter'), '\n# my tweak\n');
     fs.writeFileSync(path.join(installed, 'Mine.vkfilter'), 'name = "Mine"\ncode = "clip = clip"\n');
 
-    await manager.copyFilterTemplates(root, report);
+    await manager.reconcileTemplates(root, report);
   }, 60_000); // copies the real template tree; slow under a parallel run
 
   afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -140,21 +134,21 @@ describe.skipIf(!hasTag)('updating a 2.0.0 install', { timeout: 30_000 }, () => 
     expect(await manager.getTemplateDecisions()).toEqual([]);
 
     const again = emptyReportDraft();
-    await manager.copyFilterTemplates(root, again);
+    await manager.reconcileTemplates(root, again);
     expect(fs.existsSync(path.join(installed, 'TFMBobN.vkfilter'))).toBe(true);
     expect(again).toEqual(emptyReportDraft());
   });
 
   it('puts back a template that vanished without being deleted in the app', async () => {
     fs.rmSync(path.join(installed, 'Guided Filter.vkfilter'));
-    await manager.copyFilterTemplates(root, emptyReportDraft());
+    await manager.reconcileTemplates(root, emptyReportDraft());
     expect(fs.existsSync(path.join(installed, 'Guided Filter.vkfilter'))).toBe(true);
   });
 
   it('does not bring back a template the user deleted in the app', async () => {
     fs.rmSync(path.join(installed, 'Guided Filter.vkfilter'));
     await markTemplateDeletedByUser('Guided Filter.vkfilter');
-    await manager.copyFilterTemplates(root, emptyReportDraft());
+    await manager.reconcileTemplates(root, emptyReportDraft());
     expect(fs.existsSync(path.join(installed, 'Guided Filter.vkfilter'))).toBe(false);
     // Until the user asks for it back.
     expect(await manager.restoreMissingBundledTemplates()).toEqual(['Guided Filter.vkfilter']);

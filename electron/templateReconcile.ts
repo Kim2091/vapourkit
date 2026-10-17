@@ -148,9 +148,13 @@ export function planTemplateReconcile(state: TemplateState, tables: TemplateTabl
       continue;
     }
 
-    // Seeded on another platform's terms, or one this platform skips; the
-    // Linux catalog pass owns those.
-    if (state.shippedAnywhere.has(file)) continue;
+    // Shipped, but not for this platform (Linux skips the plugin templates
+    // its install cannot run): an untouched copy goes, and an edited one
+    // stays as a template of the user's own.
+    if (state.shippedAnywhere.has(file)) {
+      if (tables.history[file]?.includes(installed)) actions.push({ kind: 'remove', file });
+      continue;
+    }
 
     // Never ours: a template the user made.
     if (!entry && !tables.history[file]) continue;
