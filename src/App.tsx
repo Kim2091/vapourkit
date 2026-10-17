@@ -40,18 +40,11 @@ import { getErrorMessage } from './types/errors';
 import { ChevronLeft } from 'lucide-react';
 import { SetupScreen } from './components/SetupScreen';
 import { VideoPreviewPanel } from './components/VideoPreviewPanel';
-import { ColorGradeDock, GRADE_COMPACT_BELOW, GRADE_DOCK_HEIGHT, GRADE_DOCK_COMPACT_HEIGHT } from './components/ColorGradeDock';
-import { solveScopeColumnWidth, clampScopeColumnWidth } from './components/GradeScopeColumn';
+import { ColorGradeDock, GRADE_COMPACT_BELOW } from './components/ColorGradeDock';
+import { clampScopeColumnWidth } from './components/GradeScopeColumn';
 import { gradeBasePx } from './components/gradeType';
-import { writeCube, parseLut, to3d } from './utils/lut';
-import { solveBlackPoint, solveWhitePoint, solveNeutral, autoBalance } from './utils/colorGrade';
 import { useLutSteps } from './hooks/useLutSteps';
 import type { LutPanelActions } from './components/DynamicFilterPanel';
-import type { CompareMode, PickMode } from './components/ColorGradeOverlay';
-import type { ViewerControls } from './components/PreviewStepRail';
-import type { ToolRailControls } from './components/GradeToolRail';
-import type { ScopeKind } from './components/GradeScopes';
-import { useColorGrade } from './hooks/useColorGrade';
 import { useChainPreview } from './hooks/useChainPreview';
 import { VideoInputPanel } from './components/VideoInputPanel';
 import { VideoInfoPanel } from './components/VideoPanel';
@@ -61,14 +54,15 @@ import { getPortableModelName } from './utils/modelUtils';
 import { useAccentColor } from './hooks/useAccentColor';
 import { useMainColor } from './hooks/useMainColor';
 import { useDiscordRichPresence } from './hooks/useDiscordRichPresence';
+import { useDiscordActivity } from './hooks/useDiscordActivity';
+import { useGpuStats } from './hooks/useGpuStats';
+import { useResizableColumn } from './hooks/useResizableColumn';
+import { useGradeWorkspace } from './hooks/useGradeWorkspace';
+import { useLutImport } from './hooks/useLutImport';
 import { projectOutputOverride, type QueueSession } from './utils/projectSnapshot';
 import { useWorkflowDocument } from './hooks/useWorkflowDocument';
 import { viewOf } from './utils/workflowDocument';
 import { toQueueWorkflow, WHOLE_VIDEO } from './utils/workflowSettings';
-
-// Settings column drag bounds, in pixels.
-const SETTINGS_MIN_W = 320;
-const SETTINGS_MAX_W = 720;
 
 function parseFrameSize(resolution: string | undefined): { width: number; height: number } | null {
   const match = resolution?.match(/(\d+)\s*[xX]\s*(\d+)/);
@@ -83,19 +77,7 @@ function App() {
   const rightPanelRef = useRef<HTMLDivElement>(null);
 
   // GPU stats polling (always-on, independent of processing)
-  const [gpuStats, setGpuStats] = useState<{ gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null>(null);
-  useEffect(() => {
-    let active = true;
-    const poll = async () => {
-      try {
-        const stats = await window.electronAPI.getGpuStats();
-        if (active) setGpuStats(stats);
-      } catch { /* nvidia-smi unavailable */ }
-    };
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => { active = false; clearInterval(interval); };
-  }, []);
+  const gpuStats = useGpuStats();
 
   // Runtime TensorRT engine builds happening inside vspipe. These take minutes
   // and produce no other feedback, so the main process forwards the [vk-build]
@@ -281,57 +263,15 @@ function App() {
     segment,
   });
 
-  const [discordPresenceStartTimestamp, setDiscordPresenceStartTimestamp] = useState<number | undefined>();
-  const discordPresenceHiddenForPrivacyRef = useRef(false);
-  useEffect(() => {
-    setDiscordPresenceStartTimestamp(isProcessing ? Math.floor(Date.now() / 1000) : undefined);
-  }, [isProcessing]);
-
-  useEffect(() => {
-    if (!isSetupComplete) return;
-
-    if (privacyMode) {
-      if (!discordPresenceHiddenForPrivacyRef.current) {
-        discordPresenceHiddenForPrivacyRef.current = true;
-        void clearDiscordRichPresence();
-      }
-      return;
-    }
-
-    discordPresenceHiddenForPrivacyRef.current = false;
-
-    if (isProcessing) {
-      const percentage = upscaleProgress?.percentage;
-      const state = typeof percentage === 'number'
-        ? `${Math.max(0, Math.min(100, Math.round(percentage)))}% complete`
-        : 'Processing';
-      void publishDiscordRichPresence({
-        details: 'Upscaling a video',
-        state,
-        startTimestamp: discordPresenceStartTimestamp,
-      });
-      return;
-    }
-
-    void publishDiscordRichPresence(videoInfo
-      ? {
-          details: 'Video loaded',
-          state: 'Ready to upscale',
-        }
-      : {
-          details: 'Ready to upscale',
-          state: 'Waiting for a video',
-        });
-  }, [
-    discordPresenceStartTimestamp,
-    clearDiscordRichPresence,
-    isProcessing,
+  useDiscordActivity({
     isSetupComplete,
     privacyMode,
-    publishDiscordRichPresence,
-    upscaleProgress?.percentage,
+    isProcessing,
+    upscaleProgress,
     videoInfo,
-  ]);
+    publishDiscordRichPresence,
+    clearDiscordRichPresence,
+  });
   
   // Destructure queue store for convenience
   const {
@@ -731,45 +671,12 @@ function App() {
     }
   }, [videoInfo, selectedModel, defaultBackend, filters, numStreams, segment, addConsoleLog, isLaunchingPreviewer]);
 
-  // Seek to a specific frame in the video preview (used by segment selector)
   // Settings column width — pixel-based drag on its left edge, persisted.
-  // Pixels, not percentages: a proportional split is what stretched the
-  // column to ~970px on a 2560px display.
-  const [settingsWidth, setSettingsWidth] = useState(() => {
-    const stored = Number(window.localStorage.getItem('vk-settings-width'));
-    return Number.isFinite(stored) && stored >= SETTINGS_MIN_W && stored <= SETTINGS_MAX_W ? stored : 400;
-  });
-  const [isResizingSettings, setIsResizingSettings] = useState(false);
-  const resizeStartRef = useRef({ x: 0, width: 400 });
-
-  const handleSettingsResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    resizeStartRef.current = { x: e.clientX, width: settingsWidth };
-    setIsResizingSettings(true);
-  }, [settingsWidth]);
-
-  useEffect(() => {
-    if (!isResizingSettings) return;
-    const onMove = (e: MouseEvent) => {
-      const delta = resizeStartRef.current.x - e.clientX;
-      setSettingsWidth(Math.min(SETTINGS_MAX_W, Math.max(SETTINGS_MIN_W, resizeStartRef.current.width + delta)));
-    };
-    const onUp = () => setIsResizingSettings(false);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    document.body.style.cursor = 'ew-resize';
-    document.body.style.userSelect = 'none';
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizingSettings]);
-
-  useEffect(() => {
-    if (!isResizingSettings) window.localStorage.setItem('vk-settings-width', String(settingsWidth));
-  }, [settingsWidth, isResizingSettings]);
+  const {
+    width: settingsWidth,
+    isResizing: isResizingSettings,
+    handleResizeStart: handleSettingsResizeStart,
+  } = useResizableColumn();
 
   // Which frame the preview is showing — drives the scrubber playhead.
   const [playheadFrame, setPlayheadFrame] = useState<number | null>(null);
@@ -806,7 +713,6 @@ function App() {
     close: closeChainPreview,
     cancel: cancelChainPreview,
     seek: seekChainPreview,
-    select: selectChainStep,
     isOpening: isOpeningChainPreview,
   } = chainPreview;
 
@@ -918,166 +824,49 @@ function App() {
     handleSetFilters(filters.map(filter => filter.id === filterId ? { ...filter, parameters } : filter));
   }, [filters, handleSetFilters]);
 
-  // Colour grading. The values live in the filter's parameters; the hook holds
-  // the draft while a trackball is being dragged so history records one entry
-  // per gesture rather than one per pixel of travel.
-  const colorGrade = useColorGrade({
-    filter: activeFilterEditor,
+
+  const {
+    colorGrade,
+    gradeCompareMode,
+    holdingBefore,
+    scopeSample,
+    setScopeSample,
+    dockScope,
+    setDockScope,
+    pickMode,
+    showClipping,
+    windowHeight,
+    gradeFocus,
+    setSettingsRevealed,
+    scopeColumnWidth,
+    setScopeColumnOverride,
+    gradePaneWidth,
+    gradeStepLabel,
+    handlePick,
+    handleAutoBalance,
+    handleToolAvailability,
+    viewerControls,
+    toolRail,
+    gradeUpstreamOutput,
+  } = useGradeWorkspace({
+    activeFilterEditor,
+    activeFilterEditorId,
+    setActiveFilterEditorId,
     onParametersChange: handleFilterParametersChange,
-  });
-  const [gradeCompareMode, setGradeCompareMode] = useState<CompareMode>('split');
-  const [holdingBefore, setHoldingBefore] = useState(false);
-  const [scopeSample, setScopeSample] = useState<Float32Array | null>(null);
-  const [dockScope, setDockScope] = useState<ScopeKind>('parade');
-  // The grading tools live in the dock, but their state lives here: the dock
-  // and the viewer overlay both read it, and it has to survive the dock
-  // remounting as the layout solver moves the tools between column and row.
-  const [pickMode, setPickMode] = useState<PickMode>(null);
-  const [showClipping, setShowClipping] = useState(false);
-  const [toolsAvailable, setToolsAvailable] = useState({ canPick: false, canShowClipping: false });
-  const [windowHeight, setWindowHeight] = useState(() => window.innerHeight);
-  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
-
-  useEffect(() => {
-    const onResize = () => {
-      setWindowHeight(window.innerHeight);
-      setWindowWidth(window.innerWidth);
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  // Grading is a mode, so it gets the window. A 16:9 window has no vertical
-  // room to spare and the dock is the thing that needs width, so while a grade
-  // is open the settings column folds to a strip and the preview column — dock
-  // included — takes what it was using. One click brings the column back for
-  // as long as this grade stays open.
-  const [settingsRevealed, setSettingsRevealed] = useState(false);
-  const gradeFocus = Boolean(colorGrade.editor) && !settingsRevealed;
-
-  useEffect(() => {
-    if (!colorGrade.editor) setSettingsRevealed(false);
-  }, [colorGrade.editor]);
-
-  // Where the scope column beside the picture gets its width, and why taking
-  // it costs nothing. The picture is laid out object-contain, so in a pane
-  // wider than the frame can use at that height the extra width goes nowhere.
-  // In a 16:9 window it always is: the spare runs from 97px at 1200x675 to
-  // 193px at 2560x1440 *beyond* the 380px the column asks for. So the column
-  // is only ever offered out of width the picture had no use for, and it
-  // disappears the moment that stops being true — a tall window, a portrait
-  // source, or the settings column brought back over the top of a grade.
-  // Dragged by hand this wins over the rule above, and is remembered. Null
-  // means nobody has asked, so the spare-width rule keeps deciding — which is
-  // also what double-clicking the handle puts it back to.
-  const [scopeColumnOverride, setScopeColumnOverride] = useState<number | null>(() => {
-    const stored = Number(window.localStorage.getItem('vk-scope-column-width'));
-    return Number.isFinite(stored) && stored > 0 ? stored : null;
+    filters,
+    chainPreview,
+    cropSourceSize,
+    showQueue: queueStore.showQueue,
+    settingsWidth,
+    addConsoleLog,
   });
 
-  useEffect(() => {
-    if (scopeColumnOverride === null) window.localStorage.removeItem('vk-scope-column-width');
-    else window.localStorage.setItem('vk-scope-column-width', String(scopeColumnOverride));
-  }, [scopeColumnOverride]);
-
-  const gradePaneWidth = windowWidth - 63
-    - (queueStore.showQueue ? 240 : 0)
-    - (gradeFocus ? 34 : 5 + settingsWidth);
-
-  const scopeColumnWidth = useMemo(() => {
-    if (!colorGrade.editor) return 0;
-    if (scopeColumnOverride !== null) {
-      return clampScopeColumnWidth(scopeColumnOverride, gradePaneWidth);
-    }
-    const dockHeight = windowHeight < GRADE_COMPACT_BELOW ? GRADE_DOCK_COMPACT_HEIGHT : GRADE_DOCK_HEIGHT;
-    const pictureHeight = windowHeight - (45 + 37 + dockHeight + 41) - 24;
-    const aspect = cropSourceSize && cropSourceSize.height > 0
-      ? cropSourceSize.width / cropSourceSize.height
-      : 16 / 9;
-    return solveScopeColumnWidth(gradePaneWidth, pictureHeight, aspect);
-  }, [colorGrade.editor, scopeColumnOverride, gradePaneWidth, windowHeight, cropSourceSize]);
-
-  // Making a table is a step in the chain, not a gesture over it: a Create LUT
-  // remembers the colour where it sits, and a Load LUT below it makes the
-  // table that puts that colour back. Import is the other direction and
-  // cannot be a step's own doing, because a LUT is an arbitrary transform and
-  // the trackballs are not — so an imported table arrives as a Load LUT step,
-  // which is also what lets it sit anywhere in the chain like everything else.
-  /**
-   * Pick a table off disk and keep a normalised copy beside the app's data.
-   *
-   * The parse happens here rather than in the main process so this tested
-   * parser is the only one, and so its "line 4: ..." reaches the person who
-   * has to fix the file. A 1D table is lifted onto a lattice; .3dl and
-   * declared domains are folded away, leaving one plain shape for the render.
-   */
-  const handlePickLutFile = useCallback(async (): Promise<{ path: string; title: string } | null> => {
-    const source = await window.electronAPI.selectLutFile('open');
-    if (!source) return null;
-
-    const read = await window.electronAPI.readLutFile(source);
-    if (!read.success) {
-      notify.error('LUT not read', read.error);
-      return null;
-    }
-
-    let normalised: string;
-    let title: string;
-    try {
-      const parsed = to3d(parseLut(read.text, read.name));
-      title = parsed.title || read.name.replace(/\.[^.]+$/, '');
-      normalised = writeCube(parsed, title);
-    } catch (error) {
-      notify.error('That LUT could not be read', getErrorMessage(error));
-      return null;
-    }
-
-    const installed = await window.electronAPI.installLut(read.name, normalised);
-    if (!installed.success) {
-      notify.error('LUT not read', installed.error);
-      return null;
-    }
-    return { path: installed.path, title };
-  }, []);
-
-  const handleImportLut = useCallback(async () => {
-    const template = filterTemplates.find(t => t.name === 'Load LUT');
-    if (!template) {
-      notify.error('Load LUT is missing', 'The Load LUT filter template is not installed.');
-      return;
-    }
-    const installed = await handlePickLutFile();
-    if (!installed) return;
-    const title = installed.title;
-
-    const defaults = Object.entries(template.variables ?? {}).reduce<Record<string, string | number | boolean>>(
-      (values, [name, variable]) => {
-        if (variable.default !== undefined) values[name] = variable.default;
-        return values;
-      }, {});
-
-    const step: Filter = {
-      id: `filter-${Date.now()}`,
-      enabled: true,
-      filterType: 'custom',
-      preset: 'Load LUT',
-      code: template.code,
-      category: template.category,
-      parameters: { ...defaults, lut_path: installed.path },
-      variables: template.variables,
-      editor: template.editor,
-      order: filters.length,
-    };
-
-    // Straight after the grade it was imported from, so the chain reads in
-    // the order the look was built.
-    const at = filters.findIndex(filter => filter.id === activeFilterEditorId);
-    const next = at === -1 ? [...filters, step] : [
-      ...filters.slice(0, at + 1), step, ...filters.slice(at + 1),
-    ];
-    handleSetFilters(next.map((filter, index) => ({ ...filter, order: index })));
-    notify.success('LUT imported', `"${title}" added to the chain as a Load LUT step.`);
-  }, [activeFilterEditorId, filterTemplates, filters, handleSetFilters]);
+  const { handlePickLutFile, handleImportLut } = useLutImport({
+    filterTemplates,
+    filters,
+    activeFilterEditorId,
+    handleSetFilters,
+  });
 
   // The tables the chain's LUT steps ask for. Its own hook because it owns
   // two engines and a job per step, and App is long enough already. The
@@ -1103,256 +892,6 @@ function App() {
     previewOpen: chainPreview.isOpen,
   }), [handlePickLutFile, lutSteps, chainPreview.isOpen]);
 
-  const gradeStepLabel = useMemo(() => {
-    if (!colorGrade.editor || !activeFilterEditor) return '';
-    const enabled = filters.filter(filter => filter.enabled);
-    const position = enabled.findIndex(filter => filter.id === activeFilterEditor.id);
-    const previous = position > 0 ? enabled[position - 1] : null;
-    const previousName = previous?.preset
-      || (previous?.modelPath ? getPortableModelName(previous.modelPath) : null);
-    if (position < 0) return 'this step is disabled';
-    return previousName
-      ? `step ${position + 1} of ${enabled.length} · after ${previousName}`
-      : `step ${position + 1} of ${enabled.length} · from the source`;
-  }, [activeFilterEditor, colorGrade.editor, filters]);
-
-  // With a grade step open, park the session on the step BELOW it. That frame
-  // is the picture entering the grade, and the shader applies the grade to it
-  // on the GPU — so a trackball drag costs a draw call, not a script reload.
-  // Selecting the grade's own output would show the values that were baked
-  // into the script when it loaded, which is exactly the stale picture.
-  // Both pickers solve the primaries ramp, not the final pixel, so contrast,
-  // gamma and brightness still do what they were set to afterwards — which is
-  // what a black or white point means in Resolve too.
-  const handlePick = useCallback((sample: [number, number, number]) => {
-    const wanted = pickMode;
-    // One solve per arming, so a stray second click cannot re-solve against
-    // the picture the first one just changed.
-    setPickMode(null);
-    if (!wanted) return;
-
-    if (wanted === 'black') {
-      const solved = solveBlackPoint(colorGrade.values, sample);
-      if (!solved) {
-        notify.warning(
-          'Too bright for a black point',
-          'That pixel is too far up the range to sit at black. Pick something in the shadows.',
-        );
-        return;
-      }
-      colorGrade.apply(solved.values);
-      if (solved.clamped) {
-        notify.info(
-          'Black point set, partly',
-          'The colour cast in those shadows is stronger than the lift ball can correct on its own.',
-        );
-      } else {
-        addConsoleLog('Black point set from the picture');
-      }
-      return;
-    }
-
-    if (wanted === 'white') {
-      const solved = solveWhitePoint(colorGrade.values, sample);
-      if (!solved) {
-        notify.warning(
-          'Too dark for a white point',
-          'That pixel is too far down the range to sit at white. Pick something in the highlights.',
-        );
-        return;
-      }
-      colorGrade.apply(solved.values);
-      if (solved.clamped) {
-        notify.info(
-          'White point set, partly',
-          'The colour cast in those highlights is stronger than the gain ball can correct on its own.',
-        );
-      } else {
-        addConsoleLog('White point set from the picture');
-      }
-      return;
-    }
-
-    // Neutral is the odd one out: it writes the two tone sliders rather than a
-    // ball, because temperature and tint are where a colour cast is stored.
-    const solved = solveNeutral(colorGrade.values, sample);
-    if (!solved) {
-      notify.warning(
-        'Nothing to balance there',
-        'That pixel sits too near black or white to carry a cast. Pick something in the midtones.',
-      );
-      return;
-    }
-    colorGrade.apply(solved.values);
-    if (solved.clamped) {
-      notify.info(
-        'Balanced, partly',
-        'That cast runs further than temperature and tint reach. What is left is not a white balance error.',
-      );
-    } else {
-      addConsoleLog(
-        `Neutral picked — ${solved.values.temperature.toFixed(0)}K, tint ${solved.values.tint.toFixed(1)}`,
-      );
-    }
-  }, [pickMode, colorGrade, addConsoleLog]);
-
-  // Reads the two ends off the scope sample — the same 240px buffer the scopes
-  // already grade, so this costs no extra readback — and solves lift and gain
-  // together against them.
-  const handleAutoBalance = useCallback(() => {
-    const solved = autoBalance(colorGrade.values, scopeSample);
-    if (!solved) {
-      notify.warning(
-        'Nothing to balance',
-        'This frame has no usable range to read a black and a white off. Try a frame with more in it.',
-      );
-      return;
-    }
-
-    colorGrade.apply(solved.values);
-    if (!solved.solved.black || !solved.solved.white) {
-      // Half an answer is still worth having, but saying so is the difference
-      // between a tool that missed and a tool that looks broken.
-      const end = solved.solved.black ? 'black' : 'white';
-      notify.info(
-        `Only the ${end} point was set`,
-        'The picture does not reach far enough the other way for both ends to be solved.',
-      );
-    } else if (solved.clamped) {
-      notify.info(
-        'Balanced, partly',
-        'The cast in this frame is stronger than the lift and gain balls can correct on their own.',
-      );
-    } else {
-      addConsoleLog('Auto balance set the black and white points from the frame');
-    }
-  }, [colorGrade, scopeSample, addConsoleLog]);
-
-  // The panel reports on every frame change, so this only stores an answer
-  // that actually changed — otherwise a new object each time would re-render
-  // the whole grading surface behind every preview frame.
-  const handleToolAvailability = useCallback((next: { canPick: boolean; canShowClipping: boolean }) => {
-    setToolsAvailable(current =>
-      current.canPick === next.canPick && current.canShowClipping === next.canShowClipping
-        ? current
-        : next);
-  }, []);
-
-  // A picker armed against a picture it can no longer be used on is a click
-  // that will never land, so the panel's answer disarms it.
-  useEffect(() => {
-    if (!toolsAvailable.canPick) setPickMode(null);
-  }, [toolsAvailable.canPick]);
-
-  // Two groups, not one, because they are two kinds of thing. The viewer
-  // controls change how the picture is shown and ride the step rail above it;
-  // the tool rail changes what a click on the picture does. Auto balance is
-  // neither — it is a command, and it goes to the dock header beside Reset all.
-  const viewerControls = useMemo<ViewerControls>(() => ({
-    compareMode: gradeCompareMode,
-    onCompareModeChange: setGradeCompareMode,
-    holdingBefore,
-    showClipping,
-    onShowClippingChange: setShowClipping,
-    canShowClipping: toolsAvailable.canShowClipping,
-    // Only a session can offer a choice: without one there is a single frame,
-    // and the only "before" available is that frame ungraded.
-    reference: chainPreview.isOpen
-      ? {
-          steps: chainPreview.steps.map(step => ({ index: step.index, label: step.label })),
-          pinned: chainPreview.reference,
-          onPin: chainPreview.setReference,
-        }
-      : null,
-  }), [
-    gradeCompareMode, holdingBefore, showClipping, toolsAvailable.canShowClipping,
-    chainPreview.isOpen, chainPreview.steps, chainPreview.reference, chainPreview.setReference,
-  ]);
-
-  const toolRail = useMemo<ToolRailControls>(() => ({
-    pickMode,
-    onPickModeChange: setPickMode,
-    canPick: toolsAvailable.canPick,
-  }), [pickMode, toolsAvailable.canPick]);
-
-  const gradeUpstreamOutput = useMemo(() => {
-    if (!colorGrade.editor || !activeFilterEditor) return null;
-    const enabled = filters.filter(filter => filter.enabled).sort((a, b) => a.order - b.order);
-    const position = enabled.findIndex(filter => filter.id === activeFilterEditor.id);
-    // Output 0 is the source, so the filter at position p produces output
-    // p + 1 and receives output p.
-    return position < 0 ? null : position;
-  }, [colorGrade.editor, activeFilterEditor, filters]);
-
-  const lastChainStep = chainPreview.steps.length
-    ? chainPreview.steps[chainPreview.steps.length - 1].index
-    : null;
-
-  // Park once per open editor, rather than on a transition.
-  //
-  // Watching for a change in the step was wrong in a way that showed up only
-  // in the ordering people actually use: opening takes a moment, and anything
-  // that set the grade step while the session was still opening left the
-  // before and after values equal by the time it was open. The effect then
-  // concluded nothing had changed and never selected anything, so the session
-  // sat on the last step until a tab was clicked by hand.
-  //
-  // Keyed on the editor instead, both orderings park exactly once, and a step
-  // chosen by hand afterwards is left alone.
-  const parkedForRef = useRef<string | null>(null);
-  const parkKey = gradeUpstreamOutput === null
-    ? null
-    : `${activeFilterEditorId}:${gradeUpstreamOutput}`;
-
-  useEffect(() => {
-    if (!chainPreviewOpen) {
-      parkedForRef.current = null;
-      return;
-    }
-
-    if (parkKey === null) {
-      // The grade closed, so show the whole chain again — once.
-      if (parkedForRef.current !== null && lastChainStep !== null) {
-        parkedForRef.current = null;
-        selectChainStep(lastChainStep);
-      }
-      return;
-    }
-
-    if (parkedForRef.current === parkKey) return;
-    parkedForRef.current = parkKey;
-    selectChainStep(gradeUpstreamOutput!);
-  }, [chainPreviewOpen, parkKey, gradeUpstreamOutput, lastChainStep, selectChainStep]);
-
-  useEffect(() => {
-    if (!activeFilterEditorId) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setActiveFilterEditorId(null);
-      // Hold to see the frame entering this step. Ignored while typing, so a
-      // "b" in the code editor or a filename never flickers the preview.
-      const target = event.target as HTMLElement | null;
-      const typing = target && (target.isContentEditable
-        || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
-      if (!typing && (event.key === 'b' || event.key === 'B')) setHoldingBefore(true);
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (event.key === 'b' || event.key === 'B') setHoldingBefore(false);
-    };
-    // A window that loses focus mid-hold would otherwise stay stuck on "before".
-    const onBlur = () => setHoldingBefore(false);
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [activeFilterEditorId]);
-
-  useEffect(() => {
-    if (!colorGrade.editor) setHoldingBefore(false);
-  }, [colorGrade.editor]);
 
   // Determine if processing should be disabled
   // Console drawer — stable identities so the memoised bar and drawer don't
