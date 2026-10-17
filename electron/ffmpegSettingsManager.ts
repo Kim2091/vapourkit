@@ -1,8 +1,5 @@
 // electron/ffmpegSettingsManager.ts
-import * as path from 'path';
-import * as fs from 'fs-extra';
 import { logger } from './logger';
-import { PATHS } from './constants';
 import type { ConfigManager } from './configManager';
 import { DEFAULT_FFMPEG_ARGS } from './configManager';
 
@@ -18,7 +15,7 @@ export interface FFmpegConfig {
 }
 
 /**
- * Manages FFmpeg encoding settings loading from user configuration
+ * Reads the FFmpeg encoding settings from the user's configuration
  */
 export class FFmpegSettingsManager {
   /**
@@ -35,95 +32,19 @@ export class FFmpegSettingsManager {
     movflags: []
   };
 
-  /**
-   * Loads FFmpeg configuration from ConfigManager or falls back to file-based config
-   */
-  static async loadFFmpegConfig(configManager?: ConfigManager): Promise<FFmpegConfig> {
-    // If configManager is provided, use it (new approach)
-    // Return only videoArgs - user controls everything via command line
-    if (configManager) {
-      try {
-        const argsString = configManager.getFfmpegArgs();
-        const videoArgs = FFmpegSettingsManager.parseArgsString(argsString);
-        
-        // Don't force any additional flags - user has full control via command line
-        return {
-          videoArgs,
-          preserveAspectRatio: false,
-          copyMetadata: false,
-          movflags: []
-        };
-      } catch (error) {
-        logger.warn('Failed to load FFmpeg settings from ConfigManager, using defaults:', error);
-        return FFmpegSettingsManager.DEFAULT_CONFIG;
-      }
-    }
-    
-    // Legacy: Load from file (old approach, for backward compatibility)
-    const userConfigPath = path.join(PATHS.CONFIG, 'ffmpeg_settings.json');
-    
+  /** The encoding arguments from the user's settings, or the defaults if they cannot be read. */
+  static async loadFFmpegConfig(configManager: ConfigManager): Promise<FFmpegConfig> {
     try {
-      if (await fs.pathExists(userConfigPath)) {
-        const userConfig = await fs.readJson(userConfigPath);
-        
-        // Support legacy format ("args" array only)
-        if (userConfig.args && !userConfig.videoArgs) {
-          return {
-            videoArgs: userConfig.args,
-            preserveAspectRatio: userConfig.preserveAspectRatio ?? FFmpegSettingsManager.DEFAULT_CONFIG.preserveAspectRatio,
-            copyMetadata: userConfig.copyMetadata ?? FFmpegSettingsManager.DEFAULT_CONFIG.copyMetadata,
-            movflags: userConfig.movflags ?? FFmpegSettingsManager.DEFAULT_CONFIG.movflags
-          };
-        }
-        
-        // New format
-        return {
-          videoArgs: userConfig.videoArgs ?? FFmpegSettingsManager.DEFAULT_CONFIG.videoArgs,
-          preserveAspectRatio: userConfig.preserveAspectRatio ?? FFmpegSettingsManager.DEFAULT_CONFIG.preserveAspectRatio,
-          copyMetadata: userConfig.copyMetadata ?? FFmpegSettingsManager.DEFAULT_CONFIG.copyMetadata,
-          movflags: userConfig.movflags ?? FFmpegSettingsManager.DEFAULT_CONFIG.movflags
-        };
-      }
+      // Only videoArgs: the user controls everything else on the command line.
+      return {
+        videoArgs: FFmpegSettingsManager.parseArgsString(configManager.getFfmpegArgs()),
+        preserveAspectRatio: false,
+        copyMetadata: false,
+        movflags: []
+      };
     } catch (error) {
-      logger.warn('Failed to load user FFmpeg settings, using defaults:', error);
+      logger.warn('Failed to load FFmpeg settings from ConfigManager, using defaults:', error);
+      return FFmpegSettingsManager.DEFAULT_CONFIG;
     }
-    
-    return FFmpegSettingsManager.DEFAULT_CONFIG;
-  }
-
-  /**
-   * Loads FFmpeg video encoding settings (legacy method for backward compatibility)
-   */
-  static async loadFFmpegSettings(configManager?: ConfigManager): Promise<string[]> {
-    const config = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
-    return config.videoArgs || [];
-  }
-
-  /**
-   * Gets the default FFmpeg configuration
-   */
-  static getDefaultConfig(): FFmpegConfig {
-    return { ...FFmpegSettingsManager.DEFAULT_CONFIG };
-  }
-
-  /**
-   * Gets the default FFmpeg settings (legacy method)
-   */
-  static getDefaultSettings(): string[] {
-    return [...(FFmpegSettingsManager.DEFAULT_CONFIG.videoArgs || [])];
-  }
-
-  /**
-   * Converts an array of FFmpeg arguments to a space-separated string
-   */
-  static argsToString(args: string[]): string {
-    return args.join(' ');
-  }
-
-  /**
-   * Gets the default FFmpeg args as a string
-   */
-  static getDefaultArgsString(): string {
-    return DEFAULT_FFMPEG_ARGS;
   }
 }

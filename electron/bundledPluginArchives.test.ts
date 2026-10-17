@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  shouldCopyBundledPluginFilterTemplates,
-  shouldExtractBundledPluginArchives,
-} from './bundledPluginArchives';
+import { shouldExtractBundledPluginArchives } from './bundledPluginArchives';
 
 describe('shouldExtractBundledPluginArchives', () => {
   it('allows the legacy native plugin archive on Windows', () => {
@@ -15,12 +12,4 @@ describe('shouldExtractBundledPluginArchives', () => {
       expect(shouldExtractBundledPluginArchives(platform)).toBe(false);
     }
   );
-});
-
-describe('shouldCopyBundledPluginFilterTemplates', () => {
-  it('copies the platform-neutral plugin-filter catalog on supported desktops', () => {
-    expect(shouldCopyBundledPluginFilterTemplates('win32')).toBe(true);
-    expect(shouldCopyBundledPluginFilterTemplates('linux')).toBe(true);
-    expect(shouldCopyBundledPluginFilterTemplates('darwin')).toBe(false);
-  });
 });

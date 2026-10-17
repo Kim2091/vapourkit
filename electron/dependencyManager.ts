@@ -74,10 +74,8 @@ export interface DownloadProgress {
 
 interface ComponentConfig {
   name: string;
-  url?: string;
-  urls?: string[];  // For multi-part archives (e.g., .7z.001, .7z.002)
+  url: string;
   archiveName: string;
-  archiveNames?: string[];  // For multi-part archives
   checkPath: string;
   extractTo: string;
 }
@@ -811,31 +809,10 @@ export class DependencyManager {
     logger.dependency(`${config.name} not found, downloading`);
     await fs.ensureDir(config.extractTo);
     
-    // Handle multi-part archives (e.g., .7z.001, .7z.002)
-    if (config.urls && config.archiveNames) {
-      const archivePaths: string[] = [];
-      
-      // Download all parts
-      for (let i = 0; i < config.urls.length; i++) {
-        const archivePath = path.join(PATHS.APP_DATA, config.archiveNames[i]);
-        archivePaths.push(archivePath);
-        await this.downloadFile(config.urls[i], archivePath, `${config.name} (Part ${i + 1}/${config.urls.length})`);
-      }
-      
-      // Extract using the first part (7zip will automatically find the other parts)
-      await this.extractArchive(archivePaths[0], config.extractTo, config.name);
-      
-      // Clean up all parts
-      for (const archivePath of archivePaths) {
-        await fs.remove(archivePath);
-      }
-    } else if (config.url) {
-      // Single archive download
-      const archivePath = path.join(PATHS.APP_DATA, config.archiveName);
-      await this.downloadFile(config.url, archivePath, config.name);
-      await this.extractArchive(archivePath, config.extractTo, config.name);
-      await fs.remove(archivePath);
-    }
+    const archivePath = path.join(PATHS.APP_DATA, config.archiveName);
+    await this.downloadFile(config.url, archivePath, config.name);
+    await this.extractArchive(archivePath, config.extractTo, config.name);
+    await fs.remove(archivePath);
   }
 
   async setupDependencies(): Promise<void> {
@@ -967,16 +944,8 @@ export class DependencyManager {
     return PATHS.VSPIPE;
   }
 
-  getModelsPath(): string {
-    return PATHS.MODELS;
-  }
-
   getPluginsPath(): string {
     return PATHS.PLUGINS;
-  }
-
-  getVSPath(): string {
-    return PATHS.VS;
   }
 
   /**
@@ -1533,21 +1502,6 @@ export class DependencyManager {
 
     // Copy filter templates from bundled location
     await this.copyFilterTemplates(bundledBasePath);
-    
-    // Create FFmpeg settings JSON if it doesn't exist
-    const ffmpegConfigPath = path.join(PATHS.CONFIG, 'ffmpeg_settings.json');
-    if (!await fs.pathExists(ffmpegConfigPath)) {
-      const defaultConfig = {
-        "_comment": "Edit these args to customize FFmpeg encoding. These are passed directly to FFmpeg.",
-        "args": [
-          "-c:v", "libx264",
-          "-preset", "medium",
-          "-crf", "18"
-        ]
-      };
-      await fs.writeJson(ffmpegConfigPath, defaultConfig, { spaces: 2 });
-      logger.dependency('Created user FFmpeg settings');
-    }
     
     logger.dependency('User configuration initialized');
 

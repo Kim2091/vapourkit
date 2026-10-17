@@ -1,5 +1,4 @@
 // electron/vsMlrtManager.ts
-import * as fs from 'fs-extra';
 import { BrowserWindow } from 'electron';
 import { VS_MLRT_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { pipInstall, throwIfFailed, withPipLock } from './pip';
@@ -8,7 +7,7 @@ import { applyPluginCompatibilityFixes } from './legacyCleanup';
 import { configManager } from './configManager';
 import { getProvider, type BackendId } from './providers/registry';
 
-export type VsMlrtComponent = 'onnx-runtime' | 'tensorrt';
+export type VsMlrtComponent = 'tensorrt';
 
 export interface VsMlrtDownloadProgress {
   progress: number;
@@ -17,10 +16,9 @@ export interface VsMlrtDownloadProgress {
 
 export type VsMlrtProgressCallback = (progress: VsMlrtDownloadProgress) => void;
 
-// Historical IPC component names → inference backend ids. Package specs and
-// plugin check paths come from the backend's provider module.
+// Component names → inference backend ids; package specs come from the
+// backend's provider module.
 const COMPONENT_BACKEND: Record<VsMlrtComponent, BackendId> = {
-  'onnx-runtime': 'directml',
   'tensorrt': 'tensorrt',
 };
 
@@ -44,30 +42,9 @@ export class VsMlrtManager {
    */
   static getComponentName(component: VsMlrtComponent): string {
     switch (component) {
-      case 'onnx-runtime':
-        return `vs-mlrt ONNX Runtime v${VS_MLRT_VERSION}`;
       case 'tensorrt':
         return `vs-mlrt TensorRT v${VS_MLRT_VERSION}`;
     }
-  }
-
-  /**
-   * Get the check paths that indicate a component is installed (any match counts)
-   */
-  static getCheckPaths(component: VsMlrtComponent): string[] {
-    return getProvider(COMPONENT_BACKEND[component]).pluginHealthPaths().flat();
-  }
-
-  /**
-   * Check if a component is installed
-   */
-  static async isComponentInstalled(component: VsMlrtComponent): Promise<boolean> {
-    for (const checkPath of VsMlrtManager.getCheckPaths(component)) {
-      if (await fs.pathExists(checkPath)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   /**
