@@ -38,14 +38,16 @@ from pathlib import Path
 # instance one by one.
 MAX_BLACKLIST_RETRIES = 30
 SIGNATURE_ESCALATE_AFTER = 2
-EXPAND_REGION_ON_REPEAT = True
 REGION_HOPS = 1
-AUTO_BLACKLIST_AMBIGUOUS = False
 PROBE_AVG_TIMING_ITERATIONS = 1
 FINAL_AVG_TIMING_ITERATIONS = 4
 INIT_MAX = 65504.0
 USE_STANDALONE_TYPE_INFERENCE = True
-USE_FAST_MODELOPT_CLEANUP = True
+
+# ModelOpt minor releases the indexed cleanup in _make_fast_precision_converter
+# was checked against. It replaces private ModelOpt functions, so any other
+# release converts with ModelOpt's own PrecisionConverter.
+FAST_MODELOPT_CLEANUP_RELEASES = {(0, 45), (0, 46)}
 
 
 # trtexec flags that have no build-time equivalent here. Inference-only or
@@ -181,6 +183,11 @@ def report_progress(percent):
     # Parsed by the Electron engine-build protocol while vspipe waits on a
     # runtime build. This avoids the appearance of a frozen preview/export.
     print(f'[vk-build] progress {int(percent)}', flush=True)
+
+
+def report_status(text):
+    """Name the build step for the app's progress message ([vk-build] protocol)."""
+    print(f'[vk-build] status {text}', flush=True)
 
 
 def make_progress_monitor(trt):
@@ -573,7 +580,7 @@ def _make_fast_precision_converter(onnx_utils, autocast_utils, PrecisionConverte
             self.value_info_map, self.initializer_map, self.node_to_init_map = autocast_utils.setup_mappings(
                 self.model
             )
-            self._fast_cleanup_ok = USE_FAST_MODELOPT_CLEANUP and not any(
+            self._fast_cleanup_ok = not any(
                 attr.type in (onnx.AttributeProto.GRAPH, onnx.AttributeProto.GRAPHS)
                 for node in self.model.graph.node
                 for attr in node.attribute
@@ -616,6 +623,27 @@ def _make_fast_precision_converter(onnx_utils, autocast_utils, PrecisionConverte
                 lookup.restore()
 
     return PreSanitizedPrecisionConverter
+
+
+def modelopt_release():
+    """The installed ModelOpt (major, minor), or None if it cannot be read."""
+    try:
+        from importlib.metadata import version
+        major, minor = version('nvidia-modelopt').split('.')[:2]
+        return int(major), int(minor)
+    except Exception:
+        return None
+
+
+def precision_converter_type(onnx_utils, autocast_utils, PrecisionConverter):
+    """The indexed converter on a checked ModelOpt release, else ModelOpt's own."""
+    release = modelopt_release()
+    patched = ('get_consumer_nodes', 'get_producer_nodes', '_bypass_cast_node', 'remove_redundant_casts')
+    if release in FAST_MODELOPT_CLEANUP_RELEASES and all(hasattr(onnx_utils, name) for name in patched):
+        return _make_fast_precision_converter(onnx_utils, autocast_utils, PrecisionConverter)
+    found = f'ModelOpt {release[0]}.{release[1]}' if release else 'This ModelOpt release'
+    print(f'{found} has not been checked with the fast conversion cleanup; using ModelOpt\'s own.', flush=True)
+    return PrecisionConverter
 
 
 def prepare_precision_context(source_model, precision, pretyped_source):
@@ -663,6 +691,7 @@ def prepare_precision_context(source_model, precision, pretyped_source):
         (int(item.version) for item in model.opset_import if item.domain in ('', 'ai.onnx')),
         None,
     )
+    report_status(f'{precision.upper()} precision conversion in progress...')
     print(
         f'Preparing {precision.upper()} precision candidates (opset {original_opset}, minimum {min_opset})...',
         flush=True,
@@ -706,7 +735,7 @@ def prepare_precision_context(source_model, precision, pretyped_source):
         'base_high': set(base_high),
         'fingerprint': fingerprint,
         'index': index,
-        'converter_type': _make_fast_precision_converter(onnx_utils, autocast_utils, PrecisionConverter),
+        'converter_type': precision_converter_type(onnx_utils, autocast_utils, PrecisionConverter),
     }
 
 
@@ -1367,6 +1396,7 @@ def build_low_precision_engine(opts, trt):
         report_progress(100)
 
     if cached_blacklist is not None:
+        report_status('Using previously learned TensorRT compatibility fallbacks...')
         print(
             f'Using learned TensorRT {precision.upper()} blacklist with '
             f'{len(cached_blacklist)} FP32 fallback node(s); skipping capability probes.',
@@ -1406,6 +1436,7 @@ def build_low_precision_engine(opts, trt):
         return len(new_nodes)
 
     for attempt in range(1, MAX_BLACKLIST_RETRIES + 1):
+        report_status('Checking TensorRT low-precision support and applying safe FP32 fallbacks...')
         print(
             f'TensorRT {precision.upper()} capability probe {attempt}/{MAX_BLACKLIST_RETRIES}...',
             flush=True,
@@ -1457,14 +1488,14 @@ def build_low_precision_engine(opts, trt):
 
         clear_direct_match = candidates[0][1] >= 100000
         clear_score_lead = len(candidates) == 1 or candidates[0][1] >= candidates[1][1] * 2
-        if not clear_direct_match and not clear_score_lead and not AUTO_BLACKLIST_AMBIGUOUS:
+        if not clear_direct_match and not clear_score_lead:
             raise RuntimeError(
                 'TensorRT named multiple equally likely failing nodes; refusing to guess an '
                 'FP32 fallback island automatically.'
             )
 
         failing_node = candidates[0][0]
-        if failing_node in effective_high and EXPAND_REGION_ON_REPEAT:
+        if failing_node in effective_high:
             nearby = neighborhood(
                 failing_node,
                 node_by_name,
@@ -1534,6 +1565,7 @@ def build_direct_engine(opts, trt, legacy_precision_flags):
             1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)
         )
     parser = trt.OnnxParser(network, logger)
+    report_status('Parsing ONNX model...')
     print(f'Parsing ONNX model: {opts["onnx"]}', flush=True)
     if not parser.parse_from_file(opts['onnx']):
         report_parse_errors(parser)

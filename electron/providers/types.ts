@@ -26,6 +26,18 @@ export interface EngineBuildParams {
   customBuildParams?: string;
 }
 
+/** How a model build ended, when it did not fail. */
+export type EngineBuildOutcome =
+  | {
+    kind: 'built';
+    /**
+     * Set when a static-shape build succeeded only after dropping explicit
+     * shape arguments, with the shape the model declares when it was readable.
+     */
+    staticShapeFallback?: { detectedShape: string };
+  }
+  | { kind: 'cancelled' };
+
 /**
  * A single cancelable model build job. Only backends with
  * descriptor.requiresEngineBuild provide these (TensorRT today).
@@ -33,16 +45,15 @@ export interface EngineBuildParams {
 export interface ModelBuildJob {
   /**
    * Builds the model, mapping sub-progress into [baseProgress,
-   * baseProgress + progressRange] for aggregate progress bars.
-   * Throws STATIC_SHAPE_FALLBACK (with detectedShape) when a static-shape
-   * build succeeded only after dropping explicit shape arguments.
+   * baseProgress + progressRange] for aggregate progress bars. Throws when
+   * the build fails.
    */
   buildWithProgress(
     params: EngineBuildParams,
     baseProgress: number,
     progressRange: number,
     progressCallback?: (message: string, progress: number) => void
-  ): Promise<void>;
+  ): Promise<EngineBuildOutcome>;
   /** Requests cooperative cancellation of the running build. */
   cancel(): void;
   /** Kills the build process immediately. */

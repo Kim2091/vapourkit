@@ -52,7 +52,11 @@ export const tensorrtProvider: InferenceProvider = {
       // extra, whose closure adds cupy-cuda12x (CUDA 12, against a CUDA 13
       // stack) and onnxruntime-gpu, and pins onnx back to 1.21 — none of which
       // this builder needs at inference time.
-      'nvidia-modelopt>=0.45',
+      // Capped at the minor releases the builder's indexed cleanup was
+      // checked against; it falls back to ModelOpt's own converter on any
+      // other release, but the rest of the builder uses ModelOpt's internal
+      // module layout too.
+      'nvidia-modelopt>=0.45,<0.47',
       'onnx_graphsurgeon',
       'onnxscript',
       'onnxslim',

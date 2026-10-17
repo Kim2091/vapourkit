@@ -10,7 +10,7 @@ import { handleValidated } from './ipcValidation';
 import { z } from 'zod';
 import { resolveProvider } from './providers/registry';
 import { precisionOf, withPrecisionSuffix } from './modelPrecision';
-import type { ModelBuildJob } from './providers/types';
+import type { EngineBuildParams, InferenceProvider, ModelBuildJob } from './providers/types';
 
 // Module-level build job reference for cancellation support
 let activeBuildJob: ModelBuildJob | null = null;
@@ -22,6 +22,52 @@ export function cancelActiveModelOperation(): void {
   if (activeBuildJob) {
     activeBuildJob.cancel();
     activeBuildJob = null;
+  }
+}
+
+/**
+ * Builds an engine as the active (cancellable) build job, mapping its progress
+ * into [baseProgress, baseProgress + progressRange]. Returns false when the
+ * user cancelled it and throws when it failed. A static-shape build that only
+ * succeeded without shape arguments is announced on `channel` with the shape
+ * the model declares, so the renderer can switch its form to static mode.
+ */
+async function buildModelEngine(
+  mainWindow: BrowserWindow | null,
+  provider: InferenceProvider,
+  params: EngineBuildParams,
+  channel: 'model-init-progress' | 'model-import-progress',
+  baseProgress: number,
+  progressRange: number,
+  onProgress: (message: string, progress: number) => void,
+): Promise<boolean> {
+  if (!provider.createBuildJob) {
+    throw new Error(`Backend ${provider.descriptor.label} does not build model engines`);
+  }
+  const job = provider.createBuildJob();
+  activeBuildJob = job;
+  try {
+    const outcome = await job.buildWithProgress(params, baseProgress, progressRange, onProgress);
+    if (outcome.kind === 'cancelled') {
+      // The renderer already cleared its progress UI when the user pressed
+      // Cancel, so no failure is reported for it.
+      logger.model('Model build cancelled');
+      return false;
+    }
+    if (outcome.staticShapeFallback) {
+      const { detectedShape } = outcome.staticShapeFallback;
+      logger.model('Static shape build succeeded with fallback to no shape parameters');
+      mainWindow?.webContents.send(channel, {
+        type: 'converting',
+        progress: baseProgress + progressRange,
+        message: `Build succeeded without shape parameters.${detectedShape ? ` Detected shape: ${detectedShape}` : ''}`,
+        detectedShape,
+        detectedStatic: true,
+      });
+    }
+    return true;
+  } finally {
+    if (activeBuildJob === job) activeBuildJob = null;
   }
 }
 
@@ -163,12 +209,6 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         // pre-build models offer it (TensorRT today). resolveProvider maps an
         // unset backend to the TensorRT default.
         const provider = resolveProvider(undefined);
-        if (!provider.createBuildJob) {
-          throw new Error(`Backend ${provider.descriptor.label} does not build model engines`);
-        }
-
-        // Use module-level build job for cancellation support
-        activeBuildJob = provider.createBuildJob();
 
         // Send progress updates
         const sendProgress = (type: 'converting' | 'complete' | 'error', progress: number, message: string, enginePath?: string) => {
@@ -189,54 +229,29 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         );
         const enginePath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.engine`);
 
-        try {
-          await activeBuildJob.buildWithProgress(
-            {
-              onnxPath: params.onnxPath,
-              enginePath,
-              minShapes: params.minShapes,
-              optShapes: params.optShapes,
-              maxShapes: params.maxShapes,
-              useFp32: params.useFp32,
-              useBf16: params.useBf16,
-              useStaticShape: params.useStaticShape || false,
-              customBuildParams: params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
-            },
-            0,
-            99,
-            (message: string, progress: number) => {
-              sendProgress('converting', progress, message);
-            }
-          );
-        } catch (conversionError: any) {
-          // Check if this is a fallback notification
-          if (conversionError.message === 'STATIC_SHAPE_FALLBACK') {
-            logger.model('Static shape build succeeded with fallback to no shape parameters');
-            const shapeInfo = conversionError.detectedShape ? ` Detected shape: ${conversionError.detectedShape}` : '';
-            // Send shape and static mode info to frontend
-            mainWindow?.webContents.send('model-init-progress', {
-              type: 'converting',
-              progress: 99,
-              message: `Build succeeded without shape parameters.${shapeInfo}`,
-              detectedShape: conversionError.detectedShape,
-              detectedStatic: true
-            });
-          } else if (conversionError.message === 'MODEL_BUILD_CANCELLED') {
-            // Cancellation is expected control flow. The renderer already
-            // clears the progress UI when the user presses Cancel, so do not
-            // emit a second misleading "build failed" notification when the
-            // killed child process reports a nonzero exit code.
-            logger.model('Model import cancelled');
-            activeBuildJob = null;
-            return {
-              success: false,
-              error: 'Model build cancelled'
-            };
-          } else {
-            throw conversionError;
-          }
+        const built = await buildModelEngine(
+          mainWindow,
+          provider,
+          {
+            onnxPath: params.onnxPath,
+            enginePath,
+            minShapes: params.minShapes,
+            optShapes: params.optShapes,
+            maxShapes: params.maxShapes,
+            useFp32: params.useFp32,
+            useBf16: params.useBf16,
+            useStaticShape: params.useStaticShape || false,
+            customBuildParams: params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
+          },
+          'model-init-progress',
+          0,
+          99,
+          (message, progress) => sendProgress('converting', progress, message),
+        );
+        if (!built) {
+          return { success: false, error: 'Model build cancelled' };
         }
-              
+
         logger.model(`Engine created: ${enginePath}`);
         
         // Save model metadata including type and display tag
@@ -252,7 +267,6 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
 
         // Complete
         sendProgress('complete', 100, 'Model initialized successfully!', enginePath);
-        activeBuildJob = null;
 
         return {
           success: true,
@@ -260,7 +274,6 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         };
 
       } catch (error) {
-        activeBuildJob = null;
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         logger.error('Model initialization failed:', errorMsg);
         
@@ -385,59 +398,36 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
 
         const enginePath = path.join(PATHS.MODELS, `${modelNameWithPrecision}.engine`);
 
-        // Use module-level build job for cancellation support
-        activeBuildJob = provider.createBuildJob();
-
-        try {
-          await activeBuildJob.buildWithProgress(
-            {
-              onnxPath: targetOnnxPath,
-              enginePath,
-              minShapes: params.minShapes,
-              optShapes: params.optShapes,
-              maxShapes: params.maxShapes,
-              useFp32: params.useFp32,
-              useBf16: params.useBf16,
-              useStaticShape: params.useStaticShape || false,
-              customBuildParams: params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
-            },
-            30,
-            69,
-            (message: string, progress: number) => {
-              const cleanMessage = message.replace(/\.\.\.\s\d+%$/, '...');
-              sendModelImportProgress(mainWindow, 'converting', progress, cleanMessage);
-            }
-          );
-        } catch (conversionError: any) {
-          // Check if this is a fallback notification
-          if (conversionError.message === 'STATIC_SHAPE_FALLBACK') {
-            logger.model('Static shape build succeeded with fallback to no shape parameters');
-            const shapeInfo = conversionError.detectedShape ? ` Detected shape: ${conversionError.detectedShape}` : '';
-            // Send shape and static mode info to frontend
-            mainWindow?.webContents.send('model-import-progress', {
-              type: 'converting',
-              progress: 69,
-              message: `Build succeeded without shape parameters.${shapeInfo}`,
-              detectedShape: conversionError.detectedShape,
-              detectedStatic: true
-            });
-          } else if (conversionError.message === 'MODEL_BUILD_CANCELLED') {
-            logger.model('Model import cancelled');
-            activeBuildJob = null;
-            return {
-              success: false,
-              error: 'Model build cancelled'
-            };
-          } else {
-            throw conversionError;
-          }
+        const built = await buildModelEngine(
+          mainWindow,
+          provider,
+          {
+            onnxPath: targetOnnxPath,
+            enginePath,
+            minShapes: params.minShapes,
+            optShapes: params.optShapes,
+            maxShapes: params.maxShapes,
+            useFp32: params.useFp32,
+            useBf16: params.useBf16,
+            useStaticShape: params.useStaticShape || false,
+            customBuildParams: params.useCustomTrtexecParams ? params.customTrtexecParams : undefined,
+          },
+          'model-import-progress',
+          30,
+          69,
+          (message, progress) => {
+            const cleanMessage = message.replace(/\.\.\.\s\d+%$/, '...');
+            sendModelImportProgress(mainWindow, 'converting', progress, cleanMessage);
+          },
+        );
+        if (!built) {
+          return { success: false, error: 'Model build cancelled' };
         }
-              
+
         logger.model(`Engine created: ${enginePath}`);
         
         // Complete
         sendModelImportProgress(mainWindow, 'complete', 100, 'Model imported successfully!', enginePath);
-        activeBuildJob = null;
 
         return {
           success: true,
@@ -445,7 +435,6 @@ export function registerModelHandlers(mainWindow: BrowserWindow | null) {
         };
 
       } catch (error) {
-        activeBuildJob = null;
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         logger.error('Model import failed:', errorMsg);
         sendModelImportProgress(mainWindow, 'error', 0, `Import failed: ${errorMsg}`);

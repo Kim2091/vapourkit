@@ -8,6 +8,7 @@
 //
 //     [vk-build] begin <human-readable label>
 //     [vk-build] progress <integer 0-100>     (optional, repeatable)
+//     [vk-build] status <human-readable text> (optional, repeatable)
 //     [vk-build] end <label>
 //
 // The marker may appear anywhere in the line so emitters can keep their own log
@@ -17,6 +18,7 @@
 export type EngineBuildEvent =
   | { type: 'begin'; label: string }
   | { type: 'progress'; percent: number }
+  | { type: 'status'; text: string }
   | { type: 'end'; label: string };
 
 /** Payload sent to the renderer over the `engine-build-progress` channel. */
@@ -98,6 +100,8 @@ export function parseVkBuildLine(line: string): EngineBuildEvent | null {
       return { type: 'begin', label: argument };
     case 'end':
       return { type: 'end', label: argument };
+    case 'status':
+      return argument ? { type: 'status', text: argument } : null;
     case 'progress': {
       const token = argument.split(/\s+/)[0];
       if (!/^[+-]?\d+$/.test(token)) {
@@ -140,7 +144,8 @@ export function createEngineBuildTracker(onStatus: (status: EngineBuildStatus) =
 
       for (const line of lines) {
         const event = parseBuildLine(line);
-        if (!event) continue;
+        // A status line describes the build step; the banner keeps its label.
+        if (!event || event.type === 'status') continue;
 
         if (event.type === 'begin') {
           label = event.label || 'TensorRT engine';
@@ -152,7 +157,7 @@ export function createEngineBuildTracker(onStatus: (status: EngineBuildStatus) =
             label = 'TensorRT engine';
           }
           percent = event.percent;
-        } else {
+        } else if (event.type === 'end') {
           label = null;
           percent = undefined;
         }

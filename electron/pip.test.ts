@@ -34,7 +34,6 @@ import {
   canImportModules,
   createPipPathAlias,
   EnvLock,
-  LineSplitter,
   pipInstall,
   pipList,
   pipUninstall,
@@ -44,6 +43,7 @@ import {
   throwIfFailed,
   withPipLock,
 } from './pip';
+import { LineSplitter } from './lineSplitter';
 
 class FakeChild extends EventEmitter {
   stdout = new EventEmitter();

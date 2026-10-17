@@ -26,18 +26,32 @@ export function getSystemRoot(): string {
 }
 
 /**
- * Copies the bundled engine builder next to the app data folder and (re)writes
- * the trtexec shim that runs it. Cheap enough to call on every launch, which
- * also keeps both files in step with an upgraded app bundle.
+ * Puts the bundled engine builder in the app data folder, where Python can run
+ * it (an external process cannot read from the asar), and returns its path.
+ * The file is written only when it differs from the bundled one.
+ */
+export async function ensureEngineBuilderScript(): Promise<string> {
+  const bundledBuilder = path.join(getBundledBasePath(), 'include', 'build_trt_engine.py');
+  const builderScript = path.join(PATHS.APP_DATA, 'build_trt_engine.py');
+
+  const bundled = await fs.readFile(bundledBuilder);
+  const current = await fs.readFile(builderScript).catch(() => null);
+  if (!current || !current.equals(bundled)) {
+    await fs.ensureDir(PATHS.APP_DATA);
+    await fs.writeFile(builderScript, bundled);
+  }
+  return builderScript;
+}
+
+/**
+ * Brings the engine builder up to date and (re)writes the trtexec shim that
+ * runs it. Cheap enough to call on every launch, which also keeps both files
+ * in step with an upgraded app bundle.
  *
  * Returns the shim path.
  */
 export async function ensureTrtexecShim(): Promise<string> {
-  const bundledBuilder = path.join(getBundledBasePath(), 'include', 'build_trt_engine.py');
-  const builderScript = path.join(PATHS.APP_DATA, 'build_trt_engine.py');
-
-  await fs.ensureDir(PATHS.APP_DATA);
-  await fs.copy(bundledBuilder, builderScript, { overwrite: true });
+  const builderScript = await ensureEngineBuilderScript();
 
   const lines = IS_WINDOWS
     ? buildWindowsShim(builderScript)

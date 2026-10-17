@@ -8,6 +8,8 @@ describe('parseVkBuildLine', () => {
     ['[vk-build] progress 0', { type: 'progress', percent: 0 }],
     ['[vk-build] progress 42', { type: 'progress', percent: 42 }],
     ['[vk-build] progress 100', { type: 'progress', percent: 100 }],
+    ['[vk-build] status Parsing ONNX model...', { type: 'status', text: 'Parsing ONNX model...' }],
+    ['[vk-build] status', null],
     // Tolerant of surrounding whitespace, CR endings and foreign log prefixes
     ['   [vk-build] progress 7  \r', { type: 'progress', percent: 7 }],
     ['2026-08-11 12:00:00 INFO [vk-build] begin Denoise model', { type: 'begin', label: 'Denoise model' }],
@@ -112,6 +114,17 @@ describe('createEngineBuildTracker', () => {
 
     tracker.push('gress 55\n');
     expect(statuses[1]).toEqual({ status: 'building', label: 'Engine', percent: 55 });
+  });
+
+  it('keeps the banner as it is on a status line', () => {
+    const { statuses, tracker } = track();
+
+    tracker.push('[vk-build] begin Engine\n[vk-build] status Checking FP16 support...\n[vk-build] progress 20\n');
+
+    expect(statuses).toEqual([
+      { status: 'building', label: 'Engine', percent: undefined },
+      { status: 'building', label: 'Engine', percent: 20 },
+    ]);
   });
 
   it('ignores non-protocol stderr noise', () => {

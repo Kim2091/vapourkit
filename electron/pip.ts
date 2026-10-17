@@ -15,6 +15,7 @@ import { PATHS, PIP_NETWORK_ARGS } from './constants';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
 import { appendBounded, CommandError, type PipProbe } from './installFlow';
 import { classifyInstallError, type ClassifiedInstallError } from './installErrors';
+import { LineSplitter } from './lineSplitter';
 
 // ---------------------------------------------------------------------------
 // The environment lock
@@ -174,30 +175,6 @@ export interface RunOptions {
   logLines?: boolean;
   /** Starts the process in its own process group on POSIX, so a cancel ends its children too. */
   workload?: boolean;
-}
-
-/** Splits a stream into lines, holding back a partial last line until more arrives. */
-export class LineSplitter {
-  private pending = '';
-
-  constructor(private readonly onLine: (line: string) => void) {}
-
-  push(chunk: string): void {
-    const parts = (this.pending + chunk).split(/\r\n|\r|\n/);
-    this.pending = parts.pop() ?? '';
-    for (const part of parts) this.emit(part);
-  }
-
-  flush(): void {
-    const rest = this.pending;
-    this.pending = '';
-    this.emit(rest);
-  }
-
-  private emit(line: string): void {
-    const trimmed = line.trim();
-    if (trimmed) this.onLine(trimmed);
-  }
 }
 
 /** Runs the interpreter with `args` and settles once it has exited; never rejects. */
