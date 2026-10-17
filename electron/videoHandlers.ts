@@ -22,6 +22,7 @@ import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 import { FFmpegManager } from './ffmpegManager';
 import { VsViewManager } from './vsViewManager';
 import { PreviewSession } from './previewSession';
+import { API3_UNSUPPORTED, describeCoreTooNew } from './vapoursynthCore';
 import { QueueItemLogger } from './queueItemLogger';
 import {
   getVideoCompareUnavailableMessage,
@@ -61,23 +62,28 @@ const upscaleJob = new JobSlot<UpscaleJob, UpscaleStop>((job, { mode, note }) =>
 /** A `vspipe -i` evaluation run for validation or as a preflight. */
 const infoJob = new JobSlot<VapourSynthInfoExtractor>(extractor => extractor.cancelAll());
 
-/** The open preview session and how to remove the script it was opened on. */
+/** A preview session and how to remove the script it was opened on. */
 interface PreviewJob {
   session: PreviewSession;
   removeScript: () => Promise<void>;
-  /** False until the session has opened its script. */
-  ready: boolean;
 }
 
-const previewJob = new JobSlot<PreviewJob>(({ session, removeScript }) => {
+const stopPreviewJob = ({ session, removeScript }: PreviewJob) => {
   session.dispose();
   removeScript().catch(() => {});
-});
+};
 
-/** The preview session requests are served from, once it has opened. */
+/** The open session, which requests are served from. */
+const previewJob = new JobSlot<PreviewJob>(stopPreviewJob);
+
+/**
+ * A session still opening its script. It replaces the open one only once it
+ * has opened, so a chain that fails to open leaves the last good preview.
+ */
+const openingPreviewJob = new JobSlot<PreviewJob>(stopPreviewJob);
+
 function openPreviewSession(): PreviewSession | null {
-  const job = previewJob.current;
-  return job?.ready ? job.session : null;
+  return previewJob.current?.session ?? null;
 }
 
 /**
@@ -103,9 +109,9 @@ function closePreviewPort(): void {
 /**
  * Bumped by every open and by every cancel.
  *
- * Opening runs a preflight that can sit in an engine build for minutes and a
- * source open that can take seconds, so a cancel usually lands while an open
- * is still in flight. Without this the cancelled open would go on to install
+ * Opening evaluates the graph, which can sit in an engine build for minutes,
+ * and opens the source, which can take seconds, so a cancel usually lands
+ * while an open is still in flight. Without this the cancelled open would go on to install
  * its session afterwards, and the user would be left with the thing they just
  * stopped.
  */
@@ -115,6 +121,7 @@ let previewOpenToken = 0;
 function closePreview(): void {
   previewOpenToken++;
   closePreviewPort();
+  openingPreviewJob.stop();
   previewJob.stop();
 }
 
@@ -609,43 +616,42 @@ export function registerVideoHandlers(
         return { success: false, cancelled: true };
       }
 
-      // Same preflight as the vs-view launch: a TensorRT step with no cached
-      // engine would otherwise block the session's open for minutes with
-      // nothing on screen explaining why.
-      const preflight = await evaluateScript(scriptPath);
-
-      // A cancel during the preflight surfaces as an error from it, so the
-      // token is what tells the two apart.
-      if (superseded()) {
-        await scriptGenerator.cleanupScript(scriptPath).catch(() => {});
-        return { success: false, cancelled: true };
-      }
-
-      if (preflight.error) {
-        logger.error('Preview preflight failed:', preflight.error);
-        await scriptGenerator.cleanupScript(scriptPath);
-        return { success: false, error: preflight.error };
-      }
-
-      // The new session takes the slot before it starts, so a cancel or the
-      // app quitting while it opens stops it too.
+      // The session evaluates the graph when it opens the script, which is
+      // where a TensorRT step with no cached engine builds it; its stderr
+      // feeds the build banner so a minutes-long open explains itself. It
+      // waits in its own slot, so a cancel or the app quitting stops it too.
       const session = new PreviewSession();
-      openingJob = previewJob.start({
+      session.onBuildStatus = status => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('engine-build-progress', status);
+        }
+      };
+      openingJob = openingPreviewJob.start({
         session,
         removeScript: () => scriptGenerator.cleanupScript(scriptPath),
-        ready: false,
       });
-      closePreviewPort();
       await session.start();
-      const outputs = await session.open(scriptPath, PREVIEW_CACHE_MB);
+      let outputs;
+      try {
+        outputs = await session.open(scriptPath, PREVIEW_CACHE_MB);
+      } catch (error) {
+        // A core too new for the installed plugins only says so on stderr;
+        // the traceback it leads to names the wrong cause.
+        if (!superseded() && API3_UNSUPPORTED.test(session.recentStderr)) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          throw new Error(`${describeCoreTooNew()}\n\n${errorMsg}`);
+        }
+        throw error;
+      }
 
       // Opening a cold source can take seconds, which is plenty of time for a
       // cancel to arrive. Do not keep a session nobody is waiting for.
-      if (superseded()) {
-        if (previewJob.holds(openingJob)) previewJob.stop();
+      if (superseded() || !openingPreviewJob.holds(openingJob)) {
+        if (openingPreviewJob.holds(openingJob)) openingPreviewJob.stop();
         return { success: false, cancelled: true };
       }
-      openingJob.ready = true;
+      openingPreviewJob.release(openingJob);
+      previewJob.start(openingJob);
 
       // The playback channel. Created here rather than on first play so the
       // renderer has it before the user can press anything, and so its `close`
@@ -682,7 +688,8 @@ export function registerVideoHandlers(
       logger.info(`Preview session open with ${outputs.length} steps`);
       return { success: true, outputs, token: portToken };
     } catch (error) {
-      if (openingJob && previewJob.holds(openingJob)) previewJob.stop();
+      if (openingJob && openingPreviewJob.holds(openingJob)) openingPreviewJob.stop();
+      if (superseded()) return { success: false, cancelled: true };
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error('Error opening preview session:', error);
       return { success: false, error: errorMsg };
@@ -694,7 +701,6 @@ export function registerVideoHandlers(
     // Invalidates any open still in flight, so it tears itself down instead
     // of installing a session after the user asked to stop.
     closePreview();
-    infoJob.stop();
     return { success: true, cancelled: true };
   });
 

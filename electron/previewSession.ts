@@ -22,6 +22,10 @@ import { PATHS } from './constants';
 import { logger } from './logger';
 import { setupVSEnvironment } from './utils';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
+import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
+
+/** How much of the server's stderr is kept for explaining a failed open. */
+const STDERR_TAIL = 64 * 1024;
 
 export interface PreviewOutput {
   index: number;
@@ -204,11 +208,36 @@ export class PreviewSession {
    */
   onStream?: (event: StreamEvent) => void;
 
+  /**
+   * Receives `[vk-build]` status parsed from the server's stderr. Opening a
+   * script evaluates its graph in the server, which is where a TensorRT
+   * engine or MIGraphX program with no cached build gets built.
+   */
+  onBuildStatus?: (status: EngineBuildStatus) => void;
+
+  /** The running child's build tracker; null once it exited or was disposed. */
+  private buildTracker: ReturnType<typeof createEngineBuildTracker> | null = null;
+
+  /** The last of the server's stderr, for explaining a failed open. */
+  private stderrTail = '';
+
   /** Injected so the protocol can be tested against a fake child. */
   constructor(private readonly spawner: typeof spawn = spawn) {}
 
   get isRunning(): boolean {
     return this.child !== null;
+  }
+
+  /** The last 64 KB the server wrote to stderr. */
+  get recentStderr(): string {
+    return this.stderrTail;
+  }
+
+  /** Ends the build banner this child raised, once. */
+  private endBuildStatus(tracker: ReturnType<typeof createEngineBuildTracker>): void {
+    if (this.buildTracker !== tracker) return;
+    this.buildTracker = null;
+    tracker.reset();
   }
 
   /**
@@ -228,6 +257,9 @@ export class PreviewSession {
 
     this.exitReason = null;
     this.reader = new FrameReader(reply => this.onReply(reply));
+    const tracker = createEngineBuildTracker(status => this.onBuildStatus?.(status));
+    this.buildTracker = tracker;
+    this.stderrTail = '';
 
     // -u so stderr reaches the log promptly; stdout is flushed explicitly by
     // the server after every reply.
@@ -244,10 +276,14 @@ export class PreviewSession {
 
     child.stdout?.on('data', (chunk: Buffer) => this.reader?.push(chunk));
     child.stderr?.on('data', (chunk: Buffer) => {
-      const text = chunk.toString().trimEnd();
+      const raw = chunk.toString();
+      tracker.push(raw);
+      this.stderrTail = (this.stderrTail + raw).slice(-STDERR_TAIL);
+      const text = raw.trimEnd();
       if (text) logger.debug(`[preview] ${text}`);
     });
     child.on('exit', (code, signal) => {
+      this.endBuildStatus(tracker);
       this.exitReason = signal ? `signal ${signal}` : `code ${code}`;
       this.failAllPending(new Error(`Preview session exited (${this.exitReason})`));
       this.child = null;
@@ -257,6 +293,7 @@ export class PreviewSession {
       this.onStream = undefined;
     });
     child.on('error', error => {
+      this.endBuildStatus(tracker);
       this.failAllPending(new Error(`Preview session failed to start: ${error.message}`));
       this.child = null;
       this.reader = null;
@@ -338,6 +375,7 @@ export class PreviewSession {
     this.outputs = [];
     this.onStream = undefined;
     this.failAllPending(new Error('Preview session closed'));
+    if (this.buildTracker) this.endBuildStatus(this.buildTracker);
 
     if (!child) return;
     try {
