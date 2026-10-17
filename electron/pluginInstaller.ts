@@ -53,6 +53,7 @@ import {
   type InstalledPackage,
 } from './vendorPackages';
 import * as _7z from '7zip-min';
+import { extract7z } from './archive';
 import { readLedger, writeLedger } from './installLedger';
 import { shippedTemplateDigest } from './shippedTemplateDigest';
 
@@ -1011,7 +1012,11 @@ export class PluginInstaller {
         // and several bundled DLLs share filenames with pip-managed ones — the
         // bundle must never overwrite them. (On fresh installs pip runs after
         // this and overwrites same-named bundled copies, so pip always wins.)
-        await this.extractArchive(archivePath, PATHS.PLUGINS, archiveFile, { skipExisting: true });
+        await extract7z(archivePath, PATHS.PLUGINS, {
+          skipExisting: true,
+          onLockedRetry: (attempt, attempts) =>
+            logger.info(`${archiveFile} is locked (attempt ${attempt}/${attempts}), retrying...`),
+        });
         logger.info(`Successfully extracted ${archiveFile}`);
         expected.push(...await this.archiveContents(archivePath));
       } catch (error) {
@@ -1070,59 +1075,6 @@ export class PluginInstaller {
       logger.warn(`Plugin files missing right after extraction: ${missing.join(', ')}`);
       this.warn(warning, 40);
     }
-  }
-
-  private async extractArchive(
-    archivePath: string,
-    outputPath: string,
-    componentName: string,
-    options: { skipExisting?: boolean } = {}
-  ): Promise<void> {
-    logger.info(`Extracting ${componentName} from ${archivePath} to ${outputPath}${options.skipExisting ? ' (skip existing)' : ''}`);
-    await fs.ensureDir(outputPath);
-
-    const maxRetries = 5;
-    const retryDelay = 2000; // 2 seconds
-    let lastError: any = null;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        if (options.skipExisting) {
-          // -aos = skip files that already exist in the destination
-          await _7z.cmd(['x', archivePath, `-o${outputPath}`, '-aos', '-y']);
-        } else {
-          await _7z.unpack(archivePath, outputPath);
-        }
-        logger.info(`Extraction completed: ${componentName}`);
-        return; // Success, exit the function
-      } catch (err: any) {
-        lastError = err;
-        const errorMessage = err.message || String(err);
-        
-        // Check if it's a file locking error
-        const isFileLockError = 
-          errorMessage.includes('Can not open the file as archive') ||
-          errorMessage.includes('The process cannot access the file because it is being used by another process') ||
-          errorMessage.includes("Can't open as archive");
-        
-        if (isFileLockError && attempt < maxRetries) {
-          logger.info(`File locked during extraction (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-          continue;
-        }
-        
-        // If it's not a file lock error, or we've exhausted retries, throw
-        const errorMsg = `Error extracting ${componentName}: ${errorMessage}`;
-        logger.error(errorMsg);
-        if (attempt === maxRetries) {
-          logger.error(`Failed after ${maxRetries} attempts`);
-        }
-        throw err;
-      }
-    }
-
-    // Should never reach here, but just in case
-    throw lastError;
   }
 
   private async copyFilterTemplates(mode: InstallMode = 'partial'): Promise<void> {

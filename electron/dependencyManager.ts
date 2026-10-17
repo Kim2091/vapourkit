@@ -59,6 +59,7 @@ import {
   type UpdateReportDraft,
 } from './installLedger';
 import * as _7z from '7zip-min';
+import { extract7z } from './archive';
 
 export interface DownloadProgress {
   // 'warning' is worth showing but stops nothing; 'error' ends setup.
@@ -732,8 +733,6 @@ export class DependencyManager {
 
   async extractArchive(archivePath: string, outputPath: string, componentName: string): Promise<void> {
     logger.dependency(`Extracting ${componentName} from ${archivePath} to ${outputPath}`);
-    await fs.ensureDir(outputPath);
-    
     this.sendProgress({
       type: 'extract',
       component: componentName,
@@ -741,65 +740,39 @@ export class DependencyManager {
       message: `Extracting ${componentName}...`
     });
 
-    const maxRetries = 5;
-    const retryDelay = 2000; // 2 seconds
-    let lastError: any = null;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        await _7z.unpack(archivePath, outputPath);
-        
-        this.sendProgress({
-          type: 'extract',
-          component: componentName,
-          progress: 100,
-          message: `${componentName} extracted successfully`
-        });
-        
-        logger.dependency(`Extraction completed: ${componentName}`);
-        return; // Success, exit the function
-      } catch (err: any) {
-        lastError = err;
-        const errorMessage = err.message || String(err);
-        
-        // Check if it's a file locking error
-        const isFileLockError = 
-          errorMessage.includes('Can not open the file as archive') ||
-          errorMessage.includes('The process cannot access the file because it is being used by another process') ||
-          errorMessage.includes("Can't open as archive");
-        
-        if (isFileLockError && attempt < maxRetries) {
-          logger.dependency(`File locked during extraction (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}ms...`);
+    try {
+      await extract7z(archivePath, outputPath, {
+        onLockedRetry: (attempt, attempts) => {
+          logger.dependency(`File locked during extraction (attempt ${attempt}/${attempts}), retrying...`);
           this.sendProgress({
             type: 'extract',
             component: componentName,
-            progress: Math.round((attempt / maxRetries) * 50), // Show partial progress during retries
-            message: `${componentName} - file locked, retrying (${attempt}/${maxRetries})...`
+            progress: Math.round((attempt / attempts) * 50),
+            message: `${componentName} - file locked, retrying (${attempt}/${attempts})...`
           });
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-          continue;
-        }
-        
-        // If it's not a file lock error, or we've exhausted retries, throw
-        const errorMsg = `Error extracting ${componentName}: ${errorMessage}`;
-        logger.error(errorMsg);
-        if (attempt === maxRetries) {
-          logger.error(`Failed after ${maxRetries} attempts`);
-        }
-        this.sendProgress({
-          type: 'error',
-          component: componentName,
-          progress: 0,
-          message: errorMsg
-        });
-        throw err;
-      }
+        },
+      });
+    } catch (error) {
+      const errorMsg = `Error extracting ${componentName}: ${error instanceof Error ? error.message : String(error)}`;
+      logger.error(errorMsg);
+      this.sendProgress({
+        type: 'error',
+        component: componentName,
+        progress: 0,
+        message: errorMsg
+      });
+      throw error;
     }
 
-    // Should never reach here, but just in case
-    throw lastError;
+    this.sendProgress({
+      type: 'extract',
+      component: componentName,
+      progress: 100,
+      message: `${componentName} extracted successfully`
+    });
+    logger.dependency(`Extraction completed: ${componentName}`);
   }
-  
+
   private async downloadAndInstallComponent(config: ComponentConfig): Promise<void> {
     if (await fs.pathExists(config.checkPath)) {
       logger.dependency(`${config.name} already installed`);
