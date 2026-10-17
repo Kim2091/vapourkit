@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as fs from 'fs-extra';
 
 const testRoot = path.join(os.tmpdir(), `vk-scriptgen-test-${process.pid}`);
+const RUNTIME_SRC = path.join(__dirname, '..', 'include', 'vk_runtime.py');
 
 // The factory is hoisted above testRoot's initialization, so it must compute
 // the same path itself rather than closing over the const
@@ -84,6 +85,9 @@ beforeAll(async () => {
   const configDir = path.join(testRoot, 'data', 'config');
   await fs.ensureDir(configDir);
   await fs.copy(templateSrc, path.join(configDir, 'vapoursynth_template.vpy'));
+  // The bundled runtime sits under the app path, which generateScript copies
+  // it into config/ from
+  await fs.copy(RUNTIME_SRC, path.join(testRoot, 'include', 'vk_runtime.py'));
 });
 
 afterAll(async () => {
@@ -322,35 +326,52 @@ describe('inference backend selection', () => {
     expect(script).toContain('core.ort.Model');
   });
 
-  it('injects the vk_backend helper with the selected default', async () => {
+  it('imports the shared runtime and hands it the selected default', async () => {
     const script = await generate([customFilter(0, 'CAS Sharpen')], false, 'directml');
 
     expect(script).toContain('VK_BACKEND = "directml"');
-    expect(script).toContain('def vk_backend(backend="auto", **kwargs):');
-    expect(script).toContain('backend = VK_BACKEND if backend == "auto" else backend.lower()');
-    expect(script).toContain('[backend](**kwargs)');
-    expect(script).toContain('"tensorrt": Backend.TRT');
-    expect(script).toContain('"directml": Backend.ORT_DML');
-    expect(script).toContain('"ncnn": Backend.NCNN_VK');
-    expect(script.indexOf('def vk_backend(')).toBeLessThan(script.indexOf('# Custom Filter: CAS Sharpen'));
+    expect(script).toMatch(/_vk_sys\.path\.insert\(0, ".*\/data\/config"\)/);
+    expect(script).toContain('import vk_runtime\n');
+    expect(script).toContain('from vk_runtime import vk_backend, vk_migx_model, vk_paired_by_time, vk_reference_video, vk_open_video, vk_conform, vk_stage_missing');
+    expect(script).toContain('vk_runtime.configure(VK_BACKEND, {"tensorrt": "TRT", "directml": "ORT_DML", "ncnn": "NCNN_VK", "migraphx": "MIGX"}, VK_BUILD_ENV,');
+    expect(script.indexOf('vk_runtime.configure(')).toBeLessThan(script.indexOf('# Custom Filter: CAS Sharpen'));
+    expect(script.indexOf('original_clip = clip')).toBeLessThan(script.indexOf('import vk_runtime'));
+  });
+
+  it('imports only names the runtime defines, with the signatures its calls use', async () => {
+    const runtime = await fs.readFile(RUNTIME_SRC, 'utf-8');
+    const script = await generate([customFilter(0, 'CAS Sharpen')], false);
+    const imported = script.match(/from vk_runtime import (.*)/)![1].trim().split(', ');
+
+    for (const name of imported) expect(runtime).toContain(`def ${name}(`);
+    expect(runtime).toContain('def configure(backend, backend_attrs, build_env, models_path, trtexec_path, migraphx_driver_path=None):');
+    expect(runtime).toContain('def vk_paired_by_time(ref, like, first=0, offset=0, *, source):');
+    expect(runtime).toContain('def vk_reference_video(path, offset, like, first=0, *, source):');
+    expect(runtime).toContain('def vk_open_video(path, settings):');
+    expect(runtime).toContain('def vk_conform(ref, source, speed, sections, framing=()):');
+  });
+
+  it('copies the bundled runtime into config/, replacing a stale copy', async () => {
+    const installed = path.join(testRoot, 'data', 'config', 'vk_runtime.py');
+    await fs.writeFile(installed, '# stale\n');
+
+    await generate([customFilter(0, 'CAS Sharpen')], false);
+
+    expect(await fs.readFile(installed, 'utf-8')).toBe(await fs.readFile(RUNTIME_SRC, 'utf-8'));
   });
 
   it('points vsmlrt at the app-managed model zoo and the trtexec shim', async () => {
     const script = await generate([customFilter(0, 'CAS Sharpen')], false);
 
-    expect(script).toContain('import vsmlrt as _vk_vsmlrt');
-    expect(script).toMatch(/_vk_vsmlrt\.models_path = ".*vsmlrt-models"/);
+    expect(script).toMatch(/models_path=".*vsmlrt-models"/);
     // pip TensorRT ships no trtexec; vsmlrt's runtime engine builds go through
     // the app's shim so Backend.TRT works for script filters
-    expect(script).toMatch(/_vk_vsmlrt\.trtexec_path = ".*trtexec(\.cmd)?"/);
-    // Guarded so scripts still run when no vs-mlrt plugin is installed
-    expect(script).toContain('except Exception:');
+    expect(script).toMatch(/trtexec_path=".*trtexec(\.cmd)?"/);
   });
 
   it('seeds the TensorRT backend env vsmlrt strips before spawning the shim', async () => {
     const script = await generate([customFilter(0, 'CAS Sharpen')], false);
 
-    expect(script).toContain('backend.custom_env.setdefault(_key, _value)');
     expect(script).toMatch(/VK_BUILD_ENV = \{.*"SystemRoot".*"COMSPEC".*\}/);
   });
 
@@ -368,29 +389,20 @@ describe('inference backend selection', () => {
     expect(script).not.toContain('provider="DML"');
   });
 
-  it('emits the MIGraphX compile-and-run helper and calls it for migraphx', async () => {
+  it('calls the runtime MIGraphX helper for migraphx', async () => {
     const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.engine')], false, 'migraphx');
 
-    expect(script).toContain('"migraphx": Backend.MIGX');
-    expect(script).toContain('def vk_migx_model(clips, network_path, input_name="input", fp16=True, num_streams=1):');
     // An .engine stored while TensorRT was selected runs as its ONNX
     expect(script).toContain('clip = vk_migx_model(clip, "C:/models/m_fp16.onnx", input_name="input", fp16=True, num_streams=');
-    expect(script.indexOf('def vk_migx_model(')).toBeLessThan(script.indexOf('clip = vk_migx_model('));
-    // First compile at a resolution is announced for the build banner
-    expect(script).toContain('print(f"[vk-build] begin {label}", file=sys.stderr, flush=True)');
-    // vsmlrt would hand migraphx-driver an empty environment otherwise
-    expect(script).toContain('custom_env=dict(os.environ)');
+    expect(script.indexOf('from vk_runtime import')).toBeLessThan(script.indexOf('clip = vk_migx_model('));
   });
 
-  it('points vsmlrt at the app-installed migraphx-driver on Windows and at ROCm on Linux', async () => {
+  it('points vsmlrt at the app-installed migraphx-driver on Windows and lets the runtime find ROCm\'s on Linux', async () => {
     const win = await generate([customFilter(0, 'CAS Sharpen')], false);
-    expect(win).toMatch(/_vk_vsmlrt\.migraphx_driver_path = ".*migx\/vsmlrt-hip\/migraphx-driver\.exe"/);
+    expect(win).toMatch(/migraphx_driver_path=".*migx\/vsmlrt-hip\/migraphx-driver\.exe"\)/);
 
     const linux = await generate([customFilter(0, 'CAS Sharpen')], false, 'ncnn', undefined, 'linux');
-    expect(linux).toContain('_vk_shutil.which("migraphx-driver")');
-    // The ROCm picked in Settings wins over whatever is first on PATH
-    expect(linux).toContain('migraphx_driver_path = _vk_os.environ.get("VK_MIGRAPHX_DRIVER") or _vk_shutil.which');
-    expect(linux).toContain('_vk_os.environ.get("ROCM_PATH", "/opt/rocm")');
+    expect(linux).toContain('migraphx_driver_path=None)');
   });
 
   it('does not emit Windows cmd.exe environment variables for Linux TensorRT scripts', async () => {
@@ -445,7 +457,7 @@ describe('a step that reads the picture from another step', () => {
     const script = await generate([customFilter(0, 'CAS Sharpen')], false);
 
     expect(script).not.toContain('VK_STAGES');
-    expect(script).not.toContain('vk_stage_missing');
+    expect(script).not.toContain('vk_stage_missing(');
   });
 
   it('reads the source when nothing is named, which is what the old one always did', async () => {
@@ -461,7 +473,7 @@ describe('a step that reads the picture from another step', () => {
     expect(script).toContain(
       'vk_stage_missing("Wavelet Color Fix from Step reads the picture from a step that is no longer in the chain.")',
     );
-    expect(script).toContain('def vk_stage_missing(message):');
+    expect(script).toContain('from vk_runtime import');
   });
 
   it('says so by name when the named step is turned off', async () => {
@@ -547,13 +559,12 @@ describe('a step that reads the picture from another step', () => {
       ]);
 
       const at = (text: string) => script.indexOf(text);
-      expect(script).toContain('def vk_open_video(path):');
-      expect(script).toContain('clip = vk_open_video("D:\\\\dvd\\\\ep01.mkv")');
+      expect(script).toContain('clip = vk_open_video("D:\\\\dvd\\\\ep01.mkv", globals())');
       expect(at('_vk_main = (clip, original_clip)')).toBeLessThan(at('core.std.Crop(clip, 6, 6)'));
       expect(at('core.std.Crop(clip, 6, 6)')).toBeLessThan(at('VK_STAGES["load-0"] = clip'));
       expect(at('VK_STAGES["load-0"] = clip')).toBeLessThan(at('clip, original_clip = _vk_main'));
       expect(at('clip, original_clip = _vk_main')).toBeLessThan(at('clip = ivtc(clip)'));
-      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 0)');
+      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 0, source=original_clip)');
     });
 
     it('numbers main-chain preview tabs as before and puts the side chain at 1000', async () => {
@@ -601,8 +612,7 @@ describe('a step that reads the picture from another step', () => {
       const script = await generate([aligned, reader(1, 'load-0')], false);
 
       expect(script).toContain('vk_source = original_clip');
-      expect(script).toContain('def vk_conform(ref, speed, sections, framing=()):');
-      expect(script).toContain('clip = vk_conform(clip, 1, [(0, 0.0202), (582.492, -19.9379)])');
+      expect(script).toContain('clip = vk_conform(clip, vk_source, 1, [(0, 0.0202), (582.492, -19.9379)])');
       expect(script.indexOf('vk_source = original_clip')).toBeLessThan(script.indexOf('clip = vk_open_video('));
     });
 
@@ -620,7 +630,7 @@ describe('a step that reads the picture from another step', () => {
       };
       const script = await generate([aligned, reader(1, 'load-0')], false);
 
-      expect(script).toContain('clip = vk_conform(clip, 1, [(0, 0.0385)], [(0, -0.01215, -0.00054, 1.01766, 1.02001), (710.211, -0.0113, 0.01014, 1.01701, 1.01665)])');
+      expect(script).toContain('clip = vk_conform(clip, vk_source, 1, [(0, 0.0385)], [(0, -0.01215, -0.00054, 1.01766, 1.02001), (710.211, -0.0113, 0.01014, 1.01701, 1.01665)])');
     });
 
     it('ignores an alignment measured against another video', async () => {
@@ -632,7 +642,7 @@ describe('a step that reads the picture from another step', () => {
 
       expect(script).not.toContain('clip = vk_conform(');
       expect(script).not.toContain('vk_source = original_clip');
-      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 0)');
+      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 0, source=original_clip)');
     });
 
     it('lines a side chain up from the segment start for the main chain only', async () => {
@@ -645,7 +655,7 @@ describe('a step that reads the picture from another step', () => {
       const script = await fs.readFile(scriptPath, 'utf-8');
       await fs.remove(scriptPath);
 
-      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 500)');
+      expect(script).toContain('reference = vk_paired_by_time(VK_STAGES["load-0"], clip, 500, source=original_clip)');
     });
   });
 
@@ -655,16 +665,15 @@ describe('a step that reads the picture from another step', () => {
     it('opens the file through the helper, offset and all, and keeps no stage for it', async () => {
       const script = await generate([customFilter(0, 'CAS Sharpen'), reader(1, file)], false);
 
-      expect(script).toContain('def vk_reference_video(path, offset, like, first=0):');
-      expect(script).toContain('reference = vk_reference_video("D:\\\\dvd\\\\ep01 \\"remux\\".mkv", 12, clip, 0)');
+      expect(script).toContain('reference = vk_reference_video("D:\\\\dvd\\\\ep01 \\"remux\\".mkv", 12, clip, 0, source=original_clip)');
       expect(script).not.toContain('VK_STAGES');
-      expect(script.indexOf('def vk_reference_video')).toBeLessThan(script.indexOf('reference = vk_reference_video'));
+      expect(script.indexOf('from vk_runtime import')).toBeLessThan(script.indexOf('reference = vk_reference_video'));
     });
 
     it('emits no helper when no step names a file', async () => {
       const script = await generate([customFilter(0, 'CAS Sharpen'), reader(1, '')], false);
 
-      expect(script).not.toContain('vk_reference_video');
+      expect(script).not.toContain('vk_reference_video(');
     });
 
     it('starts the file where the source segment starts, in time', async () => {
@@ -678,7 +687,7 @@ describe('a step that reads the picture from another step', () => {
       await fs.remove(scriptPath);
 
       expect(script).toContain('original_clip = core.std.Trim(original_clip, first=100, last=249)');
-      expect(script).toMatch(/reference = vk_reference_video(.*, 12, clip, 100)/);
+      expect(script).toMatch(/reference = vk_reference_video\(.*, 12, clip, 100, source=original_clip\)/);
     });
 
     it('starts the validation window at the beginning', async () => {
@@ -692,7 +701,7 @@ describe('a step that reads the picture from another step', () => {
       const script = await fs.readFile(scriptPath, 'utf-8');
       await fs.remove(scriptPath);
 
-      expect(script).toMatch(/reference = vk_reference_video(.*, 12, clip, 0)/);
+      expect(script).toMatch(/reference = vk_reference_video\(.*, 12, clip, 0, source=original_clip\)/);
     });
   });
 });
