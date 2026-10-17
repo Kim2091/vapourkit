@@ -89,6 +89,11 @@ function stop(id: string): boolean {
   return true;
 }
 
+/** Stops every alignment still running. */
+export function stopAllAlignments(): void {
+  for (const id of [...running.keys()]) stop(id);
+}
+
 export function runAlignment(
   id: string,
   mainPath: string,

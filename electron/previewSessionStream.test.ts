@@ -242,3 +242,41 @@ describe('teardown', () => {
     expect(() => session.credit(1, 1)).not.toThrow();
   });
 });
+
+describe('engine builds while a script opens', () => {
+  it('reports [vk-build] lines from stderr and ends the banner when the server exits', async () => {
+    const { session, child } = await startedSession();
+    const seen: unknown[] = [];
+    session.onBuildStatus = status => seen.push(status);
+
+    child.stderr.write('Plugin x is using API3\n[vk-build] begin Building TensorRT engine: m.onnx\n');
+    child.stderr.write('[vk-build] progress 40\n');
+    await settle();
+    child.emit('exit', 1, null);
+
+    expect(seen).toEqual([
+      { status: 'building', label: 'Building TensorRT engine: m.onnx', percent: undefined },
+      { status: 'building', label: 'Building TensorRT engine: m.onnx', percent: 40 },
+      { status: 'idle' },
+    ]);
+    expect(session.recentStderr).toContain('Plugin x is using API3');
+  });
+
+  it('ends the banner once on dispose, and not again when the killed server exits', async () => {
+    const { session, child } = await startedSession();
+    const seen: unknown[] = [];
+    session.onBuildStatus = status => seen.push(status);
+
+    child.stderr.write('[vk-build] begin Compiling MIGraphX program\n');
+    await settle();
+    // No pid, so dispose() has no real process tree to kill.
+    child.pid = undefined;
+    session.dispose();
+    child.emit('exit', null, 'SIGKILL');
+
+    expect(seen).toEqual([
+      { status: 'building', label: 'Compiling MIGraphX program', percent: undefined },
+      { status: 'idle' },
+    ]);
+  });
+});

@@ -8,7 +8,7 @@ import { PATHS } from './constants';
 import { setupVSEnvironment, pollGpuStats, GpuStats } from './utils';
 import { FFmpegManager } from './ffmpegManager';
 import { ErrorMessageHandler } from './errorMessageHandler';
-import { VideoMetadataExtractor, VideoMetadata } from './videoMetadataExtractor';
+import type { VideoMetadata } from './videoMetadataExtractor';
 import { VapourSynthInfoExtractor, OutputInfo } from './vapourSynthInfoExtractor';
 import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
 import { configManager } from './configManager';
@@ -19,6 +19,14 @@ export interface SegmentSelection {
   enabled: boolean;
   startFrame: number;
   endFrame: number; // -1 means end of video
+}
+
+/** Per-job probe results execute() runs from. */
+export interface RunProbes {
+  /** Stream layout from the source's ffmpeg probe; null when ffmpeg could not read it. */
+  source: VideoMetadata | null;
+  /** The script's output clip, from getOutputInfo(). */
+  output: OutputInfo;
 }
 
 export interface UpscaleProgress {
@@ -45,6 +53,8 @@ export class UpscaleExecutor {
   private ffmpegProcess: ChildProcess | null = null;
   private vsInfoExtractor: VapourSynthInfoExtractor;
   private isCanceling: boolean = false;
+  /** Aborted by cancel() and kill(); unlike isCanceling it is never reset. */
+  private readonly stopController = new AbortController();
   /**
    * Processes this executor stopped itself (cancel, kill, a new run replacing
    * this one). Their exit is not an error: on Windows a terminated process
@@ -139,50 +149,86 @@ export class UpscaleExecutor {
     }
   }
 
-  async getFrameCount(scriptPath: string, onProgress?: (percentage: number) => void): Promise<number> {
-    return this.vsInfoExtractor.getFrameCount(scriptPath, onProgress);
+  /**
+   * Evaluates the script once with `vspipe -i`. cancel() and kill() stop it,
+   * and execute() then refuses to start.
+   */
+  async getOutputInfo(scriptPath: string, onProgress?: (percentage: number) => void): Promise<OutputInfo> {
+    return this.vsInfoExtractor.getOutputInfo(scriptPath, onProgress);
   }
 
-  async getOutputInfo(scriptPath: string): Promise<OutputInfo> {
-    return this.vsInfoExtractor.getOutputInfo(scriptPath);
+  /** True once cancel() or kill() has been called; the executor never runs again. */
+  get isStopped(): boolean {
+    return this.stopController.signal.aborted;
   }
 
-  async execute(scriptPath: string, outputPath: string, inputPath: string, totalFrames: number = 0, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<void> {
-    return new Promise(async (resolve, reject) => {
+  private throwIfStopped(): void {
+    if (this.isStopped) {
+      logger.upscale('Upscale was stopped before vspipe and ffmpeg started');
+      throw new Error('Canceled');
+    }
+  }
+
+  /**
+   * Runs vspipe into ffmpeg. `probes` are the results of the source's ffmpeg
+   * probe and of getOutputInfo() on this script, which the caller runs once
+   * for the whole job.
+   */
+  async execute(scriptPath: string, outputPath: string, inputPath: string, probes: RunProbes, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<void> {
+    // A stop during the caller's graph probe surfaces as a failed probe, so
+    // the stop is checked first.
+    this.throwIfStopped();
+    const outputInfo = probes.output;
+    const totalFrames = outputInfo.frames;
+    this.logExecutionStart(scriptPath, inputPath, outputPath, totalFrames);
+    if (benchmarkMode) {
+      logger.upscale('BENCHMARK MODE: Output will be discarded, measuring processing speed only');
+    }
+
+    await this.validateFiles(scriptPath, inputPath);
+    await this.validateExecutables();
+
+    if (outputInfo.error) {
+      const errorMsg = ErrorMessageHandler.formatUserErrorMessage('VapourSynth Error', outputInfo.error);
+      logger.errorWithDialog('VapourSynth Error', errorMsg);
+      throw new Error(errorMsg);
+    }
+    if (!probes.source) {
+      const errorMsg = 'Failed to get video metadata: ffmpeg could not read the source';
+      logger.errorWithDialog('Upscale Error', errorMsg);
+      throw new Error(errorMsg);
+    }
+    const metadata = probes.source;
+
+    await this.logScriptContent(scriptPath);
+
+    const env = this.setupEnvironment();
+
+    const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
+    const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, segment, fps, benchmarkMode);
+
+    // Nothing is awaited from here until both processes are tracked, so a stop
+    // either lands before this check or finds them in this.process and
+    // this.ffmpegProcess.
+    this.throwIfStopped();
+
+    return new Promise<void>((resolve, reject) => {
+      const vspipe = this.spawnVspipe(scriptPath, env, isRawVideo);
+      this.process = vspipe;
+      let ffmpeg: ChildProcess;
       try {
-        this.logExecutionStart(scriptPath, inputPath, outputPath, totalFrames);
-        if (benchmarkMode) {
-          logger.upscale('BENCHMARK MODE: Output will be discarded, measuring processing speed only');
-        }
-
-        await this.validateFiles(scriptPath, inputPath);
-        const metadata = await this.getVideoMetadata(inputPath);
-
-        // Get output info for RGB handling
-        const outputInfo = await this.getOutputInfo(scriptPath);
-
-        await this.logScriptContent(scriptPath);
-
-        const env = this.setupEnvironment();
-        await this.validateExecutables();
-
-        const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
-
-        // Spawn processes
-        const vspipe = this.spawnVspipe(scriptPath, env, isRawVideo);
-        const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, segment, fps, benchmarkMode);
-        const ffmpeg = this.spawnFFmpeg(ffmpegArgs);
-
-        this.setupProcessPiping(vspipe, ffmpeg);
-        this.setupProcessMonitoring(vspipe, ffmpeg, totalFrames, outputPath, resolve, reject, benchmarkMode);
-
-        this.process = vspipe;
-        this.ffmpegProcess = ffmpeg;
-        
+        ffmpeg = this.spawnFFmpeg(ffmpegArgs);
       } catch (error) {
-        // If validation fails, we reject immediately
+        this.stoppedByApp.add(vspipe);
+        terminateProcessTree(vspipe);
+        this.process = null;
         reject(error);
+        return;
       }
+      this.ffmpegProcess = ffmpeg;
+
+      this.setupProcessPiping(vspipe, ffmpeg);
+      this.setupProcessMonitoring(vspipe, ffmpeg, totalFrames, outputPath, resolve, reject, benchmarkMode);
     });
   }
 
@@ -210,22 +256,6 @@ export class UpscaleExecutor {
       throw new Error(error);
     }
 
-    // Validate video for upscaling compatibility
-    const validation = await VideoMetadataExtractor.validateVideoForUpscaling(inputPath);
-    if (!validation.valid) {
-      logger.errorWithDialog('Upscale Error', validation.error || 'Video validation failed');
-      throw new Error(validation.error || 'Video validation failed');
-    }
-  }
-
-  private async getVideoMetadata(inputPath: string): Promise<VideoMetadata> {
-    try {
-      return await VideoMetadataExtractor.getVideoMetadata(inputPath);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.errorWithDialog('Upscale Error', 'Failed to get video metadata: ' + errorMsg);
-      throw error;
-    }
   }
 
   private async logScriptContent(scriptPath: string) {
@@ -758,6 +788,7 @@ export class UpscaleExecutor {
   cancel() {
     logger.upscale('Canceling upscale process gracefully');
     this.isCanceling = true;
+    this.stopController.abort();
     this.stopGpuPolling();
     this.sendEngineBuildStatus({ status: 'idle' });
 
@@ -833,7 +864,8 @@ export class UpscaleExecutor {
         logger.upscale('ffmpeg finished encoding and exited');
       });
       
-      this.ffmpegProcess = null;
+      // ffmpegProcess stays set until ffmpeg closes, so kill() can still stop
+      // it during the grace period (the app quitting, for one).
       logger.upscale('ffmpeg graceful shutdown initiated');
     }
     
@@ -846,6 +878,7 @@ export class UpscaleExecutor {
   kill() {
     logger.upscale('Force killing upscale process');
     this.isCanceling = true;
+    this.stopController.abort();
     this.stopGpuPolling();
     this.sendEngineBuildStatus({ status: 'idle' });
 
@@ -872,12 +905,5 @@ export class UpscaleExecutor {
     }
     
     this.isCanceling = false;
-  }
-
-  /**
-   * Cancels any active info extraction processes (vspipe -i)
-   */
-  cancelInfoExtraction(): void {
-    this.vsInfoExtractor.cancelAll();
   }
 }

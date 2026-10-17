@@ -123,44 +123,44 @@ filter_format = clip.format
 
 VK_BACKEND = "tensorrt"
 VK_STAGES = {}
+# VK_PREVIEW is left undefined, as in a render script.
 
 # vsmlrt spawns its engine builder with a nearly empty environment; these are
 # what the app's trtexec shim needs to start on Windows.
 import os as _os
 _root = _os.environ.get("SystemRoot", "C:/Windows")
-VK_BUILD_ENV = {"SystemRoot": _root, "COMSPEC": _root + "/System32/cmd.exe"}
-
-
-# What a template calls to get a vsmlrt Backend for the app-selected backend.
-# This mirrors VapourSynthScriptGenerator.generateBackendHelper: the stub that
-# stood here returned the string it was handed, which no template could use —
-# RIFE and DPIR both raise "unknown backend auto" on it — so every filter that
-# calls vk_backend() was being checked against a helper the app never emits.
-def vk_backend(backend="auto", **kwargs):
-    from vsmlrt import Backend
-    backend = VK_BACKEND if backend == "auto" else backend.lower()
-    backend = {"tensorrt": Backend.TRT, "directml": Backend.ORT_DML,
-               "ncnn": Backend.NCNN_VK}[backend](**kwargs)
-    if hasattr(backend, "custom_env"):
-        for _key, _value in VK_BUILD_ENV.items():
-            backend.custom_env.setdefault(_key, _value)
-    return backend
+VK_BUILD_ENV = {"SystemRoot": _root, "COMSPEC": _root + "/System32/cmd.exe"} if _os.name == "nt" else {}
 """
 
-# The generated script also points vsmlrt at the model zoo the app downloads
-# and at the trtexec shim it writes, because the pip wheels ship neither. The
-# check has to do the same or it is not the environment the app provides:
-# without it RIFE and DPIR look under the plugin folder, find nothing, and the
-# refusal reads as "the model is not downloaded" while it sits in
-# data/vsmlrt-models. Paths follow electron/constants.ts for a dev run.
+
+def _backend_attrs() -> dict[str, str]:
+    """The backend id -> vsmlrt Backend attribute map, read from the app's
+    backend registry, which is what the script generator hands configure()."""
+    source = (REPO / "electron" / "providers" / "descriptors.ts").read_text(encoding="utf-8")
+    ids = re.findall(r"^\s*id: '([a-z]+)',", source, flags=re.MULTILINE)
+    attrs = re.findall(r"^\s*vsmlrtBackendAttr: '([A-Z_]+)',", source, flags=re.MULTILINE)
+    if not ids or len(ids) != len(attrs):
+        raise SystemExit("verify_filters: could not read the backend registry from descriptors.ts")
+    return dict(zip(ids, attrs))
+
+
+# The helpers and vsmlrt setup the generated script gets, from the same
+# include/vk_runtime.py the app ships. The paths follow electron/constants.ts
+# for a dev run: without them RIFE and DPIR look under the plugin folder, find
+# nothing, and the refusal reads as "the model is not downloaded" while it
+# sits in data/vsmlrt-models.
 APP_DATA = REPO / "data"
+_MIGX_DRIVER = SITE_PACKAGES / "vapoursynth" / "plugins" / "migx" / "vsmlrt-hip" / "migraphx-driver.exe"
 PREAMBLE += f"""
-try:
-    import vsmlrt as _vk_vsmlrt
-    _vk_vsmlrt.models_path = "{(APP_DATA / 'vsmlrt-models').as_posix()}"
-    _vk_vsmlrt.trtexec_path = "{(APP_DATA / ('trtexec.cmd' if sys.platform == 'win32' else 'trtexec')).as_posix()}"
-except Exception:
-    pass
+import sys as _vk_sys
+if {(REPO / 'include').as_posix()!r} not in _vk_sys.path:
+    _vk_sys.path.insert(0, {(REPO / 'include').as_posix()!r})
+import vk_runtime
+from vk_runtime import vk_backend, vk_migx_model, vk_paired_by_time, vk_reference_video, vk_open_video, vk_conform, vk_stage_missing
+vk_runtime.configure(VK_BACKEND, {_backend_attrs()!r}, VK_BUILD_ENV,
+                     models_path={(APP_DATA / 'vsmlrt-models').as_posix()!r},
+                     trtexec_path={(APP_DATA / ('trtexec.cmd' if sys.platform == 'win32' else 'trtexec')).as_posix()!r},
+                     migraphx_driver_path={(_MIGX_DRIVER.as_posix() if sys.platform == 'win32' else None)!r})
 """
 
 

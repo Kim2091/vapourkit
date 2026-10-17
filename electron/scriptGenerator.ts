@@ -4,6 +4,8 @@ import * as fs from 'fs-extra';
 import * as os from 'os';
 import { PATHS } from './constants';
 import { getSystemRoot } from './trtexecShim';
+import { app } from 'electron';
+import { fixAsarPath } from './utils';
 import { configManager } from './configManager';
 import { logger } from './logger';
 import { BACKENDS, normalizeBackendForPlatform, resolveFilterBackend, type BackendId, type FilterBackend } from './providers/descriptors';
@@ -49,6 +51,15 @@ const STAGE_REFERENCE = /\{\{\s*stage\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
 /** The dict a referenced step's picture is written into, as the script runs. */
 const STAGES = 'VK_STAGES';
 
+/** The shared runtime every generated script imports (include/, copied to data/config/). */
+const RUNTIME_FILE = 'vk_runtime.py';
+
+/** The helpers a generated script imports from it. */
+const RUNTIME_HELPERS = [
+  'vk_backend', 'vk_migx_model', 'vk_paired_by_time', 'vk_reference_video',
+  'vk_open_video', 'vk_conform', 'vk_stage_missing',
+];
+
 export interface Filter {
   id: string;
   enabled: boolean;
@@ -89,14 +100,8 @@ export interface SegmentSelection {
 
 export interface ScriptConfig {
   inputVideo: string;
-  enginePath: string;
-  pluginsPath: string;
-  outputPath?: string;
   /** App-level default inference backend; per-filter overrides resolve against it. */
   defaultBackend?: string;
-  useFp32?: boolean;
-  modelType?: ModelType;
-  upscalingEnabled?: boolean;
   colorimetry?: {
     overwriteMatrix: boolean;
     matrix709: boolean;
@@ -180,119 +185,6 @@ export class VapourSynthScriptGenerator {
     return wanted;
   }
 
-  /** Whether some enabled filter reads its picture from a video file. */
-  private readsReferenceVideo(enabledFilters: Filter[]): boolean {
-    return enabledFilters.some(filter => filter.filterType === 'custom'
-      && [...filter.code.matchAll(STAGE_REFERENCE)].some(([, variable]) => parseReferenceVideo(this.stageIdOf(filter, variable))));
-  }
-
-  /**
-   * vk_paired_by_time() and vk_reference_video(): a picture from another
-   * timeline, lined up with the step reading it.
-   *
-   * Another video — a side chain's, or a file named directly — is another
-   * release of the same footage, and two releases rarely share a frame rate:
-   * a telecined 29.97 DVD remux against a 23.976 encode of the same disc is
-   * the ordinary case. So frames are paired by time, not by number. Each frame
-   * of `like` (the clip at the reading step, after any IVTC or trim above it)
-   * gets the frame of `ref` nearest its timestamp, counted from `first` — where
-   * the reading chain's segment starts, in its source's frames — then moved by
-   * `offset` frames of `ref`. Pairing by number put a 29.97 source 2,000
-   * frames away from its 23.976 reference by the six-minute mark.
-   *
-   * Past either end the nearest frame is held, so a reference a few frames
-   * short of the source still works. A clip with no constant frame rate falls
-   * back to pairing by number, which is all there is to go on.
-   */
-  private generatePairingHelpers(): string {
-    return [
-      'def vk_paired_by_time(ref, like, first=0, offset=0):',
-      '    from fractions import Fraction as _vk_Fraction',
-      '    if offset >= ref.num_frames:',
-      '        raise ValueError("The reference offset %d is past its end; it has %d frames." % (offset, ref.num_frames))',
-      '    last = ref.num_frames - 1',
-      '    if original_clip.fps_num and like.fps_num and ref.fps_num:',
-      '        start = _vk_Fraction(first) / original_clip.fps',
-      '        def _at(n):',
-      '            return offset + int((start + _vk_Fraction(n) / like.fps) * ref.fps + _vk_Fraction(1, 2))',
-      '    else:',
-      '        def _at(n):',
-      '            return offset + first + n',
-      '    timing = {"fpsnum": like.fps_num, "fpsden": like.fps_den} if like.fps_num else {}',
-      '    base = core.std.BlankClip(ref, length=like.num_frames, **timing)',
-      '    return core.std.FrameEval(base, lambda n: ref[min(max(_at(n), 0), last)])',
-      '',
-      'def vk_reference_video(path, offset, like, first=0):',
-      '    import os as _vk_os',
-      '    if not _vk_os.path.isfile(path):',
-      '        raise ValueError("The reference video " + path + " is not there any more. Pick it again.")',
-      '    return vk_paired_by_time(core.bs.VideoSource(source=path, cachemode=3), like, first, offset)',
-      '',
-      '',
-    ].join('\n');
-  }
-
-  /**
-   * vk_open_video(), a side chain's source, prepared the way the template
-   * prepares the main one: the same colour tagging when the app overwrites it,
-   * then the same 16-bit YUV working format, so every filter meets the same
-   * kind of picture in either chain. The template's own settings are read
-   * where it defined them, with its defaults when a customised template does
-   * not define one.
-   */
-  private generateOpenVideoHelper(): string {
-    return [
-      'def vk_open_video(path):',
-      '    import os as _vk_os',
-      '    if not _vk_os.path.isfile(path):',
-      '        raise ValueError("The side chain video " + path + " is not there any more. Choose it again on its Load Video step.")',
-      '    v = core.bs.VideoSource(source=path, cachemode=3)',
-      '    _g = globals()',
-      '    _matrix, _primaries, _transfer = _g.get("default_matrix", "709"), _g.get("default_primaries", "709"), _g.get("default_transfer", "709")',
-      '    if _g.get("overwrite_matrix", False) and v.format.color_family != vs.RGB:',
-      '        if _g.get("matrix_709", True):',
-      '            v = core.std.SetFrameProps(v, _Matrix=vs.MATRIX_BT709, _Transfer=vs.TRANSFER_BT709, _Primaries=vs.PRIMARIES_BT709, _ColorRange=vs.RANGE_LIMITED)',
-      '        else:',
-      '            v = core.std.SetFrameProps(v, _Matrix=vs.MATRIX_ST170_M, _Transfer=vs.TRANSFER_BT601, _Primaries=vs.PRIMARIES_ST170_M, _ColorRange=vs.RANGE_LIMITED)',
-      '    fmt = core.query_video_format(vs.YUV, vs.INTEGER, _g.get("default_depth", 16), v.format.subsampling_w, v.format.subsampling_h)',
-      '    if v.format.id != fmt.id:',
-      '        if v.format.color_family == vs.RGB:',
-      '            v = core.resize.Point(v, format=fmt.id, primaries_in_s="709", transfer_in_s="709", matrix_s=_matrix, primaries_s=_primaries, transfer_s=_transfer)',
-      '        else:',
-      '            v = core.resize.Point(v, format=fmt.id, matrix_in_s=_matrix, primaries_in_s=_primaries, transfer_in_s=_transfer)',
-      '    return v',
-      '',
-      '# An aligned side chain\'s video, put on the main source\'s timeline: frame n',
-      '# is the moment at main frame n, by the mapping align_videos.py measured',
-      '# (reference time = speed * main time + the offset of that time\'s section).',
-      '# Each framing (from, left, top, width, height) is the part of the video, as',
-      '# fractions of it, that shows the whole main frame; it is cut out and drawn',
-      '# at the video\'s own size, so the picture sits where the main one does.',
-      'def vk_conform(ref, speed, sections, framing=()):',
-      '    w, h = ref.width, ref.height',
-      '    framed = [(start, core.resize.Bicubic(ref, w, h, src_left=left * w, src_top=top * h, src_width=fw * w, src_height=fh * h))',
-      '              for start, left, top, fw, fh in framing] or [(0, ref)]',
-      '    if not (vk_source.fps_num and ref.fps_num):',
-      '        return framed[0][1]',
-      '    src_fps, ref_fps, last = float(vk_source.fps), float(ref.fps), ref.num_frames - 1',
-      '    def _pick(n):',
-      '        t = n / src_fps',
-      '        offset = sections[0][1]',
-      '        for start, value in sections:',
-      '            if t >= start:',
-      '                offset = value',
-      '        picture = framed[0][1]',
-      '        for start, c in framed:',
-      '            if t >= start:',
-      '                picture = c',
-      '        return picture[min(max(int((speed * t + offset) * ref_fps + 0.5), 0), last)]',
-      '    base = core.std.BlankClip(ref, length=vk_source.num_frames, fpsnum=vk_source.fps_num, fpsden=vk_source.fps_den)',
-      '    return core.std.FrameEval(base, _pick)',
-      '',
-      '',
-    ].join('\n');
-  }
-
   /**
    * What one stage reference becomes in the emitted Python.
    *
@@ -328,11 +220,11 @@ export class VapourSynthScriptGenerator {
       case 'source':
         return 'original_clip';
       case 'file':
-        return `vk_reference_video(${pyString(reference.video.path)}, ${reference.video.offset}, clip, ${first})`;
+        return `vk_reference_video(${pyString(reference.video.path)}, ${reference.video.offset}, clip, ${first}, source=original_clip)`;
       case 'chain':
         // Its own timeline: lined up by time with the clip reading it.
         return emitted.has(id)
-          ? `vk_paired_by_time(${STAGES}[${pyString(id)}], clip, ${first})`
+          ? `vk_paired_by_time(${STAGES}[${pyString(id)}], clip, ${first}, source=original_clip)`
           : missing(`${chain(reference.chain)}, which produced no picture`);
       case 'ready':
         // Emitted is the authority, not the resolution: a step that resolved
@@ -360,20 +252,24 @@ export class VapourSynthScriptGenerator {
   }
 
   /**
-   * Python helper injected ahead of the filter chain. Custom .vkfilter code
-   * calls vk_backend(...) to get a vsmlrt Backend instance matching the
-   * app-selected backend, so filters follow the backend dropdown without
-   * hardcoding one (they can still construct a specific vsmlrt Backend to
-   * override). The id → vsmlrt attribute map is generated from the backend
-   * registry, so new backends are available here automatically.
+   * The script's head for the shared runtime (include/vk_runtime.py, copied
+   * to data/config/): VK_BACKEND and VK_BUILD_ENV, which filter code reads,
+   * the import of the helpers, and the configure() call that hands the
+   * runtime this run's backend, the backend registry's id -> vsmlrt Backend
+   * map, and the paths of the model zoo, trtexec shim and migraphx-driver.
+   * Custom .vkfilter code calls vk_backend(...) to get a vsmlrt Backend that
+   * follows the backend dropdown.
    */
   private generateBackendHelper(defaultBackend: BackendId): string {
-    const mapEntries = BACKENDS
-      .map(d => `"${d.id}": Backend.${d.vsmlrtBackendAttr}`)
+    const backendAttrs = BACKENDS
+      .map(d => `${pyString(d.id)}: ${pyString(d.vsmlrtBackendAttr)}`)
       .join(', ');
     const buildEnvEntries = Object.entries(this.getEngineBuildEnv())
       .map(([key, value]) => `${pyString(key)}: ${pyString(value)}`)
       .join(', ');
+    const posix = (p: string) => pyString(p.replace(/\\/g, '/'));
+    // On Linux the runtime picks the driver of the ROCm chosen in Settings.
+    const migraphxDriver = this.platform === 'win32' ? posix(PATHS.MIGX_DRIVER_WIN) : 'None';
 
     let code = '# Inference backend selected in the app; vk_backend() resolves it to a\n';
     code += '# vsmlrt Backend for custom filters (kwargs pass through, e.g. fp16=True)\n';
@@ -381,86 +277,17 @@ export class VapourSynthScriptGenerator {
     code += '# vsmlrt builds TensorRT engines at runtime by spawning trtexec with a nearly\n';
     code += '# empty environment; these are what the app\'s trtexec shim needs to start.\n';
     code += `VK_BUILD_ENV = {${buildEnvEntries}}\n`;
-    code += 'def vk_backend(backend="auto", **kwargs):\n';
-    code += '    from vsmlrt import Backend\n';
-    code += '    backend = VK_BACKEND if backend == "auto" else backend.lower()\n';
-    code += `    backend = {${mapEntries}}[backend](**kwargs)\n`;
-    code += '    if hasattr(backend, "custom_env"):\n';
-    code += '        for _key, _value in VK_BUILD_ENV.items():\n';
-    code += '            backend.custom_env.setdefault(_key, _value)\n';
-    code += '    # vsmlrt runs migraphx-driver with custom_env as its WHOLE environment,\n';
-    code += '    # so an empty one leaves HIP without PATH, HOME or its cache folders\n';
-    code += '    if type(backend).__name__ == "MIGX":\n';
-    code += '        import os as _vk_os\n';
-    code += '        for _key, _value in _vk_os.environ.items():\n';
-    code += '            backend.custom_env.setdefault(_key, _value)\n';
-    code += '    return backend\n';
-    code += this.generateMigxHelper();
-    code += '# vsmlrt model zoo location (downloaded by the app; the pip vs-mlrt wheels\n';
-    code += "# don't ship a models folder, so vsmlrt's default path doesn't exist)\n";
-    code += 'try:\n';
-    code += '    import vsmlrt as _vk_vsmlrt\n';
-    code += `    _vk_vsmlrt.models_path = "${PATHS.VSMLRT_MODELS.replace(/\\/g, '/')}"\n`;
-    code += '    # pip TensorRT ships no trtexec binary; the app writes a shim that runs\n';
-    code += "    # its own Python API engine builder (see electron/trtexecShim.ts)\n";
-    code += `    _vk_vsmlrt.trtexec_path = "${PATHS.TRTEXEC_SHIM.replace(/\\/g, '/')}"\n`;
-    code += '    # vsmlrt looks for migraphx-driver in a vsmlrt-hip folder beside the first\n';
-    code += "    # vs-mlrt plugin it finds, which a pip install doesn't have\n";
-    code += this.platform === 'win32'
-      ? `    _vk_vsmlrt.migraphx_driver_path = ${pyString(PATHS.MIGX_DRIVER_WIN.replace(/\\/g, '/'))}\n`
-      // The ROCm chosen in Settings names its own driver (rocmEnvironment.ts),
-      // so a driver from another ROCm earlier on PATH cannot pair with its libraries
-      : '    import os as _vk_os, shutil as _vk_shutil\n' +
-        '    _vk_vsmlrt.migraphx_driver_path = _vk_os.environ.get("VK_MIGRAPHX_DRIVER") or ' +
-        '_vk_shutil.which("migraphx-driver") or ' +
-        '_vk_os.path.join(_vk_os.environ.get("ROCM_PATH", "/opt/rocm"), "bin", "migraphx-driver")\n';
-    code += 'except Exception:\n';
-    code += '    pass\n\n';
+    code += '# Helpers every script shares (data/config/vk_runtime.py)\n';
+    code += 'import sys as _vk_sys\n';
+    code += `if ${posix(PATHS.CONFIG)} not in _vk_sys.path:\n`;
+    code += `    _vk_sys.path.insert(0, ${posix(PATHS.CONFIG)})\n`;
+    code += 'import vk_runtime\n';
+    code += `from vk_runtime import ${RUNTIME_HELPERS.join(', ')}\n`;
+    code += `vk_runtime.configure(VK_BACKEND, {${backendAttrs}}, VK_BUILD_ENV,\n`;
+    code += `                     models_path=${posix(PATHS.VSMLRT_MODELS)},\n`;
+    code += `                     trtexec_path=${posix(PATHS.TRTEXEC_SHIM)},\n`;
+    code += `                     migraphx_driver_path=${migraphxDriver})\n\n`;
     return code;
-  }
-
-  /**
-   * vk_migx_model(), which the MIGraphX provider's model step calls. vsmigx runs
-   * programs compiled for one input size, so this compiles one at the clip's
-   * resolution on first use — through vsmlrt's own migraphx_driver(), which
-   * caches it beside the ONNX keyed by size, precision, MIGraphX version, GPU
-   * and model checksum — and announces the compile with the [vk-build]
-   * protocol so the app shows a banner instead of looking frozen.
-   *
-   * The clip is prepared in the float format of the model's *import*
-   * precision, but vsmigx demands the program's I/O type; as with TensorRT
-   * (#12) the call retries once in the other float format on a mismatch.
-   */
-  private generateMigxHelper(): string {
-    return [
-      'def vk_migx_model(clips, network_path, input_name="input", fp16=True, num_streams=1):',
-      '    import os, sys',
-      '    import vsmlrt as _vk_m',
-      '    clips = clips if isinstance(clips, list) else [clips]',
-      '    width, height = clips[0].width, clips[0].height',
-      '    program = dict(network_path=network_path, opt_shapes=(width, height), fp16=fp16,',
-      '                   fast_math=True, exhaustive_tune=False, device_id=0, short_path=None)',
-      '    compiled = os.access(_vk_m.get_mxr_path(**program), os.R_OK)',
-      '    label = f"Compiling MIGraphX program: {os.path.basename(network_path)} at {width}x{height}"',
-      '    if not compiled:',
-      '        print(f"[vk-build] begin {label}", file=sys.stderr, flush=True)',
-      '    try:',
-      '        mxr = _vk_m.migraphx_driver(channels=sum(c.format.num_planes for c in clips), input_name=input_name,',
-      '                                    custom_env=dict(os.environ), **program)',
-      '    finally:',
-      '        if not compiled:',
-      '            print(f"[vk-build] end {label}", file=sys.stderr, flush=True)',
-      '    try:',
-      '        return core.migx.Model(clips, mxr, num_streams=num_streams)',
-      '    except vs.Error as _vk_migx_error:',
-      '        # "sample type mismatch" / "bytes per sample mismatch"',
-      '        if "sample" not in str(_vk_migx_error) or "mismatch" not in str(_vk_migx_error):',
-      '            raise',
-      '        bits = 32 if clips[0].format.bits_per_sample == 16 else 16',
-      '        clips = [core.resize.Point(c, format=c.format.replace(bits_per_sample=bits)) for c in clips]',
-      '        return core.migx.Model(clips, mxr, num_streams=num_streams)',
-      '',
-    ].join('\n');
   }
 
   /**
@@ -479,7 +306,32 @@ export class VapourSynthScriptGenerator {
     };
   }
 
+  /**
+   * Makes data/config/vk_runtime.py match the bundled include/vk_runtime.py,
+   * which every generated script imports. Checked on every generation so an
+   * edit reaches a development run at once; the copy is written beside the
+   * target and renamed over it, so a script starting meanwhile never reads
+   * half a file.
+   */
+  private async syncRuntime(): Promise<void> {
+    const target = path.join(PATHS.CONFIG, RUNTIME_FILE);
+    const bundled = path.join(fixAsarPath(app.getAppPath()), 'include', RUNTIME_FILE);
+    if (await fs.pathExists(bundled)) {
+      const source = await fs.readFile(bundled, 'utf-8');
+      const current = await fs.readFile(target, 'utf-8').catch(() => null);
+      if (current === source) return;
+      await fs.ensureDir(PATHS.CONFIG);
+      const staged = `${target}.${process.pid}-${Math.random().toString(36).substring(2, 9)}.tmp`;
+      await fs.writeFile(staged, source, 'utf-8');
+      await fs.move(staged, target, { overwrite: true });
+      logger.info(`Updated ${RUNTIME_FILE} from bundled source`);
+    } else if (!await fs.pathExists(target)) {
+      throw new Error(`${RUNTIME_FILE} is missing from ${PATHS.CONFIG}. Reinstall Vapourkit to restore it.`);
+    }
+  }
+
   async generateScript(config: ScriptConfig): Promise<string> {
+    await this.syncRuntime();
     const templatePath = this.getTemplatePath();
     let template = await fs.readFile(templatePath, 'utf-8');
 
@@ -550,14 +402,6 @@ export class VapourSynthScriptGenerator {
       }
     }
 
-    if (sideChains.length > 0 || this.readsReferenceVideo(enabledFilters)) {
-      filterCode += '# Pictures from another video, lined up by time with the step reading them\n';
-      filterCode += this.generatePairingHelpers();
-    }
-    if (sideChains.length > 0) {
-      filterCode += this.generateOpenVideoHelper();
-    }
-
     // For vs-view previews, name output tabs via vsview's set_output API and
     // always register the unprocessed (but trimmed) input as output 0, so a
     // single-stage workflow still has a "before" clip to compare against.
@@ -585,9 +429,7 @@ export class VapourSynthScriptGenerator {
     const emittedStages = new Set<string>();
     if (wantedStages.size > 0 || sideChains.length > 0) {
       filterCode += '# Pictures kept for a step below that reads them\n';
-      filterCode += `${STAGES} = {}\n`;
-      filterCode += 'def vk_stage_missing(message):\n';
-      filterCode += '    raise ValueError(message)\n\n';
+      filterCode += `${STAGES} = {}\n\n`;
     }
 
     let previewOutputIndex = 0;
@@ -640,14 +482,14 @@ export class VapourSynthScriptGenerator {
       const head = chain.head!;
       filterCode += `# Side chain ${sideChainLetter(layout.side.indexOf(chain))}: ${sideChainLabel(chain)}\n`;
       filterCode += '_vk_main = (clip, original_clip)\n';
-      filterCode += `clip = vk_open_video(${pyString(head.sourcePath!)})\n`;
+      filterCode += `clip = vk_open_video(${pyString(head.sourcePath!)}, globals())\n`;
       const align = alignmentOf(chain);
       if (align) {
         const sections = align.sections.map(sec => `(${sec.from}, ${sec.offset})`).join(', ');
         const framing = (align.framing ?? []).map(f => `(${f.from}, ${f.left}, ${f.top}, ${f.width}, ${f.height})`).join(', ');
         filterCode += framing
-          ? `clip = vk_conform(clip, ${align.speed}, [${sections}], [${framing}])\n`
-          : `clip = vk_conform(clip, ${align.speed}, [${sections}])\n`;
+          ? `clip = vk_conform(clip, vk_source, ${align.speed}, [${sections}], [${framing}])\n`
+          : `clip = vk_conform(clip, vk_source, ${align.speed}, [${sections}])\n`;
       }
       filterCode += 'original_clip = clip\n\n';
       for (const filter of chain.steps.filter(f => f.enabled)) emitStep(filter, 0);
