@@ -15,6 +15,8 @@ import { z } from 'zod';
 import { VapourSynthScriptGenerator } from './scriptGenerator';
 import { resolveProvider, resolveBackendId } from './providers/registry';
 import { UpscaleExecutor } from './upscaleExecutor';
+import { VapourSynthInfoExtractor, type OutputInfo } from './vapourSynthInfoExtractor';
+import { JobSlot } from './jobSlot';
 import { DependencyManager } from './dependencyManager';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 import { FFmpegManager } from './ffmpegManager';
@@ -27,11 +29,56 @@ import {
   resolveVideoCompareCommand,
 } from './videoCompare';
 
-let upscaleExecutor: UpscaleExecutor | null = null;
-let infoExecutor: UpscaleExecutor | null = null;
-let activeQueueItemLogger: QueueItemLogger | null = null;
-let previewSession: PreviewSession | null = null;
-let previewScriptPath: string | null = null;
+/** A processing run: its executor and its per-item log. */
+interface UpscaleJob {
+  executor: UpscaleExecutor;
+  log: QueueItemLogger;
+}
+
+/** How an upscale is stopped, and the line its item log gets. */
+interface UpscaleStop {
+  mode: 'cancel' | 'kill';
+  note: string;
+}
+
+/**
+ * Runs that were cancelled and are letting ffmpeg finish what it has. Quitting
+ * kills them; each leaves the set when its run settles.
+ */
+const drainingUpscales = new Set<UpscaleExecutor>();
+
+const upscaleJob = new JobSlot<UpscaleJob, UpscaleStop>((job, { mode, note }) => {
+  job.log.write(note);
+  job.log.close();
+  if (mode === 'cancel') {
+    drainingUpscales.add(job.executor);
+    job.executor.cancel();
+  } else {
+    job.executor.kill();
+  }
+});
+
+/** A `vspipe -i` evaluation run for validation or as a preflight. */
+const infoJob = new JobSlot<VapourSynthInfoExtractor>(extractor => extractor.cancelAll());
+
+/** The open preview session and how to remove the script it was opened on. */
+interface PreviewJob {
+  session: PreviewSession;
+  removeScript: () => Promise<void>;
+  /** False until the session has opened its script. */
+  ready: boolean;
+}
+
+const previewJob = new JobSlot<PreviewJob>(({ session, removeScript }) => {
+  session.dispose();
+  removeScript().catch(() => {});
+});
+
+/** The preview session requests are served from, once it has opened. */
+function openPreviewSession(): PreviewSession | null {
+  const job = previewJob.current;
+  return job?.ready ? job.session : null;
+}
 
 /**
  * The renderer end of the playback channel.
@@ -64,6 +111,13 @@ function closePreviewPort(): void {
  */
 let previewOpenToken = 0;
 
+/** Ends the preview: any open in flight, the session, its port and script. */
+function closePreview(): void {
+  previewOpenToken++;
+  closePreviewPort();
+  previewJob.stop();
+}
+
 /**
  * Cache ceiling for a preview session, in MB.
  *
@@ -73,28 +127,15 @@ let previewOpenToken = 0;
 const PREVIEW_CACHE_MB = 1000;
 
 /**
- * Cancels all active video processing executors and their child processes
+ * Stops every video job and its child processes, including cancelled runs
+ * whose ffmpeg is still finishing.
  */
 export function cancelAllVideoProcessing(): void {
-  if (activeQueueItemLogger) {
-    activeQueueItemLogger.write('Processing canceled (app shutdown)');
-    activeQueueItemLogger.close();
-    activeQueueItemLogger = null;
-  }
-  if (upscaleExecutor) {
-    upscaleExecutor.cancelInfoExtraction();
-    upscaleExecutor.kill();
-    upscaleExecutor = null;
-  }
-  if (infoExecutor) {
-    infoExecutor.cancelInfoExtraction();
-    infoExecutor = null;
-  }
-  if (previewSession) {
-    previewSession.dispose();
-    previewSession = null;
-  }
-  closePreviewPort();
+  upscaleJob.stop({ mode: 'kill', note: 'Processing canceled (app shutdown)' });
+  for (const executor of drainingUpscales) executor.kill();
+  drainingUpscales.clear();
+  infoJob.stop();
+  closePreview();
 }
 
 /**
@@ -105,6 +146,30 @@ export function registerVideoHandlers(
   scriptGenerator: VapourSynthScriptGenerator,
   dependencyManager: DependencyManager
 ) {
+  /**
+   * Evaluates a script once with `vspipe -i` in the info slot, replacing any
+   * evaluation already running there. Engine builds it triggers show in the
+   * app's build banner. A cancel, or a newer evaluation, kills it, and the
+   * result then carries the error that left.
+   */
+  const evaluateScript = async (scriptPath: string): Promise<OutputInfo> => {
+    const vspipePath = dependencyManager.getVSPipePath();
+    const extractor = new VapourSynthInfoExtractor(
+      vspipePath,
+      dependencyManager.getPythonExecutablePath(),
+      path.dirname(vspipePath),
+    );
+    extractor.onBuildStatus = status => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('engine-build-progress', status);
+      }
+    };
+    infoJob.start(extractor);
+    const info = await extractor.getOutputInfo(scriptPath);
+    infoJob.release(extractor);
+    return info;
+  };
+
   handleValidated('get-video-info', z.string().min(1), async (filePath) => {
     logger.info(`Getting video info for: ${filePath}`);
     try {
@@ -185,12 +250,6 @@ export function registerVideoHandlers(
   ) => {
     logger.info(`Getting output info for: ${videoPath} (validation mode - first 5 seconds)`);
     try {
-      // Cancel any previous info extraction
-      if (infoExecutor) {
-        infoExecutor.cancelInfoExtraction();
-        infoExecutor = null;
-      }
-
       const config = createScriptConfig(
         videoPath,
         modelPath,
@@ -205,15 +264,10 @@ export function registerVideoHandlers(
       );
       
       const scriptPath = await scriptGenerator.generateScript(config);
-      
-      const vspipePath = dependencyManager.getVSPipePath();
-      const pythonPath = dependencyManager.getPythonExecutablePath();
-      // mainWindow is passed so a cold-cache validation run (which can spend
-      // minutes building a TensorRT engine) surfaces the build banner
-      infoExecutor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
 
-      const info = await infoExecutor.getOutputInfo(scriptPath);
-      infoExecutor = null;
+      // A cold-cache validation run can spend minutes building a TensorRT
+      // engine; evaluateScript shows that in the build banner.
+      const info = await evaluateScript(scriptPath);
       
       // Check if vspipe returned an error
       if (info.error) {
@@ -250,7 +304,6 @@ export function registerVideoHandlers(
         scanType: 'Progressive' // AI upscaling output is typically progressive
       };
     } catch (error) {
-      infoExecutor = null;
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error('Error getting output info:', errorMsg);
       return { resolution: null, fps: null, error: errorMsg };
@@ -260,10 +313,7 @@ export function registerVideoHandlers(
   // Cancel validation handler
   ipcMain.handle('cancel-validation', async () => {
     logger.info('Cancelling workflow validation');
-    if (infoExecutor) {
-      infoExecutor.cancelInfoExtraction();
-      infoExecutor = null;
-    }
+    infoJob.stop();
     return { success: true, cancelled: true };
   });
 
@@ -283,17 +333,22 @@ export function registerVideoHandlers(
     return await withLogSeparator(async () => {
       const isUpscaling = upscalingEnabled !== false; // Default to true for backward compatibility
       
-      // Close any previous queue item logger
-      if (activeQueueItemLogger) {
-        activeQueueItemLogger.close();
-        activeQueueItemLogger = null;
-      }
-
       // Create per-item log file for this processing run
       const videoName = videoPath.split(/[\\/]/).pop() || 'unknown';
       const itemLogger = new QueueItemLogger(videoName);
       await itemLogger.open();
-      activeQueueItemLogger = itemLogger;
+
+      const vspipePath = dependencyManager.getVSPipePath();
+      const pythonPath = dependencyManager.getPythonExecutablePath();
+      const executor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
+
+      // The job is in the slot from here on, so a cancel at any later await
+      // reaches it. Any previous run, and any validation, is stopped first.
+      infoJob.stop();
+      const job = upscaleJob.start(
+        { executor, log: itemLogger },
+        { mode: 'kill', note: 'Processing stopped: a new run started' },
+      );
 
       // Helper to log to both main log and per-item log
       const qlog = (message: string) => {
@@ -305,19 +360,6 @@ export function registerVideoHandlers(
         itemLogger.error(message);
       };
 
-      // Cancel any pending upscale/preview/info executors and their child processes
-      if (infoExecutor) {
-        qlog('Canceling info executor before starting new processing');
-        infoExecutor.cancelInfoExtraction();
-        infoExecutor = null;
-      }
-      if (upscaleExecutor) {
-        qlog('Canceling previous upscale executor before starting new processing');
-        upscaleExecutor.cancelInfoExtraction();
-        upscaleExecutor.kill();
-        upscaleExecutor = null;
-      }
-      
       qlog('Starting processing');
       qlog(`Input: ${videoPath}`);
       qlog(`Upscaling: ${isUpscaling ? 'enabled' : 'disabled'}`);
@@ -379,14 +421,8 @@ export function registerVideoHandlers(
         const fps = sourceProbe.display.fps || 24;
         qlog(`Input video fps: ${fps}`);
 
-        // Initialize executor
-        const vspipePath = dependencyManager.getVSPipePath();
-        const pythonPath = dependencyManager.getPythonExecutablePath();
         qlog(`VSPipe: ${vspipePath}`);
         qlog(`Python: ${pythonPath}`);
-        
-        const executor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
-        upscaleExecutor = executor;
 
         // Record runtime engine builds per item — they can add minutes to a run,
         // so the item log should show why. The banner covers the live view.
@@ -402,10 +438,8 @@ export function registerVideoHandlers(
         };
 
         // Evaluate the graph once for the frame count and output format. Stream
-        // BestSource indexing progress so a cold cache doesn't look like a hang,
-        // and re-check the module slot after the await — cancel-upscale,
-        // kill-upscale, and the new-run cleanup at the top of this handler all
-        // null the module reference mid-flight.
+        // BestSource indexing progress so a cold cache doesn't look like a hang.
+        // A stop during it kills the probe, and execute() then refuses to run.
         qlog('Getting frame count');
         let lastIndexPct = -1;
         const outputInfo = await executor.getOutputInfo(scriptPath, (pct) => {
@@ -418,14 +452,11 @@ export function registerVideoHandlers(
         const totalFrames = outputInfo.frames;
         qlog(`Total frames to process: ${totalFrames}`);
 
-        if (upscaleExecutor !== executor) {
-          qlog('Upscale canceled before execution started');
-          mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
-          itemLogger.close();
-          activeQueueItemLogger = null;
+        mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
+        if (executor.isStopped) {
+          logger.upscale('Upscale canceled before execution started');
           return { success: false, error: 'Canceled' };
         }
-        mainWindow?.webContents.send('video-index-progress', { percentage: 100, complete: true });
 
         qlog('Starting execution');
         await executor.execute(scriptPath, outputPath, videoPath, { source: sourceProbe.streams, output: outputInfo }, segment?.enabled ? segment : undefined, fps, benchmarkMode);
@@ -435,29 +466,26 @@ export function registerVideoHandlers(
         await scriptGenerator.cleanupScript(scriptPath);
 
         qlog('Processing completed successfully');
-        itemLogger.close();
-        activeQueueItemLogger = null;
         return { success: true, outputPath };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        qerror(`Processing failed: ${errorMsg}`);
-        itemLogger.close();
-        activeQueueItemLogger = null;
+        if (executor.isStopped) {
+          logger.upscale(`Processing stopped: ${errorMsg}`);
+        } else {
+          qerror(`Processing failed: ${errorMsg}`);
+        }
         return { success: false, error: errorMsg };
+      } finally {
+        upscaleJob.release(job);
+        drainingUpscales.delete(executor);
+        itemLogger.close();
       }
     });
   });
 
   ipcMain.handle('cancel-upscale', async () => {
     logger.upscale('Canceling upscale process');
-    if (activeQueueItemLogger) {
-      activeQueueItemLogger.write('Processing canceled by user');
-      activeQueueItemLogger.close();
-      activeQueueItemLogger = null;
-    }
-    if (upscaleExecutor) {
-      upscaleExecutor.cancel();
-      upscaleExecutor = null;
+    if (upscaleJob.stop({ mode: 'cancel', note: 'Processing canceled by user' })) {
       logger.upscale('Upscale canceled');
     }
     return { success: true };
@@ -465,16 +493,11 @@ export function registerVideoHandlers(
 
   ipcMain.handle('kill-upscale', async () => {
     logger.upscale('Force killing upscale process');
-    if (activeQueueItemLogger) {
-      activeQueueItemLogger.write('Processing force killed');
-      activeQueueItemLogger.close();
-      activeQueueItemLogger = null;
-    }
-    if (upscaleExecutor) {
-      upscaleExecutor.kill();
-      upscaleExecutor = null;
+    if (upscaleJob.stop({ mode: 'kill', note: 'Processing force killed' })) {
       logger.upscale('Upscale force killed');
     }
+    // A run cancelled earlier may still be letting ffmpeg finish.
+    for (const executor of drainingUpscales) executor.kill();
     return { success: true };
   });
 
@@ -561,19 +584,7 @@ export function registerVideoHandlers(
       // build then happens here, under the app's build banner and with the
       // launch spinner still up, instead of freezing vs-view's own window — and
       // script errors surface with our error handling rather than vs-view's.
-      const vspipePath = dependencyManager.getVSPipePath();
-      const pythonPath = dependencyManager.getPythonExecutablePath();
-      if (infoExecutor) {
-        infoExecutor.cancelInfoExtraction();
-      }
-      const preflightExecutor = new UpscaleExecutor(vspipePath, pythonPath, mainWindow);
-      infoExecutor = preflightExecutor;
-      const preflight = await preflightExecutor.getOutputInfo(scriptPath);
-      // Only release the slot if it's still ours — cancel-validation and a
-      // second launch both replace it mid-flight
-      if (infoExecutor === preflightExecutor) {
-        infoExecutor = null;
-      }
+      const preflight = await evaluateScript(scriptPath);
 
       if (preflight.error) {
         logger.error('vs-view preflight failed:', preflight.error);
@@ -617,6 +628,7 @@ export function registerVideoHandlers(
   ) => {
     const token = ++previewOpenToken;
     const superseded = () => token !== previewOpenToken;
+    let openingJob: PreviewJob | null = null;
 
     try {
       const metadata = await extractVideoMetadata(videoPath);
@@ -642,19 +654,7 @@ export function registerVideoHandlers(
       // Same preflight as the vs-view launch: a TensorRT step with no cached
       // engine would otherwise block the session's open for minutes with
       // nothing on screen explaining why.
-      if (infoExecutor) {
-        infoExecutor.cancelInfoExtraction();
-      }
-      const preflightExecutor = new UpscaleExecutor(
-        dependencyManager.getVSPipePath(),
-        dependencyManager.getPythonExecutablePath(),
-        mainWindow,
-      );
-      infoExecutor = preflightExecutor;
-      const preflight = await preflightExecutor.getOutputInfo(scriptPath);
-      if (infoExecutor === preflightExecutor) {
-        infoExecutor = null;
-      }
+      const preflight = await evaluateScript(scriptPath);
 
       // A cancel during the preflight surfaces as an error from it, so the
       // token is what tells the two apart.
@@ -669,29 +669,25 @@ export function registerVideoHandlers(
         return { success: false, error: preflight.error };
       }
 
-      if (previewSession) {
-        previewSession.dispose();
-        previewSession = null;
-      }
-      if (previewScriptPath) {
-        await scriptGenerator.cleanupScript(previewScriptPath).catch(() => {});
-        previewScriptPath = null;
-      }
-
+      // The new session takes the slot before it starts, so a cancel or the
+      // app quitting while it opens stops it too.
       const session = new PreviewSession();
+      openingJob = previewJob.start({
+        session,
+        removeScript: () => scriptGenerator.cleanupScript(scriptPath),
+        ready: false,
+      });
+      closePreviewPort();
       await session.start();
       const outputs = await session.open(scriptPath, PREVIEW_CACHE_MB);
 
       // Opening a cold source can take seconds, which is plenty of time for a
-      // cancel to arrive. Do not install a session nobody is waiting for.
+      // cancel to arrive. Do not keep a session nobody is waiting for.
       if (superseded()) {
-        session.dispose();
-        await scriptGenerator.cleanupScript(scriptPath).catch(() => {});
+        if (previewJob.holds(openingJob)) previewJob.stop();
         return { success: false, cancelled: true };
       }
-
-      previewSession = session;
-      previewScriptPath = scriptPath;
+      openingJob.ready = true;
 
       // The playback channel. Created here rather than on first play so the
       // renderer has it before the user can press anything, and so its `close`
@@ -728,6 +724,7 @@ export function registerVideoHandlers(
       logger.info(`Preview session open with ${outputs.length} steps`);
       return { success: true, outputs, token: portToken };
     } catch (error) {
+      if (openingJob && previewJob.holds(openingJob)) previewJob.stop();
       const errorMsg = error instanceof Error ? error.message : String(error);
       logger.error('Error opening preview session:', error);
       return { success: false, error: errorMsg };
@@ -738,21 +735,8 @@ export function registerVideoHandlers(
     logger.info('Cancelling the preview session');
     // Invalidates any open still in flight, so it tears itself down instead
     // of installing a session after the user asked to stop.
-    previewOpenToken++;
-    closePreviewPort();
-
-    if (infoExecutor) {
-      infoExecutor.cancelInfoExtraction();
-      infoExecutor = null;
-    }
-    if (previewSession) {
-      previewSession.dispose();
-      previewSession = null;
-    }
-    if (previewScriptPath) {
-      await scriptGenerator.cleanupScript(previewScriptPath).catch(() => {});
-      previewScriptPath = null;
-    }
+    closePreview();
+    infoJob.stop();
     return { success: true, cancelled: true };
   });
 
@@ -767,6 +751,7 @@ export function registerVideoHandlers(
       prefetch: z.number().int().positive().max(16).optional(),
     }),
     async (options) => {
+      const previewSession = openPreviewSession();
       if (!previewSession) return { success: false, error: 'No preview session is open' };
       if (!previewPort) return { success: false, error: 'The preview session has no playback channel' };
       try {
@@ -782,6 +767,7 @@ export function registerVideoHandlers(
     'preview-stop',
     z.number().int().nonnegative(),
     async (stream) => {
+      const previewSession = openPreviewSession();
       if (!previewSession) return { success: true, n: null };
       try {
         return { success: true, n: await previewSession.stop(stream) };
@@ -792,6 +778,7 @@ export function registerVideoHandlers(
   );
 
   ipcMain.handle('preview-select', async (event, index: number) => {
+    const previewSession = openPreviewSession();
     if (!previewSession) return { success: false, error: 'No preview session is open' };
     try {
       await previewSession.select(index);
@@ -805,6 +792,7 @@ export function registerVideoHandlers(
   // the one frame this handler serves; playback replaces it with a
   // MessageChannel port so frames are transferred rather than cloned.
   ipcMain.handle('preview-frame', async (event, n: number, width: number) => {
+    const previewSession = openPreviewSession();
     if (!previewSession) return { success: false, error: 'No preview session is open' };
     try {
       const frame = await previewSession.frame(n, width);
@@ -824,16 +812,7 @@ export function registerVideoHandlers(
   });
 
   ipcMain.handle('preview-close', async () => {
-    previewOpenToken++;
-    closePreviewPort();
-    if (previewSession) {
-      previewSession.dispose();
-      previewSession = null;
-    }
-    if (previewScriptPath) {
-      await scriptGenerator.cleanupScript(previewScriptPath).catch(() => {});
-      previewScriptPath = null;
-    }
+    closePreview();
     return { success: true };
   });
 

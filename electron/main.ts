@@ -7,6 +7,7 @@ import { WindowManager } from './windowManager';
 import { registerAllIpcHandlers } from './ipcRegistry';
 import { cancelActiveModelOperation } from './modelHandlers';
 import { cancelAllVideoProcessing } from './videoHandlers';
+import { stopAllAlignments } from './alignHandlers';
 import { shutdownDiscordRichPresence } from './discordRichPresence';
 
 // ============================================================================
@@ -102,6 +103,8 @@ app.on('before-quit', () => {
   cancelActiveModelOperation();
   // Cancel any active video processing (vspipe, ffmpeg processes)
   cancelAllVideoProcessing();
+  // Stop any side-chain alignment (python processes)
+  stopAllAlignments();
 });
 
 app.on('activate', () => {

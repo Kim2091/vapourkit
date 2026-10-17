@@ -87,3 +87,33 @@ describe('stopping an upscale before it spawns', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 });
+
+describe('stopping a running upscale', () => {
+  it('kill() still reaches an ffmpeg that cancel() left finishing its encode', async () => {
+    const { EventEmitter } = await import('events');
+    const { PassThrough } = await import('stream');
+    const { terminateProcessTree } = await import('./processLifecycle');
+    const fakeProcess = () => Object.assign(new EventEmitter(), {
+      pid: 1, killed: false, stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
+    });
+    const vspipe = fakeProcess();
+    const ffmpeg = fakeProcess();
+    spawn.mockReset();
+    spawn.mockReturnValueOnce(vspipe).mockReturnValueOnce(ffmpeg);
+    vi.mocked(terminateProcessTree).mockClear();
+
+    const executor = new UpscaleExecutor('/vs/vspipe', '/py');
+    const run = executor.execute('/s.vpy', '/out.mkv', '/in.mkv', probes());
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+
+    executor.cancel();
+    expect(terminateProcessTree).toHaveBeenCalledWith(vspipe, 'SIGTERM');
+    expect(terminateProcessTree).not.toHaveBeenCalledWith(ffmpeg);
+
+    executor.kill();
+    expect(terminateProcessTree).toHaveBeenCalledWith(ffmpeg);
+
+    ffmpeg.emit('close', 1);
+    await expect(run).rejects.toThrow('Processing was stopped');
+  });
+});

@@ -864,7 +864,8 @@ export class UpscaleExecutor {
         logger.upscale('ffmpeg finished encoding and exited');
       });
       
-      this.ffmpegProcess = null;
+      // ffmpegProcess stays set until ffmpeg closes, so kill() can still stop
+      // it during the grace period (the app quitting, for one).
       logger.upscale('ffmpeg graceful shutdown initiated');
     }
     
@@ -904,12 +905,5 @@ export class UpscaleExecutor {
     }
     
     this.isCanceling = false;
-  }
-
-  /**
-   * Cancels any active info extraction processes (vspipe -i)
-   */
-  cancelInfoExtraction(): void {
-    this.vsInfoExtractor.cancelAll();
   }
 }
