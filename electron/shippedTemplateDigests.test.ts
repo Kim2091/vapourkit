@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
-import { SHIPPED_TEMPLATE_DIGESTS } from './shippedTemplateDigests';
+import { RELEASE_TEMPLATE_DIGESTS, SHIPPED_TEMPLATE_DIGESTS } from './shippedTemplateDigests';
 import { shippedTemplateDigest } from './shippedTemplateDigest';
 
 const repoRoot = path.resolve(__dirname, '..');
@@ -20,6 +20,15 @@ describe('shipped template digests', () => {
       }
     }
     expect(missing, 'run: npx tsx scripts/generateShippedTemplateDigests.ts').toEqual([]);
+  });
+
+  it("resolves every release body to one of that template's shipped bodies", () => {
+    const unresolved = Object.entries(RELEASE_TEMPLATE_DIGESTS).flatMap(([version, files]) =>
+      Object.entries(files)
+        .filter(([file, digest]) => typeof digest !== 'string' || !SHIPPED_TEMPLATE_DIGESTS[file]?.includes(digest))
+        .map(([file]) => `${version} ${file}`));
+    expect(Object.keys(RELEASE_TEMPLATE_DIGESTS).length).toBeGreaterThan(0);
+    expect(unresolved).toEqual([]);
   });
 
   it('ignores line endings, so a CRLF checkout matches the LF body git stored', () => {
