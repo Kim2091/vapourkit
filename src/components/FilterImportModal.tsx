@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { X, Check, Edit2, Filter, Search, CheckCircle } from 'lucide-react';
 import type { FilterEditor, FilterParameterValues, FilterVariables } from '../electron.d';
+import { useModalEscape } from './useModalEscape';
 
 interface FilterImportItem {
   originalName: string;
@@ -86,23 +87,15 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
     }
   }, [isOpen, filters, workflowName]);
 
-  // Handle escape key to close modal
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        if (editingIndex !== null) {
-          // Cancel editing
-          setEditingIndex(null);
-          setEditName('');
-        } else {
-          // Close modal
-          onClose();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, editingIndex, onClose]);
+  // Escape cancels a rename in progress, otherwise closes the modal.
+  useModalEscape(() => {
+    if (editingIndex !== null) {
+      setEditingIndex(null);
+      setEditName('');
+    } else {
+      onClose();
+    }
+  }, isOpen);
 
   const toggleSelection = (index: number) => {
     setImportItems(prev =>
@@ -279,7 +272,10 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
                                 onChange={(e) => setEditName(e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') saveEdit();
-                                  if (e.key === 'Escape') cancelEdit();
+                                  if (e.key === 'Escape') {
+                                    e.stopPropagation();
+                                    cancelEdit();
+                                  }
                                 }}
                                 className="flex-1 px-2 py-1.5 bg-ink-850 border border-ink-700 rounded text-sm
                                          focus:outline-none focus:border-accent-500 transition-colors"

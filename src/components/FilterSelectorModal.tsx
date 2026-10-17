@@ -2,6 +2,7 @@ import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, Star, Clock, Filter as FilterIcon, Check, Trash2, Edit3, Plus } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
 import { TemplateEditDialog } from './TemplateEditDialog';
+import { ModalShell } from './ModalShell';
 import { ask } from '../utils/dialogs';
 
 interface FilterSelectorModalProps {
@@ -95,7 +96,6 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
   const [editingTemplate, setEditingTemplate] = useState<FilterTemplate | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
 
   // Load favorites and recent from localStorage
   useEffect(() => {
@@ -121,17 +121,6 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
       setTimeout(() => searchInputRef.current?.focus(), 50);
     }
   }, [isOpen]);
-
-  // Handle escape key to close modal
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
 
   // Group templates by category (templates can appear in multiple categories)
   const groupedTemplates = useMemo(() => {
@@ -347,244 +336,224 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
         />
       )}
 
-      {/* Main Modal */}
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={modalRef}
-        className="bg-ink-900 border border-ink-750 rounded-lg shadow-2xl shadow-black/60 w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+      <ModalShell
+        title="Select Filter Template"
+        icon={FilterIcon}
+        onClose={onClose}
+        closeLabel="Close filter selector"
+        closeTitle="Close"
+        closeOnBackdrop
+        padded={false}
+        className="w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col overflow-hidden"
       >
-        {/* Header */}
-        <div className="h-10 flex-shrink-0 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800 rounded-t-lg overflow-hidden">
-          <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <FilterIcon className="w-4 h-4 text-ink-500" />
-            <h2 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Select Filter Template</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 self-center rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
-            title="Close"
-            aria-label="Close filter selector"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
         {/* Search Bar */}
         <div className="flex-shrink-0 px-3 py-2 border-b border-ink-800">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-500" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search filters by name, category, or description..."
-              className="w-full h-8 bg-ink-850 border border-ink-750 rounded pl-8 pr-8 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-500" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search filters by name, category, or description..."
+            className="w-full h-8 bg-ink-850 border border-ink-750 rounded pl-8 pr-8 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
         </div>
 
         {/* Main Content */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Category Sidebar */}
-          <div className="w-56 flex-shrink-0 border-r border-ink-800 overflow-y-auto bg-ink-950">
-            <div className="pb-2">
-              <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
-                Categories
+        {/* Category Sidebar */}
+        <div className="w-56 flex-shrink-0 border-r border-ink-800 overflow-y-auto bg-ink-950">
+          <div className="pb-2">
+            <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
+              Categories
+            </div>
+            <div>
+              {categories.map(category => {
+                const count = category === 'All'
+                  ? filterTemplates.length
+                  : (groupedTemplates[category]?.length || 0);
+
+                return (
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
+                      selectedCategory === category
+                        ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
+                        : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
+                    }`}
+                  >
+                    <span className="truncate">{category}</span>
+                    <span className={`text-[10.5px] tabular-nums ${
+                      selectedCategory === category
+                        ? 'text-accent-400'
+                        : 'text-ink-500 group-hover:text-ink-400'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Filter List */}
+        <div className="flex-1 overflow-y-auto bg-ink-950">
+          {/* Custom/New Button */}
+          <button
+            onClick={() => handleSelectTemplate('')}
+            className={`w-full h-9 px-3 border-b border-ink-900 transition-colors flex items-center gap-2 text-[12.5px] font-medium text-left ${
+              currentSelection === ''
+                ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
+                : 'text-accent-400 hover:bg-ink-900 hover:text-accent-300'
+            }`}
+            title="Start with a blank filter"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Custom/New Filter</span>
+          </button>
+
+          {/* Current Selection */}
+          {currentSelection && (
+            <div className="flex items-center gap-2.5 min-h-[36px] px-3 py-1.5 bg-accent-500/10 border-b border-ink-800 shadow-[inset_3px_0_0] shadow-accent-500">
+              <div className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 flex-shrink-0">Current Selection</div>
+              <div className="text-[12.5px] font-medium text-accent-400 truncate flex-1 min-w-0">{currentSelection}</div>
+              <button
+                onClick={handleClearSelection}
+                className="h-6 px-2 rounded inline-flex items-center text-[11px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors flex-shrink-0"
+              >
+                Clear (Custom)
+              </button>
+            </div>
+          )}
+
+          {/* Favorites Section */}
+          {!searchQuery && selectedCategory === 'All' && favoriteFilterTemplates.length > 0 && (
+            <div className="mb-2">
+              <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                <Star className="w-3 h-3 text-warn-400 fill-warn-400" />
+                <h3>Favorites</h3>
+                <span className="text-ink-500 tabular-nums">({favoriteFilterTemplates.length})</span>
               </div>
               <div>
-                {categories.map(category => {
-                  const count = category === 'All'
-                    ? filterTemplates.length
-                    : (groupedTemplates[category]?.length || 0);
-
-                  return (
-                    <button
-                      key={category}
-                      onClick={() => setSelectedCategory(category)}
-                      className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
-                        selectedCategory === category
-                          ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
-                          : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
-                      }`}
-                    >
-                      <span className="truncate">{category}</span>
-                      <span className={`text-[10.5px] tabular-nums ${
-                        selectedCategory === category
-                          ? 'text-accent-400'
-                          : 'text-ink-500 group-hover:text-ink-400'
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
+                {favoriteFilterTemplates.map(template => (
+                  <FilterItem
+                    key={template.name}
+                    template={template}
+                    isFavorite={true}
+                    onToggleFavorite={toggleFavorite}
+                    onSelect={handleSelectTemplate}
+                    isSelected={currentSelection === template.name}
+                    onDelete={onDeleteTemplate ? handleDeleteTemplate : undefined}
+                    onEdit={onEditTemplate ? handleEditTemplate : undefined}
+                  />
+                ))}
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Filter List */}
-          <div className="flex-1 overflow-y-auto bg-ink-950">
-            {/* Custom/New Button */}
-            <button
-              onClick={() => handleSelectTemplate('')}
-              className={`w-full h-9 px-3 border-b border-ink-900 transition-colors flex items-center gap-2 text-[12.5px] font-medium text-left ${
-                currentSelection === ''
-                  ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
-                  : 'text-accent-400 hover:bg-ink-900 hover:text-accent-300'
-              }`}
-              title="Start with a blank filter"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Custom/New Filter</span>
-            </button>
-
-            {/* Current Selection */}
-            {currentSelection && (
-              <div className="flex items-center gap-2.5 min-h-[36px] px-3 py-1.5 bg-accent-500/10 border-b border-ink-800 shadow-[inset_3px_0_0] shadow-accent-500">
-                <div className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 flex-shrink-0">Current Selection</div>
-                <div className="text-[12.5px] font-medium text-accent-400 truncate flex-1 min-w-0">{currentSelection}</div>
-                <button
-                  onClick={handleClearSelection}
-                  className="h-6 px-2 rounded inline-flex items-center text-[11px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors flex-shrink-0"
-                >
-                  Clear (Custom)
-                </button>
-              </div>
-            )}
-
-            {/* Favorites Section */}
-            {!searchQuery && selectedCategory === 'All' && favoriteFilterTemplates.length > 0 && (
-              <div className="mb-2">
-                <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-                  <Star className="w-3 h-3 text-warn-400 fill-warn-400" />
-                  <h3>Favorites</h3>
-                  <span className="text-ink-500 tabular-nums">({favoriteFilterTemplates.length})</span>
-                </div>
-                <div>
-                  {favoriteFilterTemplates.map(template => (
-                    <FilterItem
-                      key={template.name}
-                      template={template}
-                      isFavorite={true}
-                      onToggleFavorite={toggleFavorite}
-                      onSelect={handleSelectTemplate}
-                      isSelected={currentSelection === template.name}
-                      onDelete={onDeleteTemplate ? handleDeleteTemplate : undefined}
-                      onEdit={onEditTemplate ? handleEditTemplate : undefined}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recent Section */}
-            {!searchQuery && selectedCategory === 'All' && recentFilterTemplates.length > 0 && (
-              <div className="mb-2">
-                <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-                  <Clock className="w-3 h-3 text-ink-500" />
-                  <h3>Recent</h3>
-                  <span className="text-ink-500 tabular-nums">({recentFilterTemplates.length})</span>
-                </div>
-                <div>
-                  {recentFilterTemplates.map(template => (
-                    <FilterItem
-                      key={template.name}
-                      template={template}
-                      isFavorite={favorites.has(template.name)}
-                      onToggleFavorite={toggleFavorite}
-                      onSelect={handleSelectTemplate}
-                      isSelected={currentSelection === template.name}
-                      onDelete={onDeleteTemplate ? handleDeleteTemplate : undefined}
-                      onEdit={onEditTemplate ? handleEditTemplate : undefined}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* All Filters / Search Results */}
-            <div>
+          {/* Recent Section */}
+          {!searchQuery && selectedCategory === 'All' && recentFilterTemplates.length > 0 && (
+            <div className="mb-2">
               <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-                <FilterIcon className="w-3 h-3 text-ink-500" />
-                <h3>
-                  {searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Filters' : selectedCategory}
-                </h3>
-                <span className="text-ink-500 tabular-nums">({filteredTemplates.length})</span>
+                <Clock className="w-3 h-3 text-ink-500" />
+                <h3>Recent</h3>
+                <span className="text-ink-500 tabular-nums">({recentFilterTemplates.length})</span>
               </div>
-              {filteredTemplates.length === 0 ? (
-                <div className="text-center py-12 text-ink-500">
-                  <FilterIcon className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                  <p className="text-[12.5px] text-ink-400">No filters found</p>
-                  {searchQuery && (
-                    <p className="text-[11px] mt-1">Try adjusting your search query</p>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  {filteredTemplates.map(template => (
-                    <FilterItem
-                      key={template.name}
-                      template={template}
-                      isFavorite={favorites.has(template.name)}
-                      onToggleFavorite={toggleFavorite}
-                      onSelect={handleSelectTemplate}
-                      isSelected={currentSelection === template.name}
-                      onDelete={onDeleteTemplate ? handleDeleteTemplate : undefined}
-                      onEdit={onEditTemplate ? handleEditTemplate : undefined}
-                    />
-                  ))}
-                </div>
-              )}
+              <div>
+                {recentFilterTemplates.map(template => (
+                  <FilterItem
+                    key={template.name}
+                    template={template}
+                    isFavorite={favorites.has(template.name)}
+                    onToggleFavorite={toggleFavorite}
+                    onSelect={handleSelectTemplate}
+                    isSelected={currentSelection === template.name}
+                    onDelete={onDeleteTemplate ? handleDeleteTemplate : undefined}
+                    onEdit={onEditTemplate ? handleEditTemplate : undefined}
+                  />
+                ))}
+              </div>
             </div>
+          )}
+
+          {/* All Filters / Search Results */}
+          <div>
+            <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+              <FilterIcon className="w-3 h-3 text-ink-500" />
+              <h3>
+                {searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Filters' : selectedCategory}
+              </h3>
+              <span className="text-ink-500 tabular-nums">({filteredTemplates.length})</span>
+            </div>
+            {filteredTemplates.length === 0 ? (
+              <div className="text-center py-12 text-ink-500">
+                <FilterIcon className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="text-[12.5px] text-ink-400">No filters found</p>
+                {searchQuery && (
+                  <p className="text-[11px] mt-1">Try adjusting your search query</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                {filteredTemplates.map(template => (
+                  <FilterItem
+                    key={template.name}
+                    template={template}
+                    isFavorite={favorites.has(template.name)}
+                    onToggleFavorite={toggleFavorite}
+                    onSelect={handleSelectTemplate}
+                    isSelected={currentSelection === template.name}
+                    onDelete={onDeleteTemplate ? handleDeleteTemplate : undefined}
+                    onEdit={onEditTemplate ? handleEditTemplate : undefined}
+                  />
+                ))}
+              </div>
+            )}
           </div>
+        </div>
         </div>
 
         {/* Footer */}
         <div className="flex-shrink-0 h-8 border-t border-ink-800 px-3 bg-ink-900 flex items-center justify-between text-[11px] text-ink-500">
-          <div className="flex items-center gap-3 tabular-nums">
-            <span>{filteredTemplates.length} filters shown</span>
-            <span>•</span>
-            <span>{favorites.size} favorites</span>
-            {missingBuiltIns.length > 0 && (
-              <>
-                <span>•</span>
-                <button
-                  onClick={handleRestoreBuiltIns}
-                  disabled={isRestoring}
-                  title={missingBuiltIns.map(f => f.replace(/\.vkfilter$/, '')).join(', ')}
-                  className="text-accent-400 hover:text-accent-300 hover:underline disabled:opacity-50"
-                >
-                  {isRestoring
-                    ? 'Restoring…'
-                    : `Restore ${missingBuiltIns.length} deleted built-in filter${missingBuiltIns.length === 1 ? '' : 's'}`}
-                </button>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd className="px-1.5 py-0.5 bg-ink-850 border border-ink-750 rounded text-[10px] font-mono text-ink-300">Esc</kbd>
-            <span>to close</span>
-          </div>
+        <div className="flex items-center gap-3 tabular-nums">
+          <span>{filteredTemplates.length} filters shown</span>
+          <span>•</span>
+          <span>{favorites.size} favorites</span>
+          {missingBuiltIns.length > 0 && (
+            <>
+              <span>•</span>
+              <button
+                onClick={handleRestoreBuiltIns}
+                disabled={isRestoring}
+                title={missingBuiltIns.map(f => f.replace(/\.vkfilter$/, '')).join(', ')}
+                className="text-accent-400 hover:text-accent-300 hover:underline disabled:opacity-50"
+              >
+                {isRestoring
+                  ? 'Restoring…'
+                  : `Restore ${missingBuiltIns.length} deleted built-in filter${missingBuiltIns.length === 1 ? '' : 's'}`}
+              </button>
+            </>
+          )}
         </div>
-      </div>
-      </div>
+        <div className="flex items-center gap-2">
+          <kbd className="px-1.5 py-0.5 bg-ink-850 border border-ink-750 rounded text-[10px] font-mono text-ink-300">Esc</kbd>
+          <span>to close</span>
+        </div>
+        </div>
+      </ModalShell>
     </>
   );
 });

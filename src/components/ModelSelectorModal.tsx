@@ -5,6 +5,7 @@ import { ask } from '../utils/dialogs';
 import { notify } from '../utils/notifications';
 import { getModelDisplayName, filterModels, getPortableModelName } from '../utils/modelUtils';
 import { getBackendDescriptor } from '../utils/backends';
+import { ModalShell } from './ModalShell';
 
 interface ModelSelectorModalProps {
   isOpen: boolean;
@@ -97,7 +98,6 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
   const categoryInputRef = useRef<HTMLInputElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
 
   // All unique user-defined categories across all models
   const allExistingCategories = useMemo(() => {
@@ -170,17 +170,6 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
       setTimeout(() => searchInputRef.current?.focus(), 50);
     }
   }, [isOpen]);
-
-  // Handle escape key to close modal
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
 
   // Helper: get the model type label (VSR or Image)
   const getModelType = (model: ModelFile): string => {
@@ -493,593 +482,559 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     <>
       {/* Edit Dialog Overlay */}
       {editingModel && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={handleCancelEdit}
+        <ModalShell
+          title="Edit Model"
+          icon={Edit3}
+          onClose={handleCancelEdit}
+          closeLabel="Close edit dialog"
+          closeOnBackdrop
+          padded={false}
+          layer={60}
+          className="w-[500px] max-w-[90vw]"
         >
-          <div
-            className="bg-ink-900 border border-ink-750 rounded-lg shadow-2xl shadow-black/60 w-[500px] max-w-[90vw]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-10 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800 rounded-t-lg overflow-hidden">
-              <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <Edit3 className="w-4 h-4 text-ink-500" />
-                <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Edit Model</h3>
-              </div>
-              <button
-                onClick={handleCancelEdit}
-                aria-label="Close edit dialog"
-                className="w-7 h-7 self-center rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          <div className="p-4 space-y-3">
+            <div>
+              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
+                Model Name
+              </label>
+              <input
+                type="text"
+                value={editModelName}
+                onChange={(e) => setEditModelName(e.target.value)}
+                placeholder="Model name"
+                className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
+              />
             </div>
 
-            <div className="p-4 space-y-3">
+            <div>
+              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
+                Display Tag
+              </label>
+              <input
+                type="text"
+                value={editDisplayTag}
+                onChange={(e) => setEditDisplayTag(e.target.value)}
+                placeholder="Optional display name"
+                className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Model Name
+                  Model Type
+                </label>
+                <select
+                  value={editModelType}
+                  onChange={(e) => setEditModelType(e.target.value as 'vsr' | 'image')}
+                  className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
+                >
+                  <option value="vsr">Video</option>
+                  <option value="image">Image</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
+                  Inference Precision
+                </label>
+                {editingModel.backend === 'tensorrt' ? (
+                  <select
+                    value={editUseFp32 ? 'fp32' : editUseBf16 ? 'bf16' : 'fp16'}
+                    onChange={(e) => {
+                      const precision = e.target.value;
+                      setEditUseFp32(precision === 'fp32');
+                      setEditUseBf16(precision === 'bf16');
+                    }}
+                    className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
+                  >
+                    <option value="fp16">FP16 (RGBH)</option>
+                    <option value="bf16">BF16 (RGBH)</option>
+                    <option value="fp32">FP32 (RGBS)</option>
+                  </select>
+                ) : (
+                  <select
+                    value={editUseFp32 ? 'fp32' : 'fp16'}
+                    onChange={(e) => {
+                      setEditUseFp32(e.target.value === 'fp32');
+                      setEditUseBf16(false);
+                    }}
+                    className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
+                  >
+                    <option value="fp16">FP16 (RGBH)</option>
+                    <option value="fp32">FP32 (RGBS)</option>
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {editModelType === 'vsr' && (
+              <div>
+                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
+                  Temporal Frames
                 </label>
                 <input
-                  type="text"
-                  value={editModelName}
-                  onChange={(e) => setEditModelName(e.target.value)}
-                  placeholder="Model name"
+                  type="number"
+                  min="1"
+                  max="99"
+                  step="2"
+                  value={editTemporalFrames ?? 5}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value, 10);
+                    setEditTemporalFrames(Number.isNaN(value) ? undefined : value);
+                  }}
                   className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
                 />
               </div>
+            )}
 
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Display Tag
-                </label>
-                <input
-                  type="text"
-                  value={editDisplayTag}
-                  onChange={(e) => setEditDisplayTag(e.target.value)}
-                  placeholder="Optional display name"
-                  className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
-                  autoFocus
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                    Model Type
-                  </label>
-                  <select
-                    value={editModelType}
-                    onChange={(e) => setEditModelType(e.target.value as 'vsr' | 'image')}
-                    className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-                  >
-                    <option value="vsr">Video</option>
-                    <option value="image">Image</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                    Inference Precision
-                  </label>
-                  {editingModel.backend === 'tensorrt' ? (
-                    <select
-                      value={editUseFp32 ? 'fp32' : editUseBf16 ? 'bf16' : 'fp16'}
-                      onChange={(e) => {
-                        const precision = e.target.value;
-                        setEditUseFp32(precision === 'fp32');
-                        setEditUseBf16(precision === 'bf16');
-                      }}
-                      className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-                    >
-                      <option value="fp16">FP16 (RGBH)</option>
-                      <option value="bf16">BF16 (RGBH)</option>
-                      <option value="fp32">FP32 (RGBS)</option>
-                    </select>
-                  ) : (
-                    <select
-                      value={editUseFp32 ? 'fp32' : 'fp16'}
-                      onChange={(e) => {
-                        setEditUseFp32(e.target.value === 'fp32');
-                        setEditUseBf16(false);
-                      }}
-                      className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-                    >
-                      <option value="fp16">FP16 (RGBH)</option>
-                      <option value="fp32">FP32 (RGBS)</option>
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              {editModelType === 'vsr' && (
-                <div>
-                  <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                    Temporal Frames
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="99"
-                    step="2"
-                    value={editTemporalFrames ?? 5}
-                    onChange={(e) => {
-                      const value = parseInt(e.target.value, 10);
-                      setEditTemporalFrames(Number.isNaN(value) ? undefined : value);
-                    }}
-                    className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Categories
-                </label>
-                <div className="space-y-2">
-                  {/* Selected category chips */}
-                  {editCategories.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {editCategories.map((cat, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center gap-1 h-[18px] px-1.5 bg-accent-500/10 border border-accent-500/40 rounded text-accent-300 text-[10px]"
+            <div>
+              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
+                Categories
+              </label>
+              <div className="space-y-2">
+                {/* Selected category chips */}
+                {editCategories.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {editCategories.map((cat, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-1 h-[18px] px-1.5 bg-accent-500/10 border border-accent-500/40 rounded text-accent-300 text-[10px]"
+                      >
+                        {cat}
+                        <button
+                          onClick={() => setEditCategories(prev => prev.filter((_, i) => i !== index))}
+                          className="hover:text-bad-400 transition-colors"
+                          type="button"
+                          aria-label={`Remove category ${cat}`}
                         >
-                          {cat}
-                          <button
-                            onClick={() => setEditCategories(prev => prev.filter((_, i) => i !== index))}
-                            className="hover:text-bad-400 transition-colors"
-                            type="button"
-                            aria-label={`Remove category ${cat}`}
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Combobox input */}
-                  <div className="relative" ref={categoryDropdownRef}>
-                    <input
-                      ref={categoryInputRef}
-                      type="text"
-                      value={newCategoryInput}
-                      onChange={(e) => {
-                        setNewCategoryInput(e.target.value);
-                        setShowCategoryDropdown(true);
-                      }}
-                      onFocus={() => setShowCategoryDropdown(true)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const filtered = allExistingCategories.filter(
-                            c => !editCategories.includes(c) &&
-                              c.toLowerCase().includes(newCategoryInput.toLowerCase())
-                          );
-                          // Prefer exact match or first suggestion, else create new
-                          const exact = allExistingCategories.find(
-                            c => c.toLowerCase() === newCategoryInput.trim().toLowerCase()
-                          );
-                          if (exact) {
-                            handleAddCategory(exact);
-                          } else if (newCategoryInput.trim()) {
-                            handleAddCategory(newCategoryInput);
-                          } else if (filtered.length > 0) {
-                            handleAddCategory(filtered[0]);
-                          }
-                        } else if (e.key === 'Escape') {
-                          setShowCategoryDropdown(false);
-                        }
-                      }}
-                      onBlur={() => {
-                        // Delay so click on a dropdown item registers first
-                        setTimeout(() => setShowCategoryDropdown(false), 150);
-                      }}
-                      placeholder="Search or add a category…"
-                      className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
-                    />
-
-                    {/* Dropdown */}
-                    {showCategoryDropdown && (() => {
-                      const suggestions = allExistingCategories.filter(
-                        c => !editCategories.includes(c) &&
-                          c.toLowerCase().includes(newCategoryInput.toLowerCase())
-                      );
-                      const canCreate = newCategoryInput.trim() &&
-                        !allExistingCategories.some(c => c.toLowerCase() === newCategoryInput.trim().toLowerCase()) &&
-                        !editCategories.includes(newCategoryInput.trim());
-
-                      if (suggestions.length === 0 && !canCreate) return null;
-
-                      return (
-                        <div className="absolute z-10 top-full mt-1 w-full bg-ink-850 border border-ink-750 rounded-md shadow-xl shadow-black/50 overflow-hidden">
-                          {suggestions.length > 0 && (
-                            <div className="max-h-40 overflow-y-auto">
-                              {suggestions.map(cat => (
-                                <button
-                                  key={cat}
-                                  type="button"
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => handleAddCategory(cat)}
-                                  className="w-full text-left px-2.5 py-1.5 text-[12px] text-ink-200 hover:bg-ink-800 hover:text-ink-100 transition-colors"
-                                >
-                                  {cat}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {canCreate && (
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => handleAddCategory(newCategoryInput)}
-                              className="w-full text-left px-2.5 py-1.5 text-[12px] text-accent-300 hover:bg-ink-800 transition-colors border-t border-ink-800 flex items-center gap-1.5"
-                            >
-                              <span className="text-accent-400">+</span> Create &ldquo;{newCategoryInput.trim()}&rdquo;
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })()}
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
                   </div>
+                )}
+
+                {/* Combobox input */}
+                <div className="relative" ref={categoryDropdownRef}>
+                  <input
+                    ref={categoryInputRef}
+                    type="text"
+                    value={newCategoryInput}
+                    onChange={(e) => {
+                      setNewCategoryInput(e.target.value);
+                      setShowCategoryDropdown(true);
+                    }}
+                    onFocus={() => setShowCategoryDropdown(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const filtered = allExistingCategories.filter(
+                          c => !editCategories.includes(c) &&
+                            c.toLowerCase().includes(newCategoryInput.toLowerCase())
+                        );
+                        // Prefer exact match or first suggestion, else create new
+                        const exact = allExistingCategories.find(
+                          c => c.toLowerCase() === newCategoryInput.trim().toLowerCase()
+                        );
+                        if (exact) {
+                          handleAddCategory(exact);
+                        } else if (newCategoryInput.trim()) {
+                          handleAddCategory(newCategoryInput);
+                        } else if (filtered.length > 0) {
+                          handleAddCategory(filtered[0]);
+                        }
+                      } else if (e.key === 'Escape' && showCategoryDropdown) {
+                        e.stopPropagation();
+                        setShowCategoryDropdown(false);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Delay so click on a dropdown item registers first
+                      setTimeout(() => setShowCategoryDropdown(false), 150);
+                    }}
+                    placeholder="Search or add a category…"
+                    className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
+                  />
+
+                  {/* Dropdown */}
+                  {showCategoryDropdown && (() => {
+                    const suggestions = allExistingCategories.filter(
+                      c => !editCategories.includes(c) &&
+                        c.toLowerCase().includes(newCategoryInput.toLowerCase())
+                    );
+                    const canCreate = newCategoryInput.trim() &&
+                      !allExistingCategories.some(c => c.toLowerCase() === newCategoryInput.trim().toLowerCase()) &&
+                      !editCategories.includes(newCategoryInput.trim());
+
+                    if (suggestions.length === 0 && !canCreate) return null;
+
+                    return (
+                      <div className="absolute z-10 top-full mt-1 w-full bg-ink-850 border border-ink-750 rounded-md shadow-xl shadow-black/50 overflow-hidden">
+                        {suggestions.length > 0 && (
+                          <div className="max-h-40 overflow-y-auto">
+                            {suggestions.map(cat => (
+                              <button
+                                key={cat}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => handleAddCategory(cat)}
+                                className="w-full text-left px-2.5 py-1.5 text-[12px] text-ink-200 hover:bg-ink-800 hover:text-ink-100 transition-colors"
+                              >
+                                {cat}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {canCreate && (
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleAddCategory(newCategoryInput)}
+                            className="w-full text-left px-2.5 py-1.5 text-[12px] text-accent-300 hover:bg-ink-800 transition-colors border-t border-ink-800 flex items-center gap-1.5"
+                          >
+                            <span className="text-accent-400">+</span> Create &ldquo;{newCategoryInput.trim()}&rdquo;
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
-              </div>
-              
-              <div>
-                <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  placeholder="Describe what this model does..."
-                  rows={3}
-                  className="w-full bg-ink-850 border border-ink-750 rounded px-2 py-1.5 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500 resize-none"
-                />
               </div>
             </div>
-
-            <div className="flex items-center gap-2 px-4 py-3 border-t border-ink-800">
-              <button
-                onClick={() => {
-                  if (editingModel) handleDeleteModel(editingModel);
-                }}
-                disabled={isSavingEdit}
-                className="w-8 h-8 rounded-md grid place-items-center border border-bad-500/50 text-bad-400 hover:bg-bad-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-                title="Delete model"
-                aria-label="Delete model"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={isSavingEdit || !editModelName.trim()}
-                className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-accent-500 border border-accent-500 text-accent-ink hover:bg-accent-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {isSavingEdit ? 'Saving...' : 'Save Changes'}
-              </button>
-              <button
-                onClick={handleCancelEdit}
-                disabled={isSavingEdit}
-                className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
+            
+            <div>
+              <label className="block text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 mb-1">
+                Description
+              </label>
+              <textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Describe what this model does..."
+                rows={3}
+                className="w-full bg-ink-850 border border-ink-750 rounded px-2 py-1.5 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500 resize-none"
+              />
             </div>
           </div>
-        </div>
+
+          <div className="flex items-center gap-2 px-4 py-3 border-t border-ink-800">
+            <button
+              onClick={() => {
+                if (editingModel) handleDeleteModel(editingModel);
+              }}
+              disabled={isSavingEdit}
+              className="w-8 h-8 rounded-md grid place-items-center border border-bad-500/50 text-bad-400 hover:bg-bad-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+              title="Delete model"
+              aria-label="Delete model"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              disabled={isSavingEdit || !editModelName.trim()}
+              className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-accent-500 border border-accent-500 text-accent-ink hover:bg-accent-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isSavingEdit ? 'Saving...' : 'Save Changes'}
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              disabled={isSavingEdit}
+              className="flex-1 h-8 px-3 rounded-md inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+          </div>
+        </ModalShell>
       )}
 
       {/* Main Modal */}
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
+      <ModalShell
+        title="Select Model"
+        icon={Cpu}
+        onClose={onClose}
+        closeLabel="Close model selector"
+        closeTitle="Close"
+        closeOnBackdrop
+        padded={false}
+        className="w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col overflow-hidden"
+        headerActions={onImportModel && (
+          <button
+            onClick={() => {
+              onImportModel();
+              onClose();
+            }}
+            className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-accent-500/10 border border-accent-500/40 text-accent-300 hover:bg-accent-500/20 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Import Model
+          </button>
+        )}
       >
-        <div
-          ref={modalRef}
-          className="bg-ink-900 border border-ink-750 rounded-lg shadow-2xl shadow-black/60 w-[90vw] max-w-5xl h-[80vh] max-h-[800px] flex flex-col overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="h-10 flex-shrink-0 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800 rounded-t-lg overflow-hidden">
-            <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <Cpu className="w-4 h-4 text-ink-500" />
-              <h2 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">Select Model</h2>
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0 self-center">
-              {onImportModel && (
-                <button
-                  onClick={() => {
-                    onImportModel();
-                    onClose();
-                  }}
-                  className="h-7 px-2.5 rounded inline-flex items-center gap-1.5 text-[11.5px] font-semibold bg-accent-500/10 border border-accent-500/40 text-accent-300 hover:bg-accent-500/20 transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Import Model
-                </button>
-              )}
+        {/* Search Bar */}
+        <div className="flex-shrink-0 px-3 py-2 border-b border-ink-800">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-500" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search models by name, category, type, or description..."
+              className="w-full h-8 bg-ink-850 border border-ink-750 rounded pl-8 pr-8 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
+            />
+            {searchQuery && (
               <button
-                onClick={onClose}
-                className="w-7 h-7 rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
-                title="Close"
-                aria-label="Close model selector"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
+                aria-label="Clear search"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
-            </div>
+            )}
           </div>
+        </div>
 
-          {/* Search Bar */}
-          <div className="flex-shrink-0 px-3 py-2 border-b border-ink-800">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-500" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search models by name, category, type, or description..."
-                className="w-full h-8 bg-ink-850 border border-ink-750 rounded pl-8 pr-8 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors placeholder-ink-500"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
-                  aria-label="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="flex flex-1 overflow-hidden">
-            {/* Category Sidebar */}
-            <div className="w-56 flex-shrink-0 border-r border-ink-800 overflow-y-auto bg-ink-950">
-              <div className="pb-2">
-                {/* File-kind filter - only for engine-building backends with both kinds present */}
-                {getBackendDescriptor(backendId).requiresEngineBuild && backendCounts.tensorrt > 0 && backendCounts.onnx > 0 && (
-                  <>
-                    <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
-                      Backend
-                    </div>
-                    <div className="mb-1">
-                      {([
-                        { key: 'all' as const, label: 'All Backends', count: backendCounts.all },
-                        { key: 'tensorrt' as const, label: 'TensorRT', count: backendCounts.tensorrt },
-                        { key: 'onnx' as const, label: 'ONNX', count: backendCounts.onnx },
-                      ]).filter(b => b.count > 0).map(backend => (
-                        <button
-                          key={backend.key}
-                          onClick={() => setSelectedBackend(backend.key)}
-                          className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
-                            selectedBackend === backend.key
-                              ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
-                              : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
-                          }`}
-                        >
-                          <span className="truncate">{backend.label}</span>
-                          <span className={`text-[10.5px] tabular-nums ${
-                            selectedBackend === backend.key
-                              ? 'text-accent-400'
-                              : 'text-ink-500 group-hover:text-ink-400'
-                          }`}>
-                            {backend.count}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
-                  Model Type
-                </div>
-                <div className="mb-1">
-                  {modelTypes.map(type => {
-                    const count = type === 'All'
-                      ? backendFilteredModels.length
-                      : (groupedByType[type]?.length || 0);
-                    return (
+        {/* Main Content */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Category Sidebar */}
+          <div className="w-56 flex-shrink-0 border-r border-ink-800 overflow-y-auto bg-ink-950">
+            <div className="pb-2">
+              {/* File-kind filter - only for engine-building backends with both kinds present */}
+              {getBackendDescriptor(backendId).requiresEngineBuild && backendCounts.tensorrt > 0 && backendCounts.onnx > 0 && (
+                <>
+                  <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
+                    Backend
+                  </div>
+                  <div className="mb-1">
+                    {([
+                      { key: 'all' as const, label: 'All Backends', count: backendCounts.all },
+                      { key: 'tensorrt' as const, label: 'TensorRT', count: backendCounts.tensorrt },
+                      { key: 'onnx' as const, label: 'ONNX', count: backendCounts.onnx },
+                    ]).filter(b => b.count > 0).map(backend => (
                       <button
-                        key={type}
-                        onClick={() => setSelectedCategory(type)}
+                        key={backend.key}
+                        onClick={() => setSelectedBackend(backend.key)}
                         className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
-                          selectedCategory === type
+                          selectedBackend === backend.key
                             ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
                             : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
                         }`}
                       >
-                        <span className="truncate">{type}</span>
+                        <span className="truncate">{backend.label}</span>
                         <span className={`text-[10.5px] tabular-nums ${
-                          selectedCategory === type
+                          selectedBackend === backend.key
                             ? 'text-accent-400'
                             : 'text-ink-500 group-hover:text-ink-400'
                         }`}>
-                          {count}
+                          {backend.count}
                         </span>
                       </button>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                </>
+              )}
 
-                <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
-                  Categories
+              <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
+                Model Type
+              </div>
+              <div className="mb-1">
+                {modelTypes.map(type => {
+                  const count = type === 'All'
+                    ? backendFilteredModels.length
+                    : (groupedByType[type]?.length || 0);
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => setSelectedCategory(type)}
+                      className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
+                        selectedCategory === type
+                          ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
+                          : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
+                      }`}
+                    >
+                      <span className="truncate">{type}</span>
+                      <span className={`text-[10.5px] tabular-nums ${
+                        selectedCategory === type
+                          ? 'text-accent-400'
+                          : 'text-ink-500 group-hover:text-ink-400'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="px-2.5 pt-2.5 pb-1 text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
+                Categories
+              </div>
+              <div>
+                {userCategories.map(cat => {
+                  const count = cat === 'All'
+                    ? typeFilteredModels.length
+                    : typeFilteredModels.filter(model => getModelUserCategories(model).includes(cat)).length;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedUserCategory(cat)}
+                      className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
+                        selectedUserCategory === cat
+                          ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
+                          : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
+                      }`}
+                    >
+                      <span className="truncate">{cat}</span>
+                      <span className={`text-[10.5px] tabular-nums ${
+                        selectedUserCategory === cat
+                          ? 'text-accent-400'
+                          : 'text-ink-500 group-hover:text-ink-400'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Model List */}
+          <div className="flex-1 overflow-y-auto bg-ink-950">
+            {/* Current Selection */}
+            {currentSelection && (
+              <div className="flex items-center gap-2.5 min-h-[36px] px-3 py-1.5 bg-accent-500/10 border-b border-ink-800 shadow-[inset_3px_0_0] shadow-accent-500">
+                <div className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 flex-shrink-0">Current Selection</div>
+                <div className="text-[12.5px] font-medium text-accent-400 truncate flex-1 min-w-0">
+                  {availableModels.find(m => m.path === currentSelection)?.name || currentSelection}
+                </div>
+                <button
+                  onClick={handleClearSelection}
+                  className="h-6 px-2 rounded inline-flex items-center text-[11px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors flex-shrink-0"
+                >
+                  Clear Selection
+                </button>
+              </div>
+            )}
+
+            {/* Favorites Section */}
+            {!searchQuery && selectedCategory === 'All' && favoriteModelFiles.length > 0 && (
+              <div className="mb-2">
+                <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                  <Star className="w-3 h-3 text-warn-400 fill-warn-400" />
+                  <h3>Favorites</h3>
+                  <span className="text-ink-500 tabular-nums">({favoriteModelFiles.length})</span>
                 </div>
                 <div>
-                  {userCategories.map(cat => {
-                    const count = cat === 'All'
-                      ? typeFilteredModels.length
-                      : typeFilteredModels.filter(model => getModelUserCategories(model).includes(cat)).length;
-                    return (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedUserCategory(cat)}
-                        className={`w-full h-7 text-left px-2.5 text-[12px] transition-colors flex items-center justify-between gap-2 group ${
-                          selectedUserCategory === cat
-                            ? 'bg-accent-500/15 text-accent-400 shadow-[inset_3px_0_0] shadow-accent-500'
-                            : 'text-ink-400 hover:bg-ink-900 hover:text-ink-200'
-                        }`}
-                      >
-                        <span className="truncate">{cat}</span>
-                        <span className={`text-[10.5px] tabular-nums ${
-                          selectedUserCategory === cat
-                            ? 'text-accent-400'
-                            : 'text-ink-500 group-hover:text-ink-400'
-                        }`}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {favoriteModelFiles.map(model => (
+                    <ModelItem
+                      key={model.path}
+                      model={model}
+                      matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
+                      backendId={backendId}
+                      isFavorite={true}
+                      onToggleFavorite={toggleFavorite}
+                      onSelect={handleSelectModel}
+                      isSelected={currentSelection === model.path}
+                      onDelete={handleDeleteModel}
+                      onEdit={onEditModel || handleEditModel}
+                    />
+                  ))}
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Model List */}
-            <div className="flex-1 overflow-y-auto bg-ink-950">
-              {/* Current Selection */}
-              {currentSelection && (
-                <div className="flex items-center gap-2.5 min-h-[36px] px-3 py-1.5 bg-accent-500/10 border-b border-ink-800 shadow-[inset_3px_0_0] shadow-accent-500">
-                  <div className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500 flex-shrink-0">Current Selection</div>
-                  <div className="text-[12.5px] font-medium text-accent-400 truncate flex-1 min-w-0">
-                    {availableModels.find(m => m.path === currentSelection)?.name || currentSelection}
-                  </div>
-                  <button
-                    onClick={handleClearSelection}
-                    className="h-6 px-2 rounded inline-flex items-center text-[11px] font-semibold bg-ink-850 border border-ink-750 text-ink-300 hover:bg-ink-800 hover:border-ink-700 transition-colors flex-shrink-0"
-                  >
-                    Clear Selection
-                  </button>
-                </div>
-              )}
-
-              {/* Favorites Section */}
-              {!searchQuery && selectedCategory === 'All' && favoriteModelFiles.length > 0 && (
-                <div className="mb-2">
-                  <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-                    <Star className="w-3 h-3 text-warn-400 fill-warn-400" />
-                    <h3>Favorites</h3>
-                    <span className="text-ink-500 tabular-nums">({favoriteModelFiles.length})</span>
-                  </div>
-                  <div>
-                    {favoriteModelFiles.map(model => (
-                      <ModelItem
-                        key={model.path}
-                        model={model}
-                        matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
-                        backendId={backendId}
-                        isFavorite={true}
-                        onToggleFavorite={toggleFavorite}
-                        onSelect={handleSelectModel}
-                        isSelected={currentSelection === model.path}
-                        onDelete={handleDeleteModel}
-                        onEdit={onEditModel || handleEditModel}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Recent Section */}
-              {!searchQuery && selectedCategory === 'All' && recentModelFiles.length > 0 && (
-                <div className="mb-2">
-                  <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-                    <Clock className="w-3 h-3 text-ink-500" />
-                    <h3>Recent</h3>
-                    <span className="text-ink-500 tabular-nums">({recentModelFiles.length})</span>
-                  </div>
-                  <div>
-                    {recentModelFiles.map(model => (
-                      <ModelItem
-                        key={model.path}
-                        model={model}
-                        matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
-                        backendId={backendId}
-                        isFavorite={favorites.has(model.path)}
-                        onToggleFavorite={toggleFavorite}
-                        onSelect={handleSelectModel}
-                        isSelected={currentSelection === model.path}
-                        onDelete={handleDeleteModel}
-                        onEdit={onEditModel || handleEditModel}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* All Models / Search Results */}
-              <div>
+            {/* Recent Section */}
+            {!searchQuery && selectedCategory === 'All' && recentModelFiles.length > 0 && (
+              <div className="mb-2">
                 <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-                  <Cpu className="w-3 h-3 text-ink-500" />
-                  <h3>
-                    {searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Models' : selectedCategory}
-                  </h3>
-                  <span className="text-ink-500 tabular-nums">({filteredModels.length})</span>
+                  <Clock className="w-3 h-3 text-ink-500" />
+                  <h3>Recent</h3>
+                  <span className="text-ink-500 tabular-nums">({recentModelFiles.length})</span>
                 </div>
-                {filteredModels.length === 0 ? (
-                  <div className="text-center py-12 text-ink-500">
-                    <Cpu className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p className="text-[12.5px] text-ink-400">No models found</p>
-                    {searchQuery && (
-                      <p className="text-[11px] mt-1">Try adjusting your search query</p>
-                    )}
-                    {!searchQuery && onImportModel && (
-                      <button
-                        onClick={() => {
-                          onImportModel();
-                          onClose();
-                        }}
-                        className="mt-3 h-8 px-3 rounded-md inline-flex items-center gap-2 text-[12.5px] font-semibold bg-accent-500/10 border border-accent-500/40 text-accent-300 hover:bg-accent-500/20 transition-colors"
-                      >
-                        <Download className="w-4 h-4" />
-                        Import a Model
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    {filteredModels.map(model => (
-                      <ModelItem
-                        key={model.path}
-                        model={model}
-                        matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
-                        backendId={backendId}
-                        isFavorite={favorites.has(model.path)}
-                        onToggleFavorite={toggleFavorite}
-                        onSelect={handleSelectModel}
-                        isSelected={currentSelection === model.path}
-                        onDelete={handleDeleteModel}
-                        onEdit={onEditModel || handleEditModel}
-                      />
-                    ))}
-                  </div>
-                )}
+                <div>
+                  {recentModelFiles.map(model => (
+                    <ModelItem
+                      key={model.path}
+                      model={model}
+                      matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
+                      backendId={backendId}
+                      isFavorite={favorites.has(model.path)}
+                      onToggleFavorite={toggleFavorite}
+                      onSelect={handleSelectModel}
+                      isSelected={currentSelection === model.path}
+                      onDelete={handleDeleteModel}
+                      onEdit={onEditModel || handleEditModel}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          </div>
+            )}
 
-          {/* Footer */}
-          <div className="flex-shrink-0 h-8 border-t border-ink-800 px-3 bg-ink-900 flex items-center justify-between text-[11px] text-ink-500">
-            <div className="flex items-center gap-3 tabular-nums">
-              <span>{filteredModels.length} models shown</span>
-              <span>•</span>
-              <span>{favorites.size} favorites</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 bg-ink-850 border border-ink-750 rounded text-[10px] font-mono text-ink-300">Esc</kbd>
-              <span>to close</span>
+            {/* All Models / Search Results */}
+            <div>
+              <div className="h-7 flex items-center gap-2 px-2.5 bg-ink-850 border-y border-ink-800 font-display text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-400">
+                <Cpu className="w-3 h-3 text-ink-500" />
+                <h3>
+                  {searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Models' : selectedCategory}
+                </h3>
+                <span className="text-ink-500 tabular-nums">({filteredModels.length})</span>
+              </div>
+              {filteredModels.length === 0 ? (
+                <div className="text-center py-12 text-ink-500">
+                  <Cpu className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                  <p className="text-[12.5px] text-ink-400">No models found</p>
+                  {searchQuery && (
+                    <p className="text-[11px] mt-1">Try adjusting your search query</p>
+                  )}
+                  {!searchQuery && onImportModel && (
+                    <button
+                      onClick={() => {
+                        onImportModel();
+                        onClose();
+                      }}
+                      className="mt-3 h-8 px-3 rounded-md inline-flex items-center gap-2 text-[12.5px] font-semibold bg-accent-500/10 border border-accent-500/40 text-accent-300 hover:bg-accent-500/20 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Import a Model
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  {filteredModels.map(model => (
+                    <ModelItem
+                      key={model.path}
+                      model={model}
+                      matchingEngineModels={model.backend === 'onnx' ? (engineModelsByPortableName.get(getPortableModelName(model.path)) || []) : []}
+                      backendId={backendId}
+                      isFavorite={favorites.has(model.path)}
+                      onToggleFavorite={toggleFavorite}
+                      onSelect={handleSelectModel}
+                      isSelected={currentSelection === model.path}
+                      onDelete={handleDeleteModel}
+                      onEdit={onEditModel || handleEditModel}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 h-8 border-t border-ink-800 px-3 bg-ink-900 flex items-center justify-between text-[11px] text-ink-500">
+          <div className="flex items-center gap-3 tabular-nums">
+            <span>{filteredModels.length} models shown</span>
+            <span>•</span>
+            <span>{favorites.size} favorites</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <kbd className="px-1.5 py-0.5 bg-ink-850 border border-ink-750 rounded text-[10px] font-mono text-ink-300">Esc</kbd>
+            <span>to close</span>
+          </div>
+        </div>
+      </ModalShell>
     </>
   );
 });
