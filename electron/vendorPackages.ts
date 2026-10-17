@@ -170,25 +170,20 @@ export function getPypiPackages(vendor: GpuVendor): string[] {
 }
 
 /**
- * Vendor-neutral packages checkInstalled looks for, normalized (PEP 503) for
- * comparison against `pip list` output.
- */
-const BASE_CHECK_PACKAGE_NAMES: string[] = [
-  'vapoursynth', 'torch', 'vsjetpack', 'vsview',
-  'vs-temporalfix', 'vs-undistort', 'vs-colorfix', 'vs-grain', 'vs-tiletools',
-];
-
-/**
  * Package names that must be present for this vendor's install to count as
- * complete. The backend wheels are derived from the providers rather than
- * hardcoded, so moving an AMD install to an NVIDIA machine reads as
- * not-installed (the TRT wheel is missing) and offers a reinstall.
+ * complete, normalized (PEP 503) for comparison against `pip list` output:
+ * every top-level package the plugin install asks pip for. The backend
+ * wheels come from the providers, so moving an AMD install to an NVIDIA
+ * machine reads as not-installed (the TRT wheel is missing) and offers a
+ * reinstall.
  */
 export function getCheckPackageNames(vendor: GpuVendor, platform: NodeJS.Platform = process.platform): string[] {
-  return [
-    ...BASE_CHECK_PACKAGE_NAMES.map(normalizePackageName),
-    ...getBackendPipPackages(vendor, platform).map(distNameOf),
-  ];
+  return [...new Set([
+    ...getTorchInstall(vendor, platform).packages,
+    ...getPypiPackages(vendor),
+    ...getNoDepsPackages(vendor),
+    ...getBackendPipPackages(vendor, platform),
+  ].map(distNameOf))];
 }
 
 /**

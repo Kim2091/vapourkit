@@ -194,6 +194,16 @@ describe('getCheckPackageNames', () => {
     expect(names).not.toContain('vapoursynth-mlrt-trt');
   });
 
+  it.each([...NON_NVIDIA, 'nvidia'] as GpuVendor[])('names every package the %s install asks pip for, once', (vendor) => {
+    const names = getCheckPackageNames(vendor, 'win32');
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of ['vapoursynth', 'torch', 'vsjetpack', 'vsview', 'vs-temporalfix', 'vs-undistort',
+      'vs-colorfix', 'vs-grain', 'vs-tiletools', 'vapoursynth-mvtools', 'vapoursynth-timecube', 'timm']) {
+      expect(names).toContain(name);
+    }
+    expect(names.includes('vapoursynth-nlm-cuda')).toBe(vendor === 'nvidia');
+  });
+
   it('returns PEP 503-normalized names', () => {
     for (const name of getCheckPackageNames('nvidia', 'win32')) {
       expect(name).toBe(name.toLowerCase());
