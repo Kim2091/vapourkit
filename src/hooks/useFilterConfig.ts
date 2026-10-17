@@ -1,73 +1,84 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import type { Filter } from '../electron.d';
-import { useFilterHistory } from './useFilterHistory';
+import { recordFilters, redoFilters, startHistory, undoFilters, type FilterHistory } from '../utils/filterHistory';
+import { useSyncReducer } from './useSyncReducer';
 import { useUndoRedoShortcuts } from './useUndoRedoShortcuts';
+
+interface ChainState {
+  history: FilterHistory;
+  /**
+   * Which chain the window holds. Bumped whenever a different one is swapped
+   * in (a queue item's, the project's back), so a result started on one chain
+   * is not applied to another that happens to share step ids, as a queue item
+   * copied from the project does.
+   */
+  epoch: number;
+}
+
+type ChainAction =
+  | { type: 'record'; filters: Filter[] }
+  | { type: 'replace'; filters: Filter[] }
+  | { type: 'undo' }
+  | { type: 'redo' };
+
+function chainReducer(state: ChainState, action: ChainAction): ChainState {
+  switch (action.type) {
+    case 'record': {
+      const history = recordFilters(state.history, action.filters);
+      return history === state.history ? state : { ...state, history };
+    }
+    case 'replace':
+      return { history: startHistory(action.filters), epoch: state.epoch + 1 };
+    case 'undo': {
+      const history = undoFilters(state.history);
+      return history === state.history ? state : { ...state, history };
+    }
+    case 'redo': {
+      const history = redoFilters(state.history);
+      return history === state.history ? state : { ...state, history };
+    }
+  }
+}
+
+function readStoredFilters(): Filter[] {
+  try {
+    const saved = localStorage.getItem('filters');
+    return saved !== null ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
 
 export function useFilterConfig(
   isSetupComplete: boolean,
   onLog: (message: string) => void
 ) {
-  const [initialFilters] = useState<Filter[]>(() => {
-    const saved = localStorage.getItem('filters');
-    return saved !== null ? JSON.parse(saved) : [];
-  });
+  // The chain is saved as part of every change rather than by an effect: a
+  // step's code still being typed is committed as the window closes, and no
+  // render (so no effect) follows that.
+  const [state, dispatch, getState] = useSyncReducer(
+    chainReducer,
+    () => ({ history: startHistory(readStoredFilters()), epoch: 0 }),
+    (next, previous) => {
+      if (next.history.present === previous.history.present) return;
+      try {
+        localStorage.setItem('filters', JSON.stringify(next.history.present));
+      } catch {
+        // Storage full or blocked: the chain still works for this session.
+      }
+    },
+  );
 
-  // Initialize filter history with the loaded filters
-  const {
-    filters: historyFilters,
-    recordState,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    resetHistory,
-  } = useFilterHistory(initialFilters);
-
-  const [filters, setFiltersState] = useState<Filter[]>(historyFilters);
-
-  // The chain as of the last change, ahead of the render that shows it: for
-  // work that finishes later (an Align, a generated LUT) and has to apply its
-  // result to the chain as it is then, not as it was when it started.
-  const latestRef = useRef<Filter[]>(historyFilters);
-  const setFilters = useCallback((value: Filter[]) => {
-    latestRef.current = value;
-    setFiltersState(value);
-  }, []);
-
-  // Which chain the window holds. Bumped whenever a different one is swapped
-  // in (a queue item's, the project's back), so a result started on one chain
-  // is not applied to another that happens to share step ids, as a queue item
-  // copied from the project does.
-  const [chainEpoch, setChainEpoch] = useState(0);
-  const epochRef = useRef(0);
-
-  // Sync filters with history state
-  useEffect(() => {
-    setFilters(historyFilters);
-    localStorage.setItem('filters', JSON.stringify(historyFilters));
-  }, [historyFilters, setFilters]);
-
-  // There used to be a load from app-config's filterConfigurations here.
-  // Nothing has written that since before 0.9.3, and the load re-ran on every
-  // edit, so a list left in an old config would have replaced the chain each
-  // time it changed. localStorage is the chain's only home.
-
-  // Wrapper to persist state changes and record in history
+  // A change made by the user: saved, and a step undo can go back over.
   const handleSetFilters = useCallback((value: Filter[]) => {
-    setFilters(value);
-    localStorage.setItem('filters', JSON.stringify(value));
-    recordState(value);
-  }, [recordState, setFilters]);
+    dispatch({ type: 'record', filters: value });
+  }, [dispatch]);
 
   // Swap in a different chain (a queue item's, or the project's back again):
   // saved like any change, but a fresh start for undo.
   const replaceFilters = useCallback((value: Filter[]) => {
-    setFilters(value);
-    localStorage.setItem('filters', JSON.stringify(value));
-    resetHistory(value);
-    epochRef.current += 1;
-    setChainEpoch(epochRef.current);
-  }, [resetHistory, setFilters]);
+    dispatch({ type: 'replace', filters: value });
+  }, [dispatch]);
 
   /**
    * Start work on one step that will change it later. The function returned
@@ -76,37 +87,28 @@ export function useFilterConfig(
    * false) if the step is gone or a different chain has been swapped in.
    */
   const beginStepPatch = useCallback((stepId: string) => {
-    const startedOn = epochRef.current;
+    const startedOn = getState().epoch;
     return (patch: (step: Filter) => Filter): boolean => {
-      if (epochRef.current !== startedOn) return false;
-      const latest = latestRef.current;
-      if (!latest.some(step => step.id === stepId)) return false;
-      handleSetFilters(latest.map(step => step.id === stepId ? patch(step) : step));
+      const { epoch, history } = getState();
+      if (epoch !== startedOn) return false;
+      if (!history.present.some(step => step.id === stepId)) return false;
+      dispatch({ type: 'record', filters: history.present.map(step => step.id === stepId ? patch(step) : step) });
       return true;
     };
-  }, [handleSetFilters]);
+  }, [dispatch, getState]);
 
-  const getLatestFilters = useCallback(() => latestRef.current, []);
+  /** The chain including changes not rendered yet (a code edit committed as the window closes). */
+  const getLatestFilters = useCallback(() => getState().history.present, [getState]);
 
-  // Undo handler
   const handleUndo = useCallback(() => {
-    const previousState = undo();
-    if (previousState) {
-      setFilters(previousState);
-      localStorage.setItem('filters', JSON.stringify(previousState));
-      onLog('Undo filter change');
-    }
-  }, [undo, onLog, setFilters]);
+    const before = getState();
+    if (dispatch({ type: 'undo' }) !== before) onLog('Undo filter change');
+  }, [dispatch, getState, onLog]);
 
-  // Redo handler
   const handleRedo = useCallback(() => {
-    const nextState = redo();
-    if (nextState) {
-      setFilters(nextState);
-      localStorage.setItem('filters', JSON.stringify(nextState));
-      onLog('Redo filter change');
-    }
-  }, [redo, onLog, setFilters]);
+    const before = getState();
+    if (dispatch({ type: 'redo' }) !== before) onLog('Redo filter change');
+  }, [dispatch, getState, onLog]);
 
   // Setup keyboard shortcuts for undo/redo
   useUndoRedoShortcuts({
@@ -116,15 +118,14 @@ export function useFilterConfig(
   });
 
   return {
-    filters,
-    setFilters,
+    filters: state.history.present,
     handleSetFilters,
     replaceFilters,
     beginStepPatch,
     getLatestFilters,
-    chainEpoch,
-    canUndo,
-    canRedo,
+    chainEpoch: state.epoch,
+    canUndo: state.history.past.length > 0,
+    canRedo: state.history.future.length > 0,
     handleUndo,
     handleRedo,
   };
