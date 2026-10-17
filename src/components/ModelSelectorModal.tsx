@@ -261,7 +261,7 @@ export const ModelSelectorModal = memo<ModelSelectorModalProps>(({
     }
 
     // Sort alphabetically
-    return models.sort((a, b) => a.name.localeCompare(b.name));
+    return [...models].sort((a, b) => a.name.localeCompare(b.name));
   }, [typeFilteredModels, selectedUserCategory, searchQuery]);
 
   // Get recent models that still exist

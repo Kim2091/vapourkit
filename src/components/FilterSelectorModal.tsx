@@ -192,7 +192,7 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
     }
 
     // Sort alphabetically
-    return templates.sort((a, b) => a.name.localeCompare(b.name));
+    return [...templates].sort((a, b) => a.name.localeCompare(b.name));
   }, [filterTemplates, selectedCategory, searchQuery]);
 
   // Get recent filters that still exist
