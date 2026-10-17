@@ -183,15 +183,6 @@ export function useVideoProcessing({
     };
   }, [onLog]); // Only re-subscribe if onLog changes (which it shouldn't)
 
-  // Cleanup blob URL when component unmounts or new video starts
-  useEffect(() => {
-    return () => {
-      if (completedVideoBlobUrl) {
-        URL.revokeObjectURL(completedVideoBlobUrl);
-      }
-    };
-  }, [completedVideoBlobUrl]);
-
   /** Load a video into the window, its output named automatically. Resolves to the video's info. */
   const loadVideoInfo = useCallback(async (filePath: string): Promise<VideoInfo> => {
     onLog(`Selected video: ${filePath}`);
@@ -204,11 +195,6 @@ export function useVideoProcessing({
       throw error;
     }
 
-    // Cleanup old blob URL before loading new video
-    if (completedVideoBlobUrl) {
-      URL.revokeObjectURL(completedVideoBlobUrl);
-    }
-
     setVideoInfo(info);
     setOutputPathOverride(null);
     onLog(`Video info: ${info.resolution || 'unknown'} @ ${info.fps || 'unknown'} FPS`);
@@ -218,19 +204,7 @@ export function useVideoProcessing({
     setCompletedVideoBlobUrl(null);
     setVideoLoadError(false);
     return info;
-  }, [onLog, completedVideoBlobUrl]);
-
-  const handleSelectVideo = async (): Promise<void> => {
-    try {
-      const files = await window.electronAPI.selectVideoFile();
-      // Handle single file selection - take first file from array
-      if (files && files.length > 0) {
-        await loadVideoInfo(files[0]);
-      }
-    } catch (error) {
-      onLog(`Error: ${getErrorMessage(error)}`);
-    }
-  };
+  }, [onLog]);
 
   const handleSelectOutputFile = async (): Promise<void> => {
     if (!videoInfo) return;
@@ -417,7 +391,6 @@ export function useVideoProcessing({
     videoLoadError,
     indexingProgress,
     loadVideoInfo,
-    handleSelectVideo,
     handleSelectOutputFile,
     handleUpscale,
     handleCancelUpscale,

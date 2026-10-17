@@ -6,11 +6,10 @@ import type { QueueItem } from '../electron.d';
 export type QueueRunStatus = 'idle' | 'running' | 'stopping';
 
 /** The flags the queue panel and action bar read. */
-export function queueRunFlags(status: QueueRunStatus, runningItemId: string | null) {
+export function queueRunFlags(status: QueueRunStatus) {
   return {
     isQueueStarted: status !== 'idle',
     isQueueStopping: status === 'stopping',
-    isProcessingQueueItem: runningItemId !== null,
   };
 }
 

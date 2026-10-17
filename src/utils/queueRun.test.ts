@@ -16,10 +16,10 @@ const item = (id: string, status: QueueItem['status']): QueueItem => ({
 });
 
 describe('queueRunFlags', () => {
-  it('derives the panel flags from the status and the running item', () => {
-    expect(queueRunFlags('idle', null)).toEqual({ isQueueStarted: false, isQueueStopping: false, isProcessingQueueItem: false });
-    expect(queueRunFlags('running', 'a')).toEqual({ isQueueStarted: true, isQueueStopping: false, isProcessingQueueItem: true });
-    expect(queueRunFlags('stopping', 'a')).toEqual({ isQueueStarted: true, isQueueStopping: true, isProcessingQueueItem: true });
+  it('derives the panel flags from the status', () => {
+    expect(queueRunFlags('idle')).toEqual({ isQueueStarted: false, isQueueStopping: false });
+    expect(queueRunFlags('running')).toEqual({ isQueueStarted: true, isQueueStopping: false });
+    expect(queueRunFlags('stopping')).toEqual({ isQueueStarted: true, isQueueStopping: true });
   });
 });
 

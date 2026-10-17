@@ -231,16 +231,6 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
     });
   }, []);
 
-  const getQueueStats = useCallback(() => {
-    return {
-      total: queue.length,
-      pending: queue.filter(item => item.status === 'pending').length,
-      processing: queue.filter(item => item.status === 'processing').length,
-      completed: queue.filter(item => item.status === 'completed').length,
-      error: queue.filter(item => item.status === 'error').length,
-    };
-  }, [queue]);
-
   const requeueItem = useCallback((itemId: string) => {
     setQueue(prev => prev.map(item =>
       item.id === itemId && (item.status === 'completed' || item.status === 'error')
@@ -280,7 +270,7 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
     isShowQueueLoaded,
     runStatus,
     runningItemId,
-    ...queueRunFlags(runStatus, runningItemId),
+    ...queueRunFlags(runStatus),
     setShowQueue,
     setRunStatus,
     setRunningItemId,
@@ -296,7 +286,6 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
     clearQueue,
     clearCompletedItems,
     reorderQueue,
-    getQueueStats,
     requeueItem,
     duplicateQueueItem,
   };

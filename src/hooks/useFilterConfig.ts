@@ -39,9 +39,6 @@ export function useFilterConfig(
     };
   }, [getState, patch]);
 
-  /** The chain including changes not rendered yet (a code edit committed as the window closes). */
-  const getLatestFilters = useCallback(() => viewOf(getState()).filters, [getState]);
-
   const handleUndo = useCallback(() => {
     if (undo()) onLog('Undo filter change');
   }, [undo, onLog]);
@@ -61,7 +58,6 @@ export function useFilterConfig(
     filters: workflow.view.filters,
     handleSetFilters,
     beginStepPatch,
-    getLatestFilters,
     chainEpoch: workflow.epoch,
     canUndo: workflow.canUndo,
     canRedo: workflow.canRedo,
