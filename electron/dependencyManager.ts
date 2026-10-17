@@ -9,12 +9,11 @@ import { MigxRuntimeManager } from './migxRuntimeManager';
 import { ensureTrtexecShim } from './trtexecShim';
 import { logger } from './logger';
 import * as os from 'os';
-import { spawn } from 'child_process';
+import { pipInstall, probePip, QUICK_PIP_NETWORK_ARGS, runGetPip, throwIfFailed, withPipLock } from './pip';
 import {
   PATHS,
   PYTHON_VERSION,
   IS_WINDOWS,
-  PIP_NETWORK_ARGS,
   PYPI_EXTRA_INDEX_ARGS,
   VAPOURSYNTH_PIP_SPEC,
   VAPOURSYNTH_VERSION,
@@ -26,7 +25,6 @@ import { downloadToFile } from './download';
 import { APP_OWNED_PLUGIN_ARCHIVES, shouldExtractBundledPluginArchives } from './bundledPluginArchives';
 import { CORE_SETUP_REQUIRED_BYTES, CORE_SETUP_REQUIRED_TEMP_BYTES, runInstallPreflight } from './installPreflight';
 import {
-  appendBounded,
   describeInstallFailure,
   describeVanishedFiles,
   embeddedPythonRequiredFiles,
@@ -35,7 +33,6 @@ import {
   judgePreflight,
   missingEmbeddedPythonFiles,
   SingleFlight,
-  type PipProbe,
 } from './installFlow';
 import { runCommand, getBundledBasePath, resolveSupportedPythonCommand } from './utils';
 import { FFmpegManager } from './ffmpegManager';
@@ -211,7 +208,7 @@ export class DependencyManager {
     // folder whose package is damaged passed the old folder check and then
     // failed every install with "No module named pip" (vapourkit-nightly#1).
     const pipFolderExists = await fs.pathExists(path.join(PATHS.SITE_PACKAGES, 'pip'));
-    if (!pipFolderExists || judgePipProbe(await this.probePip()) === 'repair-pip') {
+    if (!pipFolderExists || judgePipProbe(await probePip()) === 'repair-pip') {
       await this.bootstrapPip('Python Embedded');
     }
 
@@ -226,15 +223,10 @@ export class DependencyManager {
     // ship in the wheel) plus BestSource so the app can probe videos even if the
     // plugin install phase is skipped. The plugin phase installs everything else.
     logger.dependency('Installing VapourSynth and BestSource from PyPI');
-    await runCommand(PATHS.PYTHON, [
-      '-m', 'pip', 'install', '--upgrade', '--no-warn-script-location',
-      // The same cache the plugin phase uses, so the one prune there covers
-      // it; pip's default cache is in the user profile, out of sight.
-      '--cache-dir', PATHS.PIP_CACHE,
-      ...PIP_NETWORK_ARGS,
-      VAPOURSYNTH_PIP_SPEC,
-      'vapoursynth-bestsource',
-    ], undefined, undefined, { step: 'Installing VapourSynth' });
+    throwIfFailed(await pipInstall([VAPOURSYNTH_PIP_SPEC, 'vapoursynth-bestsource'], {
+      step: 'Installing VapourSynth',
+      extraArgs: ['--upgrade'],
+    }), 'Installing VapourSynth');
 
     if (!IS_WINDOWS) {
       await this.configureVapourSynthForVenv();
@@ -303,19 +295,16 @@ export class DependencyManager {
       message,
     });
 
-    const pinBack = (projects: string[]) => runCommand(PATHS.PYTHON, [
-      '-m', 'pip', 'install', '--no-warn-script-location',
-      '--cache-dir', PATHS.PIP_CACHE,
-      ...PIP_NETWORK_ARGS,
+    const step = `Reinstalling VapourSynth ${VAPOURSYNTH_VERSION}`;
+    // `==` is not satisfied by a newer core, so pip uninstalls it and
+    // installs the pin, no --force-reinstall needed. Each dependent named
+    // beside it is no longer satisfied by its installed release under that
+    // pin, so pip steps it down to one that is; nothing else moves.
+    const pinBack = async (projects: string[]) => throwIfFailed(await pipInstall([VAPOURSYNTH_PIP_SPEC, ...projects], {
+      step,
       // The plugin phase installs from these too, so a dependent may live there.
-      ...(projects.length > 0 ? PYPI_EXTRA_INDEX_ARGS : []),
-      // `==` is not satisfied by a newer core, so pip uninstalls it and
-      // installs the pin, no --force-reinstall needed. Each dependent named
-      // beside it is no longer satisfied by its installed release under that
-      // pin, so pip steps it down to one that is; nothing else moves.
-      VAPOURSYNTH_PIP_SPEC,
-      ...projects,
-    ], undefined, undefined, { step: `Reinstalling VapourSynth ${VAPOURSYNTH_VERSION}` });
+      extraArgs: projects.length > 0 ? PYPI_EXTRA_INDEX_ARGS : [],
+    }), step);
 
     try {
       await pinBack(dependents);
@@ -383,21 +372,19 @@ export class DependencyManager {
       message,
     });
 
-    const pipInstall = (extraArgs: string[], packages: string[]) => runCommand(PATHS.PYTHON, [
-      '-m', 'pip', 'install', '--no-warn-script-location',
-      '--cache-dir', PATHS.PIP_CACHE,
-      '--retries', '1', '--timeout', '15',
-      ...PYPI_EXTRA_INDEX_ARGS,
-      ...extraArgs,
-      ...packages,
-    ], undefined, undefined, { step: 'Installing packages this version needs' });
+    const step = 'Installing packages this version needs';
+    const install = async (extraArgs: string[], packages: string[]) => throwIfFailed(await pipInstall(packages, {
+      step,
+      networkArgs: QUICK_PIP_NETWORK_ARGS,
+      extraArgs: [...PYPI_EXTRA_INDEX_ARGS, ...extraArgs],
+    }), step);
 
     try {
       if (resolvedSpecs.length > 0) {
-        await pipInstall([], [VAPOURSYNTH_PIP_SPEC, ...resolvedSpecs]);
+        await install([], [VAPOURSYNTH_PIP_SPEC, ...resolvedSpecs]);
       }
       if (noDepsSpecs.length > 0) {
-        await pipInstall(['--no-deps'], noDepsSpecs);
+        await install(['--no-deps'], noDepsSpecs);
       }
       report.packagesInstalled.push(...specs);
       delete ledger.packageFailure;
@@ -421,35 +408,6 @@ export class DependencyManager {
       }
     }
     return missingEmbeddedPythonFiles(PYTHON_VERSION, file => present.get(file) === true);
-  }
-
-  /**
-   * `python -m pip --version`: one interpreter start, about a tenth of a
-   * second, and the only check that pip will actually run. The time limit is
-   * generous because antivirus scanning a first start can be slow; a probe
-   * that runs out of it is inconclusive, not a verdict.
-   */
-  private probePip(): Promise<PipProbe> {
-    return new Promise(resolve => {
-      let output = '';
-      let settled = false;
-      const finish = (probe: PipProbe) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(probe);
-      };
-
-      const child = spawn(PATHS.PYTHON, ['-m', 'pip', '--version'], { cwd: PATHS.VS, windowsHide: true });
-      const timer = setTimeout(() => {
-        child.kill();
-        finish({ spawnFailed: false, timedOut: true, exitCode: null, output });
-      }, 30_000);
-      child.stdout?.on('data', (data: Buffer) => { output = appendBounded(output, data.toString(), 16 * 1024); });
-      child.stderr?.on('data', (data: Buffer) => { output = appendBounded(output, data.toString(), 16 * 1024); });
-      child.on('error', error => finish({ spawnFailed: true, exitCode: null, output: error.message }));
-      child.on('close', code => finish({ spawnFailed: false, exitCode: code, output }));
-    });
   }
 
   /** get-pip.py, as a fresh setup installs pip. Throws if it fails. */
@@ -477,9 +435,7 @@ export class DependencyManager {
 
     logger.dependency('Installing pip');
     try {
-      await runCommand(PATHS.PYTHON, [getPipPath, '--no-warn-script-location', ...PIP_NETWORK_ARGS], PATHS.APP_DATA, undefined, {
-        step: 'Installing pip',
-      });
+      throwIfFailed(await runGetPip(getPipPath, { step: 'Installing pip' }), 'Installing pip');
     } finally {
       await fs.remove(getPipPath).catch(() => undefined);
     }
@@ -492,7 +448,7 @@ export class DependencyManager {
    * say) is logged, the app starts, and the next launch tries again.
    */
   private async ensurePipWorks(): Promise<void> {
-    const probe = await this.probePip();
+    const probe = await probePip();
     const health = judgePipProbe(probe);
     if (health === 'healthy') return;
 
@@ -506,7 +462,7 @@ export class DependencyManager {
     logger.warn(`pip does not run (exit code ${probe.exitCode}); reinstalling it. Output: ${probe.output.trim()}`);
     try {
       await this.bootstrapPip('Python Embedded');
-      const after = judgePipProbe(await this.probePip());
+      const after = judgePipProbe(await probePip());
       logger.dependency(`pip reinstalled; it is now ${after}`);
     } catch (error) {
       logger.error('Could not reinstall pip (will try again next launch):', error);
@@ -550,6 +506,29 @@ export class DependencyManager {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * The launch repairs that run pip, pip itself first because the steps
+   * after it need it.
+   */
+  private async repairEnvironment(report: UpdateReportDraft): Promise<void> {
+    await this.ensurePipWorks();
+    // Installs from before the setup step existed have no VSScript config
+    // on Linux; writing it is one Python start, so only when it is absent.
+    if (!IS_WINDOWS && !await this.vapourSynthConfigMentionsVenv()) {
+      await this.configureVapourSynthForVenv();
+    }
+    await this.enforceVapourSynthPin();
+    // The post-install plugin fixes, at launch too, so a fix added in a
+    // release reaches installs that do not reinstall. Only with the vendor
+    // the plugin phase recorded: the fixes decide which ort build to keep.
+    const fixVendor = configManager.getPluginsGpuVendor();
+    if (fixVendor) {
+      await applyPluginCompatibilityFixes(fixVendor).catch((error) =>
+        logger.warn('Plugin compatibility fixes failed at launch:', error));
+    }
+    await this.ensurePackageRequirements(report);
   }
 
   private readonly checkFlight = new SingleFlight<'check', boolean>();
@@ -604,23 +583,7 @@ export class DependencyManager {
     const report = emptyReportDraft();
 
     if (coreDepsPresent) {
-      // First, because both of the steps after it run pip.
-      await this.ensurePipWorks();
-      // Installs from before the setup step existed have no VSScript config
-      // on Linux; writing it is one Python start, so only when it is absent.
-      if (!IS_WINDOWS && !await this.vapourSynthConfigMentionsVenv()) {
-        await this.configureVapourSynthForVenv();
-      }
-      await this.enforceVapourSynthPin();
-      // The post-install plugin fixes, at launch too, so a fix added in a
-      // release reaches installs that do not reinstall. Only with the vendor
-      // the plugin phase recorded: the fixes decide which ort build to keep.
-      const fixVendor = configManager.getPluginsGpuVendor();
-      if (fixVendor) {
-        await applyPluginCompatibilityFixes(fixVendor).catch((error) =>
-          logger.warn('Plugin compatibility fixes failed at launch:', error));
-      }
-      await this.ensurePackageRequirements(report);
+      await withPipLock(() => this.repairEnvironment(report), { label: 'launch environment check' });
     }
 
     // If core deps are healthy, silently extract any missing bundled ONNX models rather than
@@ -911,7 +874,7 @@ export class DependencyManager {
       // The version check in the frontend (App.tsx) will detect a mismatch and
       // show a notification modal if there are existing engine files that need
       // rebuilding; the version is only updated after the user acknowledges it.
-      await this.setupEmbeddedPython();
+      await withPipLock(() => this.setupEmbeddedPython(), { label: 'Python setup' });
       
       // Extract bundled ONNX models to AppData
       if (await this.modelExtractor.needsExtraction()) {

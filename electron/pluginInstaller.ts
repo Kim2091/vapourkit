@@ -1,15 +1,13 @@
 // electron/pluginInstaller.ts
-import { spawn, ChildProcess } from 'child_process';
-import { promises as nodeFs } from 'fs';
 import { BrowserWindow, app } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs-extra';
 import { logger } from './logger';
-import { PATHS, PIP_NETWORK_ARGS, PYPI_EXTRA_INDEX_ARGS } from './constants';
+import { PATHS, PYPI_EXTRA_INDEX_ARGS } from './constants';
 import { configManager } from './configManager';
 import { getBundledBasePath } from './utils';
-import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
+import { canImportModules, pipInstall, pipList, pipUninstall, PipLockAbortedError, withPipLock, type ImportCheck } from './pip';
 import { shouldExtractBundledPluginArchives } from './bundledPluginArchives';
 import { hasPluginFilterTemplates, selectPluginFilterTemplates } from './pluginFilterCatalog';
 import { removeSupersededPlugins, removeSupersededScripts, applyPluginCompatibilityFixes } from './legacyCleanup';
@@ -26,7 +24,6 @@ import {
   runInstallPreflight,
 } from './installPreflight';
 import {
-  appendBounded,
   archiveFileNames,
   describeInstallFailure,
   describeVanishedFiles,
@@ -93,12 +90,6 @@ const PIP_CACHE_LIMIT_BYTES = 1024 ** 3;
 
 const CANCELLED: InstallResult = { success: false, cancelled: true, error: 'Installation cancelled by user' };
 
-interface ImportCheck {
-  ok: boolean;
-  /** Python's stderr when the import failed. */
-  error: string;
-}
-
 /**
  * Turns the stderr of a failed `import torch, torchgen` into the dialog text.
  *
@@ -136,11 +127,10 @@ export function describeTorchImportFailure(stderr: string): { summary: string; e
 
 export class PluginInstaller {
   private mainWindow: BrowserWindow | null;
-  private installProcess: ChildProcess | null = null;
   private isCancelled: boolean = false;
   private useSetupChannel: boolean = false;
-  // Everything this class does runs pip against the one site-packages, so
-  // installs and uninstalls go through here one at a time.
+  // A second request for the running operation joins it, and a different one
+  // is refused; the pip lock keeps other writers out of site-packages.
   private flights = new SingleFlight<'install' | 'uninstall', InstallResult>();
   private abortController: AbortController | null = null;
   private warnings: string[] = [];
@@ -194,67 +184,30 @@ export class PluginInstaller {
     this.warnings = [];
   }
 
-  private withWarnings(result: InstallResult): InstallResult {
-    return this.warnings.length > 0 ? { ...result, warnings: [...this.warnings] } : result;
+  /**
+   * Runs one whole operation with the Python environment to itself, so no
+   * other pip (a launch repair, a vs-mlrt update) runs between its steps. A
+   * cancel while it waits for the environment ends it as cancelled.
+   */
+  private async withEnvironment(label: string, run: () => Promise<InstallResult>): Promise<InstallResult> {
+    try {
+      return await withPipLock(run, {
+        label,
+        signal: this.abortController?.signal,
+        onWait: heldBy => this.sendProgress({
+          type: 'installing',
+          progress: 0,
+          message: `Waiting for another Python package operation (${heldBy}) to finish...`,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof PipLockAbortedError) return CANCELLED;
+      throw error;
+    }
   }
 
-  /**
-   * Gives Windows pip a short junction as its install prefix. Recent PyTorch
-   * wheels contain deeply nested license files; the normal installed-app
-   * prefix can push those paths past Windows' legacy directory-name limit and
-   * leave a partially extracted torch wheel behind.
-   *
-   * Installs launch the real python.exe and use the junction only as
-   * `--prefix`, so generated command launchers retain the permanent
-   * interpreter path. Uninstalls launch through the junction so pip can remove
-   * the same deep files. In both directions, the files live in PATHS.VS.
-   */
-  private async createPipPathAlias(): Promise<{
-    installArgs: string[];
-    pythonPath: string;
-    cleanup: () => Promise<void>;
-  }> {
-    const noCleanup = async () => {};
-    if (process.platform !== 'win32') {
-      return { installArgs: [], pythonPath: PATHS.PYTHON, cleanup: noCleanup };
-    }
-
-    let tempRoot: string | null = null;
-    let pythonAlias: string | null = null;
-
-    const cleanup = async () => {
-      if (pythonAlias) {
-        try {
-          await nodeFs.rmdir(pythonAlias);
-        } catch (error) {
-          logger.warn(`Failed to remove temporary pip junction ${pythonAlias}:`, error);
-        }
-      }
-      if (tempRoot) {
-        try {
-          await nodeFs.rmdir(tempRoot);
-        } catch (error) {
-          logger.warn(`Failed to remove temporary pip directory ${tempRoot}:`, error);
-        }
-      }
-    };
-
-    try {
-      tempRoot = await nodeFs.mkdtemp(path.join(os.tmpdir(), 'vkp-'));
-      pythonAlias = path.join(tempRoot, 'p');
-      await nodeFs.symlink(PATHS.VS, pythonAlias, 'junction');
-      logger.info(`Using short pip install prefix: ${pythonAlias} -> ${PATHS.VS}`);
-
-      return {
-        installArgs: ['--prefix', pythonAlias],
-        pythonPath: path.join(pythonAlias, path.basename(PATHS.PYTHON)),
-        cleanup
-      };
-    } catch (error) {
-      await cleanup();
-      logger.warn('Failed to create a short pip install prefix; using the installed path:', error);
-      return { installArgs: [], pythonPath: PATHS.PYTHON, cleanup: noCleanup };
-    }
+  private withWarnings(result: InstallResult): InstallResult {
+    return this.warnings.length > 0 ? { ...result, warnings: [...this.warnings] } : result;
   }
 
   /**
@@ -273,233 +226,78 @@ export class PluginInstaller {
       return CANCELLED;
     }
 
-    const pathAlias = await this.createPipPathAlias();
-    const args = [
-      '-m', 'pip', 'install',
-      '--no-warn-script-location',
-      '--cache-dir', PATHS.PIP_CACHE,
-      ...PIP_NETWORK_ARGS,
-      ...pathAlias.installArgs,
-      ...packages,
-      ...extraArgs
-    ];
-
-    const commandStr = `${PATHS.PYTHON} ${args.join(' ')}`;
-    logger.info(`Running command: ${commandStr}`);
-
-    return new Promise<InstallResult>((resolve) => {
-      this.installProcess = spawn(PATHS.PYTHON, args, createWorkloadSpawnOptions({
-        cwd: PATHS.VS,
-        windowsHide: true
-      }));
-
-      // stdout and stderr together, in arrival order, because pip splits one
-      // failure across both: the "Collecting" context on stdout, the error on
-      // stderr. Only the tail is kept; that is where the reason is.
-      let outputBuffer = '';
-      let errorBuffer = '';
-      let lastProgress = 0;
-      let currentPackage = '';
-      let currentStatus = 'Preparing...';
-      let lineBuffer = '';
-
-      const sendUpdate = (message: string, progressBoost: number = 0) => {
-        lastProgress = Math.max(lastProgress, progressBoost);
-        const scaledProgress = progressOffset + (lastProgress * progressScale / 100);
-        this.sendProgress({
-          type: 'installing',
-          progress: Math.min(scaledProgress, 99),
-          message
-        });
-      };
-
-      const processLine = (line: string, source: 'stdout' | 'stderr') => {
-        const trimmed = line.trim();
-        if (!trimmed) return;
-
-        // Log directly to file and console
-        logger.info(`[pip] ${trimmed}`);
-
-        // Extract package name from various pip messages
-        let packageMatch = trimmed.match(/Collecting\s+([^\s(]+)/);
-        if (packageMatch) {
-          currentPackage = packageMatch[1];
-          currentStatus = 'Collecting';
-          sendUpdate(`Collecting ${currentPackage}...`, 10);
-          return;
-        }
-
-        packageMatch = trimmed.match(/Downloading\s+([^\s(]+)/);
-        if (packageMatch) {
-          currentPackage = packageMatch[1];
-          currentStatus = 'Downloading';
-          sendUpdate(`Downloading ${currentPackage}...`, 30);
-          return;
-        }
-
-        // Download progress with percentage
-        const downloadProgress = trimmed.match(/(\d+)%/);
-        if (downloadProgress && currentPackage) {
-          const percent = parseInt(downloadProgress[1]);
-          sendUpdate(`Downloading ${currentPackage}... ${percent}%`, 30 + (percent * 0.4));
-          return;
-        }
-
-        // Installing collected packages
-        if (trimmed.includes('Installing collected packages')) {
-          const packagesMatch = trimmed.match(/Installing collected packages:\s*(.+)/);
-          if (packagesMatch) {
-            currentStatus = 'Installing';
-            sendUpdate(`Installing packages: ${packagesMatch[1]}`, 80);
-          } else {
-            sendUpdate('Installing packages...', 80);
-          }
-          return;
-        }
-
-        // Successfully installed
-        if (trimmed.includes('Successfully installed')) {
-          const installedMatch = trimmed.match(/Successfully installed\s+(.+)/);
-          if (installedMatch) {
-            sendUpdate(`Successfully installed: ${installedMatch[1]}`, 95);
-          } else {
-            sendUpdate('Installation complete!', 95);
-          }
-          return;
-        }
-
-        // Requirement already satisfied
-        if (trimmed.includes('Requirement already satisfied')) {
-          const reqMatch = trimmed.match(/Requirement already satisfied:\s+([^\s]+)/);
-          if (reqMatch) {
-            sendUpdate(`${reqMatch[1]} already installed`, lastProgress);
-          }
-          return;
-        }
-
-        // Using cached package
-        if (trimmed.includes('Using cached')) {
-          const cachedMatch = trimmed.match(/Using cached\s+([^\s(]+)/);
-          if (cachedMatch) {
-            sendUpdate(`Using cached ${cachedMatch[1]}`, lastProgress);
-          }
-          return;
-        }
-
-        // Building wheel or preparing metadata
-        if (trimmed.includes('Building wheel') || trimmed.includes('Preparing metadata')) {
-          if (currentPackage) {
-            sendUpdate(`Building ${currentPackage}...`, 60);
-          } else {
-            sendUpdate('Building packages...', 60);
-          }
-          return;
-        }
-      };
-
-      this.installProcess.stdout?.on('data', (data: Buffer) => {
-        const output = data.toString();
-        outputBuffer = appendBounded(outputBuffer, output);
-        lineBuffer += output;
-
-        // Process complete lines
-        const lines = lineBuffer.split('\n');
-        lineBuffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        lines.forEach(line => processLine(line, 'stdout'));
+    let lastProgress = 0;
+    let currentPackage = '';
+    const sendUpdate = (message: string, progressBoost: number = 0) => {
+      lastProgress = Math.max(lastProgress, progressBoost);
+      const scaledProgress = progressOffset + (lastProgress * progressScale / 100);
+      this.sendProgress({
+        type: 'installing',
+        progress: Math.min(scaledProgress, 99),
+        message
       });
+    };
 
-      this.installProcess.stderr?.on('data', (data: Buffer) => {
-        const output = data.toString();
-        outputBuffer = appendBounded(outputBuffer, output);
-        errorBuffer = appendBounded(errorBuffer, output);
+    const processLine = (trimmed: string) => {
+      let packageMatch = trimmed.match(/Collecting\s+([^\s(]+)/);
+      if (packageMatch) {
+        currentPackage = packageMatch[1];
+        sendUpdate(`Collecting ${currentPackage}...`, 10);
+        return;
+      }
 
-        // Process stderr lines (pip often outputs progress to stderr)
-        const lines = output.split('\n');
-        lines.forEach(line => processLine(line, 'stderr'));
-      });
+      packageMatch = trimmed.match(/Downloading\s+([^\s(]+)/);
+      if (packageMatch) {
+        currentPackage = packageMatch[1];
+        sendUpdate(`Downloading ${currentPackage}...`, 30);
+        return;
+      }
 
-      this.installProcess.on('close', (code: number | null) => {
-        // Process any remaining buffered line
-        if (lineBuffer.trim()) {
-          processLine(lineBuffer, 'stdout');
-        }
+      const packagesMatch = trimmed.match(/Installing collected packages:\s*(.+)/);
+      if (packagesMatch) {
+        sendUpdate(`Installing packages: ${packagesMatch[1]}`, 80);
+        return;
+      }
 
-        this.installProcess = null;
+      const installedMatch = trimmed.match(/Successfully installed\s+(.+)/);
+      if (installedMatch) {
+        sendUpdate(`Successfully installed: ${installedMatch[1]}`, 95);
+        return;
+      }
 
-        if (this.isCancelled) {
-          logger.info('Plugin dependency installation cancelled');
-          resolve(CANCELLED);
-          return;
-        }
+      const reqMatch = trimmed.match(/Requirement already satisfied:\s+([^\s]+)/);
+      if (reqMatch) {
+        sendUpdate(`${reqMatch[1]} already installed`, lastProgress);
+        return;
+      }
 
-        if (code === 0) {
-          logger.info('Pip install completed successfully');
-          logger.info('✓ Step completed successfully');
-          resolve({ success: true });
-        } else {
-          logger.error(`${step}: pip exited with code ${code}`);
-          if (errorBuffer.trim()) {
-            logger.error('Error output:');
-            errorBuffer.split('\n').forEach(line => {
-              if (line.trim()) logger.error(`  ${line}`);
-            });
-          }
-          const classified = classifyInstallError(outputBuffer, { step, exitCode: code });
-          logger.error(`${step} failed (${classified.kind}): ${classified.summary}`);
-          resolve(failureResult(classified, logger.getLogPath()));
-        }
-      });
+      const cachedMatch = trimmed.match(/Using cached\s+([^\s(]+)/);
+      if (cachedMatch) {
+        sendUpdate(`Using cached ${cachedMatch[1]}`, lastProgress);
+        return;
+      }
 
-      this.installProcess.on('error', (error: Error) => {
-        logger.error('Failed to start pip process:', error);
-        this.installProcess = null;
-        // Node's own words ("spawn ...python.exe ENOENT") are what the
-        // classifier recognises a missing interpreter by.
-        resolve(failureResult(classifyInstallError(error.message, { step }), logger.getLogPath()));
-      });
-    }).finally(() => pathAlias.cleanup());
-  }
+      if (trimmed.includes('Building wheel') || trimmed.includes('Preparing metadata')) {
+        sendUpdate(currentPackage ? `Building ${currentPackage}...` : 'Building packages...', 60);
+      }
+    };
 
-  /**
-   * Verifies that modules supplied inside a distribution are actually
-   * importable. `pip list` only checks dist-info metadata, so it cannot detect
-   * an incomplete wheel extraction (for example, `torch` being present while
-   * its bundled top-level `torchgen` package is missing).
-   */
-  private async canImportPythonModules(modules: string[], label: string): Promise<ImportCheck> {
-    const importCode =
-      `import importlib; [importlib.import_module(name) for name in ${JSON.stringify(modules)}]`;
-
-    return new Promise((resolve) => {
-      const checkProcess = spawn(PATHS.PYTHON, ['-c', importCode], {
-        cwd: PATHS.VS,
-        windowsHide: true
-      });
-
-      let errorBuffer = '';
-      checkProcess.stderr?.on('data', (data: Buffer) => {
-        errorBuffer += data.toString();
-      });
-
-      checkProcess.on('close', (code: number | null) => {
-        if (code === 0) {
-          resolve({ ok: true, error: '' });
-          return;
-        }
-
-        logger.warn(
-          `${label} import check failed (exit code: ${code})` +
-          (errorBuffer.trim() ? `: ${errorBuffer.trim()}` : '')
-        );
-        resolve({ ok: false, error: errorBuffer });
-      });
-
-      checkProcess.on('error', (error: Error) => {
-        logger.warn(`Failed to run ${label} import check:`, error);
-        resolve({ ok: false, error: error.message });
-      });
+    const outcome = await pipInstall(packages, {
+      step,
+      extraArgs,
+      shortPrefix: true,
+      onLine: processLine,
+      signal: this.abortController?.signal,
     });
+    if (outcome.cancelled || this.isCancelled) {
+      logger.info('Plugin dependency installation cancelled');
+      return CANCELLED;
+    }
+    if (outcome.ok) {
+      logger.info(`✓ ${step} completed successfully`);
+      return { success: true };
+    }
+    return failureResult(outcome.failure!, logger.getLogPath());
   }
 
   /**
@@ -542,7 +340,7 @@ export class PluginInstaller {
     // torchgen is part of the official torch wheel, not the unrelated PyPI
     // distribution with the same name. Import both so a partial extraction is
     // caught even when pip still reports `torch` as installed.
-    return this.canImportPythonModules(['torch', 'torchgen'], 'PyTorch runtime');
+    return canImportModules(['torch', 'torchgen'], 'PyTorch runtime');
   }
 
   /**
@@ -552,109 +350,20 @@ export class PluginInstaller {
    * "nothing installed" (matching the previous checkInstalled failure path).
    */
   private async listInstalledPackages(): Promise<InstalledPackage[]> {
-    const args = ['-m', 'pip', 'list', '--format=json'];
-
-    logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
-    logger.info(`Working directory: ${PATHS.VS}`);
-
-    return new Promise((resolve) => {
-      const checkProcess = spawn(PATHS.PYTHON, args, {
-        cwd: PATHS.VS,
-        windowsHide: true
-      });
-
-      let outputBuffer = '';
-      let errorBuffer = '';
-
-      checkProcess.stdout?.on('data', (data: Buffer) => {
-        outputBuffer += data.toString();
-      });
-
-      checkProcess.stderr?.on('data', (data: Buffer) => {
-        errorBuffer += data.toString();
-      });
-
-      checkProcess.on('close', (code: number | null) => {
-        if (code === 0) {
-          try {
-            const parsed = JSON.parse(outputBuffer) as Array<{ name: string; version?: string }>;
-            resolve(parsed.map(pkg => ({
-              name: normalizePackageName(pkg.name),
-              version: pkg.version ?? ''
-            })));
-          } catch (error) {
-            logger.error('Error parsing pip list output:', error);
-            logger.error('Output buffer:', outputBuffer);
-            resolve([]);
-          }
-        } else {
-          logger.error(`Failed to check installed packages (exit code: ${code})`);
-          if (errorBuffer.trim()) {
-            logger.error('Error output:', errorBuffer);
-          }
-          if (outputBuffer.trim()) {
-            logger.error('Standard output:', outputBuffer);
-          }
-          resolve([]);
-        }
-      });
-
-      checkProcess.on('error', (error: Error) => {
-        logger.error('Failed to run pip list:', error);
-        logger.error('Python path:', PATHS.PYTHON);
-        logger.error('VS path:', PATHS.VS);
-        resolve([]);
-      });
-    });
+    const listed = await pipList();
+    return (listed ?? []).map(pkg => ({ name: normalizePackageName(pkg.name), version: pkg.version }));
   }
 
-  /**
-   * Plain `pip uninstall -y` runner without progress reporting, used by the
-   * vendor purge step (uninstallDependencies keeps its own progress-emitting
-   * spawn).
-   */
+  /** `pip uninstall -y` without progress reporting, for the steps inside an install. */
   private async runPipUninstall(packages: string[]): Promise<{ success: boolean; error?: string }> {
-    const pathAlias = await this.createPipPathAlias();
-    const args = ['-m', 'pip', 'uninstall', '-y', ...packages];
-    logger.info(`Running command: ${pathAlias.pythonPath} ${args.join(' ')}`);
-
-    return new Promise<{ success: boolean; error?: string }>((resolve) => {
-      this.installProcess = spawn(pathAlias.pythonPath, args, createWorkloadSpawnOptions({
-        cwd: PATHS.VS,
-        windowsHide: true
-      }));
-
-      let errorBuffer = '';
-
-      const processLine = (line: string) => {
-        const trimmed = line.trim();
-        if (trimmed) logger.info(`[pip] ${trimmed}`);
-      };
-
-      this.installProcess.stdout?.on('data', (data: Buffer) => {
-        data.toString().split('\n').forEach(processLine);
-      });
-
-      this.installProcess.stderr?.on('data', (data: Buffer) => {
-        const output = data.toString();
-        errorBuffer += output;
-        output.split('\n').forEach(processLine);
-      });
-
-      this.installProcess.on('close', (code: number | null) => {
-        this.installProcess = null;
-        if (code === 0) {
-          resolve({ success: true });
-        } else {
-          resolve({ success: false, error: `pip uninstall failed with exit code ${code}: ${errorBuffer.trim()}` });
-        }
-      });
-
-      this.installProcess.on('error', (error: Error) => {
-        this.installProcess = null;
-        resolve({ success: false, error: error.message });
-      });
-    }).finally(() => pathAlias.cleanup());
+    const outcome = await pipUninstall(packages, {
+      step: 'Removing plugin packages',
+      shortPrefix: true,
+      signal: this.abortController?.signal,
+    });
+    return outcome.ok
+      ? { success: true }
+      : { success: false, error: outcome.cancelled ? 'cancelled' : `pip uninstall failed with exit code ${outcome.exitCode}: ${outcome.stderr.trim() || outcome.output.trim()}` };
   }
 
   /**
@@ -664,7 +373,7 @@ export class PluginInstaller {
   async installDependencies(mode: InstallMode = 'partial'): Promise<InstallResult> {
     return this.flights.run('install', async () => {
       this.beginOperation();
-      const result = await this.runInstallAttempt(mode);
+      const result = await this.withEnvironment('plugin install', () => this.runInstallAttempt(mode));
       this.emitFailure(result);
       return this.withWarnings(result);
     }, running => this.busyResult(running));
@@ -687,7 +396,7 @@ export class PluginInstaller {
       this.beginOperation();
       this.useSetupChannel = true;
       try {
-        const result = await runWithRetry(
+        const result = await this.withEnvironment('plugin install', () => runWithRetry(
           async attempt => {
             logger.info(`Starting plugin dependency installation (setup mode, attempt ${attempt}/2)`);
             return this.runInstallAttempt();
@@ -704,7 +413,7 @@ export class PluginInstaller {
               });
             },
           },
-        );
+        ));
         if (!result.success && !result.cancelled) {
           logger.error(`Plugin install failed after its automatic retry: ${result.summary ?? result.error}`);
         }
@@ -1147,7 +856,7 @@ export class PluginInstaller {
   async uninstallDependencies(): Promise<InstallResult> {
     return this.flights.run('uninstall', async () => {
       this.beginOperation();
-      const result = await this.runUninstall();
+      const result = await this.withEnvironment('plugin uninstall', () => this.runUninstall());
       this.emitFailure(result);
       return result;
     }, running => this.busyResult(running));
@@ -1167,111 +876,48 @@ export class PluginInstaller {
       // Shared, deliberately vendor-neutral list — see the comment on
       // UNINSTALL_PACKAGE_NAMES in vendorPackages.ts for why this must NOT
       // branch on the GPU vendor.
-      const packagesToUninstall = UNINSTALL_PACKAGE_NAMES;
-      const args = ['-m', 'pip', 'uninstall', '-y', ...packagesToUninstall];
-      const pathAlias = await this.createPipPathAlias();
+      let progress = 0;
+      const processLine = (trimmed: string) => {
+        const uninstalling = trimmed.match(/^Uninstalling\s+([^\s-]+)/);
+        if (uninstalling) {
+          progress += 15;
+          this.sendProgress({
+            type: 'installing',
+            progress: Math.min(progress, 95),
+            message: `Uninstalling ${uninstalling[1]}...`
+          });
+          return;
+        }
+        const uninstalled = trimmed.match(/Successfully uninstalled\s+([^\s-]+)/);
+        if (uninstalled) {
+          this.sendProgress({
+            type: 'installing',
+            progress: Math.min(progress, 95),
+            message: `Uninstalled ${uninstalled[1]}`
+          });
+        }
+      };
 
-      const commandStr = `${pathAlias.pythonPath} ${args.join(' ')}`;
-      logger.info(`Running command: ${commandStr}`);
-
-      return new Promise<InstallResult>((resolve) => {
-        this.installProcess = spawn(pathAlias.pythonPath, args, createWorkloadSpawnOptions({
-          cwd: PATHS.VS,
-          windowsHide: true
-        }));
-
-        let outputBuffer = '';
-        let errorBuffer = '';
-        let progress = 0;
-        let lineBuffer = '';
-
-        const processLine = (line: string) => {
-          const trimmed = line.trim();
-          if (!trimmed) return;
-
-          logger.info(`[pip] ${trimmed}`);
-
-          if (trimmed.includes('Uninstalling')) {
-            const pkgMatch = trimmed.match(/Uninstalling\s+([^\s-]+)/);
-            if (pkgMatch) {
-              progress += 15;
-              this.sendProgress({
-                type: 'installing',
-                progress: Math.min(progress, 95),
-                message: `Uninstalling ${pkgMatch[1]}...`
-              });
-            }
-          } else if (trimmed.includes('Successfully uninstalled')) {
-            const pkgMatch = trimmed.match(/Successfully uninstalled\s+([^\s-]+)/);
-            if (pkgMatch) {
-              this.sendProgress({
-                type: 'installing',
-                progress: Math.min(progress, 95),
-                message: `Uninstalled ${pkgMatch[1]}`
-              });
-            }
-          }
-        };
-
-        this.installProcess.stdout?.on('data', (data: Buffer) => {
-          const output = data.toString();
-          outputBuffer = appendBounded(outputBuffer, output);
-          lineBuffer += output;
-
-          const lines = lineBuffer.split('\n');
-          lineBuffer = lines.pop() || '';
-
-          lines.forEach(line => processLine(line));
-        });
-
-        this.installProcess.stderr?.on('data', (data: Buffer) => {
-          const output = data.toString();
-          outputBuffer = appendBounded(outputBuffer, output);
-          errorBuffer = appendBounded(errorBuffer, output);
-
-          const lines = output.split('\n');
-          lines.forEach(line => processLine(line));
-        });
-
-        this.installProcess.on('close', (code: number | null) => {
-          if (lineBuffer.trim()) {
-            processLine(lineBuffer);
-          }
-
-          this.installProcess = null;
-
-          if (this.isCancelled) {
-            logger.info('Plugin dependency uninstallation cancelled');
-            resolve({ ...CANCELLED, error: 'Uninstallation cancelled by user' });
-            return;
-          }
-
-          if (code === 0) {
-            logger.info('Dependencies uninstalled successfully');
-            this.sendProgress({
-              type: 'complete',
-              progress: 100,
-              message: 'Dependencies uninstalled successfully!'
-            });
-            resolve({ success: true });
-          } else {
-            logger.error(`${step}: pip exited with code ${code}`);
-            if (errorBuffer.trim()) {
-              logger.error('Error output:');
-              errorBuffer.split('\n').forEach(line => {
-                if (line.trim()) logger.error(`  ${line}`);
-              });
-            }
-            resolve(failureResult(classifyInstallError(outputBuffer, { step, exitCode: code }), logger.getLogPath()));
-          }
-        });
-
-        this.installProcess.on('error', (error: Error) => {
-          logger.error('Failed to start pip uninstall process:', error);
-          this.installProcess = null;
-          resolve(failureResult(classifyInstallError(error.message, { step }), logger.getLogPath()));
-        });
-      }).finally(() => pathAlias.cleanup());
+      const outcome = await pipUninstall(UNINSTALL_PACKAGE_NAMES, {
+        step,
+        shortPrefix: true,
+        onLine: processLine,
+        signal: this.abortController?.signal,
+      });
+      if (outcome.cancelled || this.isCancelled) {
+        logger.info('Plugin dependency uninstallation cancelled');
+        return { ...CANCELLED, error: 'Uninstallation cancelled by user' };
+      }
+      if (!outcome.ok) {
+        return failureResult(outcome.failure!, logger.getLogPath());
+      }
+      logger.info('Dependencies uninstalled successfully');
+      this.sendProgress({
+        type: 'complete',
+        progress: 100,
+        message: 'Dependencies uninstalled successfully!'
+      });
+      return { success: true };
     } catch (error) {
       logger.error('Plugin dependency uninstallation error:', error);
       return failureResult(describeInstallFailure(error, step), logger.getLogPath());
@@ -1302,11 +948,8 @@ export class PluginInstaller {
     }
     logger.info('Cancelling plugin dependency operation');
     this.isCancelled = true;
+    // Kills a running pip and releases a wait for the environment lock.
     this.abortController?.abort();
-    if (this.installProcess) {
-      terminateProcessTree(this.installProcess, 'SIGTERM');
-      this.installProcess = null;
-    }
   }
 
   private async extractAllPlugins(): Promise<void> {

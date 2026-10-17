@@ -1,8 +1,8 @@
 // electron/vsMlrtManager.ts
 import * as fs from 'fs-extra';
-import { spawn } from 'child_process';
 import { BrowserWindow } from 'electron';
-import { PATHS, VS_MLRT_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
+import { VS_MLRT_VERSION, PYPI_EXTRA_INDEX_ARGS } from './constants';
+import { pipInstall, throwIfFailed, withPipLock } from './pip';
 import { logger } from './logger';
 import { applyPluginCompatibilityFixes } from './legacyCleanup';
 import { configManager } from './configManager';
@@ -83,92 +83,51 @@ export class VsMlrtManager {
     logger.info(`=== Installing ${componentName} from PyPI ===`);
     progressCallback?.({ progress: 5, message: `Preparing to install ${componentName}...` });
 
-    const args = [
-      '-m', 'pip', 'install',
-      '--upgrade',
-      '--no-warn-script-location',
-      '--cache-dir', PATHS.PIP_CACHE,
-      ...requirements,
-      ...PYPI_EXTRA_INDEX_ARGS,
-    ];
+    let lastProgress = 5;
+    const report = (progress: number, message: string) => {
+      lastProgress = Math.max(lastProgress, progress);
+      progressCallback?.({ progress: Math.min(lastProgress, 99), message });
+    };
+    const processLine = (trimmed: string) => {
+      const collectingMatch = trimmed.match(/Collecting\s+([^\s(]+)/);
+      if (collectingMatch) {
+        report(15, `Collecting ${collectingMatch[1]}...`);
+        return;
+      }
+      const downloadingMatch = trimmed.match(/Downloading\s+([^\s(]+)/);
+      if (downloadingMatch) {
+        report(40, `Downloading ${downloadingMatch[1]}...`);
+        return;
+      }
+      if (trimmed.includes('Installing collected packages')) {
+        report(90, 'Installing packages...');
+        return;
+      }
+      if (trimmed.includes('Successfully installed')) {
+        report(98, `${componentName} installed`);
+      }
+    };
 
-    logger.info(`Running command: ${PATHS.PYTHON} ${args.join(' ')}`);
+    const step = `Installing ${componentName}`;
+    // The compatibility fixes rewrite the plugins folder, so they run inside
+    // the same hold of the environment as the install.
+    await withPipLock(async () => {
+      throwIfFailed(await pipInstall(requirements, {
+        step,
+        extraArgs: ['--upgrade', ...PYPI_EXTRA_INDEX_ARGS],
+        onLine: processLine,
+      }), step);
 
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(PATHS.PYTHON, args, {
-        cwd: PATHS.VS,
-        windowsHide: true
-      });
+      // Re-resolve the ort/ort-cuda duplicate a reinstall may have recreated.
+      // Prefer the vendor the installed set targets; the 'nvidia' fallback
+      // covers configs predating vendor tracking.
+      await applyPluginCompatibilityFixes(
+        configManager.getPluginsGpuVendor() ?? configManager.getGpuVendor() ?? 'nvidia'
+      );
+    }, { label: 'vs-mlrt update' });
 
-      let errorBuffer = '';
-      let lastProgress = 5;
-
-      const report = (progress: number, message: string) => {
-        lastProgress = Math.max(lastProgress, progress);
-        progressCallback?.({ progress: Math.min(lastProgress, 99), message });
-      };
-
-      const processLine = (line: string) => {
-        const trimmed = line.trim();
-        if (!trimmed) return;
-        logger.info(`[pip] ${trimmed}`);
-
-        const collectingMatch = trimmed.match(/Collecting\s+([^\s(]+)/);
-        if (collectingMatch) {
-          report(15, `Collecting ${collectingMatch[1]}...`);
-          return;
-        }
-
-        const percentMatch = trimmed.match(/(\d+)%/);
-        if (percentMatch) {
-          const percent = parseInt(percentMatch[1], 10);
-          report(15 + percent * 0.7, `Downloading... ${percent}%`);
-          return;
-        }
-
-        if (trimmed.includes('Installing collected packages')) {
-          report(90, 'Installing packages...');
-          return;
-        }
-
-        if (trimmed.includes('Successfully installed')) {
-          report(98, `${componentName} installed`);
-        }
-      };
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        data.toString().split('\n').forEach(processLine);
-      });
-
-      proc.stderr?.on('data', (data: Buffer) => {
-        const output = data.toString();
-        errorBuffer += output;
-        output.split('\n').forEach(processLine);
-      });
-
-      proc.on('close', async (code: number | null) => {
-        if (code === 0) {
-          // Re-resolve the ort/ort-cuda duplicate a reinstall may have recreated.
-          // Prefer the vendor the installed set targets; the 'nvidia' fallback
-          // preserves behavior for configs predating vendor tracking.
-          await applyPluginCompatibilityFixes(
-            configManager.getPluginsGpuVendor() ?? configManager.getGpuVendor() ?? 'nvidia'
-          );
-          progressCallback?.({ progress: 100, message: `${componentName} installed successfully!` });
-          logger.info(`=== ${componentName} installation completed ===`);
-          resolve();
-        } else {
-          const errorMsg = `pip install of ${componentName} failed with exit code ${code}: ${errorBuffer.trim()}`;
-          logger.error(errorMsg);
-          reject(new Error(errorMsg));
-        }
-      });
-
-      proc.on('error', (error: Error) => {
-        logger.error(`Failed to start pip for ${componentName}:`, error);
-        reject(error);
-      });
-    });
+    progressCallback?.({ progress: 100, message: `${componentName} installed successfully!` });
+    logger.info(`=== ${componentName} installation completed ===`);
   }
 
   /**

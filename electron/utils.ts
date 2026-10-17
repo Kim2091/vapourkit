@@ -74,7 +74,8 @@ export async function runCommand(
     const proc = spawn(command, args, {
       cwd: cwd || process.cwd(),
       shell: false,
-      env: env || process.env
+      env: env || process.env,
+      windowsHide: true,
     });
 
     let stdout = '';

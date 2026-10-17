@@ -83,6 +83,7 @@ import { PluginInstaller, describeTorchImportFailure } from './pluginInstaller';
 import { runInstallPreflight } from './installPreflight';
 import { inspectPythonEnvironment } from './pythonEnvIntegrity';
 import type { InstallResult } from './installFlow';
+import { withPipLock } from './pip';
 
 type Sent = { channel: string; payload: { type: string; message: string; summary?: string; component?: string } };
 
@@ -188,6 +189,44 @@ describe('setup-mode install', () => {
     await expect(result).resolves.toMatchObject({ cancelled: true });
     expect(spy).toHaveBeenCalledTimes(1);
     expect(errors()).toHaveLength(0);
+  });
+});
+
+describe('environment lock', () => {
+  it('waits for another holder of the environment, then runs', async () => {
+    const { installer, sent } = createInstaller();
+    const spy = vi.spyOn(installer as unknown as { runInstallAttempt: () => Promise<InstallResult> }, 'runInstallAttempt')
+      .mockResolvedValue({ success: true });
+    const gate = deferred<void>();
+    const holder = withPipLock(() => gate.promise, { label: 'launch environment check' });
+
+    const install = installer.installDependencies();
+    await flush();
+    expect(spy).not.toHaveBeenCalled();
+    expect(sent.some(event => event.payload.message.includes('launch environment check'))).toBe(true);
+
+    gate.resolve();
+    await holder;
+    await expect(install).resolves.toEqual({ success: true });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends as cancelled when cancelled while waiting', async () => {
+    const { installer, errors } = createInstaller();
+    const spy = vi.spyOn(installer as unknown as { runInstallAttempt: () => Promise<InstallResult> }, 'runInstallAttempt')
+      .mockResolvedValue({ success: true });
+    const gate = deferred<void>();
+    const holder = withPipLock(() => gate.promise, { label: 'vs-mlrt update' });
+
+    const install = installer.installDependenciesForSetup();
+    await flush();
+    installer.cancel();
+    await expect(install).resolves.toMatchObject({ cancelled: true });
+    expect(spy).not.toHaveBeenCalled();
+    expect(errors()).toHaveLength(0);
+
+    gate.resolve();
+    await holder;
   });
 });
 
