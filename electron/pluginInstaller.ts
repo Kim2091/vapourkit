@@ -1,5 +1,5 @@
 // electron/pluginInstaller.ts
-import { BrowserWindow, app } from 'electron';
+import { BrowserWindow } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs-extra';

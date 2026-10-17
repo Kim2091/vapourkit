@@ -132,11 +132,6 @@ export function withPipLock<T>(
   return envLock.run(fn, options);
 }
 
-/** What holds the environment lock right now, for logging. */
-export function pipLockHolder(): string | null {
-  return envLock.heldBy;
-}
-
 // ---------------------------------------------------------------------------
 // Running a process
 // ---------------------------------------------------------------------------
