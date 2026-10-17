@@ -37,6 +37,14 @@ export function useUndoRedoShortcuts({ onUndo, onRedo, enabled = true }: UseUndo
         return;
       }
 
+      // CTRL+SHIFT+Z is redo too, so it is checked before plain CTRL+Z
+      if ((e.key === 'z' || e.key === 'Z') && e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        onRedo();
+        return;
+      }
+
       // Handle CTRL+Z (Undo)
       if (e.key === 'z' || e.key === 'Z') {
         e.preventDefault();
@@ -47,14 +55,6 @@ export function useUndoRedoShortcuts({ onUndo, onRedo, enabled = true }: UseUndo
 
       // Handle CTRL+Y (Redo)
       if (e.key === 'y' || e.key === 'Y') {
-        e.preventDefault();
-        e.stopPropagation();
-        onRedo();
-        return;
-      }
-
-      // Also support CTRL+SHIFT+Z as an alternative to CTRL+Y for redo
-      if ((e.key === 'z' || e.key === 'Z') && e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
         onRedo();

@@ -1,73 +1,25 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import type { Filter } from '../electron.d';
-import { useFilterHistory } from './useFilterHistory';
+import { viewOf } from '../utils/workflowDocument';
+import type { WorkflowDocument } from './useWorkflowDocument';
 import { useUndoRedoShortcuts } from './useUndoRedoShortcuts';
 
+/**
+ * The window's filter chain, with undo and redo: the target's chain in the
+ * workflow document, whose history starts fresh whenever another chain is
+ * swapped in.
+ */
 export function useFilterConfig(
+  workflow: WorkflowDocument,
   isSetupComplete: boolean,
   onLog: (message: string) => void
 ) {
-  const [initialFilters] = useState<Filter[]>(() => {
-    const saved = localStorage.getItem('filters');
-    return saved !== null ? JSON.parse(saved) : [];
-  });
+  const { patch, getState, undo, redo } = workflow;
 
-  // Initialize filter history with the loaded filters
-  const {
-    filters: historyFilters,
-    recordState,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    resetHistory,
-  } = useFilterHistory(initialFilters);
-
-  const [filters, setFiltersState] = useState<Filter[]>(historyFilters);
-
-  // The chain as of the last change, ahead of the render that shows it: for
-  // work that finishes later (an Align, a generated LUT) and has to apply its
-  // result to the chain as it is then, not as it was when it started.
-  const latestRef = useRef<Filter[]>(historyFilters);
-  const setFilters = useCallback((value: Filter[]) => {
-    latestRef.current = value;
-    setFiltersState(value);
-  }, []);
-
-  // Which chain the window holds. Bumped whenever a different one is swapped
-  // in (a queue item's, the project's back), so a result started on one chain
-  // is not applied to another that happens to share step ids, as a queue item
-  // copied from the project does.
-  const [chainEpoch, setChainEpoch] = useState(0);
-  const epochRef = useRef(0);
-
-  // Sync filters with history state
-  useEffect(() => {
-    setFilters(historyFilters);
-    localStorage.setItem('filters', JSON.stringify(historyFilters));
-  }, [historyFilters, setFilters]);
-
-  // There used to be a load from app-config's filterConfigurations here.
-  // Nothing has written that since before 0.9.3, and the load re-ran on every
-  // edit, so a list left in an old config would have replaced the chain each
-  // time it changed. localStorage is the chain's only home.
-
-  // Wrapper to persist state changes and record in history
+  // A change made by the user: saved where the target keeps it, and a step undo can go back over.
   const handleSetFilters = useCallback((value: Filter[]) => {
-    setFilters(value);
-    localStorage.setItem('filters', JSON.stringify(value));
-    recordState(value);
-  }, [recordState, setFilters]);
-
-  // Swap in a different chain (a queue item's, or the project's back again):
-  // saved like any change, but a fresh start for undo.
-  const replaceFilters = useCallback((value: Filter[]) => {
-    setFilters(value);
-    localStorage.setItem('filters', JSON.stringify(value));
-    resetHistory(value);
-    epochRef.current += 1;
-    setChainEpoch(epochRef.current);
-  }, [resetHistory, setFilters]);
+    patch({ filters: value });
+  }, [patch]);
 
   /**
    * Start work on one step that will change it later. The function returned
@@ -76,37 +28,24 @@ export function useFilterConfig(
    * false) if the step is gone or a different chain has been swapped in.
    */
   const beginStepPatch = useCallback((stepId: string) => {
-    const startedOn = epochRef.current;
-    return (patch: (step: Filter) => Filter): boolean => {
-      if (epochRef.current !== startedOn) return false;
-      const latest = latestRef.current;
-      if (!latest.some(step => step.id === stepId)) return false;
-      handleSetFilters(latest.map(step => step.id === stepId ? patch(step) : step));
+    const startedOn = getState().epoch;
+    return (change: (step: Filter) => Filter): boolean => {
+      const current = getState();
+      if (current.epoch !== startedOn) return false;
+      const filters = viewOf(current).filters;
+      if (!filters.some(step => step.id === stepId)) return false;
+      patch({ filters: filters.map(step => step.id === stepId ? change(step) : step) });
       return true;
     };
-  }, [handleSetFilters]);
+  }, [getState, patch]);
 
-  const getLatestFilters = useCallback(() => latestRef.current, []);
-
-  // Undo handler
   const handleUndo = useCallback(() => {
-    const previousState = undo();
-    if (previousState) {
-      setFilters(previousState);
-      localStorage.setItem('filters', JSON.stringify(previousState));
-      onLog('Undo filter change');
-    }
-  }, [undo, onLog, setFilters]);
+    if (undo()) onLog('Undo filter change');
+  }, [undo, onLog]);
 
-  // Redo handler
   const handleRedo = useCallback(() => {
-    const nextState = redo();
-    if (nextState) {
-      setFilters(nextState);
-      localStorage.setItem('filters', JSON.stringify(nextState));
-      onLog('Redo filter change');
-    }
-  }, [redo, onLog, setFilters]);
+    if (redo()) onLog('Redo filter change');
+  }, [redo, onLog]);
 
   // Setup keyboard shortcuts for undo/redo
   useUndoRedoShortcuts({
@@ -116,15 +55,12 @@ export function useFilterConfig(
   });
 
   return {
-    filters,
-    setFilters,
+    filters: workflow.view.filters,
     handleSetFilters,
-    replaceFilters,
     beginStepPatch,
-    getLatestFilters,
-    chainEpoch,
-    canUndo,
-    canRedo,
+    chainEpoch: workflow.epoch,
+    canUndo: workflow.canUndo,
+    canRedo: workflow.canRedo,
     handleUndo,
     handleRedo,
   };

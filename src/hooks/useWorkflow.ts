@@ -1,12 +1,20 @@
 // src/hooks/useWorkflow.ts
 import { useState, useCallback, useEffect } from 'react';
-import type { BackendId, Filter, FilterTemplate, WorkflowData, SegmentSelection, ColorimetrySettings } from '../electron.d';
+import type { Filter, FilterTemplate, WorkflowData } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 import { getPortableModelName, resolvePortableModelName } from '../utils/modelUtils';
-import { isBackendId, normalizeBackendForCurrentPlatform } from '../utils/backends';
 import { notify } from '../utils/notifications';
 import { ask } from '../utils/dialogs';
 import { remapStepReferences } from '../utils/stepReferences';
+import {
+  encodingPatchOf,
+  encodingSettingsOf,
+  loadedWorkflowRecord,
+  NO_WORKFLOW,
+  restorePatchOf,
+  type LoadedWorkflowRecord,
+  type WorkflowSettings,
+} from '../utils/workflowSettings';
 
 const LOADED_WORKFLOW_KEY = 'loadedWorkflow';
 
@@ -25,50 +33,14 @@ interface ImportWorkflowModalState {
   }[];
 }
 
-interface WorkflowState {
-  currentWorkflow: string | null;
-  /** What the workflow was loaded into: 'project', or the queue item being edited. */
-  context?: string;
-  previousFilters: Filter[];
-  previousModel: string | null;
-  previousEncodingSettings?: {
-    defaultBackend?: BackendId;
-    ffmpegArgs: string;
-    processingFormat: string;
-    outputFormat: string;
-    videoCompareArgs: string;
-    numStreams: number;
-    segment: SegmentSelection;
-    colorimetry: ColorimetrySettings;
-  };
-}
-
 interface UseWorkflowProps {
-  filters: Filter[];
-  selectedModel: string | null;
-  setFilters: (filters: Filter[]) => void;
-  setSelectedModel: (model: string | null) => void;
-  availableModels: string[];
+  /** The window's settings. */
+  settings: WorkflowSettings;
+  /** Change the window's settings; a new chain is a step undo can go back over. */
+  patch: (change: Partial<WorkflowSettings>) => void;
   addConsoleLog: (message: string) => void;
   filterTemplates?: FilterTemplate[];
   refreshFilterTemplates?: () => Promise<void>;
-  // Encoding settings
-  ffmpegArgs?: string;
-  processingFormat?: string;
-  outputFormat?: string;
-  videoCompareArgs?: string;
-  defaultBackend?: BackendId;
-  numStreams?: number;
-  segment?: SegmentSelection;
-  colorimetry?: ColorimetrySettings;
-  setFfmpegArgs?: (args: string) => void;
-  setProcessingFormat?: (format: string) => void;
-  setOutputFormat?: (format: string) => void;
-  setVideoCompareArgs?: (args: string) => void;
-  setDefaultBackend?: (backend: BackendId) => void;
-  updateNumStreams?: (streams: number) => void;
-  setSegment?: (segment: SegmentSelection) => void;
-  handleColorimetryChange?: (settings: ColorimetrySettings) => void;
   /** What the window is showing: 'project', or the id of the queue item being edited. */
   context?: string;
 }
@@ -89,43 +61,25 @@ interface UseWorkflowReturn {
  * with proper state isolation to prevent edge cases.
  */
 export function useWorkflow({
-  filters,
-  selectedModel,
-  setFilters,
-  setSelectedModel,
+  settings,
+  patch,
   addConsoleLog,
   filterTemplates,
   refreshFilterTemplates,
-  ffmpegArgs,
-  processingFormat,
-  outputFormat,
-  videoCompareArgs,
-  defaultBackend,
-  numStreams,
-  segment,
-  colorimetry,
-  setFfmpegArgs,
-  setProcessingFormat,
-  setOutputFormat,
-  setVideoCompareArgs,
-  setDefaultBackend,
-  updateNumStreams,
-  setSegment,
-  handleColorimetryChange,
   context = 'project',
 }: UseWorkflowProps): UseWorkflowReturn {
-  // Kept in localStorage as well as in state. Loading a workflow writes its
-  // chain and settings where they are saved, so after a restart they are the
-  // project's; if what they replaced lived only in memory, Clear went with it
+  // Kept in localStorage as well as in state. Loading a workflow changes
+  // settings that are saved, so after a restart they are what the project or
+  // item has; if what they replaced lived only in memory, Clear went with it
   // and the settings from before the workflow were lost for good.
-  const [workflowState, setWorkflowState] = useState<WorkflowState>(() => {
+  const [workflowState, setWorkflowState] = useState<LoadedWorkflowRecord>(() => {
     try {
       const saved = localStorage.getItem(LOADED_WORKFLOW_KEY);
-      if (saved) return JSON.parse(saved) as WorkflowState;
+      if (saved) return JSON.parse(saved) as LoadedWorkflowRecord;
     } catch {
-      // Unreadable: start with no workflow loaded, as before this was kept.
+      // Unreadable: start with no workflow loaded.
     }
-    return { currentWorkflow: null, previousFilters: [], previousModel: null };
+    return NO_WORKFLOW;
   });
 
   useEffect(() => {
@@ -142,42 +96,6 @@ export function useWorkflow({
     workflowName: '',
     filters: [],
   });
-
-  /**
-   * Deep copy filters to prevent reference issues
-   */
-  const deepCopyFilters = useCallback((filters: Filter[]): Filter[] => {
-    return structuredClone(filters);
-  }, []);
-
-  /**
-   * Save current state before loading a workflow
-   */
-  const saveCurrentState = useCallback(() => {
-    setWorkflowState(prev => ({
-      ...prev,
-      context,
-      previousFilters: deepCopyFilters(filters),
-      previousModel: selectedModel,
-      previousEncodingSettings: ffmpegArgs !== undefined && processingFormat !== undefined && 
-        outputFormat !== undefined && videoCompareArgs !== undefined && 
-        numStreams !== undefined && segment !== undefined && colorimetry !== undefined
-        ? {
-            // Loading a workflow sets the backend too, so Clear has to put it back.
-            defaultBackend,
-            ffmpegArgs,
-            processingFormat,
-            outputFormat,
-            videoCompareArgs,
-            numStreams,
-            segment,
-            colorimetry,
-          }
-        : undefined,
-    }));
-    addConsoleLog('Saved current settings before loading workflow');
-  }, [filters, selectedModel, deepCopyFilters, addConsoleLog, ffmpegArgs, processingFormat, 
-      outputFormat, videoCompareArgs, numStreams, segment, colorimetry, defaultBackend, context]);
 
   /**
    * Load a workflow from file
@@ -200,15 +118,14 @@ export function useWorkflow({
       // One loaded into another context (the project, a different queue item)
       // kept that context's settings, which are not what this one replaces.
       const activeHere = workflowState.currentWorkflow && (workflowState.context ?? 'project') === context;
+      const displayName = workflow.name.replace(/\.vkworkflow$/i, '');
       if (!activeHere) {
-        saveCurrentState();
+        setWorkflowState(loadedWorkflowRecord(displayName, context, settings));
+        addConsoleLog('Saved current settings before loading workflow');
       } else {
         addConsoleLog(`Replacing active workflow "${workflowState.currentWorkflow}" with "${workflow.name}"`);
+        setWorkflowState(prev => ({ ...prev, currentWorkflow: displayName }));
       }
-
-      // Set the workflow name first (strip .vkworkflow extension if present)
-      const displayName = workflow.name.replace(/\.vkworkflow$/i, '');
-      setWorkflowState(prev => ({ ...prev, currentWorkflow: displayName }));
 
       // Get available models for resolution
       const availableModelObjects = await window.electronAPI.getAvailableModels();
@@ -258,43 +175,10 @@ export function useWorkflow({
           editor: wf.editor,
         };
       });
-      setFilters(remapStepReferences(workflowFilters, movedIds));
-
-      // Apply encoding settings if present
-      if (workflow.encodingSettings) {
-        if (workflow.encodingSettings.ffmpegArgs && setFfmpegArgs) {
-          setFfmpegArgs(workflow.encodingSettings.ffmpegArgs);
-          addConsoleLog(`Applied FFmpeg args from workflow`);
-        }
-        if (workflow.encodingSettings.processingFormat && setProcessingFormat) {
-          setProcessingFormat(workflow.encodingSettings.processingFormat);
-          addConsoleLog(`Applied processing format: ${workflow.encodingSettings.processingFormat}`);
-        }
-        if (workflow.encodingSettings.outputFormat && setOutputFormat) {
-          setOutputFormat(workflow.encodingSettings.outputFormat);
-          addConsoleLog(`Applied output format: ${workflow.encodingSettings.outputFormat}`);
-        }
-        if (workflow.encodingSettings.videoCompareArgs && setVideoCompareArgs) {
-          setVideoCompareArgs(workflow.encodingSettings.videoCompareArgs);
-          addConsoleLog(`Applied video compare args from workflow`);
-        }
-        if (workflow.encodingSettings.numStreams && updateNumStreams) {
-          updateNumStreams(workflow.encodingSettings.numStreams);
-          addConsoleLog(`Applied num streams: ${workflow.encodingSettings.numStreams}`);
-        }
-        if (workflow.encodingSettings.segment && setSegment) {
-          setSegment(workflow.encodingSettings.segment);
-          addConsoleLog(`Applied segment settings from workflow`);
-        }
-        if (workflow.encodingSettings.colorimetry && handleColorimetryChange) {
-          handleColorimetryChange(workflow.encodingSettings.colorimetry);
-          addConsoleLog(`Applied colorimetry settings from workflow`);
-        }
-        if (workflow.encodingSettings.defaultBackend && isBackendId(workflow.encodingSettings.defaultBackend) && setDefaultBackend) {
-          const backend = normalizeBackendForCurrentPlatform(workflow.encodingSettings.defaultBackend);
-          setDefaultBackend(backend);
-          addConsoleLog(`Applied default backend: ${backend}`);
-        }
+      const encoding = encodingPatchOf(workflow.encodingSettings);
+      patch({ ...encoding, filters: remapStepReferences(workflowFilters, movedIds) });
+      if (Object.keys(encoding).length > 0) {
+        addConsoleLog(`Applied the workflow's encoding settings: ${Object.keys(encoding).join(', ')}`);
       }
 
       addConsoleLog(`Loaded workflow "${workflow.name}" with ${workflow.filters.length} filter(s)`);
@@ -308,23 +192,7 @@ export function useWorkflow({
       addConsoleLog(`Error loading workflow: ${getErrorMessage(error)}`);
       notify.error('Workflow Error', getErrorMessage(error));
     }
-  }, [
-    workflowState.currentWorkflow,
-    workflowState.context,
-    context,
-    saveCurrentState,
-    setFilters,
-    deepCopyFilters,
-    addConsoleLog,
-    setFfmpegArgs,
-    setProcessingFormat,
-    setOutputFormat,
-    setVideoCompareArgs,
-    updateNumStreams,
-    setSegment,
-    handleColorimetryChange,
-    setDefaultBackend,
-  ]);
+  }, [workflowState.currentWorkflow, workflowState.context, context, settings, patch, addConsoleLog]);
 
   /**
    * Clear the current workflow and restore previous settings
@@ -346,52 +214,14 @@ export function useWorkflow({
       return;
     }
 
-    // Restore previous state using deep copies
-    const restoredFilters = deepCopyFilters(workflowState.previousFilters);
-    setFilters(restoredFilters);
-    
-    if (workflowState.previousModel) {
-      setSelectedModel(workflowState.previousModel);
-    }
-
-    // Restore previous encoding settings if available
-    if (workflowState.previousEncodingSettings) {
-      const prev = workflowState.previousEncodingSettings;
-      if (prev.defaultBackend && setDefaultBackend) setDefaultBackend(prev.defaultBackend);
-      if (setFfmpegArgs) setFfmpegArgs(prev.ffmpegArgs);
-      if (setProcessingFormat) setProcessingFormat(prev.processingFormat);
-      if (setOutputFormat) setOutputFormat(prev.outputFormat);
-      if (setVideoCompareArgs) setVideoCompareArgs(prev.videoCompareArgs);
-      if (updateNumStreams) updateNumStreams(prev.numStreams);
-      if (setSegment) setSegment(prev.segment);
-      if (handleColorimetryChange) handleColorimetryChange(prev.colorimetry);
-      addConsoleLog('Restored previous encoding settings');
-    }
+    patch(restorePatchOf(workflowState));
+    if (workflowState.previousEncodingSettings) addConsoleLog('Restored previous encoding settings');
 
     // Clear workflow state and reset previous state to defaults
-    setWorkflowState({
-      currentWorkflow: null,
-      previousFilters: [],
-      previousModel: null,
-    });
+    setWorkflowState(NO_WORKFLOW);
 
     addConsoleLog(`Cleared workflow "${workflowName}" and restored previous settings`);
-  }, [
-    workflowState,
-    context,
-    setDefaultBackend,
-    setFilters,
-    setSelectedModel,
-    deepCopyFilters,
-    addConsoleLog,
-    setFfmpegArgs,
-    setProcessingFormat,
-    setOutputFormat,
-    setVideoCompareArgs,
-    updateNumStreams,
-    setSegment,
-    handleColorimetryChange,
-  ]);
+  }, [workflowState, context, patch, addConsoleLog]);
 
   /**
    * Export current settings as a workflow
@@ -407,7 +237,7 @@ export function useWorkflow({
       const workflowData: WorkflowData = {
         name: workflowName,
         version: '1.0',
-        filters: deepCopyFilters(filters).map((filter, index) => {
+        filters: structuredClone(settings.filters).map((filter, index) => {
           // For AI model filters, save the portable model name instead of full path
           let portableModelName: string | undefined = undefined;
           if (filter.filterType === 'aiModel' && filter.modelPath) {
@@ -444,20 +274,7 @@ export function useWorkflow({
           };
         }),
         createdAt: new Date().toISOString(),
-        encodingSettings: ffmpegArgs !== undefined && processingFormat !== undefined &&
-          outputFormat !== undefined && videoCompareArgs !== undefined &&
-          numStreams !== undefined && segment !== undefined && colorimetry !== undefined
-          ? {
-              ffmpegArgs,
-              processingFormat,
-              outputFormat,
-              videoCompareArgs,
-              defaultBackend,
-              numStreams,
-              segment,
-              colorimetry,
-            }
-          : undefined,
+        encodingSettings: encodingSettingsOf(settings),
       };
       
       const result = await window.electronAPI.exportWorkflow(workflowData, filePath);
@@ -471,8 +288,7 @@ export function useWorkflow({
       addConsoleLog(`Error exporting workflow: ${getErrorMessage(error)}`);
       notify.error('Export Error', getErrorMessage(error));
     }
-  }, [filters, deepCopyFilters, addConsoleLog, filterTemplates, ffmpegArgs, processingFormat, outputFormat,
-      videoCompareArgs, defaultBackend, numStreams, segment, colorimetry]);
+  }, [settings, addConsoleLog, filterTemplates]);
 
   /**
    * Import filters from a workflow file permanently
