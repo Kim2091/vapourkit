@@ -89,14 +89,8 @@ export interface SegmentSelection {
 
 export interface ScriptConfig {
   inputVideo: string;
-  enginePath: string;
-  pluginsPath: string;
-  outputPath?: string;
   /** App-level default inference backend; per-filter overrides resolve against it. */
   defaultBackend?: string;
-  useFp32?: boolean;
-  modelType?: ModelType;
-  upscalingEnabled?: boolean;
   colorimetry?: {
     overwriteMatrix: boolean;
     matrix709: boolean;

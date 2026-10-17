@@ -12,7 +12,7 @@ import { extractVideoMetadata, getVideoFrameCount, probeVideo } from './videoUti
 import { formatBytes } from './ipcUtilities';
 import { handleValidated } from './ipcValidation';
 import { z } from 'zod';
-import { VapourSynthScriptGenerator } from './scriptGenerator';
+import { VapourSynthScriptGenerator, type ScriptConfig } from './scriptGenerator';
 import { resolveProvider, resolveBackendId } from './providers/registry';
 import { UpscaleExecutor } from './upscaleExecutor';
 import { VapourSynthInfoExtractor, type OutputInfo } from './vapourSynthInfoExtractor';
@@ -250,17 +250,10 @@ export function registerVideoHandlers(
   ) => {
     logger.info(`Getting output info for: ${videoPath} (validation mode - first 5 seconds)`);
     try {
-      const config = createScriptConfig(
-        videoPath,
-        modelPath,
-        dependencyManager,
-        defaultBackend,
-        upscalingEnabled,
-        filters,
-        numStreams,
-        undefined, // segment
-        true, // validationMode - always enabled for get-output-resolution
-        sourceFps
+      // Validation always evaluates only the first seconds, without a segment.
+      const config = buildScriptConfig(
+        { videoPath, defaultBackend, filters, numStreams },
+        { validationMode: true, sourceFps },
       );
       
       const scriptPath = await scriptGenerator.generateScript(config);
@@ -389,19 +382,10 @@ export function registerVideoHandlers(
         // Generate VapourSynth script
         qlog('Generating VapourSynth script');
         
-        const config = createScriptConfig(
-          videoPath,
-          modelPath,
-          dependencyManager,
-          defaultBackend,
-          upscalingEnabled,
-          filters,
-          numStreams,
-          segment
-        );
+        const config = buildScriptConfig({ videoPath, defaultBackend, filters, numStreams, segment });
 
-        if (config.upscalingEnabled && config.enginePath) {
-          qlog(`Model type: ${config.modelType}`);
+        if (isUpscaling && modelPath) {
+          qlog(`Model type: ${configManager.getModelType(modelPath)}`);
         }
 
         const scriptPath = await scriptGenerator.generateScript(config);
@@ -557,27 +541,12 @@ export function registerVideoHandlers(
   ) => {
     logger.info(`Launching vs-view for video: ${videoPath}`);
     try {
-      // Generate VapourSynth script with the current workflow
-      const metadata = await extractVideoMetadata(videoPath);
-
-      const scriptConfig = {
-        inputVideo: videoPath,
-        enginePath: modelPath || '',
-        pluginsPath: PATHS.PLUGINS,
-        defaultBackend: resolveBackendId(defaultBackend),
-        useFp32: modelPath ? configManager.isModelFp32(modelPath) : false,
-        modelType: modelPath ? configManager.getModelType(modelPath) : 'image' as const,
-        upscalingEnabled: upscalingEnabled || false,
-        colorimetry: configManager.getColorimetrySettings(),
-        filters: filters || [],
-        numStreams: numStreams || 2,
-        outputFormat: 'vs.YUV420P8',
-        segment: segment,
-        sourceFps: metadata.fps,
-        generatePreviewOutputs: true // Enable multi-output generation for filter comparison
-      };
-
-      const scriptPath = await scriptGenerator.generateScript(scriptConfig);
+      // Generate VapourSynth script with the current workflow, with an output
+      // after each step for filter comparison
+      const scriptPath = await scriptGenerator.generateScript(buildScriptConfig(
+        { videoPath, defaultBackend, filters, numStreams, segment },
+        { generatePreviewOutputs: true },
+      ));
       logger.info(`Generated preview script: ${scriptPath}`);
 
       // Evaluate the graph before handing it to vs-view. Any runtime engine
@@ -631,25 +600,14 @@ export function registerVideoHandlers(
     let openingJob: PreviewJob | null = null;
 
     try {
-      const metadata = await extractVideoMetadata(videoPath);
-      if (superseded()) return { success: false, cancelled: true };
-
-      const scriptPath = await scriptGenerator.generateScript({
-        inputVideo: videoPath,
-        enginePath: modelPath || '',
-        pluginsPath: PATHS.PLUGINS,
-        defaultBackend: resolveBackendId(defaultBackend),
-        useFp32: modelPath ? configManager.isModelFp32(modelPath) : false,
-        modelType: modelPath ? configManager.getModelType(modelPath) : 'image' as const,
-        upscalingEnabled: upscalingEnabled || false,
-        colorimetry: configManager.getColorimetrySettings(),
-        filters: filters || [],
-        numStreams: numStreams || 2,
-        outputFormat: 'vs.YUV420P8',
-        segment,
-        sourceFps: metadata.fps,
-        generatePreviewOutputs: true,
-      });
+      const scriptPath = await scriptGenerator.generateScript(buildScriptConfig(
+        { videoPath, defaultBackend, filters, numStreams, segment },
+        { generatePreviewOutputs: true },
+      ));
+      if (superseded()) {
+        await scriptGenerator.cleanupScript(scriptPath).catch(() => {});
+        return { success: false, cancelled: true };
+      }
 
       // Same preflight as the vs-view launch: a TensorRT step with no cached
       // engine would otherwise block the session's open for minutes with
@@ -1004,49 +962,31 @@ export function registerVideoHandlers(
   });
 }
 
+/** The workflow parts of a script request, as the IPC handlers receive them. */
+interface ScriptRequest {
+  videoPath: string;
+  defaultBackend?: string;
+  filters?: any[];
+  numStreams?: number;
+  segment?: { enabled: boolean; startFrame: number; endFrame: number };
+}
+
 /**
- * Helper to create script configuration
+ * Builds the generator config for a run, a validation or a preview from the
+ * workflow and the app's colorimetry and processing-format settings.
  */
-function createScriptConfig(
-  videoPath: string,
-  modelPath: string | null,
-  dependencyManager: DependencyManager,
-  defaultBackend?: string,
-  upscalingEnabled?: boolean,
-  filters?: any[],
-  numStreams?: number,
-  segment?: { enabled: boolean; startFrame: number; endFrame: number },
-  validationMode?: boolean,
-  sourceFps?: number
-) {
-  const isUpscaling = upscalingEnabled !== false;
-
-  let modelType: 'vsr' | 'image' = 'image';
-  let useFp32 = false;
-
-  if (isUpscaling && modelPath) {
-    modelType = configManager.getModelType(modelPath);
-    useFp32 = configManager.isModelFp32(modelPath);
-  }
-
-  const colorimetrySettings = configManager.getColorimetrySettings();
-  const processingFormat = configManager.getProcessingFormat();
-  const outputFormat = processingFormat === 'match_input' ? 'original_clip.format.id' : processingFormat;
-
+function buildScriptConfig(
+  request: ScriptRequest,
+  options: Pick<ScriptConfig, 'validationMode' | 'sourceFps' | 'generatePreviewOutputs'> = {},
+): ScriptConfig {
   return {
-    inputVideo: videoPath,
-    enginePath: modelPath || '',
-    pluginsPath: dependencyManager.getPluginsPath(),
-    defaultBackend: resolveBackendId(defaultBackend),
-    useFp32: useFp32,
-    modelType: modelType,
-    upscalingEnabled: isUpscaling,
-    colorimetry: colorimetrySettings,
-    filters: filters,
-    numStreams: numStreams,
-    outputFormat: outputFormat,
-    segment: segment?.enabled ? segment : undefined,
-    validationMode: validationMode,
-    sourceFps: sourceFps
+    inputVideo: request.videoPath,
+    defaultBackend: resolveBackendId(request.defaultBackend),
+    colorimetry: configManager.getColorimetrySettings(),
+    filters: request.filters ?? [],
+    numStreams: request.numStreams || 2,
+    outputFormat: configManager.getProcessingFormat(),
+    segment: request.segment?.enabled ? request.segment : undefined,
+    ...options,
   };
 }

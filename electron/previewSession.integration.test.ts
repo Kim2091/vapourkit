@@ -47,8 +47,6 @@ describe.skipIf(!configured)('preview session, end to end', () => {
 
     const scriptPath = await new VapourSynthScriptGenerator('win32').generateScript({
       inputVideo: clip,
-      enginePath: '',
-      pluginsPath: '',
       generatePreviewOutputs: true,
       filters: [
         {
@@ -128,13 +126,7 @@ describe.skipIf(!configured)('preview session, end to end', () => {
     const generator = new VapourSynthScriptGenerator();
     const scriptPath = await generator.generateScript({
       inputVideo: clip,
-      enginePath: '',
-      pluginsPath: path.join(repo, 'data', 'vapoursynth-portable', 'Lib',
-                             'site-packages', 'vapoursynth', 'plugins'),
       defaultBackend: 'tensorrt',
-      useFp32: false,
-      modelType: 'image' as const,
-      upscalingEnabled: false,
       colorimetry: {},
       filters: [],
       numStreams: 2,

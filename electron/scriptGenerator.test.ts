@@ -67,8 +67,6 @@ async function generate(
   const generator = new VapourSynthScriptGenerator(platform);
   const scriptPath = await generator.generateScript({
     inputVideo: 'C:\\videos\\input.mkv',
-    enginePath: '',
-    pluginsPath: 'C:\\plugins',
     filters,
     generatePreviewOutputs,
     defaultBackend,
@@ -315,8 +313,6 @@ describe('inference backend selection', () => {
     const generator = new VapourSynthScriptGenerator('win32');
     const scriptPath = await generator.generateScript({
       inputVideo: 'C:\\videos\\input.mkv',
-      enginePath: '',
-      pluginsPath: 'C:\\plugins',
       filters: [aiFilter(0, 'C:\\models\\m_fp16.onnx')],
       defaultBackend: true as any,
     });
@@ -514,8 +510,6 @@ describe('a step that reads the picture from another step', () => {
     const generator = new VapourSynthScriptGenerator('win32');
     const scriptPath = await generator.generateScript({
       inputVideo: 'C:\\videos\\input.mkv',
-      enginePath: '',
-      pluginsPath: 'C:\\plugins',
       filters: [customFilter(0, 'CAS Sharpen'), reader(1, 'custom-0')],
       segment: { enabled: true, startFrame: 100, endFrame: 200 },
     });
@@ -645,8 +639,6 @@ describe('a step that reads the picture from another step', () => {
       const generator = new VapourSynthScriptGenerator('win32');
       const scriptPath = await generator.generateScript({
         inputVideo: 'C:\\videos\\input.mkv',
-        enginePath: '',
-        pluginsPath: 'C:\\plugins',
         filters: [load(0), reader(1, 'load-0')],
         segment: { enabled: true, startFrame: 500, endFrame: -1 },
       });
@@ -679,8 +671,6 @@ describe('a step that reads the picture from another step', () => {
       const generator = new VapourSynthScriptGenerator('win32');
       const scriptPath = await generator.generateScript({
         inputVideo: 'C:\\videos\\input.mkv',
-        enginePath: '',
-        pluginsPath: 'C:\\plugins',
         filters: [reader(0, file)],
         segment: { enabled: true, startFrame: 100, endFrame: 250 },
       });
@@ -695,8 +685,6 @@ describe('a step that reads the picture from another step', () => {
       const generator = new VapourSynthScriptGenerator('win32');
       const scriptPath = await generator.generateScript({
         inputVideo: 'C:\\videos\\input.mkv',
-        enginePath: '',
-        pluginsPath: 'C:\\plugins',
         filters: [reader(0, file)],
         validationMode: true,
         sourceFps: 24,
