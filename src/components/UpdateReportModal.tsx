@@ -8,9 +8,10 @@
 // until every decision is made and it is cleared.
 
 import { memo, useCallback, useEffect, useState } from 'react';
-import { ArchiveRestore, CheckCircle, ChevronDown, ChevronRight, FolderOpen, PackageCheck, Wrench, X } from 'lucide-react';
+import { ArchiveRestore, CheckCircle, ChevronDown, ChevronRight, FolderOpen, PackageCheck, Wrench } from 'lucide-react';
 import { ModalSectionHeader as SectionHeader } from './ModalSectionHeader';
 import type { TemplateDecision, TemplateDecisionChoice, UpdateReport, UpdateReportSnapshot } from '../electron';
+import { ModalShell } from './ModalShell';
 
 interface UpdateReportModalProps {
   show: boolean;
@@ -145,98 +146,86 @@ export const UpdateReportModal = memo<UpdateReportModalProps>(({ show, onClose }
   ].every(list => list.length === 0);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-ink-900 border border-ink-750 rounded-lg shadow-2xl shadow-black/60 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="h-10 flex-shrink-0 flex items-stretch gap-2.5 pr-2 bg-ink-850 border-b border-ink-800 rounded-t-lg overflow-hidden">
-          <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <PackageCheck className="w-4 h-4 text-ink-500" />
-            <h2 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">
-              {report ? `Updated to ${report.toVersion}` : 'Edited filters'}
-            </h2>
+    <ModalShell
+      title={report ? `Updated to ${report.toVersion}` : 'Edited filters'}
+      icon={PackageCheck}
+      onClose={() => void close()}
+      closeLabel="Close update notes"
+      closeOnEscape={false}
+      className="max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+    >
+      <div className="flex-1 overflow-y-auto">
+        {report && (
+        <div className="px-4 py-3 border-b border-ink-900 flex items-start gap-3">
+          <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-ok-400" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] font-medium text-ok-400">
+              {report?.fromVersion ? `Updated from ${report.fromVersion}. Nothing was set up again.` : 'Nothing was set up again.'}
+            </p>
+            <p className="text-[11px] leading-relaxed text-ink-500 mt-0.5">
+              Your settings, workflows, custom filters, models, TensorRT engines and Python environment were all kept.
+            </p>
           </div>
-          <button
-            onClick={() => void close()}
-            aria-label="Close update notes"
-            className="w-7 h-7 self-center rounded grid place-items-center text-ink-500 hover:text-ink-200 hover:bg-ink-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
+        )}
 
-        <div className="flex-1 overflow-y-auto">
-          {report && (
-          <div className="px-4 py-3 border-b border-ink-900 flex items-start gap-3">
-            <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-ok-400" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] font-medium text-ok-400">
-                {report?.fromVersion ? `Updated from ${report.fromVersion}. Nothing was set up again.` : 'Nothing was set up again.'}
-              </p>
-              <p className="text-[11px] leading-relaxed text-ink-500 mt-0.5">
-                Your settings, workflows, custom filters, models, TensorRT engines and Python environment were all kept.
-              </p>
-            </div>
+        {decisions.length > 0 && (
+          <section>
+            <SectionHeader icon={Wrench} title={`Needs a decision (${decisions.length})`} />
+            <p className="px-4 py-2.5 border-b border-ink-900 text-[11px] leading-relaxed text-ink-400">
+              You changed these filters, so the update left them alone. Replacing or removing one saves your copy first.
+              Saved workflows keep their own copy of each step, so nothing here changes them.
+            </p>
+            {decisions.map(decision => (
+              <DecisionRow key={decision.file} decision={decision} toVersion={toVersion} busy={busy} onResolve={resolve} />
+            ))}
+          </section>
+        )}
+
+        {report && (
+          <section className={decisions.length > 0 ? 'mt-2 border-t border-ink-700' : ''}>
+            <SectionHeader icon={PackageCheck} title="Done automatically" />
+            {nothingElse ? (
+              <p className="px-4 py-2.5 border-b border-ink-900 text-[11px] text-ink-500">Nothing else needed changing.</p>
+            ) : (
+              <>
+                <DoneRow label="Filters updated to the new version" items={report.templatesUpdated} format={templateDisplayName} />
+                <DoneRow label="Filters removed (no longer included)" items={report.templatesRemoved} format={templateDisplayName} />
+                <DoneRow label="New filters" items={report.templatesAdded} format={templateDisplayName} />
+                <DoneRow label="Python packages installed" items={report.packagesInstalled} />
+                <DoneRow label="Plugins updated" items={report.pluginsUpdated} />
+                <DoneRow label="VapourSynth scripts updated" items={report.scriptsUpdated ?? []} />
+                <DoneRow label="Scripts you edited, kept as they were (new versions not installed)" items={report.scriptsKept ?? []} />
+              </>
+            )}
+            <p className="px-4 py-2.5 text-[11px] leading-relaxed text-ink-500">
+              Only filters and scripts you had not changed were updated or removed. Reinstalling plugins restores every shipped script, saving your edited ones first.
+            </p>
+          </section>
+        )}
+
+        {error && (
+          <div className="px-4 py-3 border-t border-ink-900 bg-bad-500/5">
+            <p className="text-[11.5px] leading-relaxed text-bad-300 whitespace-pre-wrap">{error}</p>
           </div>
-          )}
-
-          {decisions.length > 0 && (
-            <section>
-              <SectionHeader icon={Wrench} title={`Needs a decision (${decisions.length})`} />
-              <p className="px-4 py-2.5 border-b border-ink-900 text-[11px] leading-relaxed text-ink-400">
-                You changed these filters, so the update left them alone. Replacing or removing one saves your copy first.
-                Saved workflows keep their own copy of each step, so nothing here changes them.
-              </p>
-              {decisions.map(decision => (
-                <DecisionRow key={decision.file} decision={decision} toVersion={toVersion} busy={busy} onResolve={resolve} />
-              ))}
-            </section>
-          )}
-
-          {report && (
-            <section className={decisions.length > 0 ? 'mt-2 border-t border-ink-700' : ''}>
-              <SectionHeader icon={PackageCheck} title="Done automatically" />
-              {nothingElse ? (
-                <p className="px-4 py-2.5 border-b border-ink-900 text-[11px] text-ink-500">Nothing else needed changing.</p>
-              ) : (
-                <>
-                  <DoneRow label="Filters updated to the new version" items={report.templatesUpdated} format={templateDisplayName} />
-                  <DoneRow label="Filters removed (no longer included)" items={report.templatesRemoved} format={templateDisplayName} />
-                  <DoneRow label="New filters" items={report.templatesAdded} format={templateDisplayName} />
-                  <DoneRow label="Python packages installed" items={report.packagesInstalled} />
-                  <DoneRow label="Plugins updated" items={report.pluginsUpdated} />
-                  <DoneRow label="VapourSynth scripts updated" items={report.scriptsUpdated ?? []} />
-                  <DoneRow label="Scripts you edited, kept as they were (new versions not installed)" items={report.scriptsKept ?? []} />
-                </>
-              )}
-              <p className="px-4 py-2.5 text-[11px] leading-relaxed text-ink-500">
-                Only filters and scripts you had not changed were updated or removed. Reinstalling plugins restores every shipped script, saving your edited ones first.
-              </p>
-            </section>
-          )}
-
-          {error && (
-            <div className="px-4 py-3 border-t border-ink-900 bg-bad-500/5">
-              <p className="text-[11.5px] leading-relaxed text-bad-300 whitespace-pre-wrap">{error}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 border-t border-ink-800 bg-ink-850">
-          {backedUp && (
-            <button className={quietButton} onClick={() => void window.electronAPI.openTemplateBackups()}>
-              <FolderOpen className="w-3.5 h-3.5" />
-              Open backups
-            </button>
-          )}
-          <span className="flex-1 text-[11px] text-ink-500 truncate">
-            {!settled && 'You can come back to this from Settings.'}
-          </span>
-          <button className={settled ? primaryButton : quietButton} onClick={() => void close()}>
-            {settled ? <CheckCircle className="w-3.5 h-3.5" /> : <ArchiveRestore className="w-3.5 h-3.5" />}
-            {settled ? 'Done' : 'Decide later'}
-          </button>
-        </div>
+        )}
       </div>
-    </div>
+
+      <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 border-t border-ink-800 bg-ink-850">
+        {backedUp && (
+          <button className={quietButton} onClick={() => void window.electronAPI.openTemplateBackups()}>
+            <FolderOpen className="w-3.5 h-3.5" />
+            Open backups
+          </button>
+        )}
+        <span className="flex-1 text-[11px] text-ink-500 truncate">
+          {!settled && 'You can come back to this from Settings.'}
+        </span>
+        <button className={settled ? primaryButton : quietButton} onClick={() => void close()}>
+          {settled ? <CheckCircle className="w-3.5 h-3.5" /> : <ArchiveRestore className="w-3.5 h-3.5" />}
+          {settled ? 'Done' : 'Decide later'}
+        </button>
+      </div>
+    </ModalShell>
   );
 });

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { Cpu, FolderOpen, Info } from 'lucide-react';
 import type { RocmMode, RocmSettingResult } from '../electron.d';
+import { ModalSectionHeader } from './ModalSectionHeader';
 
 const MODES: { id: RocmMode; label: string; description: string }[] = [
   {
@@ -50,13 +51,7 @@ export const RocmSettingsSection = memo(() => {
 
   return (
     <section className="mt-2 border-t border-ink-700">
-      <div className="h-9 flex items-stretch gap-2.5 bg-ink-850 border-b border-ink-800">
-        <span className="w-[3px] bg-accent-500 flex-shrink-0" aria-hidden="true" />
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Cpu className="w-3.5 h-3.5 text-ink-500" />
-          <h3 className="font-display text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-100">ROCm Installation</h3>
-        </div>
-      </div>
+      <ModalSectionHeader icon={Cpu} title="ROCm Installation" />
 
       <p className="px-4 pt-2.5 pb-1 text-[11px] text-ink-500">
         Which ROCm the MIGraphX backend loads and compiles with. Change this if you have more than one ROCm installed.

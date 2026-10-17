@@ -14,8 +14,6 @@
 // pin with an asymmetric table — one that reads back wrong, rather than
 // merely differently, if the loops are transposed.
 
-import { gradePixel, type GradeValues } from './colorGrade';
-
 /** A parsed table, always in 0..1 floats regardless of what the file held. */
 export interface Lut {
   kind: '1d' | '3d';
@@ -49,25 +47,51 @@ export function lutIndex(size: number, r: number, g: number, b: number): number 
   return ((b * size + g) * size + r) * 3;
 }
 
-export function identityLut(size: number, kind: '1d' | '3d' = '3d'): Lut {
-  const count = kind === '3d' ? size * size * size : size;
-  const data = new Float32Array(count * 3);
+/**
+ * Fill a size³ red-fastest lattice. `write` is called once per cell, in
+ * storage order, with the cell's colour in 0..1 and the index of its triple
+ * in `data`, which it fills.
+ */
+export function fillLattice(
+  size: number,
+  write: (data: Float32Array, at: number, r: number, g: number, b: number) => void,
+  data: Float32Array = new Float32Array(size * size * size * 3),
+): Float32Array {
   const step = size > 1 ? 1 / (size - 1) : 0;
-  if (kind === '1d') {
-    for (let i = 0; i < size; i++) {
-      data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = i * step;
-    }
-  } else {
-    for (let b = 0; b < size; b++) {
-      for (let g = 0; g < size; g++) {
-        for (let r = 0; r < size; r++) {
-          const at = lutIndex(size, r, g, b);
-          data[at] = r * step;
-          data[at + 1] = g * step;
-          data[at + 2] = b * step;
-        }
+  let at = 0;
+  for (let b = 0; b < size; b++) {
+    for (let g = 0; g < size; g++) {
+      for (let r = 0; r < size; r++) {
+        write(data, at, r * step, g * step, b * step);
+        at += 3;
       }
     }
+  }
+  return data;
+}
+
+/** Writes an RGB triple at `at`. */
+function put(data: Float32Array, at: number, rgb: readonly [number, number, number]): void {
+  data[at] = rgb[0];
+  data[at + 1] = rgb[1];
+  data[at + 2] = rgb[2];
+}
+
+/** Writes the cell's own colour: the identity. */
+function putIdentity(data: Float32Array, at: number, r: number, g: number, b: number): void {
+  data[at] = r;
+  data[at + 1] = g;
+  data[at + 2] = b;
+}
+
+export function identityLut(size: number, kind: '1d' | '3d' = '3d'): Lut {
+  if (kind === '3d') {
+    return { kind, size, data: fillLattice(size, putIdentity), domainMin: [0, 0, 0], domainMax: [1, 1, 1] };
+  }
+  const data = new Float32Array(size * 3);
+  const step = size > 1 ? 1 / (size - 1) : 0;
+  for (let i = 0; i < size; i++) {
+    data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = i * step;
   }
   return { kind, size, data, domainMin: [0, 0, 0], domainMax: [1, 1, 1] };
 }
@@ -359,32 +383,6 @@ export function writeLut(lut: Lut, format: LutFormat, title?: string): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * Evaluate the grade over a lattice. gradePixel is the definition the shader
- * and the emitted Expr are both held to, so a table baked from it is the same
- * grade to within the interpolation error of the size chosen — which the
- * tests measure rather than assume.
- */
-export function bakeGradeToLut(values: GradeValues, size: number, title?: string): Lut {
-  if (!Number.isInteger(size) || size < 2 || size > MAX_3D_SIZE) {
-    throw new Error(`${size} is not a usable cube size`);
-  }
-  const data = new Float32Array(size * size * size * 3);
-  const step = 1 / (size - 1);
-  for (let b = 0; b < size; b++) {
-    for (let g = 0; g < size; g++) {
-      for (let r = 0; r < size; r++) {
-        const graded = gradePixel([r * step, g * step, b * step], values);
-        const at = lutIndex(size, r, g, b);
-        data[at] = graded[0];
-        data[at + 1] = graded[1];
-        data[at + 2] = graded[2];
-      }
-    }
-  }
-  return { kind: '3d', size, data, domainMin: [0, 0, 0], domainMax: [1, 1, 1], title };
-}
-
-/**
  * One colour operation, as a function on a pixel.
  *
  * Everything the chain baker composes reduces to this. Kept as a plain
@@ -434,20 +432,11 @@ export function bakeChainToLut(
     throw new Error(`${size} is not a usable cube size`);
   }
 
-  const data = new Float32Array(size * size * size * 3);
-  const step = 1 / (size - 1);
-  for (let b = 0; b < size; b++) {
-    for (let g = 0; g < size; g++) {
-      for (let r = 0; r < size; r++) {
-        let pixel: [number, number, number] = [r * step, g * step, b * step];
-        for (const operation of operations) pixel = operation.apply(pixel);
-        const at = lutIndex(size, r, g, b);
-        data[at] = pixel[0];
-        data[at + 1] = pixel[1];
-        data[at + 2] = pixel[2];
-      }
-    }
-  }
+  const data = fillLattice(size, (out, at, r, g, b) => {
+    let pixel: [number, number, number] = [r, g, b];
+    for (const operation of operations) pixel = operation.apply(pixel);
+    put(out, at, pixel);
+  });
 
   return {
     lut: { kind: '3d', size, data, domainMin: [0, 0, 0], domainMax: [1, 1, 1], title },
@@ -467,24 +456,12 @@ export function to3d(lut: Lut, size: number = DEFAULT_LUT_SIZE): Lut {
     && lut.domainMin.every(v => v === 0) && lut.domainMax.every(v => v === 1)) {
     return lut;
   }
-  const data = new Float32Array(size * size * size * 3);
-  const step = 1 / (size - 1);
-  for (let b = 0; b < size; b++) {
-    for (let g = 0; g < size; g++) {
-      for (let r = 0; r < size; r++) {
-        // Sampled in plain 0..1 input space, not across the source's declared
-        // domain. Those differ: resampling over the domain would stretch the
-        // input axis, so a table declaring DOMAIN_MAX 0.5 would come back
-        // doing something else entirely. What matters is that the result
-        // treats ordinary 0..1 video exactly as the original did, including
-        // the clamping the original applied outside its own domain.
-        const sampled = sampleLut(lut, [r * step, g * step, b * step]);
-        const at = lutIndex(size, r, g, b);
-        data[at] = sampled[0];
-        data[at + 1] = sampled[1];
-        data[at + 2] = sampled[2];
-      }
-    }
-  }
+  // Sampled in plain 0..1 input space, not across the source's declared
+  // domain. Those differ: resampling over the domain would stretch the
+  // input axis, so a table declaring DOMAIN_MAX 0.5 would come back
+  // doing something else entirely. What matters is that the result
+  // treats ordinary 0..1 video exactly as the original did, including
+  // the clamping the original applied outside its own domain.
+  const data = fillLattice(size, (out, at, r, g, b) => put(out, at, sampleLut(lut, [r, g, b])));
   return { kind: '3d', size, data, domainMin: [0, 0, 0], domainMax: [1, 1, 1], title: lut.title };
 }

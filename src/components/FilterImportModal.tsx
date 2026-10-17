@@ -1,6 +1,8 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { X, Check, Edit2, Filter, Search, CheckCircle } from 'lucide-react';
 import type { FilterEditor, FilterParameterValues, FilterVariables } from '../electron.d';
+import { useModalEscape } from './useModalEscape';
+import { toCategories } from '../utils/categories';
 
 interface FilterImportItem {
   originalName: string;
@@ -86,23 +88,15 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
     }
   }, [isOpen, filters, workflowName]);
 
-  // Handle escape key to close modal
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        if (editingIndex !== null) {
-          // Cancel editing
-          setEditingIndex(null);
-          setEditName('');
-        } else {
-          // Close modal
-          onClose();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, editingIndex, onClose]);
+  // Escape cancels a rename in progress, otherwise closes the modal.
+  useModalEscape(() => {
+    if (editingIndex !== null) {
+      setEditingIndex(null);
+      setEditName('');
+    } else {
+      onClose();
+    }
+  }, isOpen);
 
   const toggleSelection = (index: number) => {
     setImportItems(prev =>
@@ -279,7 +273,10 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
                                 onChange={(e) => setEditName(e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') saveEdit();
-                                  if (e.key === 'Escape') cancelEdit();
+                                  if (e.key === 'Escape') {
+                                    e.stopPropagation();
+                                    cancelEdit();
+                                  }
                                 }}
                                 className="flex-1 px-2 py-1.5 bg-ink-850 border border-ink-700 rounded text-sm
                                          focus:outline-none focus:border-accent-500 transition-colors"
@@ -308,17 +305,11 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
                             {/* Categories */}
                             {item.category && (
                               <div className="flex flex-wrap gap-1 mt-2">
-                                {Array.isArray(item.category) ? (
-                                  item.category.map((cat, idx) => (
-                                    <span key={idx} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded">
-                                      {cat}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded">
-                                    {item.category}
+                                {toCategories(item.category).map((cat, idx) => (
+                                  <span key={idx} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded">
+                                    {cat}
                                   </span>
-                                )}
+                                ))}
                               </div>
                             )}
                           </div>
@@ -355,17 +346,11 @@ export const FilterImportModal = memo<FilterImportModalProps>(({
                               <div className="flex items-center gap-2 flex-wrap mb-1">
                                 <h3 className="font-medium text-sm">{item.displayName}</h3>
                                 {/* Categories */}
-                                {Array.isArray(item.category) ? (
-                                  item.category.map((cat, idx) => (
-                                    <span key={idx} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded flex-shrink-0">
-                                      {cat}
-                                    </span>
-                                  ))
-                                ) : item.category ? (
-                                  <span className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded flex-shrink-0">
-                                    {item.category}
+                                {toCategories(item.category).map((cat, idx) => (
+                                  <span key={idx} className="text-xs px-2 py-0.5 bg-ink-950 text-ink-400 rounded flex-shrink-0">
+                                    {cat}
                                   </span>
-                                ) : null}
+                                ))}
                               </div>
                               {item.originalName !== item.displayName && (
                                 <div className="text-xs text-ink-500 truncate">

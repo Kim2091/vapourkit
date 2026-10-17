@@ -32,7 +32,7 @@
 // Apply LUT filter operates in, so the table that comes out is measured in the
 // space it will be used in.
 
-import { lutIndex, sampleLut, type Lut } from './lut';
+import { fillLattice, sampleLut, type Lut } from './lut';
 
 /** Pixels seen at both steps: the colour that is there, and the one wanted. */
 export interface ColorPairs {
@@ -432,25 +432,16 @@ export function fitMatch(pairs: ColorPairs, size: number, title?: string): Match
     curves = toneCurves(pairs, matrix);
   }
 
-  const data = new Float32Array(size * size * size * 3);
-  const step = 1 / (size - 1);
-  for (let b = 0; b < size; b++) {
-    for (let g = 0; g < size; g++) {
-      for (let r = 0; r < size; r++) {
-        const at = lutIndex(size, r, g, b);
-        for (let c = 0; c < 3; c++) {
-          const mixed = matrix[c * 3] * (r * step)
-            + matrix[c * 3 + 1] * (g * step)
-            + matrix[c * 3 + 2] * (b * step);
-          // The curve clamps its own input, which is what keeps a matrix that
-          // reaches outside the cube from tearing a hole in the edge of the
-          // table — everything past the end of the range gets the value the
-          // end of the range got.
-          data[at + c] = clamp01(applyCurve(curves[c], mixed));
-        }
-      }
+  const data = fillLattice(size, (out, at, r, g, b) => {
+    for (let c = 0; c < 3; c++) {
+      const mixed = matrix[c * 3] * r + matrix[c * 3 + 1] * g + matrix[c * 3 + 2] * b;
+      // The curve clamps its own input, which is what keeps a matrix that
+      // reaches outside the cube from tearing a hole in the edge of the
+      // table — everything past the end of the range gets the value the
+      // end of the range got.
+      out[at + c] = clamp01(applyCurve(curves[c], mixed));
     }
-  }
+  });
 
   const lut: Lut = { kind: '3d', size, data, domainMin: [0, 0, 0], domainMax: [1, 1, 1], title };
 

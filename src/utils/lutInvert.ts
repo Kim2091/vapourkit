@@ -26,7 +26,7 @@
 //   picture can be that colour either. They are filled from their neighbours
 //   so the table stays continuous, and counted, but they are not a loss.
 
-import { identityLut, lutIndex, type ColorOperation, type Lut } from './lut';
+import { identityLut, type ColorOperation, type Lut } from './lut';
 
 export interface InvertedLut {
   lut: Lut;
@@ -219,56 +219,107 @@ function dampedStep(jacobian: number[], residual: Triple): Triple | null {
   ], gradient);
 }
 
+type Forward = (rgb: Triple) => Triple;
+
+/** Where a cell sits in colour, from its index. */
+function targetOf(cell: number, size: number, step: number): Triple {
+  return [
+    (cell % size) * step,
+    (Math.floor(cell / size) % size) * step,
+    Math.floor(cell / (size * size)) * step,
+  ];
+}
+
 /**
- * Invert a composed stack of colour operations onto a lattice.
- *
- * The operations are given in the order they run forwards — the same order
- * bakeChainToLut takes them in — and the table that comes back undoes all of
- * them at once. Composing forwards and inverting the whole thing is not the
- * same as inverting each step and reversing the list: the second only works
- * when every step is separately invertible, and the first is what is actually
- * being asked.
+ * The six face neighbours of `cell` in a size³ lattice, written into `out`
+ * in the order -r, +r, -g, +g, -b, +b. A neighbour past the edge is -1.
  */
-export function invertOperations(
-  operations: readonly { apply: ColorOperation }[],
-  size: number,
-  title?: string,
-): InvertedLut {
-  if (!Number.isInteger(size) || size < 2 || size > 256) {
-    throw new Error(`${size} is not a usable cube size`);
+function neighbours(cell: number, size: number, out: Int32Array): Int32Array {
+  const plane = size * size;
+  const r = cell % size;
+  const g = Math.floor(cell / size) % size;
+  const b = Math.floor(cell / plane);
+  out[0] = r > 0 ? cell - 1 : -1;
+  out[1] = r < size - 1 ? cell + 1 : -1;
+  out[2] = g > 0 ? cell - size : -1;
+  out[3] = g < size - 1 ? cell + size : -1;
+  out[4] = b > 0 ? cell - plane : -1;
+  out[5] = b < size - 1 ? cell + plane : -1;
+  return out;
+}
+
+/** Take damped Newton steps from `from` until F(x) lands on `target`. */
+function solveCell(forward: Forward, target: Triple, from: Triple): { x: Triple; residual: number } {
+  let x: Triple = [clamp01(from[0]), clamp01(from[1]), clamp01(from[2])];
+  let out = forward(x);
+  let residual = Math.max(
+    Math.abs(out[0] - target[0]),
+    Math.abs(out[1] - target[1]),
+    Math.abs(out[2] - target[2]),
+  );
+
+  for (let iteration = 0; iteration < MAX_STEPS && residual > TOLERANCE; iteration++) {
+    const rows = jacobianAt(forward, x, out);
+    if (!rows) break;
+
+    const delta = dampedStep(rows, [
+      target[0] - out[0],
+      target[1] - out[1],
+      target[2] - out[2],
+    ]);
+    if (!delta) break;
+
+    // Backtrack rather than trust the full step. A grade with a knee in it
+    // can throw an undamped step across the range and never come back, and
+    // halving costs one evaluation to find out.
+    let accepted = false;
+    for (let scale = 1; scale >= 0.125; scale /= 2) {
+      const candidate: Triple = [
+        clamp01(x[0] + delta[0] * scale),
+        clamp01(x[1] + delta[1] * scale),
+        clamp01(x[2] + delta[2] * scale),
+      ];
+      const candidateOut = forward(candidate);
+      const candidateResidual = Math.max(
+        Math.abs(candidateOut[0] - target[0]),
+        Math.abs(candidateOut[1] - target[1]),
+        Math.abs(candidateOut[2] - target[2]),
+      );
+      if (candidateResidual < residual) {
+        x = candidate;
+        out = candidateOut;
+        residual = candidateResidual;
+        accepted = true;
+        break;
+      }
+    }
+    if (!accepted) break;
   }
 
-  // Nothing in the way is not a failure to invert; it is an identity, and the
-  // caller has a right to be told so by getting a table that does nothing.
-  if (operations.length === 0) {
-    return {
-      lut: { ...identityLut(size), title },
-      clippedInput: 0,
-      unreachable: 0,
-      unreachableFraction: 0,
-      maxResidual: 0,
-    };
-  }
+  return { x, residual };
+}
 
-  const forward = (rgb: Triple): Triple => {
-    let pixel: Triple = rgb;
-    for (const operation of operations) pixel = operation.apply(pixel);
-    return pixel;
-  };
+interface Seeds {
+  /** Per output cell, the input whose output landed nearest it. */
+  seed: Float32Array;
+  /** Which cells have a seed. */
+  seeded: Uint8Array;
+  /** Seed inputs whose output came out pinned against an end of the range. */
+  clippedSeeds: number;
+}
 
+/**
+ * The seed pass. Two jobs at once: plant a known-good input in each output
+ * cell the transform actually reaches, and measure how much of the input
+ * range came out pinned against an end of the scale.
+ */
+function seedPass(forward: Forward, size: number): Seeds {
   const cells = size * size * size;
   const step = 1 / (size - 1);
-  const data = new Float32Array(cells * 3);
-  const landed = new Uint8Array(cells);
-
-  // Seed pass. Two jobs at once: plant a known-good input in each output cell
-  // the transform actually reaches, and measure how much of the input range
-  // came out pinned against an end of the scale.
   const seed = new Float32Array(cells * 3);
   const seeded = new Uint8Array(cells);
   const seedDistance = new Float32Array(cells).fill(Infinity);
   const seedStep = 1 / (SEED_SIZE - 1);
-  const seedCount = SEED_SIZE * SEED_SIZE * SEED_SIZE;
   let clippedSeeds = 0;
 
   for (let b = 0; b < SEED_SIZE; b++) {
@@ -316,64 +367,63 @@ export function invertOperations(
     }
   }
 
+  return { seed, seeded, clippedSeeds };
+}
+
+/**
+ * Invert a composed stack of colour operations onto a lattice.
+ *
+ * The operations are given in the order they run forwards — the same order
+ * bakeChainToLut takes them in — and the table that comes back undoes all of
+ * them at once. Composing forwards and inverting the whole thing is not the
+ * same as inverting each step and reversing the list: the second only works
+ * when every step is separately invertible, and the first is what is actually
+ * being asked.
+ */
+export function invertOperations(
+  operations: readonly { apply: ColorOperation }[],
+  size: number,
+  title?: string,
+): InvertedLut {
+  if (!Number.isInteger(size) || size < 2 || size > 256) {
+    throw new Error(`${size} is not a usable cube size`);
+  }
+
+  // Nothing in the way is not a failure to invert; it is an identity, and the
+  // caller has a right to be told so by getting a table that does nothing.
+  if (operations.length === 0) {
+    return {
+      lut: { ...identityLut(size), title },
+      clippedInput: 0,
+      unreachable: 0,
+      unreachableFraction: 0,
+      maxResidual: 0,
+    };
+  }
+
+  const forward = (rgb: Triple): Triple => {
+    let pixel: Triple = rgb;
+    for (const operation of operations) pixel = operation.apply(pixel);
+    return pixel;
+  };
+
+  const cells = size * size * size;
+  const step = 1 / (size - 1);
+  // Cell i's triple starts at i * 3: the cell index is the red-fastest index.
+  const data = new Float32Array(cells * 3);
+  const landed = new Uint8Array(cells);
+  const around = new Int32Array(6);
+
+  const { seed, seeded, clippedSeeds } = seedPass(forward, size);
   let maxResidual = 0;
 
-  /** Where a cell sits in colour, from its index. */
-  const targetOf = (cell: number): Triple => [
-    (cell % size) * step,
-    (Math.floor(cell / size) % size) * step,
-    Math.floor(cell / (size * size)) * step,
-  ];
-
-  /** Take damped Newton steps from `from` until F(x) lands on `target`. */
-  const solveCell = (target: Triple, from: Triple) => {
-    let x: Triple = [clamp01(from[0]), clamp01(from[1]), clamp01(from[2])];
-    let out = forward(x);
-    let residual = Math.max(
-      Math.abs(out[0] - target[0]),
-      Math.abs(out[1] - target[1]),
-      Math.abs(out[2] - target[2]),
-    );
-
-    for (let iteration = 0; iteration < MAX_STEPS && residual > TOLERANCE; iteration++) {
-      const rows = jacobianAt(forward, x, out);
-      if (!rows) break;
-
-      const delta = dampedStep(rows, [
-        target[0] - out[0],
-        target[1] - out[1],
-        target[2] - out[2],
-      ]);
-      if (!delta) break;
-
-      // Backtrack rather than trust the full step. A grade with a knee in it
-      // can throw an undamped step across the range and never come back, and
-      // halving costs one evaluation to find out.
-      let accepted = false;
-      for (let scale = 1; scale >= 0.125; scale /= 2) {
-        const candidate: Triple = [
-          clamp01(x[0] + delta[0] * scale),
-          clamp01(x[1] + delta[1] * scale),
-          clamp01(x[2] + delta[2] * scale),
-        ];
-        const candidateOut = forward(candidate);
-        const candidateResidual = Math.max(
-          Math.abs(candidateOut[0] - target[0]),
-          Math.abs(candidateOut[1] - target[1]),
-          Math.abs(candidateOut[2] - target[2]),
-        );
-        if (candidateResidual < residual) {
-          x = candidate;
-          out = candidateOut;
-          residual = candidateResidual;
-          accepted = true;
-          break;
-        }
-      }
-      if (!accepted) break;
-    }
-
-    return { x, residual };
+  /** Stores a cell's answer. */
+  const land = (cell: number, solved: { x: Triple; residual: number }) => {
+    data[cell * 3] = solved.x[0];
+    data[cell * 3 + 1] = solved.x[1];
+    data[cell * 3 + 2] = solved.x[2];
+    landed[cell] = 1;
+    if (solved.residual > maxResidual) maxResidual = solved.residual;
   };
 
   // Cells are solved in the order the answers spread, not in the order they
@@ -398,7 +448,7 @@ export function invertOperations(
   const queue: number[] = [];
 
   for (let cell = 0; cell < cells; cell++) {
-    const target = targetOf(cell);
+    const target = targetOf(cell, size, step);
     startAt[cell * 3] = target[0];
     startAt[cell * 3 + 1] = target[1];
     startAt[cell * 3 + 2] = target[2];
@@ -410,14 +460,13 @@ export function invertOperations(
     queued[cell] = 1;
   }
 
-  const plane = size * size;
   for (let head = 0; head < queue.length; head++) {
     const cell = queue[head];
     queued[cell] = 0;
     if (landed[cell]) continue;
     attempts[cell]++;
 
-    const solved = solveCell(targetOf(cell), [
+    const solved = solveCell(forward, targetOf(cell, size, step), [
       startAt[cell * 3], startAt[cell * 3 + 1], startAt[cell * 3 + 2],
     ]);
 
@@ -428,37 +477,21 @@ export function invertOperations(
     startAt[cell * 3 + 2] = solved.x[2];
     if (solved.residual > TOLERANCE) continue;
 
-    const r = cell % size;
-    const g = Math.floor(cell / size) % size;
-    const b = Math.floor(cell / plane);
-    const at = lutIndex(size, r, g, b);
-    data[at] = solved.x[0];
-    data[at + 1] = solved.x[1];
-    data[at + 2] = solved.x[2];
-    landed[cell] = 1;
-    if (solved.residual > maxResidual) maxResidual = solved.residual;
+    land(cell, solved);
 
     // Hand the answer to the six neighbours as their starting point. A cell
     // gets a few goes at most — approached from another direction it may well
     // land, but retrying forever would turn a stubborn region into a spin.
-    const neighbours = [
-      r > 0 ? cell - 1 : -1,
-      r < size - 1 ? cell + 1 : -1,
-      g > 0 ? cell - size : -1,
-      g < size - 1 ? cell + size : -1,
-      b > 0 ? cell - plane : -1,
-      b < size - 1 ? cell + plane : -1,
-    ];
-    for (const next of neighbours) {
+    neighbours(cell, size, around);
+    for (let n = 0; n < 6; n++) {
+      const next = around[n];
       if (next < 0 || landed[next]) continue;
       if (attempts[next] >= MAX_ATTEMPTS) continue;
       // Refreshed even for a cell already waiting its turn. What it is holding
       // may have come from a neighbour sitting on a plateau, where every
       // derivative is zero and the solve has nowhere to go; this answer is a
-      // real preimage. Skipping the update because the cell was already queued
-      // is what used to leave a shell of cells stuck at the bottom of the
-      // range, each one attempted exactly once, from the one place it could
-      // not move away from.
+      // real preimage, and a cell left holding the plateau's would be
+      // attempted from the one place it cannot move away from.
       startAt[next * 3] = solved.x[0];
       startAt[next * 3 + 1] = solved.x[1];
       startAt[next * 3 + 2] = solved.x[2];
@@ -476,28 +509,13 @@ export function invertOperations(
     let progressed = false;
     for (let cell = 0; cell < cells; cell++) {
       if (landed[cell]) continue;
-      const r = cell % size;
-      const g = Math.floor(cell / size) % size;
-      const b = Math.floor(cell / plane);
-      const neighbours = [
-        r > 0 ? cell - 1 : -1,
-        r < size - 1 ? cell + 1 : -1,
-        g > 0 ? cell - size : -1,
-        g < size - 1 ? cell + size : -1,
-        b > 0 ? cell - plane : -1,
-        b < size - 1 ? cell + plane : -1,
-      ];
-      for (const from of neighbours) {
+      neighbours(cell, size, around);
+      for (let n = 0; n < 6; n++) {
+        const from = around[n];
         if (from < 0 || !landed[from]) continue;
-        const at = lutIndex(size, from % size, Math.floor(from / size) % size, Math.floor(from / plane));
-        const solved = solveCell(targetOf(cell), [data[at], data[at + 1], data[at + 2]]);
+        const solved = solveCell(forward, targetOf(cell, size, step), [data[from * 3], data[from * 3 + 1], data[from * 3 + 2]]);
         if (solved.residual > TOLERANCE) continue;
-        const here = lutIndex(size, r, g, b);
-        data[here] = solved.x[0];
-        data[here + 1] = solved.x[1];
-        data[here + 2] = solved.x[2];
-        landed[cell] = 1;
-        if (solved.residual > maxResidual) maxResidual = solved.residual;
+        land(cell, solved);
         progressed = true;
         break;
       }
@@ -512,7 +530,7 @@ export function invertOperations(
 
   return {
     lut: { kind: '3d', size, data, domainMin: [0, 0, 0], domainMax: [1, 1, 1], title },
-    clippedInput: clippedSeeds / seedCount,
+    clippedInput: clippedSeeds / (SEED_SIZE * SEED_SIZE * SEED_SIZE),
     unreachable,
     unreachableFraction: unreachable / cells,
     maxResidual,
@@ -533,59 +551,39 @@ function fillUnreachable(data: Float32Array, landed: Uint8Array, size: number): 
   for (let i = 0; i < cells; i++) if (!landed[i]) remaining++;
   if (remaining === 0) return;
 
-  const step = 1 / (size - 1);
   if (remaining === cells) {
     // Nothing converged anywhere. An identity is the only fill left that is
     // not a lie, and the unreachable count says how much of one it is.
-    for (let b = 0; b < size; b++) {
-      for (let g = 0; g < size; g++) {
-        for (let r = 0; r < size; r++) {
-          const at = lutIndex(size, r, g, b);
-          data[at] = r * step;
-          data[at + 1] = g * step;
-          data[at + 2] = b * step;
-        }
-      }
-    }
+    data.set(identityLut(size).data);
     return;
   }
 
   const filled = Uint8Array.from(landed);
+  const around = new Int32Array(6);
   // Bounded by the longest run of empty cells a lattice can hold, so a table
   // that somehow never closes cannot spin here.
   for (let pass = 0; pass < size * 3 && remaining > 0; pass++) {
     const wrote: number[] = [];
-    for (let b = 0; b < size; b++) {
-      for (let g = 0; g < size; g++) {
-        for (let r = 0; r < size; r++) {
-          const cell = (b * size + g) * size + r;
-          if (filled[cell]) continue;
+    for (let cell = 0; cell < cells; cell++) {
+      if (filled[cell]) continue;
 
-          let count = 0;
-          let sumR = 0, sumG = 0, sumB = 0;
-          const neighbours: [number, number, number][] = [
-            [r - 1, g, b], [r + 1, g, b],
-            [r, g - 1, b], [r, g + 1, b],
-            [r, g, b - 1], [r, g, b + 1],
-          ];
-          for (const [nr, ng, nb] of neighbours) {
-            if (nr < 0 || ng < 0 || nb < 0 || nr >= size || ng >= size || nb >= size) continue;
-            if (!filled[(nb * size + ng) * size + nr]) continue;
-            const at = lutIndex(size, nr, ng, nb);
-            sumR += data[at];
-            sumG += data[at + 1];
-            sumB += data[at + 2];
-            count++;
-          }
-          if (count === 0) continue;
-
-          const at = lutIndex(size, r, g, b);
-          data[at] = sumR / count;
-          data[at + 1] = sumG / count;
-          data[at + 2] = sumB / count;
-          wrote.push(cell);
-        }
+      let count = 0;
+      let sumR = 0, sumG = 0, sumB = 0;
+      neighbours(cell, size, around);
+      for (let n = 0; n < 6; n++) {
+        const from = around[n];
+        if (from < 0 || !filled[from]) continue;
+        sumR += data[from * 3];
+        sumG += data[from * 3 + 1];
+        sumB += data[from * 3 + 2];
+        count++;
       }
+      if (count === 0) continue;
+
+      data[cell * 3] = sumR / count;
+      data[cell * 3 + 1] = sumG / count;
+      data[cell * 3 + 2] = sumB / count;
+      wrote.push(cell);
     }
     // Marked after the pass, not during it, so a shell grows evenly rather
     // than smearing along whichever axis the loop happens to run fastest.
