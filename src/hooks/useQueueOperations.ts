@@ -48,8 +48,9 @@ interface UseQueueOperationsOptions {
   updateItemWorkflow: (id: string, workflow: any) => void;
   flushQueue: (pending?: { itemId: string; workflow: any }) => void;
   requeueItem: (id: string) => void;
-  loadVideoInfo: (path: string) => Promise<void>;
-  setOutputPath: (path: string) => void;
+  loadVideoInfo: (path: string) => Promise<unknown>;
+  /** The output path the user chose for the window's video. */
+  setOutputPathOverride: (path: string | null) => void;
   handleCancelUpscale: () => Promise<void>;
   onLog: (message: string) => void;
   loadCompletedVideo?: (path: string) => Promise<void>;
@@ -120,7 +121,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
     flushQueue,
     requeueItem,
     loadVideoInfo,
-    setOutputPath,
+    setOutputPathOverride,
     handleCancelUpscale,
     onLog,
     loadCompletedVideo,
@@ -203,7 +204,7 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
           // waiting on the auto-save, which closing editing would cancel.
           saveEditedItem();
           await loadVideoInfo(item.videoPath);
-          setOutputPath(item.outputPath);
+          setOutputPathOverride(item.outputPath);
           setCompletedVideoPath(item.outputPath);
           await loadCompletedVideo(item.outputPath);
 
@@ -235,7 +236,6 @@ export function useQueueOperations(options: UseQueueOperationsOptions) {
 
     try {
       await loadVideoInfo(item.videoPath);
-      setOutputPath(item.outputPath);
 
       if (item.workflow.segment?.enabled) {
         setSegment(item.workflow.segment);

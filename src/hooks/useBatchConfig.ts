@@ -2,7 +2,6 @@
 
 import type { BackendId, SegmentSelection } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
-import { generateOutputSuffix } from '../utils/generateOutputSuffix';
 
 interface UseBatchConfigOptions {
   ffmpegArgs: string;
@@ -16,14 +15,13 @@ interface UseBatchConfigOptions {
   segment?: SegmentSelection;
   colorimetry?: any;
   showQueue: boolean;
-  descriptiveNamingEnabled: boolean;
-  onAddToQueue: (videoPaths: string[], workflow: any, outputPath?: string) => void;
-  onLoadVideoInfo: (path: string) => Promise<void>;
+  onAddToQueue: (videoPaths: string[], workflow: any, output?: { path: string; custom: boolean }) => void;
+  onLoadVideoInfo: (path: string) => Promise<unknown>;
   onLog: (message: string) => void;
 }
 
 export function useBatchConfig(options: UseBatchConfigOptions) {
-  const { ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, selectedModel, filters, defaultBackend, numStreams, segment, colorimetry, showQueue, descriptiveNamingEnabled, onAddToQueue, onLoadVideoInfo, onLog } = options;
+  const { ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, selectedModel, filters, defaultBackend, numStreams, segment, colorimetry, showQueue, onAddToQueue, onLoadVideoInfo, onLog } = options;
 
   const handleSelectVideoWithQueue = async (): Promise<void> => {
     try {
@@ -59,36 +57,11 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
         colorimetry,
       };
 
-      // Respect the default output folder setting
-      let defaultOutputFolder: string | null = null;
-      try {
-        const result = await window.electronAPI.getDefaultOutputFolder();
-        defaultOutputFolder = result.folder;
-      } catch { /* ignore */ }
-
-      // Add each video directly to the queue without showing the modal
-      files.forEach((videoPath: string) => {
-        let outputPath: string;
-        const fileName = videoPath.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, '') || 'output';
-        const suffix = descriptiveNamingEnabled
-          ? generateOutputSuffix(
-              { colorimetry, filters, segment }
-            )
-          : 'processed';
-
-        if (defaultOutputFolder) {
-          const separator = defaultOutputFolder.includes('\\') ? '\\' : '/';
-          outputPath = `${defaultOutputFolder}${separator}${fileName}-${suffix}.${outputFormat}`;
-        } else {
-          outputPath = videoPath.replace(/\.[^.]+$/, `-${suffix}.${outputFormat}`);
-        }
-        onAddToQueue([videoPath], currentWorkflowSnapshot, outputPath);
-      });
-
-      onLog(`Added ${files.length} video(s) to queue`);
+      onAddToQueue(files, currentWorkflowSnapshot);
   };
 
-  const handleAddCurrentVideoToQueue = (videoPath: string, outputPath: string): void => {
+  /** Queue the window's video with the output path it shows, which custom says the user chose. */
+  const handleAddCurrentVideoToQueue = (videoPath: string, output: { path: string; custom: boolean }): void => {
     const currentWorkflowSnapshot = {
       selectedModel,
       filters: structuredClone(filters), // Deep copy
@@ -102,7 +75,7 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
       colorimetry,
     };
 
-    onAddToQueue([videoPath], currentWorkflowSnapshot, outputPath);
+    onAddToQueue([videoPath], currentWorkflowSnapshot, output);
     onLog(`Added current video to queue`);
   };
 

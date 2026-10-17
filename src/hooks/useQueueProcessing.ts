@@ -16,7 +16,7 @@ interface UseQueueProcessingOptions {
   setIsProcessingQueueItem: (processing: boolean) => void;
   setIsQueueStarted: (started: boolean) => void;
   setVideoInfo: (info: any) => void;
-  setOutputPath: (path: string) => void;
+  setOutputPathOverride: (path: string | null) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
   getNextPendingItem: () => QueueItem | null;
   onLog: (message: string) => void;
@@ -35,7 +35,7 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
     setIsProcessingQueueItem,
     setIsQueueStarted,
     setVideoInfo,
-    setOutputPath,
+    setOutputPathOverride,
     updateQueueItem,
     getNextPendingItem,
     onLog,
@@ -73,7 +73,7 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
         // Load video info and set output path for this item
         const info = await window.electronAPI.getVideoInfo(nextItem.videoPath);
         setVideoInfo(info);
-        setOutputPath(nextItem.outputPath);
+        setOutputPathOverride(nextItem.outputPath);
         onLog(`Loaded queue item: ${nextItem.videoName}`);
         onLog(`Output will be: ${nextItem.outputPath}`);
         

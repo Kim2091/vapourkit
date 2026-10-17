@@ -62,6 +62,7 @@ import { getPortableModelName } from './utils/modelUtils';
 import { useAccentColor } from './hooks/useAccentColor';
 import { useMainColor } from './hooks/useMainColor';
 import { useDiscordRichPresence } from './hooks/useDiscordRichPresence';
+import { projectOutputOverride, type PreQueueWorkflow } from './utils/projectSnapshot';
 
 // Settings column drag bounds, in pixels.
 const SETTINGS_MIN_W = 320;
@@ -212,20 +213,6 @@ function App() {
   // Kept in localStorage as well: the queue stays open across a restart, and
   // while it is open the window shows (and saves) a queue item's chain, so a
   // snapshot only in memory left that chain in place of the project's for good.
-  type PreQueueWorkflow = {
-    videoPath: string | null;
-    outputPath: string | null;
-    selectedModel: string | null;
-    filters: any[];
-    outputFormat: string;
-    defaultBackend: BackendId;
-    numStreams: number;
-    segment: SegmentSelection;
-    ffmpegArgs?: string;
-    processingFormat?: string;
-    videoCompareArgs?: string;
-    colorimetry?: any;
-  };
   const [preQueueWorkflow, setPreQueueWorkflowState] = useState<PreQueueWorkflow | null>(() => {
     try {
       const saved = localStorage.getItem('preQueueWorkflow');
@@ -245,14 +232,19 @@ function App() {
   };
 
   // Queue store (data + UI state)
-  const queueStore = useQueueStore({ onLog: addConsoleLog, descriptiveNamingEnabled });
+  const outputNaming = useMemo(
+    () => ({ defaultOutputFolder, descriptive: descriptiveNamingEnabled }),
+    [defaultOutputFolder, descriptiveNamingEnabled],
+  );
+  const queueStore = useQueueStore({ onLog: addConsoleLog, naming: outputNaming });
 
   // Video processing hooks
   const {
     videoInfo,
     setVideoInfo,
-    outputPath,
-    setOutputPath,
+    outputPath: projectOutputPath,
+    outputPathOverride,
+    setOutputPathOverride,
     isProcessing,
     isStopping,
     upscaleProgress,
@@ -278,7 +270,6 @@ function App() {
     descriptiveNamingEnabled,
     defaultOutputFolder,
     filters,
-    selectedModel,
     colorimetry: colorimetrySettings,
     segment,
   });
@@ -350,6 +341,28 @@ function App() {
     duplicateQueueItem,
   } = queueStore;
 
+  // While a queue item is edited the window shows the file that item writes.
+  const editingItem = queueStore.editingQueueItemId
+    ? queue.find(item => item.id === queueStore.editingQueueItemId)
+    : undefined;
+  const outputPath = editingItem ? editingItem.outputPath : projectOutputPath;
+
+  const handleSelectOutputFileForView = async (): Promise<void> => {
+    if (!editingItem) {
+      await handleSelectOutputFile();
+      return;
+    }
+    try {
+      const selected = await window.electronAPI.selectOutputFile(editingItem.outputPath);
+      if (selected) {
+        updateQueueItem(editingItem.id, { outputPath: selected, customOutputPath: true });
+        addConsoleLog(`Output path for queue item: ${selected}`);
+      }
+    } catch (error) {
+      addConsoleLog(`Error: ${getErrorMessage(error)}`);
+    }
+  };
+
   // Batch configuration hook
   const {
     handleSelectVideoWithQueue,
@@ -367,9 +380,8 @@ function App() {
     segment,
     colorimetry: colorimetrySettings,
     showQueue: queueStore.showQueue,
-    descriptiveNamingEnabled,
-    onAddToQueue: (videoPaths, workflow, outputPath) => {
-      addToQueue(videoPaths, workflow, outputPath);
+    onAddToQueue: (videoPaths, workflow, output) => {
+      addToQueue(videoPaths, workflow, output);
       // Adding several videos opens the queue; it has to set the project
       // aside like the queue button does, or closing it has nothing to put back.
       openQueue();
@@ -424,7 +436,7 @@ function App() {
     flushQueue: queueStore.flushQueue,
     requeueItem,
     loadVideoInfo,
-    setOutputPath,
+    setOutputPathOverride,
     handleCancelUpscale,
     onLog: addConsoleLog,
     loadCompletedVideo,
@@ -444,7 +456,7 @@ function App() {
     setIsProcessingQueueItem: queueStore.setIsProcessingQueueItem,
     setIsQueueStarted: queueStore.setIsQueueStarted,
     setVideoInfo,
-    setOutputPath,
+    setOutputPathOverride,
     updateQueueItem,
     getNextPendingItem,
     onLog: addConsoleLog,
@@ -591,7 +603,8 @@ function App() {
     queueOpenRef.current = true;
     setPreQueueWorkflow({
       videoPath: videoInfo?.path || null,
-      outputPath: outputPath,
+      outputPath: projectOutputPath || null,
+      outputPathOverride,
       selectedModel,
       filters: structuredClone(filters), // Deep copy
       outputFormat,
@@ -606,8 +619,8 @@ function App() {
     queueStore.setShowQueue(true);
 
     // If a video is loaded, add it to the queue
-    if (options.addCurrentVideo && videoInfo && outputPath) {
-      handleAddCurrentVideoToQueue(videoInfo.path, outputPath);
+    if (options.addCurrentVideo && videoInfo && projectOutputPath) {
+      handleAddCurrentVideoToQueue(videoInfo.path, { path: projectOutputPath, custom: outputPathOverride !== null });
     }
   };
 
@@ -660,10 +673,8 @@ function App() {
     if (snapshot.videoPath) {
       pendingSegmentRef.current = { path: snapshot.videoPath, segment: snapshot.segment, loaded: false };
       try {
-        await loadVideoInfo(snapshot.videoPath);
-        if (snapshot.outputPath) {
-          setOutputPath(snapshot.outputPath);
-        }
+        const info = await loadVideoInfo(snapshot.videoPath);
+        setOutputPathOverride(projectOutputOverride(snapshot, info, outputNaming));
       } catch (error) {
         addConsoleLog(`Could not reload the project's video: ${getErrorMessage(error)}`);
       }
@@ -672,7 +683,7 @@ function App() {
     } else {
       // No video was loaded - clear current video
       setVideoInfo(null);
-      setOutputPath('');
+      setOutputPathOverride(null);
       setSegment(snapshot.segment);
     }
   };
@@ -1811,7 +1822,7 @@ function App() {
                     benchmarkMode={benchmarkMode}
                     privacyMode={privacyMode}
                     onFormatChange={handleUpdateOutputFormat}
-                    onSelectOutputFile={handleSelectOutputFile}
+                    onSelectOutputFile={handleSelectOutputFileForView}
                     onFfmpegArgsChange={handleUpdateFfmpegArgs}
                     onProcessingFormatChange={handleUpdateProcessingFormat}
                     onBenchmarkModeChange={setBenchmarkMode}
