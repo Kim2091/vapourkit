@@ -17,6 +17,13 @@ interface UseQueueProcessingOptions {
   setIsQueueStarted: (started: boolean) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
   getNextPendingItem: () => QueueItem | null;
+  /**
+   * Put an item's render settings in the config, which the main process reads
+   * them from, before it renders; resolves once they are written.
+   */
+  beginItemRender: (workflow: QueueItem['workflow']) => Promise<void>;
+  /** Give the config back to the window's settings. */
+  endItemRender: () => void;
   onLog: (message: string) => void;
 }
 
@@ -33,6 +40,8 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
     setIsQueueStarted,
     updateQueueItem,
     getNextPendingItem,
+    beginItemRender,
+    endItemRender,
     onLog,
   } = options;
 
@@ -76,6 +85,7 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
       recordedProgressRef.current = { at: 0, percentage: 0 };
 
       try {
+        await beginItemRender(nextItem.workflow);
         onLog(`Output will be: ${nextItem.outputPath}`);
         
         // Start processing with the item's workflow
@@ -114,6 +124,7 @@ export function useQueueProcessing(options: UseQueueProcessingOptions) {
         });
         onLog(`Error processing ${nextItem.videoName}: ${getErrorMessage(error)}`);
       } finally {
+        endItemRender();
         // Clear flag to allow next item to process
         setRunningItemId(null);
         setIsProcessingQueueItem(false);

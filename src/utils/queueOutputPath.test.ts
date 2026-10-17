@@ -8,7 +8,7 @@ import {
   withItemWorkflow,
   type QueueEntry,
 } from './queueOutputPath';
-import { projectOutputOverride, type PreQueueWorkflow } from './projectSnapshot';
+import { projectOutputOverride, type QueueSession } from './projectSnapshot';
 import type { Filter, QueueItem } from '../electron.d';
 
 const model = (modelPath: string): Filter =>
@@ -167,26 +167,17 @@ describe('newQueueItems', () => {
 });
 
 describe('projectOutputOverride', () => {
-  const snapshot = (extra: Partial<PreQueueWorkflow>): PreQueueWorkflow => ({
-    videoPath: 'C:\\v\\ep.mp4',
-    outputPath: null,
-    selectedModel: null,
-    filters: [model('C:/m/2x-AnimeSharp.onnx')],
-    outputFormat: 'mkv',
-    defaultBackend: 'tensorrt',
-    numStreams: 2,
-    segment: { enabled: false, startFrame: 0, endFrame: -1 },
-    ...extra,
-  });
-  const video = { path: 'C:\\v\\ep.mp4' };
+  const settings = { filters: [model('C:/m/2x-AnimeSharp.onnx')], outputFormat: 'mkv' };
+  const video = { path: 'C:/v/ep.mp4' };
+  const session = (extra: Partial<QueueSession>): QueueSession => ({ videoPath: video.path, outputPath: null, ...extra });
 
   it('uses the kept choice', () => {
-    expect(projectOutputOverride(snapshot({ outputPath: 'C:\\v\\ep-2xanimesharp.mkv', outputPathOverride: 'E:\\x.mkv' }), video, beside)).toBe('E:\\x.mkv');
-    expect(projectOutputOverride(snapshot({ outputPath: 'E:\\x.mkv', outputPathOverride: null }), video, beside)).toBeNull();
+    expect(projectOutputOverride(session({ outputPath: 'C:/v/ep-2xanimesharp.mkv', outputPathOverride: 'E:/x.mkv' }), video, settings, beside)).toBe('E:/x.mkv');
+    expect(projectOutputOverride(session({ outputPath: 'E:/x.mkv', outputPathOverride: null }), video, settings, beside)).toBeNull();
   });
 
-  it('reads an older snapshot\'s path as chosen only when it is not the automatic name', () => {
-    expect(projectOutputOverride(snapshot({ outputPath: 'C:\\v\\ep-2xanimesharp.mkv' }), video, beside)).toBeNull();
-    expect(projectOutputOverride(snapshot({ outputPath: 'E:\\mine.mkv' }), video, beside)).toBe('E:\\mine.mkv');
+  it('reads an older record\'s path as chosen only when it is not the automatic name', () => {
+    expect(projectOutputOverride(session({ outputPath: 'C:/v/ep-2xanimesharp.mkv' }), video, settings, beside)).toBeNull();
+    expect(projectOutputOverride(session({ outputPath: 'E:/mine.mkv' }), video, settings, beside)).toBe('E:/mine.mkv');
   });
 });

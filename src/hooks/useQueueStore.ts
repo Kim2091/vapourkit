@@ -6,8 +6,6 @@ import { newQueueItems, uniqueOutputPath, withItemWorkflow, type OutputNaming, t
 import { normalizeBackendForCurrentPlatform } from '../utils/backends';
 import { queueSaveDelay, queueShape } from '../utils/queueSaveTiming';
 
-const EDITING_ITEM_KEY = 'editingQueueItemId';
-
 interface UseQueueStoreProps {
   onLog: (message: string) => void;
   /** How items are named when the user has not chosen an output path. */
@@ -19,27 +17,6 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
   // --- UI state (from useQueueState) ---
   const [showQueue, setShowQueueRaw] = useState(false);
   const [isShowQueueLoaded, setIsShowQueueLoaded] = useState(false);
-  const [editingQueueItemId, setEditingQueueItemIdRaw] = useState<string | null>(null);
-  // The item being edited when the app last closed. Editing puts the item's
-  // chain and encoding settings in the window, and those are saved, so after a
-  // restart the window still shows them: App re-enters editing that item
-  // rather than leave it on screen with nowhere for edits to go.
-  const [resumeEditingId] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(EDITING_ITEM_KEY);
-    } catch {
-      return null;
-    }
-  });
-  const setEditingQueueItemId = useCallback((id: string | null) => {
-    setEditingQueueItemIdRaw(id);
-    try {
-      if (id) localStorage.setItem(EDITING_ITEM_KEY, id);
-      else localStorage.removeItem(EDITING_ITEM_KEY);
-    } catch {
-      // Storage blocked: editing still works for this session.
-    }
-  }, []);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [isQueueStarted, setIsQueueStarted] = useState(false);
   const [isQueueStopping, setIsQueueStopping] = useState(false);
@@ -205,13 +182,13 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
     workflow: Partial<QueueItem['workflow']>
   ) => {
     setQueue(prev => withItemWorkflow(prev, itemId, workflow, { defaultOutputFolder, descriptive }));
-    onLog(`Updated workflow for queue item`);
-  }, [onLog, defaultOutputFolder, descriptive]);
+  }, [defaultOutputFolder, descriptive]);
 
   /**
-   * Write the queue now, synchronously, with an edit still waiting to be
-   * auto-saved folded in: for when the window closes, which would otherwise
-   * drop whatever the debounced saves had not written yet.
+   * Write the queue now, synchronously, with the edited item's latest
+   * settings folded in (an edit committed as the window closes has not
+   * reached the queue's state yet): for when the window closes, which would
+   * otherwise drop whatever the debounced saves had not written yet.
    */
   const latestQueueRef = useRef<QueueEntry[]>(queue);
   latestQueueRef.current = queue;
@@ -306,14 +283,11 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
     // UI state
     showQueue,
     isShowQueueLoaded,
-    editingQueueItemId,
-    resumeEditingId,
     isProcessingQueue,
     isQueueStarted,
     isQueueStopping,
     isProcessingQueueItem,
     setShowQueue,
-    setEditingQueueItemId,
     setIsProcessingQueue,
     setIsQueueStarted,
     setIsQueueStopping,

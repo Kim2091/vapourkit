@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ModelFile, UninitializedModel } from '../electron.d';
 
 interface StoredRecentModel {
@@ -37,36 +37,34 @@ function getMostRecentAvailableModel(models: ModelFile[]): string | null {
   }
 }
 
-export const useModels = (isSetupComplete: boolean) => {
+/** The model to select once models: the current one if it is still there, else the most recent, else the first. */
+function modelToSelect(current: string | null, models: ModelFile[]): string | null {
+  if (models.length === 0) return null;
+  if (current === null) return getMostRecentAvailableModel(models) ?? models[0].path;
+  if (current && !models.some(m => m.path === current)) return models[0].path;
+  return current;
+}
+
+/**
+ * The models on disk. The selected model is a workflow setting, read and set
+ * through selection, which is kept valid as the list changes.
+ */
+export const useModels = (
+  isSetupComplete: boolean,
+  selection: { get: () => string | null; set: (model: string | null) => void },
+) => {
   const [availableModels, setAvailableModels] = useState<ModelFile[]>([]);
   const [uninitializedModels, setUninitializedModels] = useState<UninitializedModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
 
   const loadModels = useCallback(async (): Promise<void> => {
     try {
       const models = await window.electronAPI.getAvailableModels();
       setAvailableModels(models);
-      // Use functional updater to avoid dependency on selectedModel
-      setSelectedModel(prev => {
-        // If no model selected yet and we have models, prefer most recent model first
-        if (prev === null && models.length > 0) {
-          const recentModel = getMostRecentAvailableModel(models);
-          if (recentModel) {
-            return recentModel;
-          }
-          return models[0].path;
-        }
-        // If currently selected model was deleted, select first available
-        if (prev && models.length > 0 && !models.some(m => m.path === prev)) {
-          return models[0].path;
-        }
-        // If no models available, clear selection
-        if (models.length === 0) {
-          return null;
-        }
-        // Keep current selection
-        return prev;
-      });
+      const current = selectionRef.current.get();
+      const next = modelToSelect(current, models);
+      if (next !== current) selectionRef.current.set(next);
     } catch (error) {
       console.error('Error loading models:', error);
     }
@@ -92,8 +90,6 @@ export const useModels = (isSetupComplete: boolean) => {
   return {
     availableModels,
     uninitializedModels,
-    selectedModel,
-    setSelectedModel,
     loadModels,
     loadUninitializedModels,
   };

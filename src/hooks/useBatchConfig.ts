@@ -1,27 +1,20 @@
-// src/hooks/useBatchConfig.ts - Batch configuration management
+// src/hooks/useBatchConfig.ts - Adding videos: one loads into the window, several go to the queue
 
-import type { BackendId, SegmentSelection } from '../electron.d';
+import type { QueueItem } from '../electron.d';
 import { getErrorMessage } from '../types/errors';
 
 interface UseBatchConfigOptions {
-  ffmpegArgs: string;
-  processingFormat: string;
-  outputFormat: string;
-  videoCompareArgs: string;
-  selectedModel: string | null;
-  filters: any[];
-  defaultBackend: BackendId;
-  numStreams: number;
-  segment?: SegmentSelection;
-  colorimetry?: any;
+  /** The window's settings, as a queue item's workflow. */
+  getWorkflow: () => QueueItem['workflow'];
   showQueue: boolean;
-  onAddToQueue: (videoPaths: string[], workflow: any, output?: { path: string; custom: boolean }) => void;
+  onAddToQueue: (videoPaths: string[], workflow: QueueItem['workflow'], output?: { path: string; custom: boolean }) => void;
+  /** Load a video into the project. */
   onLoadVideoInfo: (path: string) => Promise<unknown>;
   onLog: (message: string) => void;
 }
 
 export function useBatchConfig(options: UseBatchConfigOptions) {
-  const { ffmpegArgs, processingFormat, outputFormat, videoCompareArgs, selectedModel, filters, defaultBackend, numStreams, segment, colorimetry, showQueue, onAddToQueue, onLoadVideoInfo, onLog } = options;
+  const { getWorkflow, showQueue, onAddToQueue, onLoadVideoInfo, onLog } = options;
 
   const handleSelectVideoWithQueue = async (): Promise<void> => {
     try {
@@ -36,46 +29,20 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
   };
 
   const handleBatchFiles = async (files: string[]): Promise<void> => {
-      // Single file - load it normally if queue is not shown, otherwise add to queue
-      if (files.length === 1 && !showQueue) {
-        await onLoadVideoInfo(files[0]);
-        onLog(`Loaded video: ${files[0]}`);
-        return;
-      }
+    // Single file - load it normally if queue is not shown, otherwise add to queue
+    if (files.length === 1 && !showQueue) {
+      await onLoadVideoInfo(files[0]);
+      onLog(`Loaded video: ${files[0]}`);
+      return;
+    }
 
-      // Single file with queue shown, or multiple files - add directly to queue
-      const currentWorkflowSnapshot = {
-        selectedModel,
-        filters: structuredClone(filters), // Deep copy
-        ffmpegArgs,
-        processingFormat,
-        outputFormat,
-        videoCompareArgs,
-        defaultBackend,
-        numStreams,
-        segment: segment?.enabled ? { ...segment } : undefined,
-        colorimetry,
-      };
-
-      onAddToQueue(files, currentWorkflowSnapshot);
+    // Single file with queue shown, or multiple files - add directly to queue
+    onAddToQueue(files, getWorkflow());
   };
 
   /** Queue the window's video with the output path it shows, which custom says the user chose. */
   const handleAddCurrentVideoToQueue = (videoPath: string, output: { path: string; custom: boolean }): void => {
-    const currentWorkflowSnapshot = {
-      selectedModel,
-      filters: structuredClone(filters), // Deep copy
-      ffmpegArgs,
-      processingFormat,
-      outputFormat,
-      videoCompareArgs,
-      defaultBackend,
-      numStreams,
-      segment: segment?.enabled ? { ...segment } : undefined,
-      colorimetry,
-    };
-
-    onAddToQueue([videoPath], currentWorkflowSnapshot, output);
+    onAddToQueue([videoPath], getWorkflow(), output);
     onLog(`Added current video to queue`);
   };
 
