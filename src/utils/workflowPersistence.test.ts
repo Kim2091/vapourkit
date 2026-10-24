@@ -16,14 +16,18 @@ import {
 } from './workflowPersistence';
 import {
   encodingPatchOf,
+  encodingSettingsOf,
   fromQueueWorkflow,
   loadedWorkflowRecord,
+  migrateQueueWorkflow,
+  renderSettingsOf,
   restorePatchOf,
   toQueueWorkflow,
   type ConfigSettings,
   type LoadedWorkflowRecord,
 } from './workflowSettings';
-import { readEditingItemId, writeProjectConfigAside } from './workflowStores';
+import { readEditingItemId, readProjectConfigAside, writeProjectConfigAside } from './workflowStores';
+import { DEFAULT_SIMPLE_ENCODING, migrateLegacyArgs, type EncodingSettings } from '../../electron/encodingSettings';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -37,6 +41,9 @@ const storage = new MemoryStorage();
 (globalThis as unknown as { localStorage: MemoryStorage }).localStorage = storage;
 
 const step = (id: string): Filter => ({ id, enabled: true, filterType: 'custom', preset: id, code: `# ${id}`, order: 0 });
+
+/** Advanced-mode encoding with these arguments. */
+const adv = (customArgs: string): EncodingSettings => ({ mode: 'advanced', simple: DEFAULT_SIMPLE_ENCODING, customArgs });
 
 const COLOR = { overwriteMatrix: false, matrix709: false, defaultMatrix: '709', defaultPrimaries: '709', defaultTransfer: '709' } as const;
 
@@ -70,7 +77,7 @@ class Session {
 }
 
 const projectConfig = (): Partial<ConfigSettings> => ({
-  ffmpegArgs: '-c:v libx264',
+  encoding: adv('-c:v libx264'),
   processingFormat: 'vs.YUV420P8',
   outputFormat: 'mkv',
   videoCompareArgs: '-W',
@@ -80,6 +87,7 @@ const projectConfig = (): Partial<ConfigSettings> => ({
 const itemWorkflow = (): QueueItem['workflow'] => ({
   selectedModel: null,
   filters: [step('item')],
+  encoding: adv('-c:v libx265'),
   ffmpegArgs: '-c:v libx265',
   processingFormat: 'vs.YUV444P16',
   outputFormat: 'mp4',
@@ -100,15 +108,15 @@ describe('editing a queue item', () => {
     const app = new Session(projectConfig());
     app.dispatch({ type: 'openSession', session: { videoPath: 'C:/v/project.mp4', outputPath: null, outputPathOverride: null } });
     app.dispatch({ type: 'openItem', id: 'q1', editable: true, settings: fromQueueWorkflow(itemWorkflow(), app.view) });
-    app.dispatch({ type: 'patch', patch: { filters: [step('edited')], ffmpegArgs: '-crf 18', numStreams: 3 } });
+    app.dispatch({ type: 'patch', patch: { filters: [step('edited')], encoding: adv('-crf 18'), numStreams: 3 } });
 
-    expect(app.items.get('q1')).toMatchObject({ filters: [step('edited')], ffmpegArgs: '-crf 18', numStreams: 3 });
+    expect(app.items.get('q1')).toMatchObject({ filters: [step('edited')], encoding: adv('-crf 18'), ffmpegArgs: '-crf 18', numStreams: 3 });
     expect(JSON.parse(storage.getItem('filters')!)).toEqual([step('project')]);
     expect(storage.getItem('numStreams')).toBe('2');
-    expect(app.state.project.ffmpegArgs).toBe('-c:v libx264');
+    expect(app.state.project.encoding).toEqual(adv('-c:v libx264'));
     // The config renders what the window shows; the project's are kept aside meanwhile.
-    expect(app.config.ffmpegArgs).toBe('-crf 18');
-    expect(JSON.parse(storage.getItem('projectConfigSettings')!).ffmpegArgs).toBe('-c:v libx264');
+    expect(app.config.encoding).toEqual(adv('-crf 18'));
+    expect(JSON.parse(storage.getItem('projectConfigSettings')!).encoding).toEqual(adv('-c:v libx264'));
   });
 
   it('undoes only within the item, and a finished item takes no edits', () => {
@@ -172,7 +180,7 @@ describe('restarting with the queue open', () => {
     // The config still holds the item's settings, as it did when the app closed.
     const second = new Session({ ...first.config });
     expect(second.state.project.filters).toEqual([step('project')]);
-    expect(second.state.project.ffmpegArgs).toBe('-c:v libx264');
+    expect(second.state.project.encoding).toEqual(adv('-c:v libx264'));
     expect(second.state.project.processingFormat).toBe('vs.YUV420P8');
     expect(second.state.project.segment).toEqual({ enabled: true, startFrame: 1, endFrame: 2 });
     expect(second.state.session?.videoPath).toBe('C:/v/project.mp4');
@@ -201,10 +209,12 @@ describe('restarting with the queue open', () => {
       colorimetry: COLOR,
     }));
 
-    const app = new Session({ ...projectConfig(), ffmpegArgs: '-c:v libx265', outputFormat: 'mp4' });
+    const app = new Session({ ...projectConfig(), encoding: adv('-c:v libx265'), outputFormat: 'mp4' });
     expect(app.state.project.filters).toEqual([step('project')]);
     expect(app.state.project.numStreams).toBe(2);
-    expect(app.state.project.ffmpegArgs).toBe('-c:v libx264');
+    // Its encoding, kept only as arguments, is migrated: these ones the simple controls can show.
+    expect(app.state.project.encoding).toEqual(migrateLegacyArgs('-c:v libx264'));
+    expect(app.state.project.encoding.mode).toBe('simple');
     expect(app.state.project.outputFormat).toBe('mkv');
     expect(JSON.parse(storage.getItem('filters')!)).toEqual([step('project')]);
     expect(JSON.parse(storage.getItem('preQueueWorkflow')!).version).toBe(2);
@@ -213,12 +223,12 @@ describe('restarting with the queue open', () => {
 
   it('puts the project back after a crash during a queue run with the queue closed', () => {
     const first = new Session(projectConfig());
-    first.dispatch({ type: 'lockRender', settings: { ffmpegArgs: '-c:v libx265' } });
-    expect(first.config.ffmpegArgs).toBe('-c:v libx265');
+    first.dispatch({ type: 'lockRender', settings: { encoding: adv('-c:v libx265') } });
+    expect(first.config.encoding).toEqual(adv('-c:v libx265'));
 
     const second = new Session({ ...first.config });
-    expect(second.state.project.ffmpegArgs).toBe('-c:v libx264');
-    expect(second.config.ffmpegArgs).toBe('-c:v libx264');
+    expect(second.state.project.encoding).toEqual(adv('-c:v libx264'));
+    expect(second.config.encoding).toEqual(adv('-c:v libx264'));
     expect(storage.getItem('projectConfigSettings')).toBeNull();
   });
 });
@@ -230,29 +240,29 @@ describe('loading a workflow, then restarting', () => {
     storage.setItem('loadedWorkflow', JSON.stringify(record));
     first.dispatch({
       type: 'patch',
-      patch: { ...encodingPatchOf({ ffmpegArgs: '-preset slow', numStreams: 3 }), filters: [step('workflow')] },
+      patch: { ...encodingPatchOf({ ffmpegArgs: '-c:v libx264 -tune film', numStreams: 3 }), filters: [step('workflow')] },
     });
 
     const second = new Session({ ...first.config });
     expect(second.view.filters).toEqual([step('workflow')]);
-    expect(second.view.ffmpegArgs).toBe('-preset slow');
+    expect(second.view.encoding).toEqual(adv('-c:v libx264 -tune film'));
     expect(second.view.numStreams).toBe(3);
 
     const saved = JSON.parse(storage.getItem('loadedWorkflow')!) as LoadedWorkflowRecord;
     second.dispatch({ type: 'patch', patch: restorePatchOf(saved) });
     expect(second.view.filters).toEqual([step('project')]);
-    expect(second.view.ffmpegArgs).toBe('-c:v libx264');
+    expect(second.view.encoding).toEqual(adv('-c:v libx264'));
     expect(second.view.numStreams).toBe(2);
-    expect(second.config.ffmpegArgs).toBe('-c:v libx264');
+    expect(second.config.encoding).toEqual(adv('-c:v libx264'));
   });
 });
 
 describe('the config read at launch', () => {
   it('does not replace a setting changed before it arrived', () => {
     let state = loadDocument();
-    state = workflowDocumentReducer(state, { type: 'patch', patch: { ffmpegArgs: '-crf 10' } });
+    state = workflowDocumentReducer(state, { type: 'patch', patch: { encoding: adv('-crf 10') } });
     state = workflowDocumentReducer(state, { type: 'loaded', values: projectConfig() });
-    expect(state.project.ffmpegArgs).toBe('-crf 10');
+    expect(state.project.encoding).toEqual(adv('-crf 10'));
     expect(state.project.processingFormat).toBe('vs.YUV420P8');
     expect(state.loaded).toBe(true);
   });
@@ -261,12 +271,12 @@ describe('the config read at launch', () => {
 describe('a queue item rendering', () => {
   it('holds its own render settings in the config, then gives the config back', () => {
     const app = new Session(projectConfig());
-    app.dispatch({ type: 'lockRender', settings: { ffmpegArgs: '-c:v libx265', processingFormat: 'vs.RGBS' } });
-    app.dispatch({ type: 'patch', patch: { ffmpegArgs: '-crf 20', outputFormat: 'mp4' } });
-    expect(app.config.ffmpegArgs).toBe('-c:v libx265');
+    app.dispatch({ type: 'lockRender', settings: { encoding: adv('-c:v libx265'), processingFormat: 'vs.RGBS' } });
+    app.dispatch({ type: 'patch', patch: { encoding: adv('-crf 20'), outputFormat: 'mp4' } });
+    expect(app.config.encoding).toEqual(adv('-c:v libx265'));
     expect(app.config.outputFormat).toBe('mp4');
     app.dispatch({ type: 'unlockRender' });
-    expect(app.config.ffmpegArgs).toBe('-crf 20');
+    expect(app.config.encoding).toEqual(adv('-crf 20'));
     expect(app.config.processingFormat).toBe('vs.YUV420P8');
   });
 });
@@ -277,9 +287,64 @@ describe('queue workflows', () => {
     const workflow = itemWorkflow();
     expect(toQueueWorkflow(fromQueueWorkflow(workflow, app.view))).toEqual({ ...workflow, segment: undefined, colorimetry: COLOR });
 
-    const older = { ...workflow, ffmpegArgs: undefined, colorimetry: undefined } as unknown as QueueItem['workflow'];
+    const older = { ...workflow, encoding: undefined, ffmpegArgs: undefined, colorimetry: undefined } as unknown as QueueItem['workflow'];
     const settings = fromQueueWorkflow(older, app.view);
-    expect(settings.ffmpegArgs).toBe('-c:v libx264');
+    expect(settings.encoding).toEqual(adv('-c:v libx264'));
     expect(settings.colorimetry).toEqual(COLOR);
+  });
+});
+
+describe('encoding kept only as ffmpegArgs', () => {
+  const OLD_STOCK = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1 -movflags +faststart';
+  const legacyItem = (ffmpegArgs: string): QueueItem['workflow'] => ({ ...itemWorkflow(), encoding: undefined, ffmpegArgs });
+
+  it('is migrated in queue items as they load, render and open', () => {
+    const simple = migrateQueueWorkflow(legacyItem(OLD_STOCK));
+    expect(simple.encoding).toMatchObject({ mode: 'simple', simple: { codec: 'h264', preset: 'medium', quality: 18 }, customArgs: OLD_STOCK });
+    // The arguments stored beside it are what it now encodes, so it is not migrated again.
+    expect(simple.ffmpegArgs).toBe(OLD_STOCK.replace(' -movflags +faststart', ''));
+    expect(migrateQueueWorkflow(simple)).toBe(simple);
+
+    const typed = '-c:v hevc_nvenc -preset p4 -cq 19 -b:v 0 -spatial-aq 1';
+    expect(renderSettingsOf(legacyItem(typed)).encoding).toMatchObject({ mode: 'advanced', customArgs: typed, simple: { codec: 'h265', encoder: 'nvidia' } });
+    expect(fromQueueWorkflow(legacyItem(typed), new Session(projectConfig()).view).encoding.mode).toBe('advanced');
+  });
+
+  it('keeps the mode of each queue item', () => {
+    const app = new Session(projectConfig());
+    const simpleItem = migrateQueueWorkflow(legacyItem(OLD_STOCK));
+    app.dispatch({ type: 'openItem', id: 'a', editable: true, settings: fromQueueWorkflow(itemWorkflow(), app.view) });
+    expect(app.view.encoding.mode).toBe('advanced');
+    app.dispatch({ type: 'openItem', id: 'b', editable: true, settings: fromQueueWorkflow(simpleItem, app.view) });
+    expect(app.view.encoding.mode).toBe('simple');
+    expect(app.config.encoding?.mode).toBe('simple');
+    app.dispatch({ type: 'showProject' });
+    expect(app.view.encoding).toEqual(adv('-c:v libx264'));
+  });
+
+  it('is migrated in the set-aside project settings', () => {
+    storage.setItem('projectConfigSettings', JSON.stringify({ ffmpegArgs: OLD_STOCK, processingFormat: 'vs.YUV420P10' }));
+    const aside = readProjectConfigAside()!;
+    expect(aside.encoding?.mode).toBe('simple');
+    expect('ffmpegArgs' in aside).toBe(false);
+    expect(loadDocument().project.encoding.mode).toBe('simple');
+  });
+
+  it('is migrated in a loaded-workflow record from before the mode was stored', () => {
+    const record = { currentWorkflow: 'w', previousFilters: [], previousModel: null, previousEncodingSettings: {
+      ffmpegArgs: '-c:v libx264 -tune grain', processingFormat: 'vs.YUV420P8', outputFormat: 'mkv', videoCompareArgs: '-W',
+      numStreams: 2, segment: { enabled: false, startFrame: 0, endFrame: -1 }, colorimetry: COLOR,
+    } } as LoadedWorkflowRecord;
+    expect(restorePatchOf(record).encoding).toEqual(adv('-c:v libx264 -tune grain'));
+  });
+
+  it('is written beside the encoding settings for older versions', () => {
+    const app = new Session(projectConfig());
+    const settings = { ...app.view, encoding: { ...adv('-c:v libx264 -tune film'), mode: 'simple' as const } };
+    const resolved = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1';
+    expect(toQueueWorkflow(settings).ffmpegArgs).toBe(resolved);
+    expect(encodingSettingsOf(settings).ffmpegArgs).toBe(resolved);
+    expect(loadedWorkflowRecord('w', 'project', settings).previousEncodingSettings?.ffmpegArgs).toBe(resolved);
+    expect(encodingPatchOf(encodingSettingsOf(settings)).encoding).toEqual(settings.encoding);
   });
 });

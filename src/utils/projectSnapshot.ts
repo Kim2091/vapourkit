@@ -1,6 +1,7 @@
 // src/utils/projectSnapshot.ts - The project's video and settings, kept while the queue is open.
 
 import type { BackendId, SegmentSelection } from '../electron.d';
+import { encodingFrom, resolveEncodingArgs, type EncodingSettings } from '../../electron/encodingSettings';
 import { normalizeBackendForCurrentPlatform } from './backends';
 import { outputPathFor, type OutputNaming, type OutputNamingVideo, type OutputNamingWorkflow } from './queueOutputPath';
 import { CONFIG_FIELDS, WHOLE_VIDEO, type ConfigField, type WorkflowSettings } from './workflowSettings';
@@ -24,6 +25,8 @@ export type PreQueueWorkflow = {
   defaultBackend: BackendId;
   numStreams: number;
   segment: SegmentSelection;
+  encoding?: EncodingSettings;
+  /** What encoding resolves to; the only encoding field of older records. */
   ffmpegArgs?: string;
   processingFormat?: string;
   videoCompareArgs?: string;
@@ -51,7 +54,8 @@ export function toPreQueueSnapshot(session: QueueSession, project: WorkflowSetti
     defaultBackend: project.defaultBackend,
     numStreams: project.numStreams,
     segment: project.segment,
-    ffmpegArgs: project.ffmpegArgs,
+    encoding: project.encoding,
+    ffmpegArgs: resolveEncodingArgs(project.encoding),
     processingFormat: project.processingFormat,
     videoCompareArgs: project.videoCompareArgs,
     colorimetry: project.colorimetry,
@@ -81,7 +85,7 @@ export function projectFromSnapshot(
   };
   const configFields: ConfigField[] = [];
   for (const key of CONFIG_FIELDS) {
-    const value = snapshot[key];
+    const value = key === 'encoding' ? encodingFrom(snapshot.encoding, snapshot.ffmpegArgs) : snapshot[key];
     if (value !== undefined && value !== null) {
       (project as unknown as Record<string, unknown>)[key] = value;
       configFields.push(key);

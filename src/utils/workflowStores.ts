@@ -1,6 +1,7 @@
 // src/utils/workflowStores.ts - Where the project's settings are saved: localStorage and app-config.json.
 
 import type { BackendId, ColorimetrySettings, Filter } from '../electron.d';
+import { encodingFrom, type EncodingSettings } from '../../electron/encodingSettings';
 import { isBackendId, normalizeBackendForCurrentPlatform } from './backends';
 import type { PreQueueWorkflow } from './projectSnapshot';
 import { type ConfigField, type ConfigSettings, type LocalField, type WorkflowSettings } from './workflowSettings';
@@ -120,8 +121,15 @@ export function writeEditingItemId(id: string | null): void {
   }
 }
 
+/** The set-aside project settings. Older ones kept the encoding only as ffmpegArgs, which is migrated. */
 export function readProjectConfigAside(): Partial<ConfigSettings> | null {
-  return readJson<Partial<ConfigSettings>>(PROJECT_CONFIG_KEY);
+  const saved = readJson<Partial<ConfigSettings> & { ffmpegArgs?: string }>(PROJECT_CONFIG_KEY);
+  if (!saved) return null;
+  const { ffmpegArgs, ...settings } = saved;
+  const encoding = encodingFrom(settings.encoding, ffmpegArgs);
+  if (encoding) settings.encoding = encoding;
+  else delete settings.encoding;
+  return settings;
 }
 
 export function writeProjectConfigAside(settings: Partial<ConfigSettings> | null): void {
@@ -139,7 +147,7 @@ export async function loadConfigSettings(): Promise<Partial<ConfigSettings>> {
       console.error(`Failed to load ${key}:`, error);
     }
   };
-  await read('ffmpegArgs', async () => (await api.getFfmpegArgs()).args);
+  await read('encoding', async () => await api.getEncodingSettings());
   await read('processingFormat', async () => (await api.getProcessingFormat()).format);
   await read('outputFormat', async () => (await api.getOutputFormat()).format);
   await read('videoCompareArgs', async () => (await api.getVideoCompareArgs()).args);
@@ -151,7 +159,7 @@ export async function loadConfigSettings(): Promise<Partial<ConfigSettings>> {
 export async function saveConfigSetting<K extends ConfigField>(key: K, value: ConfigSettings[K]): Promise<void> {
   const api = window.electronAPI;
   switch (key) {
-    case 'ffmpegArgs': await api.setFfmpegArgs(value as string); break;
+    case 'encoding': await api.setEncodingSettings(value as EncodingSettings); break;
     case 'processingFormat': await api.setProcessingFormat(value as string); break;
     case 'outputFormat': await api.setOutputFormat(value as string); break;
     case 'videoCompareArgs': await api.setVideoCompareArgs(value as string); break;

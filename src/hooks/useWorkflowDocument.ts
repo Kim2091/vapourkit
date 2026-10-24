@@ -177,6 +177,9 @@ export function useWorkflowDocument({ isSetupComplete, recommendedBackend, onLog
     await configWritesRef.current;
   }, [dispatch]);
 
+  /** Resolves once every config write made so far has finished. */
+  const whenConfigSaved = useCallback(() => configWritesRef.current, []);
+
   /** Give the config back to the target's settings once a queue item has rendered. */
   const endItemRender = useCallback(() => {
     dispatch({ type: 'unlockRender' });
@@ -219,11 +222,13 @@ export function useWorkflowDocument({ isSetupComplete, recommendedBackend, onLog
     closeSession,
     beginItemRender,
     endItemRender,
+    whenConfigSaved,
     pendingItemSave,
     forgetResume,
   }), [view, state.project, editingItemId, shownItemId, state.session, state.loaded, state.epoch,
       state.history.past.length, state.history.future.length, resumeEditingId, getState, patch, undo, redo,
-      openItem, showProject, openSession, closeSession, beginItemRender, endItemRender, pendingItemSave, forgetResume]);
+      openItem, showProject, openSession, closeSession, beginItemRender, endItemRender, whenConfigSaved, pendingItemSave,
+      forgetResume]);
 }
 
 export type WorkflowDocument = ReturnType<typeof useWorkflowDocument>;

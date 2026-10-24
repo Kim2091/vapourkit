@@ -91,8 +91,11 @@ export function buildPipeFFmpegArgs(input: PipeArgsInput): string[] {
   if (ffmpegConfig.copyMetadata) {
     ffmpegArgs.push('-map_metadata', '1');
   }
-  if (ffmpegConfig.movflags && ffmpegConfig.movflags.length > 0) {
-    ffmpegArgs.push('-movflags', ffmpegConfig.movflags.join(','));
+  // MP4 and MOV get their index at the front, so playback can start before
+  // the whole file is read, unless the encoding arguments set movflags themselves.
+  const movflags = movflagsFor(outputPath, ffmpegConfig);
+  if (movflags.length > 0) {
+    ffmpegArgs.push('-movflags', movflags.join(','));
   }
 
   ffmpegArgs.push('-y', outputPath);
@@ -107,4 +110,14 @@ export function buildPipeFFmpegArgs(input: PipeArgsInput): string[] {
   ffmpegArgs.push('pipe:1');
 
   return ffmpegArgs;
+}
+
+/** The movflags for the main output. */
+export function movflagsFor(outputPath: string, ffmpegConfig: Partial<FFmpegConfig>): string[] {
+  const movflags = [...(ffmpegConfig.movflags ?? [])];
+  if (MOV_FAMILY.has(path.extname(outputPath).toLowerCase()) && !ffmpegConfig.videoArgs?.includes('-movflags')
+    && !movflags.includes('+faststart')) {
+    movflags.push('+faststart');
+  }
+  return movflags;
 }

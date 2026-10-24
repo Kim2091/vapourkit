@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { QueueItem } from '../electron.d';
 import { newQueueItems, uniqueOutputPath, withItemWorkflow, type OutputNaming, type QueueEntry } from '../utils/queueOutputPath';
-import { normalizeBackendForCurrentPlatform } from '../utils/backends';
+import { migrateQueueWorkflow } from '../utils/workflowSettings';
 import { queueSaveDelay, queueShape } from '../utils/queueSaveTiming';
 import { queueRunFlags, type QueueRunStatus } from '../utils/queueRun';
 
@@ -54,20 +54,10 @@ export function useQueueStore({ onLog, naming }: UseQueueStoreProps) {
       const savedQueue = await window.electronAPI.getQueue();
 
       // Reset any items that were processing when app was closed, and migrate
-      // legacy workflows (useDirectML boolean) to backend ids
+      // legacy workflows (useDirectML boolean, encoding kept only as ffmpegArgs)
       const resetQueue = (savedQueue as QueueEntry[]).map((item): QueueEntry => {
-        const savedBackend = item.workflow.defaultBackend ?? item.workflow.useDirectML;
-        const normalizedBackend = normalizeBackendForCurrentPlatform(savedBackend);
-        const migrated: QueueEntry = item.workflow.defaultBackend === normalizedBackend && item.workflow.useDirectML === undefined
-          ? item
-          : {
-              ...item,
-              workflow: {
-                ...item.workflow,
-                defaultBackend: normalizedBackend,
-                useDirectML: undefined,
-              },
-            };
+        const workflow = migrateQueueWorkflow(item.workflow);
+        const migrated: QueueEntry = workflow === item.workflow ? item : { ...item, workflow };
         if (migrated.status === 'processing') {
           return { ...migrated, status: 'pending' as const, progress: 0 };
         }

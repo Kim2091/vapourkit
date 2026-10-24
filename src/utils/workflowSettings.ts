@@ -1,13 +1,19 @@
 // src/utils/workflowSettings.ts - The settings a render is made with, and their stored forms.
 
 import type { BackendId, ColorimetrySettings, Filter, QueueItem, SegmentSelection, WorkflowData } from '../electron.d';
+import {
+  DEFAULT_ENCODING,
+  encodingFrom,
+  resolveEncodingArgs,
+  type EncodingSettings,
+} from '../../electron/encodingSettings';
 import { isBackendId, normalizeBackendForCurrentPlatform } from './backends';
 
 /** Everything that decides what a render produces, for the project or one queue item. */
 export interface WorkflowSettings {
   selectedModel: string | null;
   filters: Filter[];
-  ffmpegArgs: string;
+  encoding: EncodingSettings;
   processingFormat: string;
   outputFormat: string;
   videoCompareArgs: string;
@@ -22,7 +28,7 @@ export interface WorkflowSettings {
  * there for every render, preview and validation, so the config always holds
  * the settings being worked on (or, during a queue run, the running item's).
  */
-export const CONFIG_FIELDS = ['ffmpegArgs', 'processingFormat', 'outputFormat', 'videoCompareArgs', 'colorimetry'] as const;
+export const CONFIG_FIELDS = ['encoding', 'processingFormat', 'outputFormat', 'videoCompareArgs', 'colorimetry'] as const;
 export type ConfigField = typeof CONFIG_FIELDS[number];
 export type ConfigSettings = Pick<WorkflowSettings, ConfigField>;
 
@@ -43,7 +49,7 @@ export const DEFAULT_COLORIMETRY: ColorimetrySettings = {
 export const DEFAULT_SETTINGS: WorkflowSettings = {
   selectedModel: null,
   filters: [],
-  ffmpegArgs: '',
+  encoding: DEFAULT_ENCODING,
   processingFormat: 'vs.YUV420P8',
   outputFormat: 'mkv',
   videoCompareArgs: '-W',
@@ -77,7 +83,8 @@ export function toQueueWorkflow(settings: WorkflowSettings): QueueItem['workflow
   return {
     selectedModel: settings.selectedModel,
     filters: structuredClone(settings.filters),
-    ffmpegArgs: settings.ffmpegArgs,
+    encoding: structuredClone(settings.encoding),
+    ffmpegArgs: resolveEncodingArgs(settings.encoding),
     processingFormat: settings.processingFormat,
     outputFormat: settings.outputFormat,
     videoCompareArgs: settings.videoCompareArgs,
@@ -90,13 +97,14 @@ export function toQueueWorkflow(settings: WorkflowSettings): QueueItem['workflow
 
 /**
  * The settings a queue item carries. Older items lack some fields; those are
- * taken from fallback, and a legacy useDirectML backend is migrated.
+ * taken from fallback, and a legacy useDirectML backend and an encoding kept
+ * only as ffmpegArgs are migrated.
  */
 export function fromQueueWorkflow(workflow: QueueItem['workflow'], fallback: WorkflowSettings): WorkflowSettings {
   return {
     selectedModel: workflow.selectedModel ?? null,
     filters: structuredClone(workflow.filters ?? []),
-    ffmpegArgs: typeof workflow.ffmpegArgs === 'string' ? workflow.ffmpegArgs : fallback.ffmpegArgs,
+    encoding: encodingOfItem(workflow) ?? fallback.encoding,
     processingFormat: typeof workflow.processingFormat === 'string' ? workflow.processingFormat : fallback.processingFormat,
     outputFormat: workflow.outputFormat || fallback.outputFormat,
     videoCompareArgs: typeof workflow.videoCompareArgs === 'string' ? workflow.videoCompareArgs : fallback.videoCompareArgs,
@@ -107,21 +115,47 @@ export function fromQueueWorkflow(workflow: QueueItem['workflow'], fallback: Wor
   };
 }
 
+/**
+ * A saved queue item's workflow in the current form: a legacy useDirectML
+ * backend becomes a backend id, and an encoding kept only as ffmpegArgs
+ * becomes encoding settings. The same object when nothing needed migrating.
+ */
+export function migrateQueueWorkflow(workflow: QueueItem['workflow']): QueueItem['workflow'] {
+  const defaultBackend = normalizeBackendForCurrentPlatform(workflow.defaultBackend ?? workflow.useDirectML);
+  const encoding = encodingOfItem(workflow);
+  const backendCurrent = workflow.defaultBackend === defaultBackend && workflow.useDirectML === undefined;
+  const encodingCurrent = !encoding || sameValue(encoding, workflow.encoding);
+  if (backendCurrent && encodingCurrent) return workflow;
+  return {
+    ...workflow,
+    defaultBackend,
+    useDirectML: undefined,
+    ...(encoding ? { encoding, ffmpegArgs: resolveEncodingArgs(encoding) } : {}),
+  };
+}
+
+/** A queue item's encoding settings, or null when it carries none. */
+function encodingOfItem(workflow: QueueItem['workflow']): EncodingSettings | null {
+  return encodingFrom(workflow.encoding, workflow.ffmpegArgs);
+}
+
 /** The settings a render of a queue item reads from the config: only the ones the item carries. */
 export function renderSettingsOf(workflow: QueueItem['workflow']): Partial<ConfigSettings> {
   const settings: Partial<ConfigSettings> = {};
-  if (typeof workflow.ffmpegArgs === 'string') settings.ffmpegArgs = workflow.ffmpegArgs;
+  const encoding = encodingOfItem(workflow);
+  if (encoding) settings.encoding = encoding;
   if (typeof workflow.processingFormat === 'string') settings.processingFormat = workflow.processingFormat;
   if (workflow.colorimetry) settings.colorimetry = workflow.colorimetry;
   return settings;
 }
 
-type EncodingSettings = NonNullable<WorkflowData['encodingSettings']>;
+type WorkflowEncodingSettings = NonNullable<WorkflowData['encodingSettings']>;
 
 /** A workflow file's encoding settings for settings. */
-export function encodingSettingsOf(settings: WorkflowSettings): EncodingSettings {
+export function encodingSettingsOf(settings: WorkflowSettings): WorkflowEncodingSettings {
   return {
-    ffmpegArgs: settings.ffmpegArgs,
+    encoding: settings.encoding,
+    ffmpegArgs: resolveEncodingArgs(settings.encoding),
     processingFormat: settings.processingFormat,
     outputFormat: settings.outputFormat,
     videoCompareArgs: settings.videoCompareArgs,
@@ -136,7 +170,8 @@ export function encodingSettingsOf(settings: WorkflowSettings): EncodingSettings
 export function encodingPatchOf(encoding: WorkflowData['encodingSettings']): Partial<WorkflowSettings> {
   const patch: Partial<WorkflowSettings> = {};
   if (!encoding) return patch;
-  if (encoding.ffmpegArgs) patch.ffmpegArgs = encoding.ffmpegArgs;
+  const videoEncoding = encodingFrom(encoding.encoding, encoding.ffmpegArgs || undefined);
+  if (videoEncoding) patch.encoding = videoEncoding;
   if (encoding.processingFormat) patch.processingFormat = encoding.processingFormat;
   if (encoding.outputFormat) patch.outputFormat = encoding.outputFormat;
   if (encoding.videoCompareArgs) patch.videoCompareArgs = encoding.videoCompareArgs;
@@ -158,7 +193,9 @@ export interface LoadedWorkflowRecord {
   previousModel: string | null;
   previousEncodingSettings?: {
     defaultBackend?: BackendId;
-    ffmpegArgs: string;
+    encoding?: EncodingSettings;
+    /** What encoding resolves to; the only encoding field of older records. */
+    ffmpegArgs?: string;
     processingFormat: string;
     outputFormat: string;
     videoCompareArgs: string;
@@ -179,7 +216,8 @@ export function loadedWorkflowRecord(workflowName: string, context: string, sett
     previousModel: settings.selectedModel,
     previousEncodingSettings: {
       defaultBackend: settings.defaultBackend,
-      ffmpegArgs: settings.ffmpegArgs,
+      encoding: settings.encoding,
+      ffmpegArgs: resolveEncodingArgs(settings.encoding),
       processingFormat: settings.processingFormat,
       outputFormat: settings.outputFormat,
       videoCompareArgs: settings.videoCompareArgs,
@@ -197,7 +235,8 @@ export function restorePatchOf(record: LoadedWorkflowRecord): Partial<WorkflowSe
   const previous = record.previousEncodingSettings;
   if (previous) {
     if (previous.defaultBackend) patch.defaultBackend = previous.defaultBackend;
-    patch.ffmpegArgs = previous.ffmpegArgs;
+    const encoding = encodingFrom(previous.encoding, previous.ffmpegArgs);
+    if (encoding) patch.encoding = encoding;
     patch.processingFormat = previous.processingFormat;
     patch.outputFormat = previous.outputFormat;
     patch.videoCompareArgs = previous.videoCompareArgs;

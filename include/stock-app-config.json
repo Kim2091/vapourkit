@@ -1,6 +1,6 @@
 {
   "developerMode": false,
-  "ffmpegArgs": "-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1 -movflags +faststart",
+  "ffmpegArgs": "-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1",
   "models": {
     "1x-AniRestore_TFDAT_fp32": {
       "useFp32": true,

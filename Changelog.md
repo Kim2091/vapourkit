@@ -101,7 +101,12 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - Align and Generate LUT apply their result to the chain as it is when they finish, keeping edits made meanwhile; if a different chain was loaded in between, they leave it alone and say so
 - Code typed into a step and not yet committed is saved when the app closes
 - Importing filters, saving or renaming a template, or importing a .vkfilter asks before replacing an existing template with the same name
-- Encoding arguments the simple controls can't show (a filter chain, HDR tags, a bitrate) now open in advanced mode with a note saying why, instead of simple mode showing made-up values; going back to simple mode asks before replacing them
+- **Encoding: Advanced mode no longer gets stuck on.** Simple or Advanced is now saved with the settings (the project's, each queue item's and each workflow file's), and only that choice decides what is encoded. Before, the mode was guessed from the FFmpeg arguments, so a fresh install opened in Advanced mode and encoded with those arguments, and switching modes could write old arguments over the current settings
+  - Both halves are kept: the simple settings and the typed arguments survive switching back and forth, so switching never asks to replace anything. *Copy from simple settings* fills the arguments from the simple controls
+  - Existing settings open in Simple mode when the simple controls can show their arguments, and otherwise in Advanced mode with the arguments unchanged and the simple controls set to their codec
+  - MP4 and MOV output gets `-movflags +faststart` unless the arguments set movflags themselves
+  - Quoted values in the FFmpeg and video-compare arguments (`-metadata "title=My Video"`) stay one argument
+  - A render started right after changing a setting uses the new value
 - Confirmations (delete, replace, overwrite, reinstall) use the app's own dialog instead of the system one, veiled in privacy mode; Escape cancels, and destructive ones start on Cancel
 - Escape closes only the topmost dialog. In the Edit Model dialog it closed the whole model picker
 - Renaming a model keeps it in Favourites and Recent

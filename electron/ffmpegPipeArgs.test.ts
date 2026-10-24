@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPipeFFmpegArgs, vspipeArgs, type PipeArgsInput } from './ffmpegPipeArgs';
+import { buildPipeFFmpegArgs, movflagsFor, vspipeArgs, type PipeArgsInput } from './ffmpegPipeArgs';
 
 const metadata = { hasAudio: true, hasSubtitles: true, dar: '16:9', duration: 4, startTime: 0, audioStreams: 1, subtitleStreams: 1 };
 const cfr = { frames: 96, resolution: '1920x1080', fps: 23.976, fpsString: '24000/1001', pixelFormat: 'YUV420P10', variableFrameRate: false };
@@ -94,5 +94,17 @@ describe('the ffmpeg encode', () => {
     expect(build({ benchmarkMode: true, outputInfo: { ...cfr, pixelFormat: 'RGBS' } })).toEqual([
       '-hide_banner', '-f', 'matroska', '-i', 'pipe:0', '-f', 'null', '-',
     ]);
+  });
+});
+
+describe('movflags', () => {
+  it('moves the index to the front of MP4 and MOV outputs', () => {
+    expect(movflagsFor('C:/out.mp4', {})).toEqual(['+faststart']);
+    expect(movflagsFor('C:/out.MOV', { movflags: ['+faststart'] })).toEqual(['+faststart']);
+    expect(movflagsFor('C:/out.mkv', {})).toEqual([]);
+  });
+
+  it('leaves them to encoding arguments that set movflags', () => {
+    expect(movflagsFor('C:/out.mp4', { videoArgs: ['-c:v', 'libx264', '-movflags', '+frag_keyframe'] })).toEqual([]);
   });
 });

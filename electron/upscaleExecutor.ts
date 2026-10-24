@@ -14,7 +14,7 @@ import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
 import { configManager } from './configManager';
 import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
-import { buildPipeFFmpegArgs, vspipeArgs } from './ffmpegPipeArgs';
+import { buildPipeFFmpegArgs, movflagsFor, vspipeArgs } from './ffmpegPipeArgs';
 import { audioTrimFor, parseTimecodesV2, timecodesPathFor, type AudioTrim } from './sourceTiming';
 
 export interface SegmentSelection {
@@ -343,9 +343,8 @@ export class UpscaleExecutor {
     if (metadata.hasSubtitles) logger.upscale(`Mapping ${metadata.subtitleStreams} subtitle stream(s)`);
     if (ffmpegConfig.preserveAspectRatio && metadata.dar) logger.upscale(`Setting DAR: ${metadata.dar}`);
     if (ffmpegConfig.copyMetadata) logger.upscale('Copying metadata from input');
-    if (ffmpegConfig.movflags && ffmpegConfig.movflags.length > 0) {
-      logger.upscale(`Adding movflags: ${ffmpegConfig.movflags.join(',')}`);
-    }
+    const movflags = movflagsFor(outputPath, ffmpegConfig);
+    if (movflags.length > 0) logger.upscale(`Adding movflags: ${movflags.join(',')}`);
     return buildPipeFFmpegArgs({ inputPath, outputPath, metadata, outputInfo, ffmpegConfig, audioTrim });
   }
 

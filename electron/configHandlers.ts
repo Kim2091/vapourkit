@@ -53,15 +53,15 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     return { success: true };
   });
 
-  ipcMain.handle('get-ffmpeg-args', async () => {
-    const args = configManager.getFfmpegArgs();
-    return { args };
+  ipcMain.handle('get-encoding-settings', async () => {
+    return configManager.getEncodingSettings();
   });
 
-  ipcMain.handle('set-ffmpeg-args', async (event, args: string) => {
-    logger.info(`Setting ffmpeg args: ${args}`);
-    await configManager.setFfmpegArgs(args);
-    return { success: true };
+  ipcMain.handle('set-encoding-settings', async (event, encoding: unknown) => {
+    const success = await configManager.setEncodingSettings(encoding);
+    if (success) logger.info(`Setting encoding: ${configManager.getFfmpegArgs()}`);
+    else logger.warn('Ignored encoding settings that are not valid');
+    return { success };
   });
 
   ipcMain.handle('get-default-ffmpeg-args', async () => {

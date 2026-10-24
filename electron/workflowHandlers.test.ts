@@ -41,4 +41,42 @@ describe('workflow encoding settings', () => {
     const imported = await invoke('import-workflow', file);
     expect(imported.workflow.encodingSettings.defaultBackend).toBeUndefined();
   });
+
+  it('writes the mode, both halves, and the arguments older versions read', async () => {
+    const encoding = {
+      mode: 'advanced',
+      simple: { codec: 'h265', encoder: 'nvidia', preset: 'p5', quality: 24 },
+      customArgs: '-c:v libx264 -crf 18 -metadata "title=A B"',
+    };
+    const workflow = {
+      name: 'w', version: '1.0', filters: [],
+      encodingSettings: { ...encodingSettings, encoding, ffmpegArgs: encoding.customArgs },
+    };
+    await invoke('export-workflow', workflow, file);
+    const written = require('@iarna/toml').parse(await fs.readFile(file, 'utf8')).encoding_settings;
+    expect(written).toMatchObject({
+      ffmpeg_args: encoding.customArgs,
+      encoding_mode: 'advanced',
+      custom_args: encoding.customArgs,
+      simple_encoding: encoding.simple,
+    });
+    const imported = await invoke('import-workflow', file);
+    expect(imported.workflow.encodingSettings.encoding).toEqual(encoding);
+    expect(imported.workflow.encodingSettings.ffmpegArgs).toBe(encoding.customArgs);
+  });
+
+  it('migrates a file with only ffmpeg_args', async () => {
+    const oldFile = (args: string) => [
+      'filters = []', '[workflow]', 'name = "old"', 'version = "1.0"', '',
+      '[encoding_settings]', `ffmpeg_args = "${args}"`, '',
+    ].join('\n');
+    await fs.writeFile(file, oldFile('-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1 -movflags +faststart'));
+    const imported = await invoke('import-workflow', file);
+    expect(imported.workflow.encodingSettings.encoding).toMatchObject({ mode: 'simple', simple: { codec: 'h264', quality: 18 } });
+
+    await fs.writeFile(file, oldFile('-c:v libx265 -x265-params aq-mode=3'));
+    const custom = await invoke('import-workflow', file);
+    expect(custom.workflow.encodingSettings.encoding)
+      .toMatchObject({ mode: 'advanced', simple: { codec: 'h265' }, customArgs: '-c:v libx265 -x265-params aq-mode=3' });
+  });
 });
