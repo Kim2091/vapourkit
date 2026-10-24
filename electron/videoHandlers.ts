@@ -24,6 +24,7 @@ import { VsViewManager } from './vsViewManager';
 import { PreviewSession } from './previewSession';
 import { API3_UNSUPPORTED, describeCoreTooNew } from './vapoursynthCore';
 import { QueueItemLogger } from './queueItemLogger';
+import { ReportedRunError } from './errorMessageHandler';
 import {
   getVideoCompareUnavailableMessage,
   launchVideoCompare,
@@ -462,6 +463,9 @@ export function registerVideoHandlers(
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         if (executor.isStopped) {
           logger.upscale(`Processing stopped: ${errorMsg}`);
+        } else if (error instanceof ReportedRunError) {
+          // The executor has written it to the main log already.
+          itemLogger.error(`Processing failed: ${errorMsg}`);
         } else {
           qerror(`Processing failed: ${errorMsg}`);
         }

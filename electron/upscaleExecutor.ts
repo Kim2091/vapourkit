@@ -7,7 +7,7 @@ import { logger } from './logger';
 import { PATHS } from './constants';
 import { setupVSEnvironment, pollGpuStats, GpuStats } from './utils';
 import { FFmpegManager } from './ffmpegManager';
-import { ErrorMessageHandler } from './errorMessageHandler';
+import { ErrorMessageHandler, ReportedRunError } from './errorMessageHandler';
 import type { VideoMetadata } from './videoMetadataExtractor';
 import { VapourSynthInfoExtractor, OutputInfo } from './vapourSynthInfoExtractor';
 import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
@@ -324,7 +324,7 @@ export class UpscaleExecutor {
     if (benchmarkMode) {
       logger.upscale('Building FFmpeg command for BENCHMARK MODE (null output)');
       const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
-      const ffmpegArgs: string[] = [];
+      const ffmpegArgs: string[] = ['-hide_banner'];
 
       if (isRawVideo) {
         ffmpegArgs.push('-f', 'rawvideo');
@@ -347,7 +347,7 @@ export class UpscaleExecutor {
 
     const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
 
-    const ffmpegArgs: string[] = [];
+    const ffmpegArgs: string[] = ['-hide_banner'];
 
     if (isRawVideo) {
       logger.upscale(`Detected RGB output (${outputInfo.pixelFormat}), using rawvideo format`);
@@ -582,15 +582,12 @@ export class UpscaleExecutor {
     // Monitor vspipe stderr
     if (vspipe.stderr) {
       vspipe.stderr.on('data', (data: Buffer) => {
-        const output = data.toString();
-        // Prevent unbounded stderr buffer growth
-        if (vspipeStderrBuffer.length < MAX_STDERR_BUFFER_SIZE) {
-          vspipeStderrBuffer += output;
-        } else if (vspipeStderrBuffer.length === MAX_STDERR_BUFFER_SIZE) {
-          vspipeStderrBuffer += '\n... (stderr buffer limit reached, truncating further output) ...';
-        }
+        // ONNX Runtime writes UTF-16 on Windows, a NUL after every character.
+        const output = data.toString().replace(/\0/g, '');
+        // The error is at the end, so the buffer keeps the newest output.
+        vspipeStderrBuffer = (vspipeStderrBuffer + output).slice(-MAX_STDERR_BUFFER_SIZE);
         buildTracker.push(output);
-        logger.error(`[vspipe stderr] ${output.trim()}`);
+        logger.info(`[vspipe stderr] ${output.trim()}`);
       });
     }
 
@@ -598,12 +595,7 @@ export class UpscaleExecutor {
     if (ffmpeg.stderr) {
       ffmpeg.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
-        // Prevent unbounded stderr buffer growth
-        if (ffmpegStderrBuffer.length < MAX_STDERR_BUFFER_SIZE) {
-          ffmpegStderrBuffer += output;
-        } else if (ffmpegStderrBuffer.length === MAX_STDERR_BUFFER_SIZE) {
-          ffmpegStderrBuffer += '\n... (stderr buffer limit reached, truncating further output) ...';
-        }
+        ffmpegStderrBuffer = (ffmpegStderrBuffer + output).slice(-MAX_STDERR_BUFFER_SIZE);
         logger.debug(`[ffmpeg stderr] ${output.trim()}`);
 
         // Parse ffmpeg progress format: "frame=  662 fps=187 q=24.0 size=..."
@@ -651,36 +643,33 @@ export class UpscaleExecutor {
       });
     }
 
-    // Handle errors
-    vspipe.on('error', (error) => {
-      buildTracker.reset();
-      logger.error('vspipe process error:', error);
-      logger.errorWithDialog('VapourSynth Process Error', `VapourSynth process failed to start or crashed: ${error.message}`);
-      
+    // The first failure is the one reported; the other process stopping
+    // because of it is not a second error.
+    let failed = false;
+    const fail = (title: string, errorMsg: string) => {
+      if (failed) return;
+      failed = true;
+      logger.errorWithDialog(title, errorMsg);
       this.sendProgress({
         type: 'error',
         currentFrame: 0,
         totalFrames: 0,
         fps: 0,
         percentage: 0,
-        message: `VapourSynth error: ${error.message}`
+        message: errorMsg
       });
-      reject(error);
+      reject(new ReportedRunError(errorMsg));
+    };
+
+    vspipe.on('error', (error) => {
+      buildTracker.reset();
+      logger.error('vspipe process error:', error);
+      fail('VapourSynth Process Error', `VapourSynth process failed to start or crashed: ${error.message}`);
     });
 
     ffmpeg.on('error', (error) => {
       logger.error('ffmpeg process error:', error);
-      logger.errorWithDialog('FFmpeg Process Error', `FFmpeg process failed to start or crashed: ${error.message}`);
-      
-      this.sendProgress({
-        type: 'error',
-        currentFrame: 0,
-        totalFrames: 0,
-        fps: 0,
-        percentage: 0,
-        message: `FFmpeg error: ${error.message}`
-      });
-      reject(error);
+      fail('FFmpeg Process Error', `FFmpeg process failed to start or crashed: ${error.message}`);
     });
 
     // Handle vspipe exit
@@ -697,28 +686,15 @@ export class UpscaleExecutor {
       }
 
       if (code !== 0 && code !== null) {
-        // Kill ffmpeg process since vspipe failed
-        if (ffmpeg && !ffmpeg.killed) {
+        // ffmpeg has no more frames coming. The app stops it, so its exit
+        // is not reported as a second error.
+        if (!ffmpeg.killed) {
+          this.stoppedByApp.add(ffmpeg);
           ffmpeg.kill('SIGTERM');
-          this.ffmpegProcess = null;
         }
-        
-        // Extract actual error from stderr
+
         const actualError = ErrorMessageHandler.extractErrorMessage(vspipeStderrBuffer);
-        const errorMsg = ErrorMessageHandler.formatUserErrorMessage('VapourSynth Error', actualError);
-        
-        logger.errorWithDialog('VapourSynth Error', errorMsg);
-        
-        this.sendProgress({
-          type: 'error',
-          currentFrame: 0,
-          totalFrames: 0,
-          fps: 0,
-          percentage: 0,
-          message: errorMsg
-        });
-        
-        reject(new Error(errorMsg));
+        fail('VapourSynth Error', ErrorMessageHandler.formatUserErrorMessage('VapourSynth Error', actualError));
       }
     });
 
@@ -765,22 +741,8 @@ export class UpscaleExecutor {
           this.process = null;
         }
 
-        // Extract actual error from stderr
         const actualError = ErrorMessageHandler.extractErrorMessage(ffmpegStderrBuffer);
-        const errorMsg = ErrorMessageHandler.formatUserErrorMessage('FFmpeg Error', actualError);
-        
-        logger.errorWithDialog('FFmpeg Error', errorMsg);
-        
-        this.sendProgress({
-          type: 'error',
-          currentFrame: 0,
-          totalFrames: 0,
-          fps: 0,
-          percentage: 0,
-          message: errorMsg
-        });
-        
-        reject(new Error(errorMsg));
+        fail('FFmpeg Error', ErrorMessageHandler.formatUserErrorMessage('FFmpeg Error', actualError));
       }
     });
   }

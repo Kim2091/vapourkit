@@ -27,6 +27,22 @@ describe('ErrorMessageHandler.extractErrorMessage', () => {
     expect(ErrorMessageHandler.extractErrorMessage(stderr)).toMatch(/^MIGraphX could not start the AMD HIP runtime\..*DirectML or NCNN\.$/);
   });
 
+  it('explains a DirectML out-of-memory error in UTF-16, whatever the system language', () => {
+    // ONNX Runtime's log line as it arrives on a Spanish Windows: UTF-16, so a NUL after every character
+    const line = '[E:onnxruntime:, sequential_executor.cc:671] Non-zero status code returned while running DmlFusedNode_0_1 node. '
+      + 'Exception(2) tid(2a38) 8007000E No hay suficientes recursos de memoria disponibles';
+    const stderr = [...line].join('\0') + '\nOutput 4 frames in 133.49 seconds (0.03 fps)\n';
+    expect(ErrorMessageHandler.extractErrorMessage(stderr)).toMatch(/^The GPU ran out of video memory/);
+  });
+
+  it('does not show the FFmpeg version banner as the error', () => {
+    const stderr = 'ffmpeg version 2026-10-22-git full_build Copyright (c) 2000-2026 the FFmpeg developers\n'
+      + '  built with gcc 16.2.0\n  configuration: --enable-gpl\n'
+      + '  libavfilter    12.  5.100 / 12.  5.100\n  libswscale     10.  2.100 / 10.  2.100\n'
+      + '  libswresample   7.  3.101 /  7.  3.101\n';
+    expect(ErrorMessageHandler.extractErrorMessage(stderr)).toBe('FFmpeg stopped before encoding anything. The log has its full output.');
+  });
+
   it('extracts Error: pattern', () => {
     const stderr = 'Some output\nError: Could not open file\nMore output';
     expect(ErrorMessageHandler.extractErrorMessage(stderr)).toBe('Could not open file');

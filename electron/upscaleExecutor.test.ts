@@ -117,3 +117,33 @@ describe('stopping a running upscale', () => {
     await expect(run).rejects.toThrow('Processing was stopped');
   });
 });
+
+describe('a failing run', () => {
+  it('reports a VapourSynth failure once, not again when the app stops ffmpeg', async () => {
+    const { EventEmitter } = await import('events');
+    const { PassThrough } = await import('stream');
+    const fakeProcess = () => Object.assign(new EventEmitter(), {
+      pid: 1, killed: false, stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
+      kill: vi.fn(),
+    });
+    const vspipe = fakeProcess();
+    const ffmpeg = fakeProcess();
+    spawn.mockReset();
+    spawn.mockReturnValueOnce(vspipe).mockReturnValueOnce(ffmpeg);
+
+    const executor = new UpscaleExecutor('/vs/vspipe', '/py');
+    const sent: Array<{ type: string; message: string }> = [];
+    (executor as unknown as { sendProgress: (p: { type: string; message: string }) => void }).sendProgress = p => sent.push(p);
+    const run = executor.execute('/s.vpy', '/out.mkv', '/in.mkv', probes());
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+
+    vspipe.stderr.write('Error: frame 4 failed\n');
+    await new Promise(resolve => setImmediate(resolve));
+    vspipe.emit('close', 1);
+    expect(ffmpeg.kill).toHaveBeenCalled();
+    ffmpeg.emit('close', null);
+
+    await expect(run).rejects.toThrow('frame 4 failed');
+    expect(sent.filter(p => p.type === 'error')).toHaveLength(1);
+  });
+});

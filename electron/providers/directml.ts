@@ -18,7 +18,7 @@ export const directmlProvider: InferenceProvider = {
 
   modelCallCode(inputExpr: string, modelFile: string, opts: ModelCallOptions): string {
     const fp16 = opts.useFp32 ? 'False' : 'True';
-    return `clip = core.ort.Model(${inputExpr}, network_path="${modelFile.replace(/\\/g, '/')}", num_streams=${opts.numStreams}, provider="DML", device_id=0, fp16=${fp16}, verbosity=4)\n`;
+    return `clip = core.ort.Model(${inputExpr}, network_path="${modelFile.replace(/\\/g, '/')}", num_streams=${opts.numStreams}, provider="DML", device_id=0, fp16=${fp16}, verbosity=2)\n`;
   },
 
   pipPackages(): string[] {

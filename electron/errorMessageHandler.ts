@@ -4,6 +4,16 @@ import { API3_UNSUPPORTED, describeCoreTooNew } from './vapoursynthCore';
 import { stripPluginLoadWarnings } from './vapourSynthErrorFormatter';
 import { describeNvencDriverError, parseNvencDriverError } from './nvencCheck';
 
+const STDERR_LOG_TAIL = 16 * 1024;
+
+const GPU_OUT_OF_MEMORY = new RegExp([
+  '8007000E', 'E_OUTOFMEMORY', 'out of memory', 'CUDA_ERROR_OUT_OF_MEMORY',
+  'cudaErrorMemoryAllocation', 'hipErrorOutOfMemory', 'std::bad_alloc',
+  'failed to allocate',
+].join('|'), 'i');
+
+const FFMPEG_BANNER_LINE = /^\s*(ffmpeg version |built with |configuration: |lib(avutil|avcodec|avformat|avdevice|avfilter|swscale|swresample|postproc)\s+\d)/;
+
 /**
  * Utility class for handling and formatting error messages from subprocess output
  */
@@ -17,8 +27,20 @@ export class ErrorMessageHandler {
       return 'Unknown error (no error details available)';
     }
 
-    // Log the full error content before any clipping
-    logger.error('Full stderr output:', stderr);
+    // ONNX Runtime writes UTF-16 on Windows, which arrives with a NUL after
+    // every character and would defeat every pattern below.
+    stderr = stderr.replace(/\0/g, '');
+
+    // The end of the output holds the error; the whole buffer can be a
+    // megabyte of runtime chatter.
+    logger.error('End of stderr output:', stderr.slice(-STDERR_LOG_TAIL));
+
+    // The hex code is never localised, unlike the text around it.
+    if (GPU_OUT_OF_MEMORY.test(stderr)) {
+      return 'The GPU ran out of video memory running this model. Try a lower number of streams, '
+        + 'an FP16 model, a smaller input resolution, or the Tile step before the model, '
+        + 'and close other programs that use the GPU.';
+    }
 
     // vsmigx loads the HIP runtime lazily, on the first MIGraphX call. When
     // the GPU or driver can't run it, the load failure kills vspipe outright
@@ -46,6 +68,13 @@ export class ErrorMessageHandler {
     stderr = stripPluginLoadWarnings(stderr);
     if (!stderr) {
       return 'VapourSynth stopped without printing an error. The log has its full output.';
+    }
+
+    // FFmpeg prints its version banner first, so a run that stopped before
+    // encoding anything has nothing else to show.
+    stderr = stderr.split('\n').filter(line => !FFMPEG_BANNER_LINE.test(line)).join('\n');
+    if (!stderr.trim()) {
+      return 'FFmpeg stopped before encoding anything. The log has its full output.';
     }
 
     // Common error patterns to look for (in order of priority)
@@ -96,3 +125,6 @@ export class ErrorMessageHandler {
     return `${errorType}: ${errorDetail}\n\nIf this issue persists, please send the log file to the developer.\nLog location: ${logger.getLogPath()}`;
   }
 }
+
+/** A run failure whose message has already been logged and shown to the user. */
+export class ReportedRunError extends Error {}
