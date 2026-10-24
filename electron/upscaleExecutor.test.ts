@@ -40,7 +40,7 @@ import { UpscaleExecutor, type RunProbes } from './upscaleExecutor';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
 
 const okInfo = { frames: 10, resolution: '64x64', fps: 24, fpsString: '24/1', pixelFormat: 'YUV420P8', error: null };
-const source = { hasAudio: false, hasSubtitles: false, dar: null, duration: null, audioStreams: 0, subtitleStreams: 0 };
+const source = { hasAudio: false, hasSubtitles: false, dar: null, duration: null, startTime: null, audioStreams: 0, subtitleStreams: 0 };
 const probes = (output: RunProbes['output'] = okInfo): RunProbes => ({ source, output });
 
 describe('stopping an upscale before it spawns', () => {

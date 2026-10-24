@@ -4,7 +4,9 @@ core.max_cache_size = 15000
 
 # Load source video
 source_path = "{{INPUT_VIDEO}}"
-clip = core.bs.VideoSource(source=source_path, cachemode=3)
+source_timecodes = "{{SOURCE_TIMECODES}}"
+clip = core.bs.VideoSource(source=source_path, cachemode=3, timecodes=source_timecodes)
+vk_source_fps = clip.fps
 
 
 # default values
@@ -51,4 +53,5 @@ if clip.format.id != output_format:
         clip = core.resize.Bilinear(clip, format=output_format, primaries_s="709", transfer_s="709", dither_type="error_diffusion")
     else:
         clip = core.resize.Bilinear(clip, format=output_format, primaries_s="709", transfer_s="709", dither_type="error_diffusion", matrix_s="709")
+clip = vk_timed_output(clip, vk_source_fps, source_timecodes)
 clip.set_output()

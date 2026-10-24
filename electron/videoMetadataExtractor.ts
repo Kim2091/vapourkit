@@ -7,6 +7,8 @@ export interface VideoMetadata {
   hasSubtitles: boolean;
   dar: string | null; // Display Aspect Ratio
   duration: number | null;
+  /** The file's start time in seconds (ffmpeg's "start:"), the earliest of its streams. */
+  startTime: number | null;
   audioStreams: number;
   subtitleStreams: number;
 }
@@ -21,6 +23,7 @@ export function parseVideoMetadata(output: string): VideoMetadata {
     hasSubtitles: /Stream #\d+:\d+.*Subtitle/.test(output),
     dar: null,
     duration: null,
+    startTime: null,
     audioStreams: (output.match(/Stream #\d+:\d+.*Audio/g) || []).length,
     subtitleStreams: (output.match(/Stream #\d+:\d+.*Subtitle/g) || []).length
   };
@@ -38,7 +41,12 @@ export function parseVideoMetadata(output: string): VideoMetadata {
     metadata.duration = hours * 3600 + minutes * 60 + seconds;
   }
 
-  logger.upscale(`Metadata: Audio=${metadata.hasAudio} (${metadata.audioStreams} streams), Subtitles=${metadata.hasSubtitles} (${metadata.subtitleStreams} streams), DAR=${metadata.dar || 'N/A'}`);
+  const startMatch = output.match(/Duration: [^,\n]*, start: (-?\d+(?:\.\d+)?)/);
+  if (startMatch) {
+    metadata.startTime = parseFloat(startMatch[1]);
+  }
+
+  logger.upscale(`Metadata: Audio=${metadata.hasAudio} (${metadata.audioStreams} streams), Subtitles=${metadata.hasSubtitles} (${metadata.subtitleStreams} streams), DAR=${metadata.dar || 'N/A'}, start=${metadata.startTime ?? 'N/A'}`);
   return metadata;
 }
 

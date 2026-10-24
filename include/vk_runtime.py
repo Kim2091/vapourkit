@@ -230,3 +230,83 @@ def vk_conform(ref, source, speed, sections, framing=()):
 def vk_stage_missing(message):
     """Raised by a step reading a picture that is not there to read."""
     raise ValueError(message)
+
+
+def _read_timecodes(path):
+    """The frame start times, in milliseconds, of a timecodes v2 file; [] when it cannot be read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return [float(line) for line in f if line.strip() and not line.startswith("#")]
+    except (OSError, ValueError):
+        return []
+
+
+def _frame_rate_varies(times):
+    """
+    Whether the frame durations in `times` vary by more than container rounding:
+    a frame differs from the median duration by more than 10% of it, or by more
+    than 1.5 ms, whichever is larger. A Matroska file stores times in whole
+    milliseconds, so a constant 23.976 fps there has 41 and 42 ms frames.
+    """
+    durations = sorted(b - a for a, b in zip(times, times[1:]))
+    if len(durations) < 2:
+        return False
+    median = durations[len(durations) // 2]
+    tolerance = max(1.5, 0.1 * median)
+    return durations[0] < median - tolerance or durations[-1] > median + tolerance
+
+
+def vk_interpolated_timing(clip, source, multi):
+    """
+    Gives each frame of `clip`, made by interpolating `source` `multi` times
+    (frames k*multi to k*multi + multi - 1 from source frame k onwards), an
+    equal share of source frame k's duration. Interpolators set one constant
+    rate, which would flatten a variable frame rate source. A fractional
+    `multi` makes a constant rate on purpose, and `clip` is returned as it is.
+    """
+    if int(multi) != multi or multi < 2:
+        return clip
+    timing = vs.core.std.Interleave([source] * int(multi))
+    return vs.core.std.CopyFrameProps(clip, timing, props=["_DurationNum", "_DurationDen"])
+
+
+def vk_timed_output(clip, source_fps, timecodes):
+    """
+    The script's output clip, written with each frame's own duration when the
+    source has a variable frame rate.
+
+    `timecodes` is the file BestSource wrote for the source and `source_fps`
+    the rate BestSource gave the source clip, which for a variable frame rate
+    file is its average. vspipe writes per-frame timestamps only for a clip
+    with no constant rate, so the output is marked as variable. That happens
+    only while the output rate is a whole multiple of the source's (as it is
+    after RIFE or a bob deinterlacer); a step that sets another rate, such as
+    AssumeFPS or a decimation, asks for a constant one. Frames with no
+    duration, such as the source's last, get the average one. A line starting
+    [vk-timing] on stderr tells the app the result.
+    """
+    core = vs.core
+    times = _read_timecodes(timecodes)
+    if not _frame_rate_varies(times) or not clip.fps_num or not source_fps:
+        return clip
+    durations = [b - a for a, b in zip(times, times[1:])]
+    low, high = 1000 / max(durations), 1000 / max(min(durations), 1e-3)
+    ratio = clip.fps / source_fps
+    if ratio.denominator != 1:
+        print(f"[vk-timing] cfr The source has a variable frame rate ({low:.3f} to {high:.3f} fps); "
+              f"the steps set a constant {float(clip.fps):.3f} fps, which the output keeps.", file=sys.stderr, flush=True)
+        return clip
+    print(f"[vk-timing] vfr average_rate={clip.fps_num}/{clip.fps_den} The source has a variable frame rate "
+          f"({low:.3f} to {high:.3f} fps); the output keeps each frame's timestamp.", file=sys.stderr, flush=True)
+    average = (clip.fps_den, clip.fps_num)
+
+    def _fill(n, f):
+        if f.props.get("_DurationNum", 0) > 0 and f.props.get("_DurationDen", 0) > 0:
+            return f
+        f = f.copy()
+        f.props["_DurationNum"], f.props["_DurationDen"] = average
+        return f
+
+    clip = core.std.ModifyFrame(clip, clip, _fill)
+    variable = core.std.Splice([clip, core.std.BlankClip(clip, length=1, fpsnum=0, fpsden=1)], mismatch=True)
+    return variable[:clip.num_frames]

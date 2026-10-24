@@ -156,7 +156,7 @@ import sys as _vk_sys
 if {(REPO / 'include').as_posix()!r} not in _vk_sys.path:
     _vk_sys.path.insert(0, {(REPO / 'include').as_posix()!r})
 import vk_runtime
-from vk_runtime import vk_backend, vk_migx_model, vk_paired_by_time, vk_reference_video, vk_open_video, vk_conform, vk_stage_missing
+from vk_runtime import vk_backend, vk_migx_model, vk_paired_by_time, vk_reference_video, vk_open_video, vk_conform, vk_stage_missing, vk_interpolated_timing, vk_timed_output
 vk_runtime.configure(VK_BACKEND, {_backend_attrs()!r}, VK_BUILD_ENV,
                      models_path={(APP_DATA / 'vsmlrt-models').as_posix()!r},
                      trtexec_path={(APP_DATA / ('trtexec.cmd' if sys.platform == 'win32' else 'trtexec')).as_posix()!r},

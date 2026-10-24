@@ -759,3 +759,39 @@ describe('the shipped filter that reads another step', () => {
     }
   });
 });
+
+describe('source timing', () => {
+  it('has BestSource write the timecodes beside the script, which the output step reads', async () => {
+    const generator = new VapourSynthScriptGenerator('win32');
+    const scriptPath = await generator.generateScript({ inputVideo: 'C:\\videos\\input.mkv', filters: [] });
+    const script = await fs.readFile(scriptPath, 'utf-8');
+    await generator.cleanupScript(scriptPath);
+
+    const timecodes = scriptPath.replace(/\.vpy$/, '.timecodes.txt').replace(/\\/g, '/');
+    expect(script).toContain(`source_timecodes = "${timecodes}"`);
+    expect(script).toContain('core.bs.VideoSource(source=source_path, cachemode=3, timecodes=source_timecodes)');
+    expect(script).toContain('clip = vk_timed_output(clip, vk_source_fps, source_timecodes)');
+    expect(script).toMatch(/from vk_runtime import [^\n]*vk_timed_output/);
+    expect(script.indexOf('vk_timed_output(clip')).toBeGreaterThan(script.indexOf('from vk_runtime import'));
+  });
+
+  it("gives a temporal model's output each frame's own props, not the earliest neighbour's", async () => {
+    const { configManager } = await import('./configManager');
+    const manager = configManager as unknown as { getModelType: () => string; getTemporalFrames: () => number | undefined };
+    const restore = { type: manager.getModelType, frames: manager.getTemporalFrames };
+    manager.getModelType = () => 'vsr';
+    manager.getTemporalFrames = () => 5;
+    try {
+      const script = await generate([aiFilter(0, 'C:\\models\\2x_TestVSR_fp16.engine', 'tensorrt')], false);
+      const centre = script.indexOf('_vk_centre = clip\n');
+      const call = script.indexOf('core.trt.Model([m2, m1, clip, p1, p2]');
+      const copy = script.indexOf('clip = core.std.CopyFrameProps(clip, _vk_centre)');
+      expect(centre).toBeGreaterThan(-1);
+      expect(call).toBeGreaterThan(centre);
+      expect(copy).toBeGreaterThan(call);
+    } finally {
+      manager.getModelType = restore.type;
+      manager.getTemporalFrames = restore.frames;
+    }
+  });
+});

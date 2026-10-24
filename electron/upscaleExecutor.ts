@@ -14,6 +14,8 @@ import { FFmpegSettingsManager, FFmpegConfig } from './ffmpegSettingsManager';
 import { configManager } from './configManager';
 import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
+import { buildPipeFFmpegArgs, vspipeArgs } from './ffmpegPipeArgs';
+import { audioTrimFor, parseTimecodesV2, timecodesPathFor, type AudioTrim } from './sourceTiming';
 
 export interface SegmentSelection {
   enabled: boolean;
@@ -114,24 +116,6 @@ export class UpscaleExecutor {
     this.onEngineBuildStatus?.(status);
   }
 
-  private isRawVideoFormat(pixelFormat: string | null | undefined): boolean {
-    if (!pixelFormat) return false;
-    // Check for RGB formats
-    return pixelFormat.includes('RGB') || pixelFormat.includes('GBR');
-  }
-
-  private mapVsFormatToFfmpeg(pixelFormat: string | null | undefined): string {
-    if (!pixelFormat) return 'gbrp'; // Default to planar RGB if unknown RGB
-    
-    // Map VapourSynth formats to FFmpeg pix_fmt
-    if (pixelFormat === 'RGB24') return 'gbrp';
-    if (pixelFormat === 'RGB48') return 'gbrp16le';
-    if (pixelFormat === 'RGBS') return 'gbrpf32le';
-    if (pixelFormat === 'RGBH') return 'gbrpf16le';
-    
-    return 'gbrp';
-  }
-
   private startGpuPolling() {
     this.stopGpuPolling();
     this.gpuPollInterval = setInterval(async () => {
@@ -204,8 +188,7 @@ export class UpscaleExecutor {
 
     const env = this.setupEnvironment();
 
-    const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
-    const ffmpegArgs = await this.buildFFmpegArgs(inputPath, outputPath, metadata, outputInfo, segment, fps, benchmarkMode);
+    const ffmpegArgs = await this.buildFFmpegArgs(scriptPath, inputPath, outputPath, metadata, outputInfo, segment, fps, benchmarkMode);
 
     // Nothing is awaited from here until both processes are tracked, so a stop
     // either lands before this check or finds them in this.process and
@@ -213,7 +196,7 @@ export class UpscaleExecutor {
     this.throwIfStopped();
 
     return new Promise<void>((resolve, reject) => {
-      const vspipe = this.spawnVspipe(scriptPath, env, isRawVideo);
+      const vspipe = this.spawnVspipe(scriptPath, env);
       this.process = vspipe;
       let ffmpeg: ChildProcess;
       try {
@@ -309,147 +292,61 @@ export class UpscaleExecutor {
     }
   }
 
-  private spawnVspipe(scriptPath: string, env: NodeJS.ProcessEnv, isRawVideo: boolean = false) {
+  private spawnVspipe(scriptPath: string, env: NodeJS.ProcessEnv) {
     logger.upscale('Spawning vspipe process');
-    const args = isRawVideo ? [scriptPath, '-'] : ['-c', 'y4m', scriptPath, '-'];
-    
-    return spawn(this.vspipePath, args, createWorkloadSpawnOptions({
+    return spawn(this.vspipePath, vspipeArgs(scriptPath), createWorkloadSpawnOptions({
       stdio: ['ignore', 'pipe', 'pipe'],
       env: env,
       cwd: this.vsPath
     }));
   }
 
-  private async buildFFmpegArgs(inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<string[]> {
+  /**
+   * The trim that lines the source's audio up with the output video, from the
+   * frame timestamps BestSource wrote beside the script. Without them it falls
+   * back to frame / fps, which drifts on a variable frame rate source.
+   */
+  private async resolveAudioTrim(scriptPath: string, metadata: VideoMetadata, segment?: SegmentSelection, fps?: number): Promise<AudioTrim> {
+    const timecodesPath = timecodesPathFor(scriptPath);
+    let frameTimes: number[] = [];
+    try {
+      frameTimes = parseTimecodesV2(await fs.readFile(timecodesPath, 'utf-8'));
+    } catch {
+      frameTimes = [];
+    }
+    if (frameTimes.length === 0) {
+      logger.warn(`No source timecodes at ${timecodesPath}; audio is trimmed by frame number and frame rate`);
+    }
+    const trim = audioTrimFor(frameTimes, metadata.startTime, segment, fps);
+    if (trim.start !== null || trim.duration !== null) {
+      logger.upscale(`Audio trimming${trim.exact ? ' (source timestamps)' : ''}: start=${(trim.start ?? 0).toFixed(6)}s, ${trim.duration !== null ? `duration=${trim.duration.toFixed(6)}s` : 'to end'}`);
+    }
+    return trim;
+  }
+
+  private async buildFFmpegArgs(scriptPath: string, inputPath: string, outputPath: string, metadata: VideoMetadata, outputInfo: OutputInfo, segment?: SegmentSelection, fps?: number, benchmarkMode: boolean = false): Promise<string[]> {
+    if (outputInfo.variableFrameRate) {
+      logger.upscale('Output has a variable frame rate; every frame keeps its source timestamp');
+    }
     if (benchmarkMode) {
       logger.upscale('Building FFmpeg command for BENCHMARK MODE (null output)');
-      const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
-      const ffmpegArgs: string[] = ['-hide_banner'];
-
-      if (isRawVideo) {
-        ffmpegArgs.push('-f', 'rawvideo');
-        const pixFmt = this.mapVsFormatToFfmpeg(outputInfo.pixelFormat);
-        ffmpegArgs.push('-pix_fmt', pixFmt);
-        if (outputInfo.resolution) ffmpegArgs.push('-s', outputInfo.resolution);
-        if (outputInfo.fpsString) ffmpegArgs.push('-r', outputInfo.fpsString);
-        else if (outputInfo.fps) ffmpegArgs.push('-r', `${outputInfo.fps}`);
-      } else {
-        ffmpegArgs.push('-f', 'yuv4mpegpipe');
-      }
-
-      ffmpegArgs.push('-i', 'pipe:0');
-      ffmpegArgs.push('-f', 'null', '-');
-      return ffmpegArgs;
+      return buildPipeFFmpegArgs({
+        inputPath, outputPath, metadata, outputInfo, ffmpegConfig: {},
+        audioTrim: { start: null, duration: null, exact: false }, benchmarkMode: true,
+      });
     }
 
     logger.upscale('Building FFmpeg command with metadata passthrough and preview output');
     const ffmpegConfig = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
-
-    const isRawVideo = this.isRawVideoFormat(outputInfo.pixelFormat);
-
-    const ffmpegArgs: string[] = ['-hide_banner'];
-
-    if (isRawVideo) {
-      logger.upscale(`Detected RGB output (${outputInfo.pixelFormat}), using rawvideo format`);
-      ffmpegArgs.push('-f', 'rawvideo');
-      
-      const pixFmt = this.mapVsFormatToFfmpeg(outputInfo.pixelFormat);
-      ffmpegArgs.push('-pix_fmt', pixFmt);
-      
-      if (outputInfo.resolution) {
-        ffmpegArgs.push('-s', outputInfo.resolution);
-      }
-      
-      if (outputInfo.fpsString) {
-        ffmpegArgs.push('-r', outputInfo.fpsString);
-      } else if (outputInfo.fps) {
-        ffmpegArgs.push('-r', `${outputInfo.fps}`);
-      }
-	} else {
-	  ffmpegArgs.push('-f', 'yuv4mpegpipe');
-	  ffmpegArgs.push(
-		'-color_range', 'tv',
-		'-colorspace', 'bt709',
-		'-color_primaries', 'bt709',
-		'-color_trc', 'bt709'
-	  );
-	}
-    
-    ffmpegArgs.push('-i', 'pipe:0');
-
-    // Calculate audio trimming for segment selection
-    // We need to trim the audio input to match the video segment
-    if (segment?.enabled && fps && fps > 0) {
-      const startTime = segment.startFrame / fps;
-      ffmpegArgs.push('-ss', startTime.toFixed(6));
-      
-      // If endFrame is specified (not -1), calculate duration
-      if (segment.endFrame > 0) {
-        const endTime = segment.endFrame / fps;
-        const duration = endTime - startTime;
-        ffmpegArgs.push('-t', duration.toFixed(6));
-        logger.upscale(`Audio trimming: start=${startTime.toFixed(3)}s, duration=${duration.toFixed(3)}s`);
-      } else {
-        logger.upscale(`Audio trimming: start=${startTime.toFixed(3)}s to end`);
-      }
-    }
-    
-    ffmpegArgs.push('-i', inputPath);
-
-    // Main output: video file with audio/subs
-    // Map video from pipe
-    ffmpegArgs.push('-map', '0:v:0');
-
-    // Map all audio streams from input
-    if (metadata.hasAudio) {
-      logger.upscale(`Mapping ${metadata.audioStreams} audio stream(s)`);
-      ffmpegArgs.push('-map', '1:a?');
-      ffmpegArgs.push('-c:a', 'copy');
-    }
-
-    // Map all subtitle streams from input
-    if (metadata.hasSubtitles) {
-      logger.upscale(`Mapping ${metadata.subtitleStreams} subtitle stream(s)`);
-      ffmpegArgs.push('-map', '1:s?');
-      ffmpegArgs.push('-c:s', 'copy');
-    }
-
-    // Add video encoding settings
-    if (ffmpegConfig.videoArgs) {
-      ffmpegArgs.push(...ffmpegConfig.videoArgs);
-    }
-
-    // Set DAR if available and enabled in config
-    if (ffmpegConfig.preserveAspectRatio && metadata.dar) {
-      logger.upscale(`Setting DAR: ${metadata.dar}`);
-      ffmpegArgs.push('-aspect', metadata.dar);
-    }
-
-    // Copy metadata if enabled in config
-    if (ffmpegConfig.copyMetadata) {
-      logger.upscale('Copying metadata from input');
-      ffmpegArgs.push('-map_metadata', '1');
-    }
-
-    // Add movflags if specified in config
+    const audioTrim = await this.resolveAudioTrim(scriptPath, metadata, segment, fps);
+    if (metadata.hasAudio) logger.upscale(`Mapping ${metadata.audioStreams} audio stream(s)`);
+    if (metadata.hasSubtitles) logger.upscale(`Mapping ${metadata.subtitleStreams} subtitle stream(s)`);
+    if (ffmpegConfig.preserveAspectRatio && metadata.dar) logger.upscale(`Setting DAR: ${metadata.dar}`);
+    if (ffmpegConfig.copyMetadata) logger.upscale('Copying metadata from input');
     if (ffmpegConfig.movflags && ffmpegConfig.movflags.length > 0) {
       logger.upscale(`Adding movflags: ${ffmpegConfig.movflags.join(',')}`);
-      ffmpegArgs.push('-movflags', ffmpegConfig.movflags.join(','));
     }
-
-    // Main output file
-    ffmpegArgs.push('-y', outputPath);
-
-    // Preview output: JPEG frames to stdout
-    ffmpegArgs.push('-map', '0:v:0');
-    ffmpegArgs.push('-vf', 'fps=1,scale=-2:720'); // 1 fps preview, max height 720p
-    ffmpegArgs.push('-f', 'image2pipe');
-    ffmpegArgs.push('-c:v', 'mjpeg');
-    ffmpegArgs.push('-pix_fmt', 'yuvj422p'); // YUV422 with full range
-    ffmpegArgs.push('-q:v', '1'); // Quality 1 = highest quality (100%)
-    ffmpegArgs.push('pipe:1');
-
-    return ffmpegArgs;
+    return buildPipeFFmpegArgs({ inputPath, outputPath, metadata, outputInfo, ffmpegConfig, audioTrim });
   }
 
   private spawnFFmpeg(ffmpegArgs: string[]) {

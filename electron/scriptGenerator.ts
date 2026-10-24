@@ -12,6 +12,7 @@ import { BACKENDS, normalizeBackendForPlatform, resolveFilterBackend, type Backe
 import { getProvider } from './providers/registry';
 import type { InferenceProvider } from './providers/types';
 import { parseReferenceVideo } from './referenceVideo';
+import { timecodesPathFor } from './sourceTiming';
 import {
   layoutChains,
   resolveReference,
@@ -57,8 +58,10 @@ const RUNTIME_FILE = 'vk_runtime.py';
 /** The helpers a generated script imports from it. */
 const RUNTIME_HELPERS = [
   'vk_backend', 'vk_migx_model', 'vk_paired_by_time', 'vk_reference_video',
-  'vk_open_video', 'vk_conform', 'vk_stage_missing',
+  'vk_open_video', 'vk_conform', 'vk_stage_missing', 'vk_interpolated_timing',
+  'vk_timed_output',
 ];
+
 
 export interface Filter {
   id: string;
@@ -517,9 +520,15 @@ export class VapourSynthScriptGenerator {
       if (sideChains.length > 0) filterCode += '\n';
     }
 
+    // Use timestamp + random string for unique script path to avoid collisions in batch processing
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(2, 9);
+    const tempScriptPath = path.join(os.tmpdir(), `VSR_upscale_${timestamp}_${randomId}.vpy`);
+
     // Replace all placeholders
     template = template
       .replace(/{{INPUT_VIDEO}}/g, config.inputVideo.replace(/\\/g, '/'))
+      .replace(/{{SOURCE_TIMECODES}}/g, timecodesPathFor(tempScriptPath).replace(/\\/g, '/'))
       .replace(/{{OVERWRITE_MATRIX}}/g, overwriteMatrix)
       .replace(/{{MATRIX_709}}/g, matrix709)
       .replace(/{{DEFAULT_MATRIX}}/g, defaultMatrix)
@@ -535,10 +544,6 @@ export class VapourSynthScriptGenerator {
       template = template.replace(/clip\.set_output\(\)\s*$/, '');
     }
 
-    // Use timestamp + random string for unique script path to avoid collisions in batch processing
-    const timestamp = Date.now();
-    const randomId = Math.random().toString(36).substring(2, 9);
-    const tempScriptPath = path.join(os.tmpdir(), `VSR_upscale_${timestamp}_${randomId}.vpy`);
     await fs.writeFile(tempScriptPath, template, 'utf-8');
 
     logger.info(`Generated script: ${tempScriptPath}`);
@@ -596,7 +601,11 @@ export class VapourSynthScriptGenerator {
         }
       }
 
+      // The model copies frame props from its first clip, which holds the
+      // earliest neighbour; each frame takes its own back, durations included.
+      code += `_vk_centre = ${CLIP}\n`;
       code += provider.modelCallCode(`[${frameVars.join(', ')}]`, modelFile, callOptions);
+      code += `${CLIP} = core.std.CopyFrameProps(${CLIP}, _vk_centre)\n`;
       code += '\n';
     } else {
       code += '# Single-frame upscaling (non-temporal architecture)\n';
@@ -614,6 +623,7 @@ export class VapourSynthScriptGenerator {
   async cleanupScript(scriptPath: string): Promise<void> {
     try {
       await fs.remove(scriptPath);
+      await fs.remove(timecodesPathFor(scriptPath));
     } catch (error) {
       logger.error('Error cleaning up script:', error);
     }

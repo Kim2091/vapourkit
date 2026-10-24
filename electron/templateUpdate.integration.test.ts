@@ -94,8 +94,8 @@ describe.skipIf(!hasTag)('updating a 2.0.0 install', { timeout: 30_000 }, () => 
     expect(report.templatesUpdated).not.toContain('QTGMC _Old_.vkfilter');
     expect(report.templatesRemoved).toContain('TFMBobQ.vkfilter');
     expect(report.templatesRemoved).toContain('Crop _auto_.vkfilter');
-    // 2.1 changed 41 of 2.0.0's templates and dropped 14; less the two edited.
-    expect(report.templatesUpdated).toHaveLength(40);
+    // The bundled templates change 42 of 2.0.0's and drop 14; less the two edited.
+    expect(report.templatesUpdated).toHaveLength(41);
     expect(report.templatesRemoved).toHaveLength(13);
     expect(report.templatesRemoved).not.toContain('TFMBobN.vkfilter');
     expect(fs.existsSync(path.join(installed, 'TFMBobQ.vkfilter'))).toBe(false);

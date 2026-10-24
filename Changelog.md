@@ -12,7 +12,7 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - **Portable users:** extract 2.1 over your existing folder, keeping `data`, as before
 - **Uninstalling** removes everything, including the long-path files the old uninstaller left behind, so the install folder no longer lingers after an uninstall
 - **What an update does to an existing install, and how it tells you:** you don't have to reinstall plugins to get a release's fixes. On the first launch after an update, Vapourkit brings your install up to date and then shows a notice listing what it did. The notice stays in Settings → Last Update until every decision in it is made
-  - **Filters you haven't edited** are updated to the new version, or removed if the release dropped them. This release updates 41 and removes 14
+  - **Filters you haven't edited** are updated to the new version, or removed if the release dropped them. This release updates 42 and removes 14
   - **Filters you have edited** are never changed without asking. If the release changed a filter you edited, the notice offers *Use new version* or *Keep mine*. If it dropped one, the notice offers *Remove* or *Keep*, and names the replacement when the filter was only renamed. Your copy is saved to `data\config\template-backups` before anything replaces or removes it. An edit made to a filter the release didn't change is left alone and not mentioned
   - **Filters you deleted** stay deleted. Updates used to put them back
   - **Python packages** are checked against the list this version installs. Anything missing or below its minimum version is installed: this release, `vapoursynth-timecube` (fast LUTs) and `vs_undistort>=2.3.1`. This needs an internet connection once. If it fails, the app still starts and tries again a day later
@@ -133,6 +133,11 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - Building a TensorRT engine no longer flashes a console window, and the import progress bar no longer jumps backwards
 - A render probes the video once and evaluates the chain once before encoding, instead of three and two times, so it starts sooner (most noticeably with a model that takes a while to load)
 - The quality slider now works on hardware encoders (NVENC, AMF, QSV). Before, it had no effect, and every quality setting produced the same few-Mbps output
+- **Variable frame rate videos keep their timing.** Phone and screen recordings, and other videos whose frame rate changes, came out at one constant average rate, so the picture drifted away from the audio (by over 300 ms on a 60/30 fps test clip). Every frame now keeps its own timestamp, in MP4 and MKV, and the log says when a source has a variable frame rate
+  - RIFE keeps the timing too: each new frame gets its share of the frame it starts from. A step that sets a rate on purpose (Assume FPS, Change FPS, decimation) still gives a constant rate
+  - A segment's audio is cut at the real time of its first frame instead of frame number ÷ frame rate, which was off by up to a few hundred ms on a variable rate source and drifted a little even at 23.976 fps
+  - A video that starts later than its audio (a common camera and capture quirk) no longer comes out with the audio early by that gap
+  - Temporal (multi-frame) models gave each frame the properties of the frame two before it, such as its duration and scene-change flags. Each frame keeps its own now
 
 ### Other
 - **Built-in filters no longer vanish.** 2.1 took any missing built-in filter as one you deleted and never put it back, so a filter removed by anything else was gone for good. Vapourkit now records a delete when you make it in the app, and restores at launch any built-in filter that is missing without one

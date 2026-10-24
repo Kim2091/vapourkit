@@ -24,7 +24,10 @@ clip = vs_tiletools.mod(clip, modulus=32, mode="mirror")
 
 # Apply RIFE
 clip = core.resize.Bilinear(clip, format=vs.RGBH if fp16 else vs.RGBS, matrix_in_s="709")
+rife_input = clip
 clip = RIFE(clip, multi=multi, model=model, backend=backend)
+# Each new frame lasts its share of the source frame it starts from
+clip = vk_interpolated_timing(clip, rife_input, multi)
 
 # Crop back to original dimensions
 clip = vs_tiletools.crop(clip)

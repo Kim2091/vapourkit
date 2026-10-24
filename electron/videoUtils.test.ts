@@ -35,7 +35,7 @@ describe('probing a source', () => {
     expect(execFile).toHaveBeenCalledTimes(1);
     expect(probe.display).toMatchObject({ resolution: '1920x1080', fps: 23.98, codec: 'h264', container: 'matroska', duration: '00:01:02.50' });
     expect(probe.streams).toEqual({
-      hasAudio: true, hasSubtitles: true, dar: '16:9', duration: 62.5, audioStreams: 1, subtitleStreams: 1,
+      hasAudio: true, hasSubtitles: true, dar: '16:9', duration: 62.5, startTime: 0, audioStreams: 1, subtitleStreams: 1,
     });
   });
 

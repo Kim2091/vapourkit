@@ -7,15 +7,38 @@ import { parseBestSourceProgress } from './bestSourceProgressParser';
 import { createEngineBuildTracker, type EngineBuildStatus } from './engineBuildProtocol';
 import { formatVapourSynthValidationError } from './vapourSynthErrorFormatter';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
+import { parseVspipeInfo, type OutputInfo } from './vspipeInfo';
 
-export interface OutputInfo {
-  /** Output frame count; 0 when it could not be read. */
-  frames: number;
-  resolution: string | null;
-  fps: number | null;
-  fpsString: string | null;
-  pixelFormat?: string | null;
-  error?: string | null;
+export type { OutputInfo } from './vspipeInfo';
+
+/** parseVspipeInfo(), with what it found written to the log. */
+function readVspipeInfo(output: string): OutputInfo {
+  const info = parseVspipeInfo(output);
+  if (info.frames > 0) {
+    logger.upscale(`Detected ${info.frames} frames from vspipe info`);
+  } else {
+    logger.warn('Could not parse frame count from vspipe output');
+  }
+  if (info.resolution) {
+    logger.upscale(`Detected output resolution: ${info.resolution}`);
+  } else {
+    logger.warn('Could not parse resolution from vspipe output');
+  }
+  if (info.variableFrameRate) {
+    logger.upscale(`Detected variable output frame rate${info.fps ? ` (average ${info.fps} fps)` : ''}; each frame keeps its own timestamp`);
+  } else if (info.fps) {
+    logger.upscale(`Detected output FPS: ${info.fps} (${info.fpsString})`);
+  } else {
+    logger.warn('Could not parse FPS from vspipe output');
+    logger.warn(`FPS regex did not match. Looking for pattern: FPS: num/den (decimal)`);
+  }
+  if (info.pixelFormat) {
+    logger.upscale(`Detected output pixel format: ${info.pixelFormat}`);
+  }
+  if (!info.resolution && !info.fps) {
+    logger.debug(`vspipe output: ${output}`);
+  }
+  return info;
 }
 
 /**
@@ -129,55 +152,7 @@ export class VapourSynthInfoExtractor {
           logger.upscale('=== vspipe -i output ===');
           logger.upscale(output);
           logger.upscale('=== end vspipe -i output ===');
-          
-          const widthMatch = output.match(/Width:\s*(\d+)/i);
-          const heightMatch = output.match(/Height:\s*(\d+)/i);
-          const fpsMatch = output.match(/FPS:\s*(\d+)\/(\d+)\s*\(([\d.]+)\s*fps\)/i);
-          const formatMatch = output.match(/Format Name:\s*(\w+)/i);
-          const framesMatch = output.match(/Frames:\s*(\d+)/i);
-          
-          let resolution: string | null = null;
-          let fps: number | null = null;
-          let fpsString: string | null = null;
-          let pixelFormat: string | null = null;
-          let frames = 0;
-
-          if (framesMatch) {
-            frames = parseInt(framesMatch[1], 10);
-            logger.upscale(`Detected ${frames} frames from vspipe info`);
-          } else {
-            logger.warn('Could not parse frame count from vspipe output');
-          }
-
-          if (widthMatch && heightMatch) {
-            const width = parseInt(widthMatch[1], 10);
-            const height = parseInt(heightMatch[1], 10);
-            resolution = `${width}x${height}`;
-            logger.upscale(`Detected output resolution: ${resolution}`);
-          } else {
-            logger.warn('Could not parse resolution from vspipe output');
-          }
-          
-          if (fpsMatch) {
-            // Use the decimal value (third capture group)
-            fps = parseFloat(fpsMatch[3]);
-            fpsString = `${fpsMatch[1]}/${fpsMatch[2]}`;
-            logger.upscale(`Detected output FPS: ${fps} (${fpsString})`);
-          } else {
-            logger.warn('Could not parse FPS from vspipe output');
-            logger.warn(`FPS regex did not match. Looking for pattern: FPS: num/den (decimal)`);
-          }
-
-          if (formatMatch) {
-            pixelFormat = formatMatch[1];
-            logger.upscale(`Detected output pixel format: ${pixelFormat}`);
-          }
-          
-          if (!resolution && !fps) {
-            logger.debug(`vspipe output: ${output}`);
-          }
-          
-          resolve({ frames, resolution, fps, fpsString, pixelFormat });
+          resolve(readVspipeInfo(output));
         } else {
           logger.error(`vspipe info failed with code ${code}`);
           logger.error(`Full output: ${output}`);
