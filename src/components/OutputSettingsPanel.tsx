@@ -1,38 +1,42 @@
 // OutputSettingsPanel.tsx
 import { memo, useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Sliders, Gauge, Info } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sliders, Gauge } from 'lucide-react';
 import type { VideoInfo } from '../electron.d';
-import type { Codec, Preset, Encoder } from '../utils/ffmpegConfig';
+import type { Preset, Encoder } from '../../electron/ffmpegConfig';
 import { PrivacyText } from './PrivacyVeil';
 import { Section, SectionButton } from './Section';
-import { ask } from '../utils/dialogs';
 import {
-  parseFfmpegArgs,
-  generateFfmpegArgs,
   getRecommendedCrfRange,
   supportsCrf,
   supportsPreset,
   getAvailableEncoders,
   getEncoderDisplayName,
   getEncoderShortName,
-  getDefaultPreset,
   getPresetDisplayName,
   getQualityLabel,
-  clampQuality
-} from '../utils/ffmpegConfig';
+} from '../../electron/ffmpegConfig';
+import {
+  simpleArgsOf,
+  simpleWithCodec,
+  simpleWithEncoder,
+  withEncodingMode,
+  type EncodingSettings,
+  type SimpleCodec,
+  type SimpleEncoding,
+} from '../../electron/encodingSettings';
 
 interface OutputSettingsPanelProps {
   videoInfo: VideoInfo | null;
   outputPath: string;
   outputFormat: string;
-  ffmpegArgs: string;
+  encoding: EncodingSettings;
   processingFormat: string;
   isProcessing: boolean;
   benchmarkMode: boolean;
   privacyMode: boolean;
   onFormatChange: (format: string) => void;
   onSelectOutputFile: () => void;
-  onFfmpegArgsChange: (args: string) => void;
+  onEncodingChange: (encoding: EncodingSettings) => void;
   onProcessingFormatChange: (format: string) => void;
   onBenchmarkModeChange: (enabled: boolean) => void;
 }
@@ -41,21 +45,18 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   videoInfo,
   outputPath,
   outputFormat,
-  ffmpegArgs,
+  encoding,
   processingFormat,
   isProcessing,
   benchmarkMode,
   privacyMode,
   onFormatChange,
   onSelectOutputFile,
-  onFfmpegArgsChange,
+  onEncodingChange,
   onProcessingFormatChange,
   onBenchmarkModeChange,
 }: OutputSettingsPanelProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [advancedMode, setAdvancedMode] = useState(false);
-  // Store advanced args separately so they persist when toggling modes
-  const [storedAdvancedArgs, setStoredAdvancedArgs] = useState<string>('');
 
   // Load persisted expanded state on mount
   useEffect(() => {
@@ -81,64 +82,21 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
     }
   };
 
-  // Parse current config from args (for simple mode display)
-  const config = parseFfmpegArgs(ffmpegArgs);
+  // The mode is part of the settings shown (the project's or a queue
+  // item's), and each mode edits only its own half of them.
+  const showAdvanced = encoding.mode === 'advanced';
+  const config = encoding.simple;
+  const simpleArgs = simpleArgsOf(config);
 
-  // Arguments the simple controls cannot show (a filter chain, HDR tags, a
-  // bitrate) are shown as they are, in advanced mode, whatever mode was last
-  // picked: simple mode would display made-up values and its controls would
-  // do nothing.
-  const argsAreCustom = config.codec === 'custom';
-  const showAdvanced = advancedMode || argsAreCustom;
-
-  // When entering advanced mode, store the current args
-  const handleToggleAdvancedMode = async () => {
-    if (argsAreCustom) {
-      // Simple mode cannot hold these arguments, so going there replaces them.
-      const replace = await ask({
-        title: 'Switch to simple mode',
-        message: 'These FFmpeg arguments include options the simple controls cannot show. '
-          + 'Simple mode replaces them with standard H.264 settings.',
-        confirmLabel: 'Replace them',
-        tone: 'danger',
-      });
-      if (!replace) return;
-      setStoredAdvancedArgs(ffmpegArgs);
-      const preset = getDefaultPreset('software', 'h264');
-      const crf = getRecommendedCrfRange('h264', 'software').default;
-      onFfmpegArgsChange(generateFfmpegArgs({ codec: 'h264', encoder: 'software', preset, crf }));
-      setAdvancedMode(false);
-      return;
-    }
-    if (!advancedMode) {
-      // Entering advanced mode - if we have stored advanced args, restore them
-      // Otherwise, keep the current args as the starting point
-      if (storedAdvancedArgs) {
-        onFfmpegArgsChange(storedAdvancedArgs);
-      } else {
-        setStoredAdvancedArgs(ffmpegArgs);
-      }
-    } else {
-      // Leaving advanced mode - store current advanced args and regenerate simple args
-      setStoredAdvancedArgs(ffmpegArgs);
-      const simpleArgs = generateFfmpegArgs(config);
-      onFfmpegArgsChange(simpleArgs);
-    }
-    setAdvancedMode(!advancedMode);
+  const handleToggleAdvancedMode = () => {
+    onEncodingChange(withEncodingMode(encoding, showAdvanced ? 'simple' : 'advanced'));
   };
 
-  const handleCodecChange = (codec: Codec) => {
-    const availableEncodersForCodec = getAvailableEncoders(codec);
-    
-    // Preserve current encoder if it's available for the new codec, otherwise fall back to software
-    const encoder = availableEncodersForCodec.includes(config.encoder) ? config.encoder : 'software' as Encoder;
-    
-    // The quality scale depends on the encoder too, so resolve it before the range
-    const crfRange = getRecommendedCrfRange(codec, encoder);
-    
-    // Get appropriate default preset for the encoder and codec
-    const preset = getDefaultPreset(encoder, codec);
-    
+  const handleSimpleChange = (simple: SimpleEncoding) => {
+    onEncodingChange({ ...encoding, simple });
+  };
+
+  const handleCodecChange = (codec: SimpleCodec) => {
     // ProRes only supports YUV422P10 and YUV444P10 - auto-select if current format is incompatible
     if (codec === 'prores') {
       const proresCompatibleFormats = ['vs.YUV422P10', 'vs.YUV444P10'];
@@ -146,39 +104,23 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
         onProcessingFormatChange('vs.YUV422P10');
       }
     }
-    
-    const newConfig = {
-      ...config,
-      codec,
-      encoder,
-      crf: crfRange.default,
-      preset
-    };
-    onFfmpegArgsChange(generateFfmpegArgs(newConfig));
+    handleSimpleChange(simpleWithCodec(config, codec));
   };
 
   const handleEncoderChange = (encoder: Encoder) => {
-    // Update preset to match encoder's defaults
-    const preset = getDefaultPreset(encoder, config.codec);
-    // Encoders do not share a quality scale (NVENC has no 0, AMF's AV1 range is
-    // 0-255), so pull the current value into the one the new encoder accepts.
-    const crf = clampQuality(config.codec, encoder, config.crf);
-    const newConfig = { ...config, encoder, preset, crf };
-    onFfmpegArgsChange(generateFfmpegArgs(newConfig));
+    handleSimpleChange(simpleWithEncoder(config, encoder));
   };
 
   const handlePresetChange = (preset: Preset) => {
-    const newConfig = { ...config, preset };
-    onFfmpegArgsChange(generateFfmpegArgs(newConfig));
+    handleSimpleChange({ ...config, preset });
   };
 
-  const handleCrfChange = (crf: number) => {
-    const newConfig = { ...config, crf };
-    onFfmpegArgsChange(generateFfmpegArgs(newConfig));
+  const handleCrfChange = (quality: number) => {
+    handleSimpleChange({ ...config, quality });
   };
 
-  const handleCustomArgsChange = (args: string) => {
-    onFfmpegArgsChange(args);
+  const handleCustomArgsChange = (customArgs: string) => {
+    onEncodingChange({ ...encoding, customArgs });
   };
 
   const crfRange = getRecommendedCrfRange(config.codec, config.encoder);
@@ -273,7 +215,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             {!showAdvanced && (
               <>
                 <span className="text-xs text-accent-500 bg-accent-500/10 px-2 py-0.5 rounded">
-                  {config.codec === 'custom' ? 'H264' : config.codec.toUpperCase()}
+                  {config.codec.toUpperCase()}
                 </span>
                 {availableEncoders.length > 1 && (
                   <span className="text-xs text-ink-400 bg-ink-800 px-2 py-0.5 rounded">
@@ -312,19 +254,15 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                 <button
                   onClick={handleToggleAdvancedMode}
                   disabled={isProcessing}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
-                    advancedMode
-                      ? 'bg-accent-500/20 text-accent-500 border border-accent-500/30 hover:bg-accent-500/30'
-                      : 'bg-ink-900 text-ink-400 border border-ink-700 hover:border-ink-600 hover:text-ink-300'
-                  }`}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 bg-ink-900 text-ink-400 border border-ink-700 hover:border-ink-600 hover:text-ink-300"
                 >
                   <Sliders className="w-3.5 h-3.5" />
                   Advanced
                 </button>
               </div>
               <select
-                value={config.codec === 'custom' ? 'h264' : config.codec}
-                onChange={(e) => handleCodecChange(e.target.value as Codec)}
+                value={config.codec}
+                onChange={(e) => handleCodecChange(e.target.value as SimpleCodec)}
                 disabled={isProcessing}
                 className="w-full h-7 bg-ink-850 border border-ink-750 rounded px-2 text-[12.5px] focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -465,14 +403,14 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                     Quality
                   </label>
                   <span className="text-sm font-medium text-accent-500">
-                    {getQualityLabel(config.encoder)} {config.crf}
+                    {getQualityLabel(config.encoder)} {config.quality}
                   </span>
                 </div>
                 <input
                   type="range"
                   min={crfRange.min}
                   max={crfRange.max}
-                  value={config.crf}
+                  value={config.quality}
                   onChange={(e) => handleCrfChange(parseInt(e.target.value, 10))}
                   disabled={isProcessing}
                   className="w-full h-2 bg-ink-900 rounded-lg appearance-none cursor-pointer accent-accent-500 disabled:opacity-50"
@@ -498,36 +436,33 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
               <button
                 onClick={handleToggleAdvancedMode}
                 disabled={isProcessing}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
-                  showAdvanced
-                    ? 'bg-accent-500/20 text-accent-500 border border-accent-500/30 hover:bg-accent-500/30'
-                    : 'bg-ink-900 text-ink-400 border border-ink-700 hover:border-ink-600 hover:text-ink-300'
-                }`}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 bg-accent-500/20 text-accent-500 border border-accent-500/30 hover:bg-accent-500/30"
               >
                 <Sliders className="w-3.5 h-3.5" />
                 Advanced
               </button>
             </div>
-            {argsAreCustom && (
-              <p className="flex items-start gap-1.5 text-[10.5px] leading-snug text-ink-400 mb-1.5">
-                <Info className="w-3 h-3 mt-px flex-shrink-0 text-ink-500" />
-                Shown as text because these arguments include options the simple controls can't show.
-              </p>
-            )}
             <textarea
-              value={ffmpegArgs}
-              onChange={(e) => {
-                handleCustomArgsChange(e.target.value);
-                setStoredAdvancedArgs(e.target.value);
-              }}
+              value={encoding.customArgs}
+              onChange={(e) => handleCustomArgsChange(e.target.value)}
               disabled={isProcessing}
-              placeholder="-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1"
+              placeholder={simpleArgs}
               rows={3}
               className="w-full bg-ink-850 border border-ink-750 rounded px-2 py-1.5 focus:outline-none focus:border-accent-500 transition-colors disabled:opacity-50 text-sm font-mono resize-none"
             />
-            <p className="text-[10.5px] text-ink-500 mt-1.5">
-              Custom FFmpeg encoding arguments
-            </p>
+            <div className="flex items-center justify-between gap-2 mt-1.5">
+              <p className="text-[10.5px] text-ink-500">
+                Custom FFmpeg encoding arguments
+              </p>
+              <button
+                onClick={() => handleCustomArgsChange(simpleArgs)}
+                disabled={isProcessing || encoding.customArgs === simpleArgs}
+                title={`Replace these arguments with the simple settings: ${simpleArgs}`}
+                className="text-[10.5px] text-ink-400 hover:text-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-ink-400"
+              >
+                Copy from simple settings
+              </button>
+            </div>
           </div>
         )}
 

@@ -14,7 +14,8 @@ vi.mock('./logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.f
 vi.mock('./utils', () => ({ getBundledBasePath: () => path.join(dir, 'no-bundle') }));
 vi.mock('./rocmEnvironment', () => ({ DEFAULT_ROCM_SETTING: 'auto', setRocmSetting: vi.fn() }));
 
-import { ConfigManager } from './configManager';
+import { ConfigManager, DEFAULT_FFMPEG_ARGS } from './configManager';
+import { DEFAULT_ENCODING, resolveEncodingArgs } from './encodingSettings';
 
 const configFile = path.join(dir, 'app-config.json');
 
@@ -30,7 +31,9 @@ describe('config file', () => {
     await manager.load();
     for (let round = 0; round < 10; round++) {
       await Promise.all([
-        manager.setFfmpegArgs(round % 2 ? '-c:v libx265 -crf 16 -preset slower -x265-params a=b' : '-W'),
+        manager.setEncodingSettings(round % 2
+          ? { ...DEFAULT_ENCODING, mode: 'advanced', customArgs: '-c:v libx265 -crf 16 -preset slower -x265-params a=b' }
+          : DEFAULT_ENCODING),
         manager.setProcessingFormat(round % 2 ? 'vs.YUV420P10' : 'vs.YUV420P8'),
         manager.setVideoCompareArgs(round % 2 ? '' : '-W -m'),
         manager.setOutputFormat(round % 2 ? 'mp4' : 'mkv'),
@@ -62,5 +65,66 @@ describe('config file', () => {
     await first.setModelMetadata('leaked', false);
     const second = new ConfigManager();
     expect(second.getModelMetadata('leaked')).toBeNull();
+  });
+});
+
+describe('encoding settings', () => {
+  beforeEach(async () => { await fs.remove(dir); await fs.ensureDir(dir); });
+  afterEach(async () => { await fs.remove(dir); });
+
+  const STOCK_ARGS = DEFAULT_FFMPEG_ARGS + ' -movflags +faststart';
+
+  it('opens a config holding only the old stock arguments in simple mode', async () => {
+    await fs.writeJson(configFile, { ffmpegArgs: STOCK_ARGS, models: {} });
+    const manager = new ConfigManager();
+    await manager.load();
+    expect(manager.getEncodingSettings().mode).toBe('simple');
+    expect(manager.getEncodingSettings().simple).toEqual({ codec: 'h264', encoder: 'software', preset: 'medium', quality: 18 });
+    expect(manager.getFfmpegArgs()).toBe(DEFAULT_FFMPEG_ARGS);
+  });
+
+  it('keeps hand-typed arguments as they are, in advanced mode', async () => {
+    const typed = '-c:v hevc_nvenc -preset p5 -cq 22 -b:v 0 -tune hq';
+    await fs.writeJson(configFile, { ffmpegArgs: typed, models: {} });
+    const manager = new ConfigManager();
+    await manager.load();
+    expect(manager.getEncodingSettings()).toMatchObject({ mode: 'advanced', customArgs: typed });
+    expect(manager.getEncodingSettings().simple).toMatchObject({ codec: 'h265', encoder: 'nvidia', preset: 'p5', quality: 22 });
+    expect(manager.getFfmpegArgs()).toBe(typed);
+  });
+
+  it('saves the mode with the arguments it resolves to, and reads it back', async () => {
+    const manager = new ConfigManager();
+    await manager.load();
+    const encoding = { ...DEFAULT_ENCODING, mode: 'advanced' as const, customArgs: '-c:v libx264 -crf 18' };
+    expect(await manager.setEncodingSettings(encoding)).toBe(true);
+    const saved = await fs.readJson(configFile);
+    expect(saved.encoding).toEqual(encoding);
+    expect(saved.ffmpegArgs).toBe('-c:v libx264 -crf 18');
+
+    const reloaded = new ConfigManager();
+    await reloaded.load();
+    // These arguments parse as simple settings, and stay advanced all the same.
+    expect(reloaded.getEncodingSettings()).toEqual(encoding);
+    expect(reloaded.getFfmpegArgs()).toBe('-c:v libx264 -crf 18');
+  });
+
+  it('follows arguments an older version changed', async () => {
+    const encoding = { ...DEFAULT_ENCODING, mode: 'advanced' as const, customArgs: '-c:v libx264 -tune film' };
+    await fs.writeJson(configFile, { encoding, ffmpegArgs: '-c:v libx265 -preset slow -crf 20', models: {} });
+    const manager = new ConfigManager();
+    await manager.load();
+    expect(manager.getEncodingSettings()).toEqual({
+      mode: 'simple',
+      simple: { codec: 'h265', encoder: 'software', preset: 'slow', quality: 20 },
+      customArgs: '-c:v libx264 -tune film',
+    });
+  });
+
+  it('refuses settings that are not encoding settings', async () => {
+    const manager = new ConfigManager();
+    await manager.load();
+    expect(await manager.setEncodingSettings('-c:v libx264')).toBe(false);
+    expect(manager.getFfmpegArgs()).toBe(resolveEncodingArgs(DEFAULT_ENCODING));
   });
 });

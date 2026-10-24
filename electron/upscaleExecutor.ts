@@ -431,10 +431,15 @@ export class UpscaleExecutor {
       ffmpegArgs.push('-map_metadata', '1');
     }
 
-    // Add movflags if specified in config
-    if (ffmpegConfig.movflags && ffmpegConfig.movflags.length > 0) {
-      logger.upscale(`Adding movflags: ${ffmpegConfig.movflags.join(',')}`);
-      ffmpegArgs.push('-movflags', ffmpegConfig.movflags.join(','));
+    // MP4 and MOV get their index at the front, so playback can start before
+    // the whole file is read, unless the encoding arguments set movflags themselves.
+    const movflags = [...(ffmpegConfig.movflags ?? [])];
+    if (/\.(mp4|mov)$/i.test(outputPath) && !ffmpegConfig.videoArgs?.includes('-movflags')) {
+      movflags.push('+faststart');
+    }
+    if (movflags.length > 0) {
+      logger.upscale(`Adding movflags: ${movflags.join(',')}`);
+      ffmpegArgs.push('-movflags', movflags.join(','));
     }
 
     // Main output file

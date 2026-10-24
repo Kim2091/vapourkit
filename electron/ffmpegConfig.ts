@@ -1,4 +1,4 @@
-// src/utils/ffmpegConfig.ts
+// electron/ffmpegConfig.ts
 // Utilities for parsing and generating FFmpeg encoding arguments
 
 export type Codec = 'h264' | 'h265' | 'av1' | 'prores' | 'custom';
@@ -64,6 +64,17 @@ const CODEC_ENCODER_TO_FFMPEG: Record<string, string> = {
   'av1-intel': 'av1_qsv',
   'prores-software': 'prores_ks'
 };
+
+/**
+ * The codec and encoder an FFmpeg encoder name (the value of -c:v) stands for,
+ * or null when the simple controls do not offer it.
+ */
+export function simpleCodecOf(name: string): { codec: Exclude<Codec, 'custom'>; encoder: Encoder } | null {
+  const codec = CODEC_MAPPINGS[name];
+  if (!codec || codec === 'custom') return null;
+  const encoder = ENCODER_MAPPINGS[name] ?? 'software';
+  return { codec, encoder: getAvailableEncoders(codec).includes(encoder) ? encoder : 'software' };
+}
 
 interface QualityRange {
   min: number;

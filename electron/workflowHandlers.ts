@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import * as fs from 'fs-extra';
 import { logger } from './logger';
+import { encodingFrom, resolveEncodingArgs, type EncodingSettings } from './encodingSettings';
 
 /**
  * Registers all workflow-related IPC handlers
@@ -48,13 +49,20 @@ export function registerWorkflowHandlers() {
 
       // Add encoding settings if provided
       if (workflow.encodingSettings) {
+        const encoding = encodingFrom(workflow.encodingSettings.encoding, workflow.encodingSettings.ffmpegArgs);
         tomlData.encoding_settings = {
-          ffmpeg_args: workflow.encodingSettings.ffmpegArgs,
+          // The resolved arguments, the only encoding field older versions read.
+          ffmpeg_args: encoding ? resolveEncodingArgs(encoding) : workflow.encodingSettings.ffmpegArgs,
           processing_format: workflow.encodingSettings.processingFormat,
           output_format: workflow.encodingSettings.outputFormat,
           video_compare_args: workflow.encodingSettings.videoCompareArgs,
           num_streams: workflow.encodingSettings.numStreams,
         };
+        if (encoding) {
+          tomlData.encoding_settings.encoding_mode = encoding.mode;
+          tomlData.encoding_settings.custom_args = encoding.customArgs;
+          tomlData.encoding_settings.simple_encoding = { ...encoding.simple };
+        }
         // Optional: workflows written before it was saved load with the
         // backend the app already has.
         if (workflow.encodingSettings.defaultBackend) {
@@ -135,8 +143,17 @@ export function registerWorkflowHandlers() {
 
       // Parse encoding settings if present
       if (data.encoding_settings) {
+        const stored = data.encoding_settings;
+        // Files written before the mode was stored carry only ffmpeg_args.
+        const encoding: EncodingSettings | null = encodingFrom(
+          typeof stored.encoding_mode === 'string'
+            ? { mode: stored.encoding_mode, simple: stored.simple_encoding, customArgs: stored.custom_args }
+            : undefined,
+          stored.ffmpeg_args,
+        );
         workflow.encodingSettings = {
-          ffmpegArgs: data.encoding_settings.ffmpeg_args,
+          encoding: encoding ?? undefined,
+          ffmpegArgs: encoding ? resolveEncodingArgs(encoding) : data.encoding_settings.ffmpeg_args,
           processingFormat: data.encoding_settings.processing_format,
           outputFormat: data.encoding_settings.output_format,
           videoCompareArgs: data.encoding_settings.video_compare_args,

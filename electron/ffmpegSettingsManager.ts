@@ -2,6 +2,7 @@
 import { logger } from './logger';
 import type { ConfigManager } from './configManager';
 import { DEFAULT_FFMPEG_ARGS } from './configManager';
+import { splitArgs } from './encodingSettings';
 
 export interface FFmpegConfig {
   /** Video encoding arguments (e.g., codec, preset, quality) */
@@ -19,10 +20,10 @@ export interface FFmpegConfig {
  */
 export class FFmpegSettingsManager {
   /**
-   * Parses a space-separated string of ffmpeg arguments into an array
+   * Parses a string of ffmpeg arguments into an array. Quoted values stay one argument.
    */
   private static parseArgsString(argsString: string): string[] {
-    return argsString.trim().split(/\s+/).filter(arg => arg.length > 0);
+    return splitArgs(argsString);
   }
 
   private static readonly DEFAULT_CONFIG: FFmpegConfig = {

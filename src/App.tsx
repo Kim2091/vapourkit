@@ -10,7 +10,7 @@ import { ActionBar } from './components/ActionBar';
 import { ConsoleDrawer } from './components/ConsoleDrawer';
 import { Scrubber } from './components/Scrubber';
 import { EngineBuildBanner } from './components/EngineBuildBanner';
-import type { BackendId, ColorimetrySettings, EngineBuildStatus, UpdateInfo, SegmentSelection, VsMlrtVersionInfo, Filter, FilterParameterValues } from './electron';
+import type { BackendId, ColorimetrySettings, EncodingSettings, EngineBuildStatus, UpdateInfo, SegmentSelection, VsMlrtVersionInfo, Filter, FilterParameterValues } from './electron';
 import { getBackendDescriptor, normalizeBackendForCurrentPlatform, resolveFilterBackend } from './utils/backends';
 import { AppRail } from './components/AppRail';
 import { TitleStrip } from './components/TitleStrip';
@@ -144,7 +144,7 @@ function App() {
   });
   const {
     selectedModel,
-    ffmpegArgs,
+    encoding,
     processingFormat,
     outputFormat,
     videoCompareArgs,
@@ -155,7 +155,7 @@ function App() {
   } = workflow.view;
   const { patch: patchWorkflow } = workflow;
   const setSelectedModel = useCallback((model: string | null) => patchWorkflow({ selectedModel: model }), [patchWorkflow]);
-  const handleUpdateFfmpegArgs = useCallback((args: string) => patchWorkflow({ ffmpegArgs: args }), [patchWorkflow]);
+  const handleUpdateEncoding = useCallback((next: EncodingSettings) => patchWorkflow({ encoding: next }), [patchWorkflow]);
   const handleUpdateProcessingFormat = useCallback((format: string) => patchWorkflow({ processingFormat: format }), [patchWorkflow]);
   const handleUpdateOutputFormat = useCallback((format: string) => patchWorkflow({ outputFormat: format }), [patchWorkflow]);
   const handleUpdateVideoCompareArgs = useCallback((args: string) => patchWorkflow({ videoCompareArgs: args }), [patchWorkflow]);
@@ -261,6 +261,7 @@ function App() {
     filters,
     colorimetry: colorimetrySettings,
     segment,
+    whenConfigSaved: workflow.whenConfigSaved,
   });
 
   useDiscordActivity({
@@ -1231,14 +1232,14 @@ function App() {
                     videoInfo={videoInfo}
                     outputPath={outputPath}
                     outputFormat={outputFormat}
-                    ffmpegArgs={ffmpegArgs}
+                    encoding={encoding}
                     processingFormat={processingFormat}
                     isProcessing={isProcessing}
                     benchmarkMode={benchmarkMode}
                     privacyMode={privacyMode}
                     onFormatChange={handleUpdateOutputFormat}
                     onSelectOutputFile={handleSelectOutputFileForView}
-                    onFfmpegArgsChange={handleUpdateFfmpegArgs}
+                    onEncodingChange={handleUpdateEncoding}
                     onProcessingFormatChange={handleUpdateProcessingFormat}
                     onBenchmarkModeChange={setBenchmarkMode}
                   />

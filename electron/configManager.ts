@@ -9,6 +9,13 @@ import type { ModelType } from './scriptGenerator';
 import type { GpuVendor } from './gpuDetection';
 import type { DiscordRichPresenceSettings } from './discordRichPresence';
 import { DEFAULT_ROCM_SETTING, setRocmSetting, type RocmSetting } from './rocmEnvironment';
+import {
+  encodingFrom,
+  migrateLegacyArgs,
+  normalizeEncodingSettings,
+  resolveEncodingArgs,
+  type EncodingSettings,
+} from './encodingSettings';
 
 // Single source of truth for FFmpeg default arguments
 export const DEFAULT_FFMPEG_ARGS = '-c:v libx264 -preset medium -crf 18 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709 -map_metadata 1';
@@ -35,6 +42,9 @@ interface AppConfig {
   showQueue?: boolean;
   filterConfigurations?: Filter[];
   upscalePosition?: number;
+  /** How renders encode. Kept out of DEFAULT_CONFIG so a config with only ffmpegArgs is migrated from it. */
+  encoding?: EncodingSettings;
+  /** What encoding resolves to, for versions that read only this. */
   ffmpegArgs?: string;
   processingFormat?: string;
   outputFormat?: string;
@@ -149,6 +159,7 @@ export class ConfigManager {
       this.config = defaultConfig();
       this.writer.block('loading the config failed');
     }
+    this.config.encoding = encodingFrom(this.config.encoding, this.config.ffmpegArgs ?? DEFAULT_FFMPEG_ARGS) ?? undefined;
     setRocmSetting(this.config.rocm);
   }
 
@@ -416,13 +427,23 @@ export class ConfigManager {
     await this.save();
   }
 
-  getFfmpegArgs(): string {
-    return this.config.ffmpegArgs ?? DEFAULT_CONFIG.ffmpegArgs!;
+  getEncodingSettings(): EncodingSettings {
+    return this.config.encoding ?? migrateLegacyArgs(this.config.ffmpegArgs ?? DEFAULT_FFMPEG_ARGS);
   }
 
-  async setFfmpegArgs(args: string): Promise<void> {
-    this.config.ffmpegArgs = args;
+  /** Save encoding settings, with the arguments they resolve to. False when they are not valid settings. */
+  async setEncodingSettings(encoding: unknown): Promise<boolean> {
+    const normalized = normalizeEncodingSettings(encoding);
+    if (!normalized) return false;
+    this.config.encoding = normalized;
+    this.config.ffmpegArgs = resolveEncodingArgs(normalized);
     await this.save();
+    return true;
+  }
+
+  /** The FFmpeg video arguments renders are encoded with. */
+  getFfmpegArgs(): string {
+    return resolveEncodingArgs(this.getEncodingSettings());
   }
 
   getProcessingFormat(): string {

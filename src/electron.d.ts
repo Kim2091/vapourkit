@@ -1,8 +1,9 @@
 // src/electron.d.ts
 import type { BackendId, FilterBackend } from '../electron/providers/descriptors';
 import type { SideChainAlignment } from '../electron/chainGraph';
+import type { EncodingSettings } from '../electron/encodingSettings';
 
-export type { BackendId, FilterBackend, SideChainAlignment };
+export type { BackendId, EncodingSettings, FilterBackend, SideChainAlignment };
 
 export type RocmMode = 'auto' | 'environment' | 'custom';
 
@@ -196,8 +197,8 @@ export interface ElectronAPI {
   setColorimetrySettings: (settings: ColorimetrySettings) => Promise<{ success: boolean }>;
   
   // FFmpeg configuration
-  getFfmpegArgs: () => Promise<{ args: string }>;
-  setFfmpegArgs: (args: string) => Promise<{ success: boolean }>;
+  getEncodingSettings: () => Promise<EncodingSettings>;
+  setEncodingSettings: (encoding: EncodingSettings) => Promise<{ success: boolean }>;
   getDefaultFfmpegArgs: () => Promise<{ args: string }>;
   
   // Processing format
@@ -882,6 +883,8 @@ export interface WorkflowData {
   description?: string;
   // Encoding settings
   encodingSettings?: {
+    encoding?: EncodingSettings;
+    /** What encoding resolves to; the only encoding field of older workflow files. */
     ffmpegArgs?: string;
     processingFormat?: string;
     outputFormat?: string;
@@ -926,6 +929,8 @@ export interface QueueItem {
   workflow: {
     selectedModel: string | null;
     filters: Filter[];
+    encoding?: EncodingSettings;
+    /** What encoding resolves to; the only encoding field of older queue items. */
     ffmpegArgs: string;
     processingFormat: string;
     outputFormat: string;

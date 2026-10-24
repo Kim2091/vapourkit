@@ -19,6 +19,7 @@ import { VapourSynthInfoExtractor, type OutputInfo } from './vapourSynthInfoExtr
 import { JobSlot } from './jobSlot';
 import { DependencyManager } from './dependencyManager';
 import { FFmpegSettingsManager } from './ffmpegSettingsManager';
+import { splitArgs } from './encodingSettings';
 import { FFmpegManager } from './ffmpegManager';
 import { VsViewManager } from './vsViewManager';
 import { PreviewSession } from './previewSession';
@@ -522,7 +523,7 @@ export function registerVideoHandlers(
       
       // Get custom args from config
       const videoCompareArgsString = configManager.getVideoCompareArgs();
-      const customArgs = videoCompareArgsString.trim().split(/\s+/).filter(arg => arg.length > 0);
+      const customArgs = splitArgs(videoCompareArgsString);
       
       // Combine args with video paths
       const allArgs = [...customArgs, inputPath, outputPath];

@@ -14,6 +14,8 @@ interface UseVideoProcessingProps {
   filters: Filter[];
   colorimetry: ColorimetrySettings;
   segment: SegmentSelection;
+  /** Resolves once the settings edited so far are in app-config.json, which the render reads. */
+  whenConfigSaved: () => Promise<void>;
 }
 
 export function useVideoProcessing({
@@ -24,6 +26,7 @@ export function useVideoProcessing({
   filters,
   colorimetry,
   segment,
+  whenConfigSaved,
 }: UseVideoProcessingProps) {
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   // A path the user chose. Without one the output is named from the video and
@@ -275,6 +278,7 @@ export function useVideoProcessing({
     }
 
     try {
+      await whenConfigSaved();
       const result = await window.electronAPI.startUpscale(
         videoInfo.path,
         selectedModel,

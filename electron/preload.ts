@@ -161,8 +161,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setColorimetrySettings: (settings: any) => ipcRenderer.invoke('set-colorimetry-settings', settings),
   
   // FFmpeg configuration
-  getFfmpegArgs: () => ipcRenderer.invoke('get-ffmpeg-args'),
-  setFfmpegArgs: (args: string) => ipcRenderer.invoke('set-ffmpeg-args', args),
+  getEncodingSettings: () => ipcRenderer.invoke('get-encoding-settings'),
+  setEncodingSettings: (encoding: unknown) => ipcRenderer.invoke('set-encoding-settings', encoding),
   getDefaultFfmpegArgs: () => ipcRenderer.invoke('get-default-ffmpeg-args'),
   getVideoFilter: () => ipcRenderer.invoke('get-video-filter'),
   setVideoFilter: (filter: string) => ipcRenderer.invoke('set-video-filter', filter),
