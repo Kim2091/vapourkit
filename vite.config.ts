@@ -24,6 +24,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // dev:electron loads this exact port, so a busy one must fail rather than move.
+    strictPort: true,
     watch: {
       ignored: ['**/data/**', '**/data2/**', '**/release/**']
     }
