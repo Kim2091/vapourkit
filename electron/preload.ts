@@ -135,10 +135,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openVSPluginsFolder: () => ipcRenderer.invoke('open-vs-plugins-folder'),
   openVSScriptsFolder: () => ipcRenderer.invoke('open-vs-scripts-folder'),
 
-  // DLSS 5 Neural Uplift runtime (nvngx_dlssnr.dll)
-  dlssRuntimeStatus: () => ipcRenderer.invoke('dlss-runtime-status'),
-  dlssRuntimeImport: () => ipcRenderer.invoke('dlss-runtime-import'),
-
   // Post-update notice: what the last update did, and the edited templates it asks about
   getUpdateReport: () => ipcRenderer.invoke('update-report-get'),
   markUpdateReportSeen: () => ipcRenderer.invoke('update-report-mark-seen'),

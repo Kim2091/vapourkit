@@ -21,7 +21,7 @@ import { readInstalledProjects, unmetRequirements } from './launchRequirements';
 import { getBackendsForVendor, getNoDepsPackages, getPypiPackages } from './vendorPackages';
 import { staleScriptSources, syncInstalledScripts } from './scriptSync';
 import { downloadToFile } from './download';
-import { APP_OWNED_PLUGIN_ARCHIVES, shouldExtractBundledPluginArchives } from './bundledPluginArchives';
+import { APP_OWNED_PLUGIN_ARCHIVES, retireDroppedPluginArchives, shouldExtractBundledPluginArchives } from './bundledPluginArchives';
 import { CORE_SETUP_REQUIRED_BYTES, CORE_SETUP_REQUIRED_TEMP_BYTES, runInstallPreflight } from './installPreflight';
 import {
   describeInstallFailure,
@@ -1007,6 +1007,10 @@ export class DependencyManager {
       } finally {
         await fs.remove(staging).catch(() => undefined);
       }
+    }
+
+    for (const archive of await retireDroppedPluginArchives(ledger.plugins, PATHS.PLUGINS)) {
+      logger.dependency(`Removed the plugins of ${archive}, which is no longer bundled`);
     }
     await writeLedger(ledger);
   }

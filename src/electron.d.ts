@@ -174,10 +174,6 @@ export interface ElectronAPI {
   openVSPluginsFolder: () => Promise<{ success: boolean }>;
   openVSScriptsFolder: () => Promise<{ success: boolean }>;
 
-  // DLSS 5 Neural Uplift runtime (nvngx_dlssnr.dll)
-  dlssRuntimeStatus: () => Promise<DlssRuntimeStatus>;
-  dlssRuntimeImport: () => Promise<DlssImportResult>;
-
   // Post-update notice
   getUpdateReport: () => Promise<UpdateReportSnapshot>;
   markUpdateReportSeen: () => Promise<void>;
@@ -340,20 +336,6 @@ export type TemplateDecisionChoice = 'replace' | 'keep' | 'remove';
 export interface UpdateReportSnapshot {
   report: UpdateReport | null;
   decisions: TemplateDecision[];
-}
-
-export interface DlssRuntimeStatus {
-  installed: boolean;
-  installedVersion: string | null;
-  /** Where the runtime goes, so a user who would rather copy it themselves can. */
-  targetDirectory: string;
-}
-
-export interface DlssImportResult {
-  success: boolean;
-  canceled?: boolean;
-  error?: string;
-  version?: string | null;
 }
 
 export interface DevConsoleLog {

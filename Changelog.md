@@ -16,7 +16,6 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
   - **Filters you have edited** are never changed without asking. If the release changed a filter you edited, the notice offers *Use new version* or *Keep mine*. If it dropped one, the notice offers *Remove* or *Keep*, and names the replacement when the filter was only renamed. Your copy is saved to `data\config\template-backups` before anything replaces or removes it. An edit made to a filter the release didn't change is left alone and not mentioned
   - **Filters you deleted** stay deleted. Updates used to put them back
   - **Python packages** are checked against the list this version installs. Anything missing or below its minimum version is installed: this release, `vapoursynth-timecube` (fast LUTs) and `vs_undistort>=2.3.1`. This needs an internet connection once. If it fails, the app still starts and tries again a day later
-  - **Vapourkit's own DLSS plugin** (`vsdlssnr.dll`) is replaced when the bundled build differs
   - **VapourSynth scripts** (the Hybrid scripts and the bundled script pack) are versioned too. An update replaces the ones you haven't edited when a release changes them, keeps any you edited and lists them in the notice, and downloads nothing when nothing changed. Reinstalling plugins restores every shipped script, saving your edited ones to `data\config\script-backups` first
   - **Saved workflows are never touched**: each step keeps its own copy of the filter's code
   - How it knows: `data\config\installed-components.json` records the version of every filter, plugin and script Vapourkit put into your install, so later updates can tell its files from your changes
@@ -68,15 +67,6 @@ Until now, installing a new Vapourkit over an old one deleted the whole `data` f
 - **Linux:** needs ROCm with MIGraphX installed on the system (`migraphx-driver` on `PATH`, or under `$ROCM_PATH`/`/opt/rocm`)
 - Models whose input is 5-D (some multi-frame VSR architectures) aren't supported by MIGraphX and say so; 4-D models, including frame-stacked VSR, work
 - Not yet tested on AMD hardware
-
-### DLSS Neural Uplift (NVIDIA)
-- New filter backed by NVIDIA's DLSS-NR model, with Vapourkit's own VapourSynth plugin (`vsdlssnr.dll`, bundled)
-- It needs `nvngx_dlssnr.dll`, which NVIDIA doesn't distribute on its own (it ships inside games that use DLSS 5). Import your copy with the file picker, either from the Plugins modal or from the bar that appears when a workflow needs it. The picker checks you chose the right DLL and not one of its lookalikes
-- About 2x faster than the first build: 4K goes from ~19.5 to ~37 fps, and 1440p from ~34 to ~53 fps (RTX 5080)
-- Optional motion vectors and depth inputs, plus automatic motion estimation on the GPU (on by default). A Vulkan backend is available and off by default
-- `working_scale` runs the model on a downscaled copy and puts the detail back. Measured at 4K: ~26 fps at 0.75 and ~31 fps at 0.5, against ~17 at 1.0. Check faces and fine texture when using it
-- Fixed several filter instances breaking each other (e.g. a preview and an encode at once)
-- The official DLL is Blackwell-only. The filter no longer claims RTX 20 to 40 series can't work with it
 
 ### Queue
 - **Fixed: filters disappearing after a restart.** Opening the queue sets the project's chain aside and editing a queue item shows that item's chain; the set-aside copy was only kept in memory, so restarting with the queue open and closing it left the item's chain in place of the project's. It is now kept across restarts

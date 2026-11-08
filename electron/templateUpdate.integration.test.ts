@@ -99,7 +99,6 @@ describe.skipIf(!hasTag)('updating a 2.0.0 install', { timeout: 30_000 }, () => 
     expect(report.templatesRemoved).toHaveLength(13);
     expect(report.templatesRemoved).not.toContain('TFMBobN.vkfilter');
     expect(fs.existsSync(path.join(installed, 'TFMBobQ.vkfilter'))).toBe(false);
-    expect(report.templatesAdded).toContain('DLSS Neural Uplift.vkfilter');
   });
 
   it('leaves both edits and the user\'s own template on disk', () => {

@@ -10,7 +10,6 @@ import { registerDependencyHandlers } from './dependencyHandlers';
 import { registerUpdateHandlers } from './updateHandlers';
 import { registerQueueHandlers } from './queueHandlers';
 import { registerDiscordRichPresenceHandlers } from './discordRichPresenceHandlers';
-import { registerDlssRuntimeHandlers } from './dlssRuntimeHandlers';
 import { registerLutHandlers } from './lutHandlers';
 import { registerUpdateReportHandlers } from './updateReportHandlers';
 import { DependencyManager } from './dependencyManager';
@@ -41,7 +40,6 @@ export function registerAllIpcHandlers(
   registerUpdateHandlers();
   registerQueueHandlers();
   registerDiscordRichPresenceHandlers();
-  registerDlssRuntimeHandlers();
   registerUpdateReportHandlers(dependencyManager);
   registerAlignHandlers();
 }

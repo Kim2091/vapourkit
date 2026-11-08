@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { useConsoleLog } from '../hooks/useConsoleLog';
 import { ModalSectionHeader as SectionHeader } from './ModalSectionHeader';
-import { DlssRuntimeSection } from './DlssRuntimeSection';
 import { InstallFailureDetails, InstallWarnings } from './InstallFailureDetails';
 import type { InstallFailureInfo, InstallResult, PluginDependencyProgress } from '../electron.d';
 import { ModalShell } from './ModalShell';
@@ -294,8 +293,6 @@ export const PluginsModal = memo<PluginsModalProps>(({ show, onClose, onInstalla
             )}
           </div>
         </section>
-
-        <DlssRuntimeSection />
 
         <section className="mt-2 border-t border-ink-700">
           <button onClick={() => setShowConsole(!showConsole)} aria-expanded={showConsole} className="w-full text-left">
