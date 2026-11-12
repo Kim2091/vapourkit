@@ -3,6 +3,7 @@ import { Settings, Info, Terminal, FolderOpen, Package, FileCode, RotateCcw, Cpu
 import type { BackendId, DiscordRichPresenceSettings, UpdateReportSnapshot } from '../electron.d';
 import { BACKENDS } from '../utils/backends';
 import { RocmSettingsSection } from './RocmSettingsSection';
+import { GpuSettingsSection } from './GpuSettingsSection';
 import { DEFAULT_ACCENT_COLOR } from '../hooks/useAccentColor';
 import { DEFAULT_MAIN_COLOR } from '../hooks/useMainColor';
 import { ModalSectionHeader } from './ModalSectionHeader';
@@ -211,6 +212,7 @@ export const SettingsModal = memo<SettingsModalProps>(({
                   </div>
                 </label>
               ))}
+              <GpuSettingsSection />
               <label className="flex items-start gap-3 cursor-pointer px-4 py-2 border-b border-ink-900 hover:bg-ink-850 transition-colors">
                 <input
                   type="checkbox"

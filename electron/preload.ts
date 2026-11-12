@@ -183,6 +183,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Descriptive naming
   getRocmSetting: () => ipcRenderer.invoke('get-rocm-setting'),
   setRocmSetting: (setting: { mode: string; customRoot?: string }) => ipcRenderer.invoke('set-rocm-setting', setting),
+  getGpus: () => ipcRenderer.invoke('get-gpus'),
+  setGpu: (index: number | null) => ipcRenderer.invoke('set-gpu', index),
   getDescriptiveNamingEnabled: () => ipcRenderer.invoke('get-descriptive-naming-enabled'),
   setDescriptiveNamingEnabled: (enabled: boolean) => ipcRenderer.invoke('set-descriptive-naming-enabled', enabled),
 

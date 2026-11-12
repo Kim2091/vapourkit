@@ -6,6 +6,7 @@ import { logger } from './logger';
 import { PATHS, IS_WINDOWS } from './constants';
 import { appendBounded, CommandError } from './installFlow';
 import { applyRocmEnvironment } from './rocmEnvironment';
+import { applyGpuEnvironment } from './gpuSelection';
 
 export { CommandError } from './installFlow';
 
@@ -146,6 +147,7 @@ export function setupVSEnvironment(pythonPath?: string): NodeJS.ProcessEnv {
 
   // The ROCm install the MIGraphX backend runs against (Settings, Linux only)
   applyRocmEnvironment(env);
+  applyGpuEnvironment(env);
 
   return env;
 }

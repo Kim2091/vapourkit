@@ -84,6 +84,7 @@
             "include/preview_server.py",
             "include/align_videos.py",
             "include/vk_runtime.py",
+            "include/vk_gpus.py",
             "include/stock-app-config.json",
             "package.json",
             "!data/**/*"
@@ -99,6 +100,7 @@
             "include/preview_server.py",
             "include/align_videos.py",
             "include/vk_runtime.py",
+            "include/vk_gpus.py",
             "include/stock-app-config.json",
             "node_modules/7zip-bin/**/*"
         ],

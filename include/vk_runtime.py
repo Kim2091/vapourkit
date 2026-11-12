@@ -25,9 +25,15 @@ import vapoursynth as vs
 _backend = "tensorrt"
 _backend_attrs = {}
 _build_env = {}
+_gpu = None
+_device_ids = {}
+
+# The backends whose GPU is a device_id in an API the app cannot pin through
+# the environment (see vk_gpus.py), and that API.
+_DEVICE_ID_APIS = {"directml": "dxgi", "ncnn": "vulkan"}
 
 
-def configure(backend, backend_attrs, build_env, models_path, trtexec_path, migraphx_driver_path=None):
+def configure(backend, backend_attrs, build_env, models_path, trtexec_path, migraphx_driver_path=None, gpu=None):
     """
     Records the app's choices for vk_backend() and points vsmlrt at the files
     the app provides.
@@ -47,11 +53,15 @@ def configure(backend, backend_attrs, build_env, models_path, trtexec_path, migr
                     $ROCM_PATH/bin (the ROCm chosen in Settings names its own
                     driver, so one from another ROCm cannot pair with its
                     libraries)
+    gpu             the GPU chosen in Settings, as vk_gpus.find_index() takes
+                    it, or None for each backend's default
     """
-    global _backend, _backend_attrs, _build_env
+    global _backend, _backend_attrs, _build_env, _gpu
     _backend = backend
     _backend_attrs = dict(backend_attrs)
     _build_env = dict(build_env)
+    _gpu = gpu
+    _device_ids.clear()
     try:
         import vsmlrt
         vsmlrt.models_path = models_path
@@ -66,14 +76,37 @@ def configure(backend, backend_attrs, build_env, models_path, trtexec_path, migr
         pass
 
 
+def vk_device_id(backend):
+    """
+    The device_id that runs `backend` on the GPU chosen in Settings. TensorRT
+    and MIGraphX see only that GPU (the app sets CUDA_VISIBLE_DEVICES and
+    HIP_VISIBLE_DEVICES), so theirs is 0; DirectML and NCNN get the GPU's DXGI
+    or Vulkan number, looked up once in this process.
+    """
+    api = _DEVICE_ID_APIS.get(backend)
+    if _gpu is None or api is None:
+        return 0
+    if backend not in _device_ids:
+        import vk_gpus
+        index = vk_gpus.find_index(api, _gpu)
+        if index is None:
+            print(f"Vapourkit: {_gpu.get('name', 'The chosen GPU')} was not found for {backend}; "
+                  "using the default GPU.", file=sys.stderr, flush=True)
+            index = 0
+        _device_ids[backend] = index
+    return _device_ids[backend]
+
+
 def vk_backend(backend="auto", **kwargs):
     """
-    A vsmlrt Backend for the app-selected backend, or for the one named.
-    Custom filters call this so they follow the backend dropdown; kwargs pass
-    through (e.g. fp16=True).
+    A vsmlrt Backend for the app-selected backend, or for the one named, on
+    the GPU chosen in Settings. Custom filters call this so they follow the
+    backend dropdown; kwargs pass through (e.g. fp16=True).
     """
     from vsmlrt import Backend
     backend = _backend if backend == "auto" else backend.lower()
+    if backend in _DEVICE_ID_APIS:
+        kwargs.setdefault("device_id", vk_device_id(backend))
     backend = {key: getattr(Backend, attr) for key, attr in _backend_attrs.items()}[backend](**kwargs)
     if hasattr(backend, "custom_env"):
         for key, value in _build_env.items():

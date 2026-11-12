@@ -4,6 +4,7 @@ import * as fs from 'fs-extra';
 import * as os from 'os';
 import { PATHS } from './constants';
 import { getSystemRoot } from './trtexecShim';
+import { gpuEnvironmentEntries, gpuScriptTarget } from './gpuSelection';
 import { app } from 'electron';
 import { fixAsarPath } from './utils';
 import { configManager } from './configManager';
@@ -53,11 +54,11 @@ const STAGE_REFERENCE = /\{\{\s*stage\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
 const STAGES = 'VK_STAGES';
 
 /** The shared runtime every generated script imports (include/, copied to data/config/). */
-const RUNTIME_FILE = 'vk_runtime.py';
+const RUNTIME_FILES = ['vk_runtime.py', 'vk_gpus.py'];
 
 /** The helpers a generated script imports from it. */
 const RUNTIME_HELPERS = [
-  'vk_backend', 'vk_migx_model', 'vk_paired_by_time', 'vk_reference_video',
+  'vk_backend', 'vk_device_id', 'vk_migx_model', 'vk_paired_by_time', 'vk_reference_video',
   'vk_open_video', 'vk_conform', 'vk_stage_missing', 'vk_interpolated_timing',
   'vk_timed_output',
 ];
@@ -259,7 +260,8 @@ export class VapourSynthScriptGenerator {
    * to data/config/): VK_BACKEND and VK_BUILD_ENV, which filter code reads,
    * the import of the helpers, and the configure() call that hands the
    * runtime this run's backend, the backend registry's id -> vsmlrt Backend
-   * map, and the paths of the model zoo, trtexec shim and migraphx-driver.
+   * map, the paths of the model zoo, trtexec shim and migraphx-driver, and
+   * the GPU chosen in Settings.
    * Custom .vkfilter code calls vk_backend(...) to get a vsmlrt Backend that
    * follows the backend dropdown.
    */
@@ -289,47 +291,52 @@ export class VapourSynthScriptGenerator {
     code += `vk_runtime.configure(VK_BACKEND, {${backendAttrs}}, VK_BUILD_ENV,\n`;
     code += `                     models_path=${posix(PATHS.VSMLRT_MODELS)},\n`;
     code += `                     trtexec_path=${posix(PATHS.TRTEXEC_SHIM)},\n`;
-    code += `                     migraphx_driver_path=${migraphxDriver})\n\n`;
+    code += `                     migraphx_driver_path=${migraphxDriver},\n`;
+    code += `                     gpu=${gpuScriptTarget()})\n\n`;
     return code;
   }
 
   /**
    * Environment seeded into vsmlrt's TensorRT backend (`custom_env`). vsmlrt
    * spawns the engine builder with `{"CUDA_MODULE_LOADING": "LAZY"}` and nothing
-   * else, which on Windows is not enough for cmd.exe to launch the .cmd shim.
+   * else, which on Windows is not enough for cmd.exe to launch the .cmd shim,
+   * and which would build the engine on another GPU than the one chosen.
    */
   private getEngineBuildEnv(): Record<string, string> {
+    const gpu = gpuEnvironmentEntries();
     if (this.platform !== 'win32') {
-      return {};
+      return gpu;
     }
     const systemRoot = getSystemRoot();
     return {
       SystemRoot: systemRoot,
       COMSPEC: path.join(systemRoot, 'System32', 'cmd.exe'),
+      ...gpu,
     };
   }
 
   /**
-   * Makes data/config/vk_runtime.py match the bundled include/vk_runtime.py,
-   * which every generated script imports. Checked on every generation so an
-   * edit reaches a development run at once; the copy is written beside the
-   * target and renamed over it, so a script starting meanwhile never reads
-   * half a file.
+   * Makes data/config/vk_runtime.py and the vk_gpus.py it imports match the
+   * bundled copies in include/. Checked on every generation so an edit reaches
+   * a development run at once; each copy is written beside its target and
+   * renamed over it, so a script starting meanwhile never reads half a file.
    */
   private async syncRuntime(): Promise<void> {
-    const target = path.join(PATHS.CONFIG, RUNTIME_FILE);
-    const bundled = path.join(fixAsarPath(app.getAppPath()), 'include', RUNTIME_FILE);
-    if (await fs.pathExists(bundled)) {
-      const source = await fs.readFile(bundled, 'utf-8');
-      const current = await fs.readFile(target, 'utf-8').catch(() => null);
-      if (current === source) return;
-      await fs.ensureDir(PATHS.CONFIG);
-      const staged = `${target}.${process.pid}-${Math.random().toString(36).substring(2, 9)}.tmp`;
-      await fs.writeFile(staged, source, 'utf-8');
-      await fs.move(staged, target, { overwrite: true });
-      logger.info(`Updated ${RUNTIME_FILE} from bundled source`);
-    } else if (!await fs.pathExists(target)) {
-      throw new Error(`${RUNTIME_FILE} is missing from ${PATHS.CONFIG}. Reinstall Vapourkit to restore it.`);
+    for (const file of RUNTIME_FILES) {
+      const target = path.join(PATHS.CONFIG, file);
+      const bundled = path.join(fixAsarPath(app.getAppPath()), 'include', file);
+      if (await fs.pathExists(bundled)) {
+        const source = await fs.readFile(bundled, 'utf-8');
+        const current = await fs.readFile(target, 'utf-8').catch(() => null);
+        if (current === source) continue;
+        await fs.ensureDir(PATHS.CONFIG);
+        const staged = `${target}.${process.pid}-${Math.random().toString(36).substring(2, 9)}.tmp`;
+        await fs.writeFile(staged, source, 'utf-8');
+        await fs.move(staged, target, { overwrite: true });
+        logger.info(`Updated ${file} from bundled source`);
+      } else if (!await fs.pathExists(target)) {
+        throw new Error(`${file} is missing from ${PATHS.CONFIG}. Reinstall Vapourkit to restore it.`);
+      }
     }
   }
 

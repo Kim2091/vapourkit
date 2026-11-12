@@ -17,7 +17,7 @@ export const ncnnProvider: InferenceProvider = {
 
   modelCallCode(inputExpr: string, modelFile: string, opts: ModelCallOptions): string {
     const fp16 = opts.useFp32 ? 'False' : 'True';
-    return `clip = core.ncnn.Model(${inputExpr}, network_path="${modelFile.replace(/\\/g, '/')}", num_streams=${opts.numStreams}, device_id=0, fp16=${fp16})\n`;
+    return `clip = core.ncnn.Model(${inputExpr}, network_path="${modelFile.replace(/\\/g, '/')}", num_streams=${opts.numStreams}, device_id=vk_device_id("ncnn"), fp16=${fp16})\n`;
   },
 
   pipPackages(): string[] {

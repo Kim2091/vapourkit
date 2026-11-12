@@ -9,6 +9,7 @@ import type { ModelType } from './scriptGenerator';
 import type { GpuVendor } from './gpuDetection';
 import type { DiscordRichPresenceSettings } from './discordRichPresence';
 import { DEFAULT_ROCM_SETTING, setRocmSetting, type RocmSetting } from './rocmEnvironment';
+import { setGpuChoice, type GpuChoice } from './gpuSelection';
 import {
   encodingFrom,
   migrateLegacyArgs,
@@ -67,6 +68,8 @@ interface AppConfig {
   linuxPluginFilterCatalogRevision?: number;
   /** Which ROCm the MIGraphX backend runs against on Linux (rocmEnvironment.ts). */
   rocm?: RocmSetting;
+  /** The GPU inference runs on (gpuSelection.ts); absent means each backend's default. */
+  gpu?: GpuChoice;
   models: {
     [modelName: string]: {
       useFp32: boolean;
@@ -161,6 +164,7 @@ export class ConfigManager {
     }
     this.config.encoding = encodingFrom(this.config.encoding, this.config.ffmpegArgs ?? DEFAULT_FFMPEG_ARGS) ?? undefined;
     setRocmSetting(this.config.rocm);
+    setGpuChoice(this.config.gpu);
   }
 
   private async migrateConfigWithStock(userConfig: Record<string, unknown>): Promise<AppConfig> {
@@ -501,6 +505,16 @@ export class ConfigManager {
   async setRocmSetting(setting: RocmSetting): Promise<void> {
     this.config.rocm = setting;
     setRocmSetting(setting);
+    await this.save();
+  }
+
+  getGpuChoice(): GpuChoice | undefined {
+    return this.config.gpu;
+  }
+
+  async setGpuChoice(choice: GpuChoice | undefined): Promise<void> {
+    this.config.gpu = choice;
+    setGpuChoice(choice);
     await this.save();
   }
 

@@ -6,6 +6,8 @@ import { configManager } from './configManager';
 import { VS_MLRT_VERSION, PATHS } from './constants';
 import { VsMlrtManager } from './vsMlrtManager';
 import { describeRocm, type RocmMode, type RocmSetting } from './rocmEnvironment';
+import { choiceFor, findChosenGpu, probeGpus, type GpuInfo } from './gpuSelection';
+import { fixAsarPath, setupVSEnvironment } from './utils';
 
 // Cache for log file reading - stores last file size for change detection
 let lastLogSize = 0;
@@ -143,6 +145,39 @@ export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
     logger.info(`Setting ROCm installation: ${mode}${customRoot ? ` (${customRoot})` : ''}`);
     await configManager.setRocmSetting(clean);
     return { setting: clean, status: describeRocm(clean) };
+  });
+
+  // Which GPU inference runs on (gpuSelection.ts). Listing also refreshes the
+  // stored choice, whose LUID is new at every boot and whose CUDA and HIP
+  // numbers follow hardware changes.
+  let listedGpus: GpuInfo[] = [];
+
+  ipcMain.handle('get-gpus', async () => {
+    const choice = configManager.getGpuChoice();
+    if (!await fs.pathExists(PATHS.PYTHON)) {
+      return { gpus: [], selected: null, choice: choice ?? null, error: 'GPUs are listed once the Python environment is installed.' };
+    }
+    try {
+      const script = path.join(fixAsarPath(app.getAppPath()), 'include', 'vk_gpus.py');
+      listedGpus = await probeGpus(PATHS.PYTHON, script, setupVSEnvironment(PATHS.PYTHON));
+    } catch (error) {
+      logger.warn(`Could not list GPUs: ${error instanceof Error ? error.message : String(error)}`);
+      return { gpus: [], selected: null, choice: choice ?? null, error: 'The GPUs could not be listed. See the log for details.' };
+    }
+    const chosen = choice ? findChosenGpu(listedGpus, choice) : undefined;
+    if (chosen) {
+      const fresh = choiceFor(listedGpus, chosen);
+      if (JSON.stringify(fresh) !== JSON.stringify(choice)) await configManager.setGpuChoice(fresh);
+    }
+    return { gpus: listedGpus, selected: chosen ? listedGpus.indexOf(chosen) : null, choice: choice ?? null, error: null };
+  });
+
+  ipcMain.handle('set-gpu', async (event, index: number | null) => {
+    const gpu = typeof index === 'number' ? listedGpus[index] : undefined;
+    const choice = gpu ? choiceFor(listedGpus, gpu) : undefined;
+    logger.info(`Setting inference GPU: ${choice ? `${choice.name}${choice.pci ? ` (${choice.pci})` : ''}` : 'default'}`);
+    await configManager.setGpuChoice(choice);
+    return { success: true };
   });
 
   ipcMain.handle('get-encoding-settings-expanded', async () => {

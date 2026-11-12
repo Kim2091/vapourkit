@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Choose which GPU runs inference
+Settings → Inference Backend → GPU picks the GPU, and every backend uses it. Until now each backend took its API's first GPU, and those differ: DirectML and NCNN often landed on a laptop's integrated GPU while TensorRT used the NVIDIA one.
+- TensorRT, MIGraphX and PyTorch-based filters see only the chosen GPU, so engine and program builds happen on it too
+- DirectML and NCNN are given the chosen GPU's number in their own API. Custom filters that call `vk_backend()` follow the setting as well
+- If a backend can't run on the chosen GPU (TensorRT on an AMD or Intel GPU, say), Settings says so and that backend keeps its default GPU
+- Automatic, the default, keeps the old behaviour
+
 ## 2.1.0
 
 ### Updating no longer costs you a re-setup

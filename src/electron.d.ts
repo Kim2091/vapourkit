@@ -21,6 +21,31 @@ export interface RocmStatus {
   summary: string;
 }
 
+/** One physical GPU and its number in each backend's API (electron/gpuSelection.ts). */
+export interface GpuInfo {
+  name: string;
+  vendorId: number;
+  deviceId: number;
+  type: string | null;
+  luid: string | null;
+  pci: string | null;
+  vramMB: number | null;
+  dxgi: number | null;
+  vulkan: number | null;
+  cuda: number | null;
+  cudaUuid: string | null;
+  hip: number | null;
+}
+
+export interface GpuListResult {
+  gpus: GpuInfo[];
+  /** Index into gpus of the chosen GPU; null for the default or when it is missing. */
+  selected: number | null;
+  /** The stored choice, which names a missing GPU when selected is null. */
+  choice: { name: string } | null;
+  error: string | null;
+}
+
 export interface RocmSettingResult {
   setting: RocmSetting;
   status: RocmStatus;
@@ -218,6 +243,8 @@ export interface ElectronAPI {
   /** Which ROCm the MIGraphX backend runs against (Linux only), with what it resolves to */
   getRocmSetting: () => Promise<RocmSettingResult>;
   setRocmSetting: (setting: RocmSetting) => Promise<RocmSettingResult>;
+  getGpus: () => Promise<GpuListResult>;
+  setGpu: (index: number | null) => Promise<{ success: boolean }>;
   getDescriptiveNamingEnabled: () => Promise<{ enabled: boolean }>;
   setDescriptiveNamingEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
 

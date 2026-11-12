@@ -36,6 +36,7 @@ vi.mock('./logger', () => ({
 
 import { VapourSynthScriptGenerator, Filter } from './scriptGenerator';
 import { encodeReferenceVideo } from './referenceVideo';
+import { setGpuChoice } from './gpuSelection';
 
 const aiFilter = (order: number, modelPath: string, backend?: Filter['backend'], numStreams?: number): Filter => ({
   id: `ai-${order}`,
@@ -88,6 +89,7 @@ beforeAll(async () => {
   // The bundled runtime sits under the app path, which generateScript copies
   // it into config/ from
   await fs.copy(RUNTIME_SRC, path.join(testRoot, 'include', 'vk_runtime.py'));
+  await fs.copy(path.join(path.dirname(RUNTIME_SRC), 'vk_gpus.py'), path.join(testRoot, 'include', 'vk_gpus.py'));
 });
 
 afterAll(async () => {
@@ -310,7 +312,7 @@ describe('inference backend selection', () => {
     expect(script).toContain('VK_BACKEND = "directml"');
     expect(script).toMatch(/_vk_sys\.path\.insert\(0, ".*\/data\/config"\)/);
     expect(script).toContain('import vk_runtime\n');
-    expect(script).toContain('from vk_runtime import vk_backend, vk_migx_model, vk_paired_by_time, vk_reference_video, vk_open_video, vk_conform, vk_stage_missing');
+    expect(script).toContain('from vk_runtime import vk_backend, vk_device_id, vk_migx_model, vk_paired_by_time, vk_reference_video, vk_open_video, vk_conform, vk_stage_missing');
     expect(script).toContain('vk_runtime.configure(VK_BACKEND, {"tensorrt": "TRT", "directml": "ORT_DML", "ncnn": "NCNN_VK", "migraphx": "MIGX"}, VK_BUILD_ENV,');
     expect(script.indexOf('vk_runtime.configure(')).toBeLessThan(script.indexOf('# Custom Filter: CAS Sharpen'));
     expect(script.indexOf('original_clip = clip')).toBeLessThan(script.indexOf('import vk_runtime'));
@@ -322,7 +324,7 @@ describe('inference backend selection', () => {
     const imported = script.match(/from vk_runtime import (.*)/)![1].trim().split(', ');
 
     for (const name of imported) expect(runtime).toContain(`def ${name}(`);
-    expect(runtime).toContain('def configure(backend, backend_attrs, build_env, models_path, trtexec_path, migraphx_driver_path=None):');
+    expect(runtime).toContain('def configure(backend, backend_attrs, build_env, models_path, trtexec_path, migraphx_driver_path=None, gpu=None):');
     expect(runtime).toContain('def vk_paired_by_time(ref, like, first=0, offset=0, *, source):');
     expect(runtime).toContain('def vk_reference_video(path, offset, like, first=0, *, source):');
     expect(runtime).toContain('def vk_open_video(path, settings):');
@@ -377,10 +379,25 @@ describe('inference backend selection', () => {
 
   it('points vsmlrt at the app-installed migraphx-driver on Windows and lets the runtime find ROCm\'s on Linux', async () => {
     const win = await generate([customFilter(0, 'CAS Sharpen')], false);
-    expect(win).toMatch(/migraphx_driver_path=".*migx\/vsmlrt-hip\/migraphx-driver\.exe"\)/);
+    expect(win).toMatch(/migraphx_driver_path=".*migx\/vsmlrt-hip\/migraphx-driver\.exe",\n/);
 
     const linux = await generate([customFilter(0, 'CAS Sharpen')], false, 'ncnn', undefined, 'linux');
-    expect(linux).toContain('migraphx_driver_path=None)');
+    expect(linux).toContain('migraphx_driver_path=None,\n');
+  });
+
+  it('hands the runtime no GPU until one is chosen, then the chosen one and its CUDA pin', async () => {
+    const auto = await generate([customFilter(0, 'CAS Sharpen')], false, 'directml');
+    expect(auto).toContain('gpu=None)');
+    expect(auto).not.toContain('CUDA_VISIBLE_DEVICES');
+
+    setGpuChoice({ name: 'GPU A', vendorId: 4318, deviceId: 11353, ordinal: 0, pci: '0000:01:00.0', luid: '0000000000011a99', cudaUuid: 'GPU-dd374f64' });
+    try {
+      const chosen = await generate([customFilter(0, 'CAS Sharpen')], false, 'tensorrt');
+      expect(chosen).toContain('gpu={"name": "GPU A", "vendorId": 4318, "deviceId": 11353, "ordinal": 0, "luid": "0000000000011a99", "pci": "0000:01:00.0"})');
+      expect(chosen).toMatch(/VK_BUILD_ENV = \{.*"CUDA_VISIBLE_DEVICES": "GPU-dd374f64"/);
+    } finally {
+      setGpuChoice(undefined);
+    }
   });
 
   it('does not emit Windows cmd.exe environment variables for Linux TensorRT scripts', async () => {
