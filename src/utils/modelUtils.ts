@@ -60,7 +60,7 @@ export function getModelDisplayName(
 
   // Add [Unbuilt] label for ONNX without engines when the backend builds engines
   if (getBackendDescriptor(backendId).requiresEngineBuild && model.backend === 'onnx' && !model.hasEngine) {
-    displayName = '[Unbuilt] ' + displayName;
+    displayName = '[Builds on first use] ' + displayName;
   }
 
   return displayName;

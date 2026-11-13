@@ -30,6 +30,42 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run test:electron
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test isolated engine-builder imports
+        if: runner.os == 'Linux'
+        run: python scripts/testEmbeddedBuilder.py
+      - name: Test Windows embedded engine-builder imports
+        if: runner.os == 'Windows'
+        run: python scripts/testEmbeddedBuilder.py --download
+      - name: Test real Windows VSRepo plugin installation
+        if: runner.os == 'Windows'
+        run: python scripts/testVsrepoInstall.py
+      - name: Install CPU pipeline and model test dependencies
+        run: python -m pip install onnx onnxruntime numpy vapoursynth==79 vapoursynth-bestsource==21.0 imageio-ffmpeg
+      - name: Configure the pinned VapourSynth runtime
+        run: python -m vapoursynth config
+      - name: Test noisy cold-build binary transport
+        run: python scripts/testRenderPipeline.py
+      - name: Test source index lifecycle across real readers
+        run: python scripts/testSourceCache.py
+      - name: Test all benchmark stages
+        run: python scripts/testPipelineBenchmark.py
+      - name: Test model contracts and engine publication
+        run: npm run test:models
+      - name: Test official Adore FP16 export
+        if: runner.os == 'Linux'
+        run: python scripts/testAdoreExport.py --electron
+      - name: Test live VSRepo registry format and extraction
+        if: runner.os == 'Linux'
+        run: node scripts/testVsrepoRegistry.cjs
+      - name: Install browser for UI smoke tests
+        if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+      - name: Test application controls
+        if: runner.os == 'Linux'
+        run: npm run test:ui
 
   package-linux:
     name: Package Linux AppImage
@@ -50,3 +86,47 @@ jobs:
           test -n "$appimage"
           test -x "$appimage"
           APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout --signal=TERM 30s "$appimage" --version
+
+  package-windows:
+    name: Package Windows x64
+    needs: quality
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Build installer and portable archive
+        run: npx electron-builder --win nsis 7z --x64 --publish never
+      - run: npx tsx scripts/renamePortable.ts
+      - name: Verify packages and smoke-test the Windows executable
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          foreach ($file in @("release/Vapourkit-$version-SETUP.exe", "release/Vapourkit-$version-PORTABLE.7z")) {
+            if (!(Test-Path $file) -or (Get-Item $file).Length -eq 0) { throw "Missing package: $file" }
+            Get-FileHash $file -Algorithm SHA256 | Format-List
+          }
+          $app = Start-Process -FilePath "$PWD/release/win-unpacked/Vapourkit.exe" -ArgumentList '--version' -PassThru
+          if (!$app.WaitForExit(30000)) {
+            Stop-Process -Id $app.Id -Force
+            throw 'Packaged Windows executable did not exit within 30 seconds'
+          }
+          if ($app.ExitCode -ne 0) { throw "Packaged Windows executable exited with $($app.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vapourkit-Windows-x64-Installer
+          path: release/*-SETUP.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vapourkit-Windows-x64-Portable
+          path: release/*-PORTABLE.7z
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

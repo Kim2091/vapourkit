@@ -2,9 +2,13 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  exportPipelineBenchmark: (request: unknown) => ipcRenderer.invoke('export-pipeline-benchmark', request),
+  getPipelineSettings: () => ipcRenderer.invoke('get-pipeline-settings'),
+  setPipelineSettings: (settings: import('./pipelineSettings').PipelineSettings) => ipcRenderer.invoke('set-pipeline-settings', settings),
   // Dependency management
   platform: process.platform,
   checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
+  checkEncodingSupport: (request: { encoder: string; pixelFormat: string }) => ipcRenderer.invoke('check-encoding-support', request),
   getNvencDriverProblem: () => ipcRenderer.invoke('get-nvenc-driver-problem'),
   detectCudaSupport: () => ipcRenderer.invoke('detect-cuda-support'),
   getInferenceBackendInfo: () => ipcRenderer.invoke('get-inference-backend-info'),
@@ -15,6 +19,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('setup-progress', listener);
     return () => ipcRenderer.removeListener('setup-progress', listener);
   },
+
+  setPreviewEnabled: (enabled: boolean) => ipcRenderer.invoke('set-preview-enabled', enabled),
 
   // Video operations
   selectVideoFile: () => ipcRenderer.invoke('select-video-file'),
@@ -106,6 +112,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (event: any, status: any) => callback(status);
     ipcRenderer.on('engine-build-progress', listener);
     return () => ipcRenderer.removeListener('engine-build-progress', listener);
+  },
+  onPreviewSuspendedForRender: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('preview-suspended-for-render', listener);
+    return () => ipcRenderer.removeListener('preview-suspended-for-render', listener);
   },
   openOutputFolder: (filePath: string) => ipcRenderer.invoke('open-output-folder', filePath),
   compareVideos: (inputPath: string, outputPath: string) => ipcRenderer.invoke('compare-videos', inputPath, outputPath),
@@ -210,6 +221,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reloadBackend: () => ipcRenderer.invoke('reload-backend'),
   
   // Filter template operations
+  listFilterRepository: (refresh: boolean) => ipcRenderer.invoke('filter-repository-list', refresh),
+  installRepositoryFilter: (id: string) => ipcRenderer.invoke('filter-repository-install', id),
   getFilterTemplates: () => ipcRenderer.invoke('get-filter-templates'),
   saveFilterTemplate: (template: any) => ipcRenderer.invoke('save-filter-template', template),
   deleteFilterTemplate: (name: string) => ipcRenderer.invoke('delete-filter-template', name),
@@ -246,6 +259,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   
   // Update operations
+  checkComponents: (online: boolean) => ipcRenderer.invoke('components-check', online),
+  installComponent: (id: string, version: string, experimental: boolean) => ipcRenderer.invoke('components-install', { id, version, experimental }),
+  rollbackComponent: (kind: 'runtime' | 'ffmpeg' | 'filters') => ipcRenderer.invoke('components-rollback', kind),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   openReleasesPage: () => ipcRenderer.invoke('open-releases-page'),
   openReleaseUrl: (url: string) => ipcRenderer.invoke('open-release-url', url),

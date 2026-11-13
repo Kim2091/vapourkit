@@ -11,6 +11,8 @@ export interface FfmpegConfig {
   preset: Preset;
   crf: number;
   customArgs?: string;
+  rateControl?: 'quality' | 'bitrate';
+  bitrateMbps?: number;
 }
 
 const CODEC_MAPPINGS: Record<string, Codec> = {
@@ -139,7 +141,7 @@ export function getQualityArgs(codec: Codec, encoder: Encoder, quality: number):
   switch (encoder) {
     case 'nvidia':
       // -b:v 0 lifts the default bitrate cap that would otherwise bound -cq.
-      return [`-cq ${value}`, '-b:v 0'];
+      return ['-rc vbr', `-cq ${value}`, '-b:v 0'];
     case 'amd':
       // hevc_amf has no -qp_b; emitting it there would go unconsumed.
       return codec === 'h265'
@@ -219,7 +221,7 @@ function hasCustomFlags(args: string): boolean {
     // matched at 0 so a real bitrate target still counts as custom.
     .replace(/-cq\s+\d+/, '')
     .replace(/-b:v\s+0(?!\S)/, '')
-    .replace(/-rc\s+cqp/, '')
+    .replace(/-rc\s+(?:cqp|vbr)(?!\S)/, '')
     .replace(/-qp_i\s+\d+/, '')
     .replace(/-qp_p\s+\d+/, '')
     .replace(/-qp_b\s+\d+/, '')
@@ -263,7 +265,11 @@ export function generateFfmpegArgs(config: FfmpegConfig): string {
   // -crf outright, so emitting it there silently falls back to their default
   // bitrate-targeted rate control.
   if (config.codec !== 'prores') {
-    parts.push(...getQualityArgs(config.codec, config.encoder, config.crf));
+    if (config.rateControl === 'bitrate') {
+      if (config.encoder === 'nvidia') parts.push('-rc vbr');
+      if (config.encoder === 'amd') parts.push('-rc vbr_peak');
+      parts.push(`-b:v ${config.bitrateMbps ?? 8}M`);
+    } else parts.push(...getQualityArgs(config.codec, config.encoder, config.crf));
   }
 
   // Add video filter for color parameters

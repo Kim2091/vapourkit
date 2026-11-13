@@ -20,6 +20,7 @@ interface QueuePanelProps {
   onOpenItemFolder: (itemId: string) => void;
   onDropFiles?: (files: string[]) => void;
   onDuplicateItem: (itemId: string) => void;
+  onApplyToPending: () => void;
 }
 
 export const QueuePanel = memo<QueuePanelProps>(({
@@ -38,6 +39,7 @@ export const QueuePanel = memo<QueuePanelProps>(({
   onOpenItemFolder,
   onDropFiles,
   onDuplicateItem,
+  onApplyToPending,
 }: QueuePanelProps) => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -205,6 +207,11 @@ export const QueuePanel = memo<QueuePanelProps>(({
         actions={<span className="text-[11px] text-ink-500 tabular-nums">{queue.length}</span>}
       />
 
+      <button type="button" onClick={onApplyToPending} disabled={stats.pending === 0}
+        title="Copy the current models, filters, encoding, trim and track selections to every pending video"
+        className="m-2 px-2 py-2 text-xs rounded border border-ink-700 text-accent-400 hover:bg-ink-850 disabled:opacity-40">
+        Apply current settings to all pending ({stats.pending})
+      </button>
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative">
         {isDraggingFiles && (
           <div className="absolute inset-0 z-50 bg-accent-500/10 border-2 border-dashed border-accent-500 m-1.5 rounded flex items-center justify-center backdrop-blur-sm pointer-events-none">

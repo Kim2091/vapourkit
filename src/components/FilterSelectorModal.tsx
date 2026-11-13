@@ -1,3 +1,4 @@
+import { FilterRepositoryModal } from './FilterRepositoryModal';
 import { memo, useState, useEffect, useMemo } from 'react';
 import { Filter as FilterIcon, Plus } from 'lucide-react';
 import type { FilterTemplate } from '../electron.d';
@@ -17,6 +18,7 @@ interface FilterSelectorModalProps {
   onEditTemplate?: (oldName: string, template: FilterTemplate) => Promise<boolean>;
   /** Puts back deleted built-in filters; answers the files restored */
   onRestoreTemplates?: () => Promise<string[]>;
+  onRefreshTemplates?: () => Promise<void>;
   currentSelection?: string;
 }
 
@@ -40,8 +42,10 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
   onDeleteTemplate,
   onEditTemplate,
   onRestoreTemplates,
+  onRefreshTemplates,
   currentSelection = '',
 }) => {
+  const [showRepository, setShowRepository] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   // Built-in filters this install deleted. An update never brings them back,
   // so this is the one place to.
@@ -164,6 +168,7 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
 
   return (
     <>
+      {showRepository && <FilterRepositoryModal onClose={() => setShowRepository(false)} onInstalled={onRefreshTemplates} />}
       {editingTemplate && (
         <TemplateEditDialog
           template={editingTemplate}
@@ -193,6 +198,8 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
           />
         }
         listTop={
+          <>
+          <button type="button" className="w-full px-3 py-2 text-left text-accent-400 border-b border-ink-800" onClick={() => setShowRepository(true)}>Get more filters</button>
           <button
             onClick={() => handleSelectTemplate('')}
             className={`w-full h-9 px-3 border-b border-ink-900 transition-colors flex items-center gap-2 text-[12.5px] font-medium text-left ${
@@ -205,6 +212,7 @@ export const FilterSelectorModal = memo<FilterSelectorModalProps>(({
             <Plus className="w-4 h-4" />
             <span>Custom/New Filter</span>
           </button>
+          </>
         }
         current={currentSelection ? { label: currentSelection, clearLabel: 'Clear (Custom)', onClear: handleClearSelection } : null}
         showPinned={!searchQuery && selectedCategory === 'All'}

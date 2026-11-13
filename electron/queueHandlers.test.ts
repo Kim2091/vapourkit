@@ -22,6 +22,7 @@ vi.mock('./constants', () => ({ PATHS: { CONFIG: dir } }));
 vi.mock('./logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
 import { registerQueueHandlers } from './queueHandlers';
+vi.mock('./sourceIndexCache', () => ({ holdQueuedSourceIndexes: vi.fn() }));
 
 const queueFile = path.join(dir, 'queue.json');
 const invoke = (channel: string, ...args: any[]) => handlers.get(channel)!({}, ...args);

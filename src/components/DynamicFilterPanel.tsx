@@ -33,6 +33,7 @@ interface DynamicFilterPanelProps {
   onDeleteTemplate?: (name: string) => Promise<boolean>;
   /** Puts back deleted built-in filters; answers the files restored */
   onRestoreTemplates?: () => Promise<string[]>;
+  onRefreshTemplates?: () => Promise<void>;
   onImportClick?: () => void;
   onModelsUpdated?: () => Promise<void>;
   /** Opens a visual editor declared by the selected .vkfilter template. */
@@ -99,6 +100,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   onSaveTemplate,
   onDeleteTemplate,
   onRestoreTemplates,
+  onRefreshTemplates,
   onImportClick,
   onModelsUpdated,
   onOpenFilterEditor,
@@ -114,6 +116,8 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
   const [hoveredDragHandle, setHoveredDragHandle] = useState<string | null>(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyDuplicatedId, setNewlyDuplicatedId] = useState<string | null>(null);
+  const [draftStep, setDraftStep] = useState<Filter | null>(null);
+  const draftStepRef = useRef<Filter | null>(null);
   const [showFilterSelector, setShowFilterSelector] = useState<string | null>(null);
   const [showModelSelector, setShowModelSelector] = useState<string | null>(null);
   /** Side chains folded shut in the rail, by Load Video id. */
@@ -162,6 +166,10 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     if (syncedEpochRef.current !== chainEpoch) {
       syncedEpochRef.current = chainEpoch;
       dirtyCodeRef.current.clear();
+      draftStepRef.current = null;
+      setDraftStep(null);
+      setShowFilterSelector(null);
+      setShowModelSelector(null);
     }
     const dirty = dirtyCodeRef.current;
     setPendingFilters(normalizeChainOrder(filters).map(filter =>
@@ -222,6 +230,7 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
    */
   const commitOrder = (updated: Filter[]) => {
     const normalized = normalizeChainOrder(updated);
+    pendingRef.current = normalized;
     setPendingFilters(normalized);
     onFiltersChange(normalized);
     return normalized;
@@ -258,12 +267,26 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
     ...fields,
   });
 
-  /** Adds a step and opens it, with its picker over it. */
+  // A picker owns an uncommitted draft. Closing it never changes the chain or undo history.
   const addStep = (step: Filter, openPicker: (id: string) => void) => {
-    commitOrder([...pendingFilters, step]);
-    setExpandedFilters(prev => new Set([...prev, step.id]));
+    draftStepRef.current = step;
+    setDraftStep(step);
     setShowAddMenu(false);
     openPicker(step.id);
+  };
+  const closePicker = () => {
+    draftStepRef.current = null;
+    setDraftStep(null);
+    setShowFilterSelector(null);
+    setShowModelSelector(null);
+  };
+  const commitPickedStep = (id: string, fields: Partial<Filter>) => {
+    const draft = draftStepRef.current;
+    if (!draft || draft.id !== id) { patchStep(id, step => ({ ...step, ...fields })); return; }
+    commitOrder([...pendingRef.current, { ...draft, ...fields }]);
+    setExpandedFilters(prev => new Set([...prev, id]));
+    draftStepRef.current = null;
+    setDraftStep(null);
   };
 
   const handleAddCustomFilter = (chain?: string) => {
@@ -332,12 +355,6 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
 
   const handleToggleFilter = (id: string, enabled: boolean) => {
     patchStep(id, f => ({ ...f, enabled }));
-  };
-
-  const handleModelChange = (id: string, modelPath: string) => {
-    const selectedModel = availableModels.find(m => m.path === modelPath);
-    // The step's type is the model's own, from its metadata
-    patchStep(id, f => ({ ...f, modelPath, modelType: selectedModel?.modelType || 'image' }));
   };
 
   const handlePresetChange = (id: string, preset: string) => {
@@ -476,10 +493,12 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       if (!(await confirmReplaceTemplate(template.name))) return;
 
       if (onSaveTemplate) {
-        await onSaveTemplate(template);
+        const saved = await onSaveTemplate(template);
+        if (!saved) { notify.error('Filter not imported', 'The template could not be saved. Check its variables and editor mapping, then retry.'); return; }
+        notify.info('Filter imported — validate before rendering', result.warnings?.join(' ') || 'External filters may require additional plugins. Validate the workflow and use Plugins → Partial reinstall for bundled dependencies.');
       }
     } catch (err) {
-      notify.error('Import Error', 'Failed to import template. Please check the file format.');
+      notify.error('Import Error', `Could not import the filter: ${err instanceof Error ? err.message : String(err)}. Check the TOML syntax, variable types and editor mapping.`);
       console.error('Import error:', err);
     }
   };
@@ -878,15 +897,18 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       {showFilterSelector && (
         <FilterSelectorModal
           isOpen={true}
-          onClose={() => setShowFilterSelector(null)}
+          onClose={closePicker}
           filterTemplates={filterTemplates}
           currentSelection={pendingFilters.find(f => f.id === showFilterSelector)?.preset || ''}
           onSelectTemplate={(templateName) => {
             if (showFilterSelector) {
-              handlePresetChange(showFilterSelector, templateName);
+              const template = filterTemplates.find(t => t.name === templateName);
+              if (!template && draftStepRef.current) return;
+              commitPickedStep(showFilterSelector, { preset: templateName, ...fromTemplate(template) });
             }
           }}
           onRestoreTemplates={onRestoreTemplates}
+          onRefreshTemplates={onRefreshTemplates}
           onDeleteTemplate={onDeleteTemplate ? async (name: string) => {
             const success = await onDeleteTemplate(name);
             if (success && showFilterSelector) {
@@ -906,13 +928,15 @@ export const DynamicFilterPanel = memo<DynamicFilterPanelProps>(({
       {showModelSelector && (
         <ModelSelectorModal
           isOpen={true}
-          onClose={() => setShowModelSelector(null)}
+          onClose={closePicker}
           availableModels={availableModels}
-          backendId={resolveFilterBackend(pendingFilters.find(f => f.id === showModelSelector)?.backend, defaultBackend)}
+          backendId={resolveFilterBackend((draftStep?.id === showModelSelector ? draftStep : pendingFilters.find(f => f.id === showModelSelector))?.backend, defaultBackend)}
           currentSelection={pendingFilters.find(f => f.id === showModelSelector)?.modelPath || ''}
           onSelectModel={(modelPath) => {
             if (showModelSelector) {
-              handleModelChange(showModelSelector, modelPath);
+              if (!modelPath && draftStepRef.current) return;
+              const model = availableModels.find(m => m.path === modelPath);
+              commitPickedStep(showModelSelector, { modelPath, modelType: model?.modelType || 'image' });
             }
           }}
           onImportModel={onImportClick}

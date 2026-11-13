@@ -1,3 +1,4 @@
+import { validateFilterTemplate, variablesWithParameters } from './filterValidation';
 import { ipcMain } from 'electron';
 import * as fs from 'fs-extra';
 import * as TOML from '@iarna/toml';
@@ -59,20 +60,18 @@ export function registerTemplateHandlers(templateManager: TemplateManager) {
   ipcMain.handle('import-template-file', async (event, filePath: string) => {
     logger.info(`Importing template file: ${filePath}`);
     try {
+      const stats = await fs.stat(filePath);
+      if (!stats.isFile() || stats.size > 2 * 1024 * 1024) throw new Error('Choose a .vkfilter text file smaller than 2 MiB.');
       const content = await fs.readFile(filePath, 'utf-8');
       
       // Parse TOML in the main process (Node.js context)
       const template = TOML.parse(content) as unknown as FilterTemplate;
       
-      // Validate required fields
-      if (!template.name || template.code === undefined) {
-        return { 
-          success: false, 
-          error: 'Invalid template format. Must include "name" and "code" fields.' 
-        };
-      }
-      
-      return { success: true, template };
+      validateFilterTemplate(template);
+      const parameters = (template as FilterTemplate & { parameters?: Record<string, string | number | boolean> }).parameters;
+      template.variables = variablesWithParameters(template.variables, parameters);
+      return { success: true, template, warnings: ['Imported Python filters may need external dependencies. Validate the workflow with a video before rendering. Use Plugins → Partial reinstall for bundled dependencies; external plugins must match your operating system and VapourSynth version.'] };
+
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Error importing template file:', errorMsg);

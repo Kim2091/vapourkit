@@ -41,7 +41,12 @@ const MAX_GRAPH_DEPTH = 3;
 // Backstop so a corrupt length cannot turn the deferred node scan into a stall.
 const MAX_SCANNED_NODES = 100000;
 
+export interface OnnxBinding { name: string; shape: Array<number | string>; dataType: string; }
+
 export interface OnnxGraphInfo {
+  inputs: OnnxBinding[];
+  outputs: OnnxBinding[];
+  externalData: string[];
   inputName?: string;
   /** Symbolic dimensions come back as strings, the way ONNX Runtime reports them. */
   inputShape?: Array<number | string>;
@@ -278,6 +283,48 @@ function scanSubgraph(
   });
 }
 
+/** Read only metadata; never decode raw tensor payloads. */
+function tensorFiles(reader: ProtoReader, start: number, end: number, files: Set<string>): string | undefined {
+  let name: string | undefined;
+  reader.pos = start;
+  eachField(reader, end, field => {
+    if (field.field === 8 && field.wire === WIRE_LENGTH) name = reader.readString(field.start, field.end);
+    if (field.field !== 13 || field.wire !== WIRE_LENGTH) return;
+    let key = ''; let value = '';
+    reader.pos = field.start;
+    eachField(reader, field.end, item => {
+      if (item.wire !== WIRE_LENGTH) return;
+      if (item.field === 1) key = reader.readString(item.start, item.end);
+      if (item.field === 2) value = reader.readString(item.start, item.end);
+    });
+    if (key === 'location') files.add(value);
+  });
+  return name;
+}
+function collectExternalGraph(reader: ProtoReader, start: number, end: number, files: Set<string>, depth: number): void {
+  if (depth > 16) throw new OnnxParseError('Graph nesting exceeds supported inspection depth');
+  reader.pos = start;
+  eachField(reader, end, field => {
+    if (field.wire !== WIRE_LENGTH) return;
+    if (field.field === 5) tensorFiles(reader, field.start, field.end, files);
+    if (field.field === 15) {
+      reader.pos = field.start;
+      eachField(reader, field.end, item => { if (item.field === 1 && item.wire === WIRE_LENGTH) tensorFiles(reader, item.start, item.end, files); });
+    }
+    if (field.field !== 1) return;
+    reader.pos = field.start;
+    eachField(reader, field.end, node => {
+      if (node.field !== 5 || node.wire !== WIRE_LENGTH) return;
+      reader.pos = node.start;
+      eachField(reader, node.end, attribute => {
+        if (attribute.wire !== WIRE_LENGTH) return;
+        if ([5, 10].includes(attribute.field)) tensorFiles(reader, attribute.start, attribute.end, files);
+        if ([6, 11].includes(attribute.field)) collectExternalGraph(reader, attribute.start, attribute.end, files, depth + 1);
+      });
+    });
+  });
+}
+
 function dataTypeName(dataType: number): string {
   return DATA_TYPE_NAMES[dataType] ?? `type${dataType}`;
 }
@@ -307,6 +354,10 @@ export function inspectOnnxGraph(onnxPath: string): OnnxGraphInfo | null {
 
     const weightTypes = new Set<number>();
     const nodeRanges: Array<[number, number]> = [];
+    const inputs: OnnxBinding[] = [];
+    const outputs: OnnxBinding[] = [];
+    const initializers = new Set<string>();
+    const externalData = new Set<string>();
     let input: { name?: string; type: TensorTypeInfo } | undefined;
     let outputShape: Array<number | string> | undefined;
 
@@ -318,14 +369,18 @@ export function inspectOnnxGraph(onnxPath: string): OnnxGraphInfo | null {
         return;
       }
       if (field.field === 5) {
+        const meta = tensorFiles(reader, field.start, field.end, externalData);
+        if (meta) initializers.add(meta);
         const dataType = tensorDataType(reader, field.start, field.end); // initializer
         if (dataType !== undefined) {
           weightTypes.add(dataType);
         }
-      } else if (field.field === 11 && !input) {
-        input = valueInfo(reader, field.start, field.end); // input
-      } else if (field.field === 12 && !outputShape) {
-        outputShape = valueInfo(reader, field.start, field.end).type.shape; // output
+      } else if (field.field === 11 || field.field === 12) {
+        const info = valueInfo(reader, field.start, field.end);
+        const binding = { name: info.name ?? '', shape: info.type.shape ?? [], dataType: dataTypeName(info.type.dataType ?? 0) };
+        (field.field === 11 ? inputs : outputs).push(binding);
+        if (field.field === 11 && !input) input = info;
+        if (field.field === 12 && !outputShape) outputShape = info.type.shape;
       } else if (field.field === 1 && nodeRanges.length < MAX_SCANNED_NODES) {
         nodeRanges.push([field.start, field.end]); // node, scanned below only if needed
       }
@@ -340,13 +395,17 @@ export function inspectOnnxGraph(onnxPath: string): OnnxGraphInfo | null {
       }
     }
 
-    const inputShape = input?.type.shape;
-    const inputDataType = input?.type.dataType;
+    collectExternalGraph(reader, graphStart, graphEnd, externalData, 0);
+    const dataInputs = inputs.filter(binding => !initializers.has(binding.name));
+    const first = dataInputs[0];
+    const inputShape = first?.shape;
+    const inputDataType = first?.dataType;
     return {
-      inputName: input?.name,
+      inputs: dataInputs, outputs, externalData: [...externalData].sort(),
+      inputName: first?.name,
       inputShape,
       outputShape,
-      inputDataType: inputDataType === undefined ? undefined : dataTypeName(inputDataType),
+      inputDataType,
       isStatic: inputShape !== undefined
         && inputShape.length >= 4
         && inputShape.every(dim => typeof dim === 'number' && Number.isInteger(dim) && dim > 0),

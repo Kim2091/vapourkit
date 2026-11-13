@@ -1,3 +1,4 @@
+import { filterFailureHint } from './filterDiagnostics';
 import { API3_UNSUPPORTED, describeCoreTooNew } from './vapoursynthCore';
 
 // VapourSynth emits one of these non-fatal notices for every legacy API3
@@ -38,5 +39,7 @@ export function formatVapourSynthValidationError(output: string): string {
   if (API3_UNSUPPORTED.test(output)) {
     return filtered ? `${describeCoreTooNew()}\n\n${filtered}` : describeCoreTooNew();
   }
+  const hint = filterFailureHint(filtered);
+  if (hint) return `${hint}\n\n${filtered}`;
   return filtered || 'VapourSynth failed before producing output. Check the log for details.';
 }

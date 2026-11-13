@@ -11,6 +11,7 @@ vi.mock('electron', () => ({
 vi.mock('./logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
 import { registerWorkflowHandlers } from './workflowHandlers';
+import { resolveEncodingArgs, type EncodingSettings } from './encodingSettings';
 
 const file = path.join(os.tmpdir(), `vk-workflow-test-${process.pid}.vkworkflow`);
 const invoke = (channel: string, ...args: any[]) => handlers.get(channel)!({}, ...args);
@@ -63,6 +64,21 @@ describe('workflow encoding settings', () => {
     const imported = await invoke('import-workflow', file);
     expect(imported.workflow.encodingSettings.encoding).toEqual(encoding);
     expect(imported.workflow.encodingSettings.ffmpegArgs).toBe(encoding.customArgs);
+  });
+
+  it('round-trips guided settings and explicit empty track selections', async () => {
+    const encoding: EncodingSettings = { mode: 'simple', simple: {
+      codec: 'h264', encoder: 'software', preset: 'medium', quality: 20,
+      rateControl: 'bitrate', bitrateMbps: 8, maxBitrateMbps: 12,
+      audioCodec: 'aac', audioBitrateKbps: 192, audioChannels: 2,
+      keyframeInterval: 48, copyMetadata: false, fastStart: false,
+    }, customArgs: '', audioTracks: [1], subtitleTracks: [] };
+    const workflow = { name: 'guided', version: '1.0', filters: [], encodingSettings: {
+      ...encodingSettings, encoding, ffmpegArgs: resolveEncodingArgs(encoding),
+    } };
+    expect(await invoke('export-workflow', workflow, file)).toEqual({ success: true });
+    const imported = await invoke('import-workflow', file);
+    expect(imported.workflow.encodingSettings.encoding).toEqual(encoding);
   });
 
   it('migrates a file with only ffmpeg_args', async () => {

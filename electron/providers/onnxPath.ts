@@ -5,6 +5,7 @@
 // backends need the ONNX it was built from.
 
 import * as fs from 'fs-extra';
+import * as path from 'path';
 import { logger } from '../logger';
 
 /**
@@ -21,6 +22,13 @@ export function resolveOnnxPath(modelPath: string): string {
     return modelPath;
   }
 
+  try {
+    const manifest = fs.readJsonSync(modelPath + '.json');
+    if (manifest.schema === 1 && typeof manifest.sourceRelative === 'string') {
+      const source = path.resolve(path.dirname(modelPath), manifest.sourceRelative);
+      if (fs.existsSync(source)) return source;
+    }
+  } catch { /* Legacy engines use filename pairing. */ }
   const candidates = [
     modelPath.replace(/\.engine$/i, '.onnx'),
     modelPath.replace(/_fp(16|32)\.engine$/i, '.onnx'),

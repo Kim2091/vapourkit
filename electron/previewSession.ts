@@ -1,3 +1,4 @@
+import { formatVapourSynthValidationError } from './vapourSynthErrorFormatter';
 // electron/previewSession.ts — the Node half of the warm preview session.
 //
 // Owns one long-lived python child running data/config/preview_server.py, and
@@ -223,6 +224,10 @@ export class PreviewSession {
 
   /** Injected so the protocol can be tested against a fake child. */
   constructor(private readonly spawner: typeof spawn = spawn) {}
+  private exited: Promise<void> = Promise.resolve();
+  private disposed = false;
+  /** Resolve only after the old Python process releases its GPU allocations. */
+  waitForExit(): Promise<void> { return this.exited; }
 
   get isRunning(): boolean {
     return this.child !== null;
@@ -245,6 +250,7 @@ export class PreviewSession {
    * session can be started ahead of a script being ready.
    */
   async start(): Promise<void> {
+    if (this.disposed) throw new Error('Preview session closed');
     if (this.child) return;
 
     const serverPath = path.join(PATHS.CONFIG, 'preview_server.py');
@@ -254,6 +260,7 @@ export class PreviewSession {
     if (!(await fs.pathExists(PATHS.PYTHON))) {
       throw new Error('Python not found; VapourSynth dependencies may not be installed.');
     }
+    if (this.disposed) throw new Error('Preview session closed');
 
     this.exitReason = null;
     this.reader = new FrameReader(reply => this.onReply(reply));
@@ -273,6 +280,7 @@ export class PreviewSession {
         windowsHide: true,
       }),
     );
+    this.exited = new Promise(resolve => { child.once('close', () => resolve()); child.once('error', () => resolve()); });
 
     child.stdout?.on('data', (chunk: Buffer) => this.reader?.push(chunk));
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -369,6 +377,7 @@ export class PreviewSession {
   }
 
   dispose(): void {
+    this.disposed = true;
     const child = this.child;
     this.child = null;
     this.reader = null;
@@ -439,7 +448,7 @@ export class PreviewSession {
     this.pending.delete(seq);
 
     if (reply.header.type === 'error') {
-      waiter.reject(new Error(String(reply.header.error ?? 'Unknown preview error')));
+      waiter.reject(new Error(formatVapourSynthValidationError(String(reply.header.error ?? 'Unknown preview error'))));
       return;
     }
     waiter.resolve(reply);
@@ -486,7 +495,7 @@ export class PreviewSession {
         type: 'error',
         stream,
         n: header.n ?? -1,
-        error: String(header.error ?? 'Unknown playback error'),
+        error: formatVapourSynthValidationError(String(header.error ?? 'Unknown playback error')),
       });
     }
     return true;

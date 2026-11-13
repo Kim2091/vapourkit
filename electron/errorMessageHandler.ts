@@ -1,3 +1,5 @@
+import { filterFailureHint } from './filterDiagnostics';
+import { explainNvencFailure } from './encodingSupport';
 // electron/errorMessageHandler.ts
 import { logger } from './logger';
 import { API3_UNSUPPORTED, describeCoreTooNew } from './vapoursynthCore';
@@ -35,6 +37,12 @@ export class ErrorMessageHandler {
     // megabyte of runtime chatter.
     logger.error('End of stderr output:', stderr.slice(-STDERR_LOG_TAIL));
 
+    const encoderFailure = explainNvencFailure(stderr);
+    if (encoderFailure) return encoderFailure.message;
+    if (/could not find tag for codec.*(?:not currently supported|not supported in container)|codec .*not.*supported.*container/i.test(stderr)) {
+      return 'The output container cannot store a selected audio or subtitle codec. Choose MKV to keep the original tracks, choose AAC audio encoding, or remove incompatible subtitles in Audio & subtitles.';
+    }
+
     // The hex code is never localised, unlike the text around it.
     if (GPU_OUT_OF_MEMORY.test(stderr)) {
       return 'The GPU ran out of video memory running this model. Try a lower number of streams, '
@@ -62,6 +70,9 @@ export class ErrorMessageHandler {
     if (nvenc) {
       return describeNvencDriverError(nvenc);
     }
+
+    const filterHint = filterFailureHint(stderr);
+    if (filterHint) return filterHint;
 
     // The API3 autoload notices are never the error, and with nothing else
     // printed they were all the "last lines" fallback below had to show.

@@ -21,11 +21,13 @@ import {
 } from './workflowSettings';
 import {
   readLocalProject,
+  readStoredBackend,
   readPreQueueSnapshot,
   readProjectConfigAside,
   writeEditingItemId,
   writeLocalProject,
   writePreQueueSnapshot,
+  writeProjectConfigAside,
 } from './workflowStores';
 
 /**
@@ -33,7 +35,16 @@ import {
  * record and the set-aside config settings over it. Both of those hold the
  * project's settings while the saved ones may be a queue item's.
  */
-export function loadDocument(): WorkflowDocumentState {
+export function loadDocument(fresh = false): WorkflowDocumentState {
+  if (fresh) {
+    // Jobs and user-exported workflows remain intact; only the working document resets.
+    const project = { ...DEFAULT_SETTINGS, defaultBackend: readStoredBackend() ?? DEFAULT_SETTINGS.defaultBackend };
+    writeLocalProject(project, [...LOCAL_FIELDS]);
+    writePreQueueSnapshot(null);
+    writeProjectConfigAside(null);
+    writeEditingItemId(null);
+    return initialDocument(project, [...CONFIG_FIELDS], null);
+  }
   let project = readLocalProject(DEFAULT_SETTINGS);
   let settled: ConfigField[] = [];
   let session: QueueSession | null = null;

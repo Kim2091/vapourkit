@@ -79,6 +79,7 @@ export function useBackendOperations({
       if (!validation.isValid) {
         detectionFailed = true;
       }
+      if (validation.compatibilityError) { onLog(validation.compatibilityError); return; }
       if (validation.isValid && validation.inputName) {
         inputName = validation.inputName;
         onLog(`Detected input name: ${inputName}`);

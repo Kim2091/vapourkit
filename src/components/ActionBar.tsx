@@ -161,7 +161,7 @@ export const ActionBar = memo(function ActionBar({
       )}
       {upscaleProgress?.fps && (
         <>
-          <Stat label="Speed" value={`${upscaleProgress.fps} FPS`} />
+          <Stat label="Pipeline" value={`${upscaleProgress.fps} FPS`} />
           <Divider />
         </>
       )}

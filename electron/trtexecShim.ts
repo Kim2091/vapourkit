@@ -40,7 +40,23 @@ export async function ensureEngineBuilderScript(): Promise<string> {
     await fs.ensureDir(PATHS.APP_DATA);
     await fs.writeFile(builderScript, bundled);
   }
+  await ensureModelRuntimeScript();
   return builderScript;
+}
+
+/** Stage the application helper for both shape inspection and engine builds. */
+export async function ensureModelRuntimeScript(): Promise<string> {
+  const target = path.join(PATHS.APP_DATA, 'vk_model_runtime.py');
+  const bundled = await fs.readFile(path.join(getBundledBasePath(), 'include', 'vk_model_runtime.py')).catch(() => { throw new Error('Vapourkit application runtime is incomplete: vk_model_runtime.py is missing from this build. Extract a complete current application build into a new folder.'); });
+  const current = await fs.readFile(target).catch(() => null);
+  if (!current || !current.equals(bundled)) {
+    await fs.ensureDir(PATHS.APP_DATA);
+    const { randomUUID } = await import('crypto');
+    const stage = `${target}.${randomUUID()}.tmp`;
+    await fs.writeFile(stage, bundled);
+    await fs.rename(stage, target);
+  }
+  return target;
 }
 
 /**

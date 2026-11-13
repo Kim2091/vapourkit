@@ -102,7 +102,7 @@ export class TrtEngineBuildJob implements ModelBuildJob {
     progressRange: number,
     progressCallback?: (message: string, progress: number) => void
   ): Promise<EngineBuildOutcome> {
-    const onnxFile = path.basename(params.onnxPath);
+    const onnxFile = path.win32.basename(params.onnxPath);
     let subProgress = 0;
     const report = (status?: string) => {
       const totalProgress = baseProgress + Math.round((subProgress / 100) * progressRange);
@@ -204,6 +204,7 @@ export class TrtEngineBuildJob implements ModelBuildJob {
   ): Promise<void> {
     logger.model(`Engine build arguments: ${args.join(' ')}`);
     const builderScript = await ensureEngineBuilderScript();
+    args = [...args, '--vkAdapter=rgb-window-v1'];
     if (this.cancelRequested) throw new BuildCancelledError();
 
     return new Promise((resolve, reject) => {

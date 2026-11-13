@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { handleValidated } from './ipcValidation';
+import { checkNvencEncoder, NVENC_FORMATS } from './encodingSupport';
 import { ipcMain } from 'electron';
 import { logger } from './logger';
 import { configManager } from './configManager';
@@ -36,6 +39,15 @@ export function registerDependencyHandlers(
       return null;
     });
     return nvencCheck;
+  });
+
+  handleValidated('check-encoding-support', z.object({
+    encoder: z.enum(['h264_nvenc', 'hevc_nvenc', 'av1_nvenc']),
+    pixelFormat: z.string().refine(value => value === 'match_input' || value in NVENC_FORMATS),
+  }), async request => {
+    const ffmpeg = FFmpegManager.getFFmpegPath();
+    if (!ffmpeg) return { available: false, category: 'ffmpeg', message: 'FFmpeg is missing. Repair it using Start Setup in Settings.' };
+    return checkNvencEncoder(ffmpeg, request.encoder, request.pixelFormat);
   });
 
   ipcMain.handle('check-dependencies', 

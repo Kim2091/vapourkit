@@ -106,6 +106,7 @@ export class VapourSynthInfoExtractor {
    * parsed from stderr are forwarded so a cold cache does not look hung.
    */
   async getOutputInfo(scriptPath: string, onProgress?: (percentage: number) => void): Promise<OutputInfo> {
+    const startedAt = Date.now();
     logger.upscale(`Getting output info from script: ${scriptPath}`);
 
     return new Promise((resolve) => {
@@ -146,6 +147,7 @@ export class VapourSynthInfoExtractor {
       }
 
       vspipe.on('close', (code) => {
+        logger.upscale(`[startup] Graph evaluation: ${Date.now() - startedAt} ms (exit ${code})`);
         buildTracker.reset();
         if (code === 0) {
           // Always log the full vspipe output for debugging

@@ -2,7 +2,7 @@
     "name": "vapourkit-gui",
     "version": "2.1.0",
     "description": "Advanced GUI for VapourSynth and Video Upscaling",
-    "main": "dist/electron/main.js",
+    "main": "dist/electron/bootstrap.js",
     "scripts": {
         "dev": "npm run build:electron && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
         "dev:vite": "vite",
@@ -17,7 +17,10 @@
         "preview": "vite preview",
         "test": "vitest run",
         "test:watch": "vitest",
-        "test:electron": "vitest run -c vitest.config.electron.ts"
+        "test:electron": "vitest run -c vitest.config.electron.ts",
+        "test:ui": "node scripts/devUiSmoke.cjs",
+        "test:models": "python -m unittest discover -s scripts/tests -p test_model_runtime.py -v",
+        "test:media": "cross-env VK_MEDIA_TESTS=1 vitest run -c vitest.config.electron.ts electron/mediaTracks.integration.test.ts"
     },
     "keywords": [
         "video",
@@ -42,6 +45,7 @@
         "cross-env": "^10.1.0",
         "electron": "^32.0.1",
         "electron-builder": "^26.0.12",
+        "playwright": "^1.65.0",
         "postcss": "^8.4.45",
         "tailwindcss": "^3.4.10",
         "tsx": "^4.21.0",
@@ -81,11 +85,14 @@
             "include/filter_templates/**/*.vkfilter",
             "include/vapoursynth_template.vpy",
             "include/build_trt_engine.py",
+            "include/vk_model_runtime.py",
             "include/preview_server.py",
             "include/align_videos.py",
             "include/vk_runtime.py",
+            "include/vk_source_cache.py",
             "include/vk_gpus.py",
             "include/stock-app-config.json",
+            "include/component-catalog.json",
             "package.json",
             "!data/**/*"
         ],
@@ -97,11 +104,14 @@
             "include/filter_templates/**/*.vkfilter",
             "include/vapoursynth_template.vpy",
             "include/build_trt_engine.py",
+            "include/vk_model_runtime.py",
             "include/preview_server.py",
             "include/align_videos.py",
             "include/vk_runtime.py",
+            "include/vk_source_cache.py",
             "include/vk_gpus.py",
             "include/stock-app-config.json",
+            "include/component-catalog.json",
             "node_modules/7zip-bin/**/*"
         ],
         "win": {

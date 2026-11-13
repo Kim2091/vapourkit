@@ -21,6 +21,7 @@ import sys
 from fractions import Fraction
 
 import vapoursynth as vs
+from vk_source_cache import video_source
 
 _backend = "tensorrt"
 _backend_attrs = {}
@@ -193,7 +194,7 @@ def vk_reference_video(path, offset, like, first=0, *, source):
     """A video file named as a step's picture, paired by time with `like`."""
     if not os.path.isfile(path):
         raise ValueError("The reference video " + path + " is not there any more. Pick it again.")
-    return vk_paired_by_time(vs.core.bs.VideoSource(source=path, cachemode=3), like, first, offset, source=source)
+    return vk_paired_by_time(video_source(path), like, first, offset, source=source)
 
 
 def vk_open_video(path, settings):
@@ -208,7 +209,7 @@ def vk_open_video(path, settings):
     core = vs.core
     if not os.path.isfile(path):
         raise ValueError("The side chain video " + path + " is not there any more. Choose it again on its Load Video step.")
-    v = core.bs.VideoSource(source=path, cachemode=3)
+    v = video_source(path)
     matrix = settings.get("default_matrix", "709")
     primaries = settings.get("default_primaries", "709")
     transfer = settings.get("default_transfer", "709")

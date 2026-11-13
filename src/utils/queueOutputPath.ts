@@ -127,13 +127,13 @@ export function withItemWorkflow(
 ): QueueEntry[] {
   return queue.map(item => {
     if (item.id !== itemId || item.status !== 'pending') return item;
-    const merged = { ...item.workflow, ...workflow };
+    const merged = { ...item.workflow, ...structuredClone(workflow) };
     if (!isAutoOutputPath(item, naming)) {
       // A chosen path keeps up with the output format, as the window's does.
       const outputPath = merged.outputFormat !== item.workflow.outputFormat
         ? withExtension(item.outputPath, merged.outputFormat)
         : item.outputPath;
-      return { ...item, outputPath, workflow: merged };
+      return { ...item, outputPath: uniqueOutputPath(outputPath, queue.filter(other => other.id !== itemId).map(other => other.outputPath)), workflow: merged };
     }
     const outputPath = uniqueOutputPath(
       outputPathFor(item.videoPath, merged, naming),
@@ -177,12 +177,15 @@ export function newQueueItems(
       customOutputPath: settled?.custom ?? false,
       status: 'pending',
       addedAt: new Date().toISOString(),
-      workflow: {
-        ...workflow,
-        filters: structuredClone(workflow.filters),
-        segment: workflow.segment ? { ...workflow.segment } : undefined,
-      },
+      workflow: structuredClone(workflow),
     };
   });
   return { items, skipped: videoPaths.length - paths.length };
+}
+
+/** Replace settings only on jobs that have not started. Each gets an independent snapshot. */
+export function withPendingWorkflows(queue: QueueEntry[], workflow: QueueItem['workflow'], naming: OutputNaming): QueueEntry[] {
+  return queue.filter(item => item.status === 'pending').reduce(
+    (updated, item) => withItemWorkflow(updated, item.id, workflow, naming), queue,
+  );
 }

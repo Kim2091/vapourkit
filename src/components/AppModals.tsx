@@ -41,6 +41,7 @@ interface AppModalsProps {
   // Settings
   showSettings: boolean;
   onCloseSettings: () => void;
+  onExportBenchmark?: () => Promise<void>;
   numStreams: number;
   onUpdateNumStreams: (streams: number) => void;
   onChangeBackend: (backend: BackendId) => void;
@@ -131,6 +132,7 @@ export const AppModals = memo(function AppModals(props: AppModalsProps) {
         onChangeBackend={props.onChangeBackend}
         showBackendOverrides={props.showBackendOverrides}
         onToggleBackendOverrides={props.onToggleBackendOverrides}
+        onExportBenchmark={props.onExportBenchmark}
         numStreams={props.numStreams}
         onUpdateNumStreams={props.onUpdateNumStreams}
         videoCompareArgs={props.videoCompareArgs}

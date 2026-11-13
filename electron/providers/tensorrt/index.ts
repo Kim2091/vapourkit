@@ -18,24 +18,13 @@ export const tensorrtProvider: InferenceProvider = {
     return modelPath;
   },
 
-  // The clip is prepared as RGBH or RGBS from the model's *build* precision,
-  // but vstrt demands the engine's *I/O* type, which comes from the ONNX: an
-  // FP16-weight export that keeps FP32 graph inputs (the TSPAN models) builds
-  // an engine that wants RGBS, and vstrt refuses RGBH with "bits per sample
-  // mismatch" (#12). vstrt checks this when the filter is created, so the
-  // script retries once in the other float format instead of failing.
+  // Prepare for the actual stage dimensions and cast using validated engine I/O.
   modelCallCode(inputExpr: string, modelFile: string, opts: ModelCallOptions): string {
-    const args = `engine_path="${modelFile.replace(/\\/g, '/')}", num_streams=${opts.numStreams}`;
+    const literal = (value: string) => JSON.stringify(value.replace(/\\/g, '/'));
     return [
-      'try:',
-      `    clip = core.trt.Model(${inputExpr}, ${args})`,
-      'except vs.Error as _vk_trt_error:',
-      "    if 'bits per sample mismatch' not in str(_vk_trt_error):",
-      '        raise',
-      `    _vk_trt_in = ${inputExpr}`,
-      '    _vk_trt_in = _vk_trt_in if isinstance(_vk_trt_in, list) else [_vk_trt_in]',
-      '    _vk_trt_fmt = vs.RGBS if _vk_trt_in[0].format.bits_per_sample == 16 else vs.RGBH',
-      `    clip = core.trt.Model([core.resize.Point(_c, format=_vk_trt_fmt) for _c in _vk_trt_in], ${args})`,
+      'import vk_model_runtime as _vk_models',
+      `clip = _vk_models.load_model(${inputExpr}, ${literal(modelFile)}, streams=${opts.numStreams},`,
+      `    builder=${literal(PATHS.APP_DATA + '/build_trt_engine.py')}, python=${literal(PATHS.PYTHON)}, precision="${opts.useFp32 ? 'fp32' : opts.useBf16 ? 'bf16' : 'fp16'}")`,
       '',
     ].join('\n');
   },

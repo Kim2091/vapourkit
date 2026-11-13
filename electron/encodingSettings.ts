@@ -1,3 +1,4 @@
+import { normalizeTrackSelection } from './mediaTracks';
 // electron/encodingSettings.ts - The video encoding settings, and the FFmpeg arguments they resolve to.
 
 import {
@@ -23,17 +24,32 @@ export interface SimpleEncoding {
   encoder: Encoder;
   preset: Preset;
   quality: number;
+  rateControl?: 'quality' | 'bitrate';
+  bitrateMbps?: number;
+  maxBitrateMbps?: number;
+  keyframeInterval?: number;
+  threads?: number;
+  tune?: 'none' | 'film' | 'animation' | 'grain' | 'stillimage' | 'fastdecode' | 'zerolatency';
+  proresProfile?: number;
+  audioCodec?: 'copy' | 'aac' | 'ac3' | 'flac' | 'none';
+  audioBitrateKbps?: number;
+  audioChannels?: number;
+  copyMetadata?: boolean;
+  fastStart?: boolean;
 }
 
 /**
  * How a render encodes its video. The mode decides which half is used: the
- * simple controls, or the FFmpeg arguments typed in advanced mode. Both halves
- * are kept, so switching modes loses nothing.
+ * simple controls, or the FFmpeg arguments typed in advanced mode. Normal
+ * controls regenerate the advanced baseline whenever they change.
  */
 export interface EncodingSettings {
   mode: EncodingMode;
   simple: SimpleEncoding;
   customArgs: string;
+  /** Per-type ordinals, not global container indices. Undefined keeps all; [] removes all. */
+  audioTracks?: number[];
+  subtitleTracks?: number[];
 }
 
 const SIMPLE_CODECS: readonly SimpleCodec[] = ['h264', 'h265', 'av1', 'prores'];
@@ -52,8 +68,23 @@ export const DEFAULT_ENCODING: EncodingSettings = {
 };
 
 /** The FFmpeg arguments the simple controls stand for. */
-export function simpleArgsOf(simple: SimpleEncoding): string {
-  return generateFfmpegArgs({ codec: simple.codec, encoder: simple.encoder, preset: simple.preset, crf: simple.quality });
+export function simpleArgsOf(value: SimpleEncoding): string {
+  const simple = normalizeSimple(value) ?? DEFAULT_SIMPLE_ENCODING;
+  let args = generateFfmpegArgs({ codec: simple.codec, encoder: simple.encoder, preset: simple.preset, crf: simple.quality,
+    rateControl: simple.rateControl, bitrateMbps: simple.bitrateMbps });
+  if (simple.codec !== 'prores' && simple.maxBitrateMbps) args += ` -maxrate ${simple.maxBitrateMbps}M -bufsize ${simple.maxBitrateMbps * 2}M`;
+  if (simple.codec !== 'prores' && simple.keyframeInterval) args += ` -g ${simple.keyframeInterval}`;
+  if (simple.encoder === 'software' && simple.threads) args += ` -threads:v ${simple.threads}`;
+  if (simple.encoder === 'software' && simple.codec === 'h264' && simple.tune && simple.tune !== 'none') args += ` -tune ${simple.tune}`;
+  if (simple.codec === 'prores' && simple.proresProfile !== undefined) args += ` -profile:v ${simple.proresProfile}`;
+  if (simple.audioCodec === 'none') args += ' -an';
+  else if (simple.audioCodec && simple.audioCodec !== 'copy') {
+    args += ` -c:a ${simple.audioCodec}`;
+    if (simple.audioCodec !== 'flac') args += ` -b:a ${simple.audioBitrateKbps ?? 192}k`;
+    if (simple.audioChannels) args += ` -ac ${simple.audioChannels}`;
+  }
+  if (simple.copyMetadata === false) args = args.replace('-map_metadata 1', '-map_metadata -1');
+  return args;
 }
 
 /** The FFmpeg video arguments a render is encoded with. */
@@ -74,7 +105,23 @@ function normalizeSimple(value: unknown): SimpleEncoding | null {
   const encoder = getAvailableEncoders(codec).includes(simple.encoder as Encoder) ? simple.encoder as Encoder : 'software';
   const preset = validPreset(codec, encoder, simple.preset) ? simple.preset : getDefaultPreset(encoder, codec);
   const quality = clampQuality(codec, encoder, typeof simple.quality === 'number' ? simple.quality : NaN);
-  return { codec, encoder, preset, quality };
+  const result: SimpleEncoding = { codec, encoder, preset, quality };
+  if (simple.rateControl === 'quality' || simple.rateControl === 'bitrate') result.rateControl = simple.rateControl;
+  const numeric = (key: 'bitrateMbps' | 'maxBitrateMbps' | 'keyframeInterval' | 'threads' | 'proresProfile' | 'audioBitrateKbps', min: number, max: number, integer = false) => {
+    const v = simple[key];
+    if (typeof v === 'number' && Number.isFinite(v)) result[key] = Math.min(max, Math.max(min, integer ? Math.round(v) : v));
+  };
+  numeric('bitrateMbps', 0.1, 1000); numeric('maxBitrateMbps', 0.1, 1000);
+  numeric('keyframeInterval', 0, 1000, true); numeric('threads', 0, 256, true);
+  numeric('proresProfile', 0, 5, true); numeric('audioBitrateKbps', 32, 640, true);
+  if (result.rateControl === 'bitrate') result.bitrateMbps ??= 8;
+  if (result.maxBitrateMbps && result.rateControl === 'bitrate') result.maxBitrateMbps = Math.max(result.maxBitrateMbps, result.bitrateMbps!);
+  if (['none', 'film', 'animation', 'grain', 'stillimage', 'fastdecode', 'zerolatency'].includes(String(simple.tune))) result.tune = simple.tune as SimpleEncoding['tune'];
+  if (['copy', 'aac', 'ac3', 'flac', 'none'].includes(String(simple.audioCodec))) result.audioCodec = simple.audioCodec as SimpleEncoding['audioCodec'];
+  if ([0, 1, 2, 6].includes(simple.audioChannels as number)) result.audioChannels = simple.audioChannels as number;
+  if (typeof simple.copyMetadata === 'boolean') result.copyMetadata = simple.copyMetadata;
+  if (typeof simple.fastStart === 'boolean') result.fastStart = simple.fastStart;
+  return result;
 }
 
 /** Stored encoding settings, made valid, or null when value is not encoding settings. */
@@ -84,7 +131,12 @@ export function normalizeEncodingSettings(value: unknown): EncodingSettings | nu
   if (encoding.mode !== 'simple' && encoding.mode !== 'advanced') return null;
   const simple = normalizeSimple(encoding.simple);
   if (!simple) return null;
+  const audioTracks = normalizeTrackSelection(encoding.audioTracks);
+  const subtitleTracks = normalizeTrackSelection(encoding.subtitleTracks);
+  if (audioTracks === null || subtitleTracks === null) return null;
   return {
+    ...(audioTracks !== undefined ? { audioTracks } : {}),
+    ...(subtitleTracks !== undefined ? { subtitleTracks } : {}),
     mode: encoding.mode,
     simple,
     customArgs: typeof encoding.customArgs === 'string' ? encoding.customArgs : '',
@@ -139,26 +191,33 @@ export function encodingFrom(encoding: unknown, ffmpegArgs: unknown): EncodingSe
   const stored = normalizeEncodingSettings(encoding);
   if (typeof ffmpegArgs !== 'string') return stored;
   if (stored && resolveEncodingArgs(stored) === ffmpegArgs) return stored;
-  const migrated = migrateLegacyArgs(ffmpegArgs);
+  const migrated = {
+    ...migrateLegacyArgs(ffmpegArgs),
+    ...(stored?.audioTracks !== undefined ? { audioTracks: stored.audioTracks } : {}),
+    ...(stored?.subtitleTracks !== undefined ? { subtitleTracks: stored.subtitleTracks } : {}),
+  };
   if (!stored) return migrated;
   return migrated.mode === 'simple'
     ? { ...migrated, customArgs: stored.customArgs || migrated.customArgs }
     : { ...migrated, simple: stored.simple };
 }
 
-/** Switch modes. Advanced mode with no arguments yet starts from the simple settings. */
+/** Edit normal controls and immediately refresh their advanced argument representation. */
+export function withSimpleEncoding(encoding: EncodingSettings, simple: SimpleEncoding): EncodingSettings {
+  return { ...encoding, simple, customArgs: simpleArgsOf(simple) };
+}
+
+/** Enter advanced mode using the current normal settings, never an old argument draft. */
 export function withEncodingMode(encoding: EncodingSettings, mode: EncodingMode): EncodingSettings {
   if (mode === encoding.mode) return encoding;
-  if (mode === 'advanced' && !encoding.customArgs.trim()) {
-    return { ...encoding, mode, customArgs: simpleArgsOf(encoding.simple) };
-  }
-  return { ...encoding, mode };
+  return { ...encoding, mode, customArgs: simpleArgsOf(encoding.simple) };
 }
 
 /** A new codec, keeping the encoder where the codec offers it, with that pair's default preset and quality. */
 export function simpleWithCodec(simple: SimpleEncoding, codec: SimpleCodec): SimpleEncoding {
   const encoder = getAvailableEncoders(codec).includes(simple.encoder) ? simple.encoder : 'software';
   return {
+    ...simple,
     codec,
     encoder,
     preset: getDefaultPreset(encoder, codec),

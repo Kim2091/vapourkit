@@ -284,3 +284,21 @@ describe('engine builds while a script opens', () => {
     ]);
   });
 });
+
+describe('render handoff', () => {
+  it('waits for actual process closure after disposing a preview', async () => {
+    const { session, child } = await startedSession();
+    let exited=false; const waiting=session.waitForExit().then(()=>{exited=true;});
+    session.dispose(); await settle();
+    expect(exited).toBe(false);
+    child.emit('close',0); await waiting;
+    expect(exited).toBe(true);
+    await expect(session.start()).rejects.toThrow('Preview session closed');
+  });
+  it('does not spawn if disposal happens during asynchronous start preparation', async () => {
+    const spawner=vi.fn(()=>fakeChild()); const session=new PreviewSession(spawner);
+    const starting=session.start(); session.dispose();
+    await expect(starting).rejects.toThrow('Preview session closed');
+    expect(spawner).not.toHaveBeenCalled();
+  });
+});

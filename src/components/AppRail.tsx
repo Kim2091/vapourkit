@@ -7,7 +7,7 @@
 // the title strip.
 
 import { memo } from 'react';
-import { Settings, Plug, RefreshCw, Lock, LockOpen, Info, List } from 'lucide-react';
+import { Settings, Plug, RefreshCw, Lock, LockOpen, Info, List, Monitor } from 'lucide-react';
 import { Logo } from './Logo';
 
 interface AppRailProps {
@@ -15,6 +15,8 @@ interface AppRailProps {
   isReloading?: boolean;
   privacyMode: boolean;
   showQueue: boolean;
+  showPreview: boolean;
+  onTogglePreview: () => void;
   queueCount: number;
   onToggleQueue: () => void;
   onSettingsClick: () => void;
@@ -70,6 +72,8 @@ export const AppRail = memo<AppRailProps>(({
   isReloading,
   privacyMode,
   showQueue,
+  showPreview,
+  onTogglePreview,
   queueCount,
   onToggleQueue,
   onSettingsClick,
@@ -94,6 +98,10 @@ export const AppRail = memo<AppRailProps>(({
         onClick={onToggleQueue}
       >
         <List className={ICON} />
+      </RailButton>
+
+      <RailButton label="Preview" title={showPreview ? 'Turn off preview panel' : 'Turn on preview panel'} active={showPreview} onClick={onTogglePreview}>
+        <Monitor className={ICON} />
       </RailButton>
 
       <RailButton label="Settings" title="Settings" onClick={onSettingsClick}>

@@ -1,3 +1,4 @@
+import { pipelineSettingsSchema, type PipelineSettings } from './pipelineSettings';
 // electron/configManager.ts
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -33,6 +34,7 @@ interface Filter {
 }
 
 interface AppConfig {
+  pipeline?: PipelineSettings;
   colorimetry?: {
     overwriteMatrix: boolean;
     matrix709: boolean;
@@ -393,6 +395,16 @@ export class ConfigManager {
     const metadata = this.getModelMetadata(filename);
     // Return temporal frames count, default to 5 for backward compatibility
     return metadata?.temporalFrames ?? 5;
+  }
+
+  getPipelineSettings(): PipelineSettings {
+    const parsed = pipelineSettingsSchema.safeParse(this.config.pipeline ?? {});
+    return parsed.success ? parsed.data : pipelineSettingsSchema.parse({});
+  }
+
+  async setPipelineSettings(settings: PipelineSettings): Promise<void> {
+    this.config.pipeline = pipelineSettingsSchema.parse(settings);
+    await this.save();
   }
 
   getColorimetrySettings(): { overwriteMatrix: boolean; matrix709: boolean; defaultMatrix: '709' | '170m'; defaultPrimaries: '709' | '601'; defaultTransfer: '709' | '170m' } {

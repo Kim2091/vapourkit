@@ -1,3 +1,5 @@
+import { pipelineSettingsSchema } from './pipelineSettings';
+import { handleValidated } from './ipcValidation';
 import { ipcMain, BrowserWindow, app } from 'electron';
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -16,6 +18,8 @@ let lastLogSize = 0;
  * Registers all configuration-related IPC handlers
  */
 export function registerConfigHandlers(mainWindow: BrowserWindow | null) {
+  ipcMain.handle('get-pipeline-settings', () => configManager.getPipelineSettings());
+  handleValidated('set-pipeline-settings', pipelineSettingsSchema, settings => configManager.setPipelineSettings(settings));
   ipcMain.handle('get-colorimetry-settings', async () => {
     const settings = configManager.getColorimetrySettings();
     return settings;

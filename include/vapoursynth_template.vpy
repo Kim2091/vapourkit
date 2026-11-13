@@ -1,11 +1,14 @@
 import vapoursynth as vs
 core = vs.core
 core.max_cache_size = 15000
+import sys
+sys.path.insert(0, {{SOURCE_HELPER_DIR}})
+from vk_source_cache import video_source as vk_video_source
 
 # Load source video
 source_path = "{{INPUT_VIDEO}}"
 source_timecodes = "{{SOURCE_TIMECODES}}"
-clip = core.bs.VideoSource(source=source_path, cachemode=3, timecodes=source_timecodes)
+clip = vk_video_source(source_path, root={{SOURCE_CACHE_ROOT}}, timecodes=source_timecodes)
 vk_source_fps = clip.fps
 
 

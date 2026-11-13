@@ -13,6 +13,7 @@ interface ConsoleDrawerProps {
   consoleOutput: string[];
   consoleEndRef: React.RefObject<HTMLDivElement | null>;
   privacyMode: boolean;
+  fill?: boolean;
 }
 
 export const ConsoleDrawer = memo(function ConsoleDrawer({
@@ -21,6 +22,7 @@ export const ConsoleDrawer = memo(function ConsoleDrawer({
   consoleOutput,
   consoleEndRef,
   privacyMode,
+  fill = false,
 }: ConsoleDrawerProps) {
   // Turning privacy mode on closes the console — log lines carry file paths.
   const prevPrivacyModeRef = useRef(privacyMode);
@@ -42,7 +44,7 @@ export const ConsoleDrawer = memo(function ConsoleDrawer({
 
   return (
     // bottom-10 keeps the scrubber visible and usable while the console is open
-    <div className="absolute inset-x-0 bottom-10 z-20 h-[280px] flex flex-col bg-ink-900/97 backdrop-blur-sm border-t border-ink-750 overflow-hidden">
+    <div role="region" aria-label="Console" className={`absolute inset-x-0 z-20 flex flex-col bg-ink-900/97 backdrop-blur-sm border-t border-ink-750 overflow-hidden ${fill ? 'inset-y-0' : 'bottom-10 h-[280px] max-h-[calc(100%_-_2.5rem)]'}`}>
       <div className="h-8 flex-shrink-0 flex items-center gap-2 px-3 border-b border-ink-800">
         <Terminal className="w-3.5 h-3.5 text-accent-500" />
         <span className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-300">
