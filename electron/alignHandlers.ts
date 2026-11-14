@@ -9,13 +9,14 @@
 // cancelling, ends the one before. A run is reading two whole videos' worth
 // of index on its first go, so it has to be stoppable.
 
-import { ipcMain, type WebContents } from 'electron';
+import { app, ipcMain, type WebContents } from 'electron';
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { PATHS } from './constants';
 import { logger } from './logger';
-import { setupVSEnvironment } from './utils';
+import { fixAsarPath, setupVSEnvironment } from './utils';
+import { ensureSourceIndexHelper, sourceIndexRoot } from './sourceIndexCache';
 import { createWorkloadSpawnOptions, terminateProcessTree } from './processLifecycle';
 import type { SideChainAlignment } from './chainGraph';
 
@@ -94,12 +95,18 @@ export function stopAllAlignments(): void {
   for (const id of [...running.keys()]) stop(id);
 }
 
-export function runAlignment(
+export async function runAlignment(
   id: string,
   mainPath: string,
   refPath: string,
   sender: WebContents | null,
 ): Promise<AlignOutcome> {
+  try {
+    await ensureSourceIndexHelper();
+    const bundled = path.join(fixAsarPath(app.getAppPath()), 'include', 'align_videos.py');
+    if (await fs.pathExists(bundled)) await fs.copy(bundled, path.join(PATHS.CONFIG, 'align_videos.py'), { overwrite: true });
+  }
+  catch (error) { return { success: false, error: String(error) }; }
   return new Promise(resolve => {
     const scriptPath = path.join(PATHS.CONFIG, 'align_videos.py');
     if (!fs.existsSync(scriptPath)) {
@@ -117,7 +124,7 @@ export function runAlignment(
       ['-u', scriptPath, mainPath, refPath],
       createWorkloadSpawnOptions({
         cwd: PATHS.VS,
-        env: setupVSEnvironment(PATHS.PYTHON),
+        env: { ...setupVSEnvironment(PATHS.PYTHON), VK_SOURCE_CACHE_ROOT: sourceIndexRoot() },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       }),

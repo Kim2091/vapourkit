@@ -2,11 +2,16 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { logger } from './logger';
-import { inspectOnnxGraph, type OnnxGraphInfo } from './onnxGraphInspector';
+import { describeModel, type ModelContract } from './modelContract';
+import { modelPackageFiles } from './modelPackage';
+import type { OnnxGraphInfo } from './onnxGraphInspector';
+import { inspectResolvedOnnxGraph } from './modelGraphResolver';
 import { resolveModelPrecision, precisionFromName, type ModelPrecision } from './modelPrecision';
 
 export interface OnnxModelInfo {
   isValid: boolean;
+  contract?: ModelContract;
+  compatibilityError?: string;
   error?: string;
   inputShape?: number[];
   outputShape?: number[];
@@ -53,7 +58,13 @@ export class ModelValidator {
 
       // Read the graph itself first. ONNX Runtime cannot see BF16 weights (or
       // load a BF16 graph at all), so precision has to come from the file.
-      const graph = inspectOnnxGraph(onnxPath);
+      const graph = await inspectResolvedOnnxGraph(onnxPath);
+      let contract: ModelContract | undefined;
+      let compatibilityError: string | undefined;
+      if (graph) {
+        await modelPackageFiles(onnxPath);
+        try { contract = describeModel(graph); } catch (error) { compatibilityError = error instanceof Error ? error.message : String(error); }
+      }
       const precision = resolveModelPrecision({
         modelName,
         weightDataTypes: graph?.weightDataTypes,
@@ -129,6 +140,9 @@ export class ModelValidator {
           logger.model(`Input shape types: ${inputShape.map(dim => typeof dim).join(', ')}`);
         }
         
+        inputShape ??= graph?.inputShape as number[] | undefined;
+        outputShape ??= graph?.outputShape as number[] | undefined;
+        inputDataType ??= graph?.inputDataType;
         // Check if the model is static (all input dimensions are fixed positive values)
         // ONNX Runtime may return BigInt for dimensions, so we need to handle that
         // Dynamic dimensions are typically represented as -1, 0, or symbolic strings
@@ -150,7 +164,7 @@ export class ModelValidator {
         logger.model('ONNX model validation passed');
         
         return {
-          isValid: true,
+          isValid: true, contract, compatibilityError,
           inputShape,
           outputShape,
           inputName,
@@ -166,7 +180,7 @@ export class ModelValidator {
         if (graph) {
           const runtimeError = ortError.message || 'Could not load model with ONNX Runtime';
           logger.model(`ONNX Runtime could not load the model (${runtimeError}); using the graph read from the file`);
-          return { isValid: true, ...graphModelInfo(graph), precision, runtimeError };
+          return { isValid: true, contract, compatibilityError, ...graphModelInfo(graph), precision, runtimeError };
         }
         logger.error('ONNX Runtime validation failed:', ortError);
         return {

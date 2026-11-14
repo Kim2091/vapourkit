@@ -1,3 +1,4 @@
+import { variablesWithParameters } from '../../electron/filterValidation';
 // src/hooks/useWorkflow.ts
 import { useState, useCallback, useEffect } from 'react';
 import type { Filter, FilterTemplate, WorkflowData } from '../electron.d';
@@ -72,15 +73,7 @@ export function useWorkflow({
   // settings that are saved, so after a restart they are what the project or
   // item has; if what they replaced lived only in memory, Clear went with it
   // and the settings from before the workflow were lost for good.
-  const [workflowState, setWorkflowState] = useState<LoadedWorkflowRecord>(() => {
-    try {
-      const saved = localStorage.getItem(LOADED_WORKFLOW_KEY);
-      if (saved) return JSON.parse(saved) as LoadedWorkflowRecord;
-    } catch {
-      // Unreadable: start with no workflow loaded.
-    }
-    return NO_WORKFLOW;
-  });
+  const [workflowState, setWorkflowState] = useState<LoadedWorkflowRecord>(NO_WORKFLOW);
 
   useEffect(() => {
     try {
@@ -269,7 +262,7 @@ export function useWorkflow({
             backend: filter.backend,
             numStreams: filter.numStreams,
             parameters: filter.parameters,
-            variables: filter.variables,
+            variables: variablesWithParameters(filter.variables, filter.parameters),
             editor: filter.editor,
           };
         }),
@@ -362,14 +355,15 @@ export function useWorkflow({
 
       // Save selected filters as templates
       for (const filter of selectedFilters) {
-        await window.electronAPI.saveFilterTemplate({
+        const saved = await window.electronAPI.saveFilterTemplate({
           name: filter.name,
           code: filter.code,
           description: filter.description,
           category: filter.category,
-          variables: filter.variables,
+          variables: variablesWithParameters(filter.variables, filter.parameters),
           editor: filter.editor,
         });
+        if (!saved.success) throw new Error(`${filter.name}: ${saved.error ?? 'The filter could not be saved'}`);
       }
       
       addConsoleLog(`Permanently imported ${selectedFilters.length} filter(s)`);

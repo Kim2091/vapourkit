@@ -48,10 +48,10 @@ export const ModelBuildNotification = memo<ModelBuildNotificationProps>(({
       <AlertCircle className="w-4 h-4 text-warn-400 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-medium text-ink-200 truncate">
-          A model in your filter workflow needs to be built before use
+          TensorRT prepares this model for the workflow on first use
         </p>
         <p className="text-[12px] text-ink-400">
-          Click to configure and build TensorRT engine for optimal performance
+          Preparation and frame checks happen before encoding. Configure a manual build only for custom settings.
         </p>
       </div>
       <button

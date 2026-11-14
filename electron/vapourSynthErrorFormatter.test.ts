@@ -11,9 +11,17 @@ describe('formatVapourSynthValidationError', () => {
       'Python exception: ModuleNotFoundError: No module named \'vs_undistort\'',
     ].join('\r\n');
 
-    expect(formatVapourSynthValidationError(output)).toBe(
-      "Script evaluation failed:\nPython exception: ModuleNotFoundError: No module named 'vs_undistort'",
-    );
+    const message = formatVapourSynthValidationError(output);
+    expect(message).toContain('Plugins');
+    expect(message).toContain('Partial reinstall');
+    expect(message).toContain("Script evaluation failed:\nPython exception: ModuleNotFoundError: No module named 'vs_undistort'");
+  });
+
+  it('identifies missing application modules without recommending plugin reinstall', () => {
+    const message = formatVapourSynthValidationError("ModuleNotFoundError: No module named 'vk_model_runtime'");
+    expect(message).toContain('application-file or Python search-path problem');
+    expect(message).not.toContain('Partial reinstall');
+    expect(message).not.toContain('Open Plugins');
   });
 
   it('preserves other warnings that may help diagnose the failure', () => {

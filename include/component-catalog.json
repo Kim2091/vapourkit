@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "client": 1,
+  "revision": 1,
+  "components": [
+    {
+      "id": "animejanai-hd-balanced",
+      "version": "3.1",
+      "name": "AnimeJaNai HD V3.1 Balanced",
+      "kind": "model",
+      "platforms": [
+        "win32",
+        "linux"
+      ],
+      "vendors": [
+        "nvidia",
+        "amd",
+        "intel",
+        "unknown"
+      ],
+      "channel": "experimental",
+      "notes": "SPANF3, 2x anime upscaling. CPU inference checked at 32x32; TensorRT/DirectML/NCNN GPU validation is pending. Existing models and workflows are kept.",
+      "license": "CC BY-NC-SA 4.0",
+      "files": [
+        {
+          "path": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16.onnx",
+          "url": "https://raw.githubusercontent.com/the-database/mpv-AnimeJaNai/f97f44cd44326cec64db48c6f00c6fa33dda03e5/BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/onnx/2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16.onnx",
+          "sha256": "b308e93c3dda3c4f9f968295b2b7b8d1c0583a711bca53a08d51134d9d1cbd5c",
+          "bytes": 1971970
+        }
+      ],
+      "model": {
+        "file": "2x_AnimeJaNai_HD_V3.1_Balanced_SPANF3_b8f64_unshuffle_fp16.onnx",
+        "type": "image",
+        "adapter": "rgb-image-v1",
+        "frames": 1,
+        "spatialMultiple": 2,
+        "scale": 2
+      }
+    },
+    {
+      "id": "animejanai-hd-performance",
+      "version": "3.1",
+      "name": "AnimeJaNai HD V3.1 Performance",
+      "kind": "model",
+      "platforms": [
+        "win32",
+        "linux"
+      ],
+      "vendors": [
+        "nvidia",
+        "amd",
+        "intel",
+        "unknown"
+      ],
+      "channel": "experimental",
+      "notes": "SPANF3, 2x anime upscaling. CPU inference checked at 32x32; TensorRT/DirectML/NCNN GPU validation is pending. Existing models and workflows are kept.",
+      "license": "CC BY-NC-SA 4.0",
+      "files": [
+        {
+          "path": "2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16.onnx",
+          "url": "https://raw.githubusercontent.com/the-database/mpv-AnimeJaNai/f97f44cd44326cec64db48c6f00c6fa33dda03e5/BuildMpvUpscale2xAnimeJaNai/mpv-upscale-2x_animejanai/animejanai/onnx/2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16.onnx",
+          "sha256": "7b804d87320f37b7269d6e27796046fbd975e95e2aa1f65d5557f52a36282716",
+          "bytes": 740318
+        }
+      ],
+      "model": {
+        "file": "2x_AnimeJaNai_HD_V3.1_Performance_SPANF3_b5f48_unshuffle_fp16.onnx",
+        "type": "image",
+        "adapter": "rgb-image-v1",
+        "frames": 1,
+        "spatialMultiple": 2,
+        "scale": 2
+      }
+    }
+  ]
+}

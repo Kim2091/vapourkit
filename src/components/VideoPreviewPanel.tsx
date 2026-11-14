@@ -135,7 +135,16 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
   gradeBasePx = 12,
   chainPreview = null,
 }: VideoPreviewPanelProps) => {
-  const videoPlayerRef = useRef<HTMLVideoElement>(null);
+  const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
+  const bindVideoPlayer = useCallback((video: HTMLVideoElement | null) => {
+    const previous = videoPlayerRef.current;
+    if (previous && previous !== video) {
+      previous.pause();
+      previous.removeAttribute('src');
+      previous.load();
+    }
+    videoPlayerRef.current = video;
+  }, []);
   const previewImageRef = useRef<HTMLImageElement>(null);
   const [previewImageSize, setPreviewImageSize] = useState<{ width: number; height: number } | null>(null);
   const [resizingScopes, setResizingScopes] = useState(false);
@@ -402,7 +411,7 @@ export const VideoPreviewPanel = memo<VideoPreviewPanelProps>(({
                 // anything else overflows the pane into a scrollbar. Completion
                 // already shows via the header's Compare/Folder buttons.
                 <video
-                  ref={videoPlayerRef}
+                  ref={bindVideoPlayer}
                   src={completedVideoBlobUrl}
                   controls
                   className="w-full h-full rounded-lg object-contain shadow-lg"

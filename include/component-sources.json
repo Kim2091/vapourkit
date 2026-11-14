@@ -1,0 +1,16 @@
+[
+  {"name":"Kim2091 model weights","kind":"github-release","url":"https://api.github.com/repos/Kim2091/Kim2091-Models/releases?per_page=30"},
+  {"name":"AnimeJaNai release notes (inspect model changes separately)","kind":"github-release","url":"https://api.github.com/repos/the-database/mpv-AnimeJaNai/releases?per_page=30"},
+  {"name":"Sirosky model weights","kind":"github-release","url":"https://api.github.com/repos/Sirosky/Upscale-Hub/releases?per_page=30"},
+  {"name":"ArtCNN model weights","kind":"github-release","url":"https://api.github.com/repos/Artoriuz/ArtCNN/releases?per_page=30"},
+  {"name":"vs-mlrt inference plugins","kind":"github-release","url":"https://api.github.com/repos/AmusementClub/vs-mlrt/releases?per_page=30"},
+  {"name":"TemporalFix","kind":"github-release","url":"https://api.github.com/repos/pifroggi/vs_temporalfix/releases?per_page=30"},
+  {"name":"Undistort","kind":"github-release","url":"https://api.github.com/repos/pifroggi/vs_undistort/releases?per_page=30"},
+  {"name":"VapourSynth core","kind":"github-release","url":"https://api.github.com/repos/vapoursynth/vapoursynth/releases?per_page=30"},
+  {"name":"FFmpeg stable tags","kind":"github-tags","url":"https://api.github.com/repos/FFmpeg/FFmpeg/tags?per_page=30","pattern":"^n[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"},
+  {"name":"CPython stable tags","kind":"github-tags","url":"https://api.github.com/repos/python/cpython/tags?per_page=30","pattern":"^v3\\.[0-9]+\\.[0-9]+$"},
+  {"name":"PyTorch","kind":"pypi","url":"https://pypi.org/pypi/torch/json"},
+  {"name":"ONNX","kind":"pypi","url":"https://pypi.org/pypi/onnx/json"},
+  {"name":"ONNX Runtime","kind":"pypi","url":"https://pypi.org/pypi/onnxruntime/json"},
+  {"name":"ModelOpt","kind":"pypi","url":"https://pypi.org/pypi/nvidia-modelopt/json"}
+]

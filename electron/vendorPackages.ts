@@ -126,6 +126,8 @@ export function getPypiPackages(vendor: GpuVendor): string[] {
     VAPOURSYNTH_PIP_SPEC,
     getVsJetpackSpec(vendor),
     `vsview[full]>=${VSVIEW_MIN_VERSION}`,
+    'onnx',
+    'numpy',
     'vs_temporalfix',
     // Off NVIDIA it is installed without its TensorRT dependencies instead;
     // see getNoDepsPackages.

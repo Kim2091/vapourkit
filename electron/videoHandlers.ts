@@ -1,4 +1,8 @@
-import { ipcMain, BrowserWindow, shell, MessageChannelMain, type MessagePortMain } from 'electron';
+import { timecodesPathFor } from './sourceTiming';
+import { beginSourceIndexes, completedSourceIndexes, sourceIndexRoot } from './sourceIndexCache';
+import { nvencEncoderOf, checkNvencEncoder } from './encodingSupport';
+import { setPreviewEnabled } from './previewSettings';
+import { ipcMain, BrowserWindow, shell, dialog, MessageChannelMain, type MessagePortMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as os from 'os';
@@ -161,6 +165,8 @@ export function registerVideoHandlers(
    * app's build banner. A cancel, or a newer evaluation, kills it, and the
    * result then carries the error that left.
    */
+  handleValidated('set-preview-enabled', z.boolean(), async enabled => { setPreviewEnabled(enabled); return { success: true }; });
+
   const evaluateScript = async (scriptPath: string): Promise<OutputInfo> => {
     const vspipePath = dependencyManager.getVSPipePath();
     const extractor = new VapourSynthInfoExtractor(
@@ -214,7 +220,8 @@ export function registerVideoHandlers(
         scanType: metadata.scanType,
         colorSpace: metadata.colorSpace,
         duration: metadata.duration,
-        frameCount: frameCount
+        frameCount: frameCount,
+        tracks: metadata.tracks,
       };
 
       logger.info(`Video info: ${info.name}, ${info.sizeFormatted}, ${metadata.resolution || 'unknown resolution'}, ${metadata.fps ? metadata.fps + ' fps' : 'unknown fps'}, ${metadata.pixelFormat || 'unknown format'}${frameCount ? `, ${frameCount} frames` : ''}`);
@@ -244,6 +251,33 @@ export function registerVideoHandlers(
       logger.error('Error reading video file:', error);
       throw error;
     }
+  });
+
+  handleValidated('export-pipeline-benchmark', z.object({
+    videoPath: z.string().min(1), defaultBackend: z.string(),
+    filters: z.array(z.any()).max(500), numStreams: z.number().int().min(1).max(16),
+    segment: z.object({ enabled: z.boolean(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int() }).optional(),
+  }), async request => {
+    const chosen = await dialog.showOpenDialog({ title: 'Choose a folder for the benchmark bundle', properties: ['openDirectory', 'createDirectory'] });
+    if (chosen.canceled || !chosen.filePaths[0]) return { cancelled: true };
+    const root = await fs.mkdtemp(path.join(chosen.filePaths[0], 'vapourkit-benchmark-'));
+    const generated: string[] = [];
+    try {
+      for (const [name, optimizeAiChains] of [['workflow.vpy', false], ['workflow-rgb.vpy', true]] as const) {
+        const file = await scriptGenerator.generateScript({ ...buildScriptConfig(request), optimizeAiChains });
+        generated.push(file);
+        let text = await fs.readFile(file, 'utf8');
+        text = text.split(timecodesPathFor(file).replace(/\\/g, '/')).join(path.join(root, name + '.timecodes.txt').replace(/\\/g, '/'));
+        await fs.writeFile(path.join(root, name), text, 'utf8');
+      }
+      const input = JSON.stringify(request.videoPath.replace(/\\/g, '/'));
+      const trim = request.segment?.enabled ? `clip=core.std.Trim(clip,first=${request.segment.startFrame}${request.segment.endFrame >= 0 ? `,last=${request.segment.endFrame - 1}` : ''})\n` : '';
+      await fs.writeFile(path.join(root, 'source.vpy'), `import sys\nsys.stdout=sys.stderr\nsys.path.insert(0,${JSON.stringify(PATHS.APP_DATA.replace(/\\/g, '/'))})\nfrom vk_source_cache import video_source\nclip=video_source(${input},root=${JSON.stringify(sourceIndexRoot().replace(/\\/g, '/'))})\nimport vapoursynth as vs\ncore=vs.core\n${trim}clip.set_output()\n`, 'utf8');
+      const encoder = await FFmpegSettingsManager.loadFFmpegConfig(configManager);
+      await fs.writeJson(path.join(root, 'benchmark.json'), { schema: 1, sourceScript: 'source.vpy', scripts: { legacy: 'workflow.vpy', rgb: 'workflow-rgb.vpy' }, vspipe: PATHS.VSPIPE, ffmpeg: FFmpegManager.getFFmpegPath(), encoderArgs: encoder.videoArgs }, { spaces: 2 });
+      return { cancelled: false, directory: root, message: `Benchmark bundle saved to ${root}. Run scripts/benchmarkPipeline.py --bundle <folder>/benchmark.json --output report.json from the repository.` };
+    } catch (error) { await fs.remove(root); throw error; }
+    finally { for (const file of generated) await scriptGenerator.cleanupScript(file); }
   });
 
   ipcMain.handle('get-output-resolution', async (
@@ -387,7 +421,33 @@ export function registerVideoHandlers(
         });
       }
       
+      let temporaryScript: string | null = null;
+      const indexSources = [videoPath, ...((filters ?? []).filter((filter: any) => filter.enabled && filter.filterType === 'videoSource').map((filter: any) => filter.sourcePath).filter((file: unknown): file is string => typeof file === 'string'))];
       try {
+        await beginSourceIndexes(indexSources);
+        const previews = [openingPreviewJob.current?.session, previewJob.current?.session].filter((s): s is PreviewSession => !!s);
+        const released = previews.map(s => s.waitForExit());
+        closePreview();
+        mainWindow?.webContents.send('preview-suspended-for-render');
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([Promise.all(released), new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('The preview process has not released its GPU resources. Close the preview and retry.')), 10000); })]);
+        } finally { if (timeout) clearTimeout(timeout); }
+        qlog('[pipeline] Released in-app preview processes before rendering');
+        executor.onDiagnostic = message => itemLogger.write(message);
+        const trackedSources = new Set(indexSources);
+        executor.onSourceIndexRead = source => {
+          if (!trackedSources.has(source)) { trackedSources.add(source); void beginSourceIndexes([source]); }
+        };
+        // Check encoding before expensive inference/engine builds, not only after a broken pipe.
+        const nvenc = nvencEncoderOf(configManager.getFfmpegArgs());
+        if (nvenc && !benchmarkMode) {
+          const ffmpeg = FFmpegManager.getFFmpegPath();
+          if (!ffmpeg) throw new Error('FFmpeg is missing. Repair it using Start Setup in Settings.');
+          const support = await checkNvencEncoder(ffmpeg, nvenc, configManager.getProcessingFormat(), () => executor.isStopped);
+          if (!support.available) throw new Error(support.message);
+        }
+        if (executor.isStopped) throw new Error('Canceled');
         // Generate VapourSynth script
         qlog('Generating VapourSynth script');
         
@@ -398,6 +458,7 @@ export function registerVideoHandlers(
         }
 
         const scriptPath = await scriptGenerator.generateScript(config);
+        temporaryScript = scriptPath;
         qlog(`Script generated: ${scriptPath}`);
 
         // Log script content to per-item log for troubleshooting
@@ -453,10 +514,9 @@ export function registerVideoHandlers(
 
         qlog('Starting execution');
         await executor.execute(scriptPath, outputPath, videoPath, { source: sourceProbe.streams, output: outputInfo }, segment?.enabled ? segment : undefined, fps, benchmarkMode);
+        if (executor.isStopped) throw new Error('Canceled');
 
-        // Cleanup
-        qlog('Cleaning up script file');
-        await scriptGenerator.cleanupScript(scriptPath);
+        if (!benchmarkMode) completedSourceIndexes([...new Set([...indexSources, ...executor.sourceIndexesRead])]);
 
         qlog('Processing completed successfully');
         return { success: true, outputPath };
@@ -470,8 +530,9 @@ export function registerVideoHandlers(
         } else {
           qerror(`Processing failed: ${errorMsg}`);
         }
-        return { success: false, error: errorMsg };
+        return { success: false, error: executor.isStopped ? 'Canceled' : errorMsg };
       } finally {
+        if (temporaryScript) await scriptGenerator.cleanupScript(temporaryScript).catch(error => logger.warn('Script cleanup deferred:', error));
         upscaleJob.release(job);
         drainingUpscales.delete(executor);
         itemLogger.close();
@@ -561,19 +622,7 @@ export function registerVideoHandlers(
       ));
       logger.info(`Generated preview script: ${scriptPath}`);
 
-      // Evaluate the graph before handing it to vs-view. Any runtime engine
-      // build then happens here, under the app's build banner and with the
-      // launch spinner still up, instead of freezing vs-view's own window — and
-      // script errors surface with our error handling rather than vs-view's.
-      const preflight = await evaluateScript(scriptPath);
-
-      if (preflight.error) {
-        logger.error('vs-view preflight failed:', preflight.error);
-        await scriptGenerator.cleanupScript(scriptPath);
-        return { success: false, error: preflight.error };
-      }
-
-      // Launch vs-view with the generated script
+      // vs-view evaluates the graph itself; a second vspipe process duplicated\n      // Python/GPU initialization and graph construction on every launch.\n      // Launch vs-view with the generated script
       const result = await VsViewManager.launch(scriptPath);
 
       if (result.success) {
@@ -607,6 +656,7 @@ export function registerVideoHandlers(
     numStreams?: number,
     segment?: { enabled: boolean; startFrame: number; endFrame: number }
   ) => {
+    if (upscaleJob.current) return { success: false, error: 'Interactive preview is suspended while rendering.' };
     const token = ++previewOpenToken;
     const superseded = () => token !== previewOpenToken;
     let openingJob: PreviewJob | null = null;
@@ -637,8 +687,10 @@ export function registerVideoHandlers(
       });
       await session.start();
       let outputs;
+      const openStartedAt = Date.now();
       try {
         outputs = await session.open(scriptPath, PREVIEW_CACHE_MB);
+        logger.info(`[startup] In-app preview graph open: ${Date.now() - openStartedAt} ms`);
       } catch (error) {
         // A core too new for the installed plugins only says so on stderr;
         // the traceback it leads to names the wrong cause.

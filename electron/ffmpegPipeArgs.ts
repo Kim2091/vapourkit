@@ -10,8 +10,9 @@ import { videoTimescaleFor, type AudioTrim } from './sourceTiming';
  * raw video in Matroska, which carries a timestamp for every frame. vspipe
  * accepts every format the app outputs, float RGB included.
  */
-export function vspipeArgs(scriptPath: string): string[] {
-  return ['-c', 'mkv', '--outputindex', '0', scriptPath, '-'];
+export function vspipeArgs(scriptPath: string, requests = 0): string[] {
+  const concurrency = Number.isInteger(requests) && requests > 0 && requests <= 32 ? ['--requests', String(requests)] : [];
+  return ['-c', 'mkv', '--outputindex', '0', ...concurrency, scriptPath, '-'];
 }
 
 export function isRgbFormat(pixelFormat: string | null | undefined): boolean {
@@ -31,6 +32,9 @@ export interface PipeArgsInput {
   /** How the source's audio and subtitles are cut to line up with the output video. */
   audioTrim: AudioTrim;
   benchmarkMode?: boolean;
+  previewEnabled?: boolean;
+  previewHeight?: number;
+  previewFps?: number;
 }
 
 /**
@@ -55,7 +59,7 @@ function pipeInputArgs(outputInfo: OutputInfo): string[] {
  */
 export function buildPipeFFmpegArgs(input: PipeArgsInput): string[] {
   const { inputPath, outputPath, metadata, outputInfo, ffmpegConfig, audioTrim } = input;
-  const ffmpegArgs: string[] = ['-hide_banner', ...pipeInputArgs(outputInfo)];
+  const ffmpegArgs: string[] = ['-hide_banner', '-nostats', '-stats_period', '0.5', '-progress', 'pipe:2', ...pipeInputArgs(outputInfo)];
 
   if (input.benchmarkMode) {
     ffmpegArgs.push('-f', 'null', '-');
@@ -69,10 +73,14 @@ export function buildPipeFFmpegArgs(input: PipeArgsInput): string[] {
   // Main output: video from the pipe, audio and subtitles from the source
   ffmpegArgs.push('-map', '0:v:0');
   if (metadata.hasAudio) {
-    ffmpegArgs.push('-map', '1:a?', '-c:a', 'copy');
+    if (ffmpegConfig.audioTracks === undefined) ffmpegArgs.push('-map', '1:a?');
+    else for (const index of ffmpegConfig.audioTracks) ffmpegArgs.push('-map', `1:a:${index}?`);
+    ffmpegArgs.push('-c:a', 'copy');
   }
   if (metadata.hasSubtitles) {
-    ffmpegArgs.push('-map', '1:s?', '-c:s', 'copy');
+    if (ffmpegConfig.subtitleTracks === undefined) ffmpegArgs.push('-map', '1:s?');
+    else for (const index of ffmpegConfig.subtitleTracks) ffmpegArgs.push('-map', `1:s:${index}?`);
+    ffmpegArgs.push('-c:s', 'copy');
   }
 
   if (ffmpegConfig.videoArgs) {
@@ -100,9 +108,13 @@ export function buildPipeFFmpegArgs(input: PipeArgsInput): string[] {
 
   ffmpegArgs.push('-y', outputPath);
 
+  if (input.previewEnabled === false) return ffmpegArgs;
+
   // Preview output: JPEG frames to stdout
   ffmpegArgs.push('-map', '0:v:0');
-  ffmpegArgs.push('-vf', 'fps=1,scale=-2:720'); // 1 fps preview, max height 720p
+  const height = Math.max(180, Math.min(1080, Math.floor((input.previewHeight ?? 720) / 2) * 2));
+  const previewFps = Math.max(0.1, Math.min(5, input.previewFps ?? 1));
+  ffmpegArgs.push('-vf', `fps=${previewFps},scale=-2:${height}`); // 1 fps preview, max height 720p
   ffmpegArgs.push('-f', 'image2pipe');
   ffmpegArgs.push('-c:v', 'mjpeg');
   ffmpegArgs.push('-pix_fmt', 'yuvj422p'); // YUV422 with full range
@@ -115,7 +127,7 @@ export function buildPipeFFmpegArgs(input: PipeArgsInput): string[] {
 /** The movflags for the main output. */
 export function movflagsFor(outputPath: string, ffmpegConfig: Partial<FFmpegConfig>): string[] {
   const movflags = [...(ffmpegConfig.movflags ?? [])];
-  if (MOV_FAMILY.has(path.extname(outputPath).toLowerCase()) && !ffmpegConfig.videoArgs?.includes('-movflags')
+  if (ffmpegConfig.fastStart !== false && MOV_FAMILY.has(path.extname(outputPath).toLowerCase()) && !ffmpegConfig.videoArgs?.includes('-movflags')
     && !movflags.includes('+faststart')) {
     movflags.push('+faststart');
   }

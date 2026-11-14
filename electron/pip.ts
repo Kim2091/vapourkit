@@ -320,7 +320,7 @@ export async function createPipPathAlias(platform: NodeJS.Platform = process.pla
     logger.info(`Using short pip install prefix: ${alias} -> ${PATHS.VS}`);
     return {
       installArgs: ['--prefix', alias],
-      pythonPath: path.join(alias, path.basename(PATHS.PYTHON)),
+      pythonPath: path.join(alias, path.win32.basename(PATHS.PYTHON)),
       cleanup,
     };
   } catch (error) {

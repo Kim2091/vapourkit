@@ -80,6 +80,8 @@ async function generate(
 }
 
 beforeAll(async () => {
+  await fs.ensureDir(path.join(testRoot, 'include'));
+  await fs.copy(path.join(__dirname, '..', 'include', 'vk_model_runtime.py'), path.join(testRoot, 'include', 'vk_model_runtime.py'));
   // generateScript reads the template from <appData>/config/; stage the real
   // bundled template there so tests exercise the actual placeholder layout
   const templateSrc = path.join(__dirname, '..', 'include', 'vapoursynth_template.vpy');
@@ -88,6 +90,7 @@ beforeAll(async () => {
   await fs.copy(templateSrc, path.join(configDir, 'vapoursynth_template.vpy'));
   // The bundled runtime sits under the app path, which generateScript copies
   // it into config/ from
+  await fs.copy(path.join(__dirname, '..', 'include', 'vk_source_cache.py'), path.join(testRoot, 'include', 'vk_source_cache.py'));
   await fs.copy(RUNTIME_SRC, path.join(testRoot, 'include', 'vk_runtime.py'));
   await fs.copy(path.join(path.dirname(RUNTIME_SRC), 'vk_gpus.py'), path.join(testRoot, 'include', 'vk_gpus.py'));
 });
@@ -210,6 +213,18 @@ describe('declared vkfilter variables', () => {
     expect(script).toContain('unknown = {{not_declared}}');
   });
 
+  it('rejects invalid declared values with the filter name and escapes string newlines', async () => {
+    const filter = customFilter(0, 'Imported filter', 'amount = {{amount}}');
+    filter.variables = { amount: { type: 'number', default: 1 } };
+    filter.parameters = { amount: 'wrong' };
+    await expect(generate([filter], false)).rejects.toThrow('Imported filter');
+    filter.code = 'label = {{label}}';
+    filter.variables = { label: { type: 'string', default: 'first\nsecond' } };
+    filter.parameters = undefined;
+    const script = await generate([filter], false);
+    expect(script).toContain('label = "first\\nsecond"');
+  });
+
   it('uses a declared variable default when a filter has no saved value', async () => {
     const filter = customFilter(0, 'Crop', 'top = {{crop_top}}');
     filter.variables = { crop_top: { type: 'number', default: 12 } };
@@ -224,17 +239,16 @@ describe('inference backend selection', () => {
   it('emits TensorRT code for the Windows default backend', async () => {
     const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.engine')], false);
 
-    expect(script).toContain('core.trt.Model(clip, engine_path="C:/models/m_fp16.engine"');
+    expect(script).toContain('_vk_models.load_model(clip, "C:/models/m_fp16.engine"');
     expect(script).not.toContain('core.ort.Model');
   });
 
-  it('retries a TensorRT engine whose I/O is the other float format (#12)', async () => {
+  it('uses the validated loader to resolve actual I/O and workflow dimensions', async () => {
     const script = await generate([aiFilter(0, 'C:\\models\\m_fp16.engine')], false);
-
-    // The retry converts to the other float format and calls the same engine.
-    expect(script).toContain("if 'bits per sample mismatch' not in str(_vk_trt_error):");
-    expect(script).toContain('_vk_trt_fmt = vs.RGBS if _vk_trt_in[0].format.bits_per_sample == 16 else vs.RGBH');
-    expect(script.match(/core\.trt\.Model\(/g)).toHaveLength(2);
+    expect(script).toContain('_vk_models.load_model(clip, "C:/models/m_fp16.engine"');
+    expect(script).toContain('vk_model_runtime as _vk_models');
+    expect(script).toContain('builder=');
+    expect(script).toContain('python=');
   });
 
   it('emits DirectML code when the default backend is directml', async () => {
@@ -251,7 +265,7 @@ describe('inference backend selection', () => {
       aiFilter(1, 'C:\\models\\b_fp16.onnx', 'directml'),
     ], false);
 
-    expect(script).toContain('core.trt.Model(clip, engine_path="C:/models/a_fp16.engine"');
+    expect(script).toContain('_vk_models.load_model(clip, "C:/models/a_fp16.engine"');
     expect(script).toContain('core.ort.Model(clip, network_path="C:/models/b_fp16.onnx"');
   });
 
@@ -267,8 +281,8 @@ describe('inference backend selection', () => {
       false, 'tensorrt', 2,
     );
 
-    expect(script).toContain('num_streams=4');
-    expect(script).not.toContain('num_streams=2');
+    expect(script).toContain('streams=4');
+    expect(script).not.toContain('streams=2');
   });
 
   it('inherits the global num_streams when a filter has no override', async () => {
@@ -277,7 +291,7 @@ describe('inference backend selection', () => {
       false, 'tensorrt', 3,
     );
 
-    expect(script).toContain('num_streams=3');
+    expect(script).toContain('streams=3');
   });
 
   it('applies per-filter num_streams independently per model', async () => {
@@ -289,8 +303,8 @@ describe('inference backend selection', () => {
       false, 'tensorrt', 2,
     );
 
-    expect(script).toContain('num_streams=1');
-    expect(script).toContain('num_streams=2');
+    expect(script).toContain('streams=1');
+    expect(script).toContain('streams=2');
   });
 
   it('maps legacy useDirectML booleans to backend ids', async () => {
@@ -764,7 +778,8 @@ describe('source timing', () => {
 
     const timecodes = scriptPath.replace(/\.vpy$/, '.timecodes.txt').replace(/\\/g, '/');
     expect(script).toContain(`source_timecodes = "${timecodes}"`);
-    expect(script).toContain('core.bs.VideoSource(source=source_path, cachemode=3, timecodes=source_timecodes)');
+    expect(script).toContain('clip = vk_video_source(source_path, root=');
+    expect(script).toContain('timecodes=source_timecodes)');
     expect(script).toContain('clip = vk_timed_output(clip, vk_source_fps, source_timecodes)');
     expect(script).toMatch(/from vk_runtime import [^\n]*vk_timed_output/);
     expect(script.indexOf('vk_timed_output(clip')).toBeGreaterThan(script.indexOf('from vk_runtime import'));
@@ -779,7 +794,7 @@ describe('source timing', () => {
     try {
       const script = await generate([aiFilter(0, 'C:\\models\\2x_TestVSR_fp16.engine', 'tensorrt')], false);
       const centre = script.indexOf('_vk_centre = clip\n');
-      const call = script.indexOf('core.trt.Model([m2, m1, clip, p1, p2]');
+      const call = script.indexOf('_vk_models.load_model(_vk_window');
       const copy = script.indexOf('clip = core.std.CopyFrameProps(clip, _vk_centre)');
       expect(centre).toBeGreaterThan(-1);
       expect(call).toBeGreaterThan(centre);
@@ -789,4 +804,53 @@ describe('source timing', () => {
       manager.getTemporalFrames = restore.frames;
     }
   });
+});
+
+describe('startup evaluation cost', () => {
+  it('keeps preview and encode scripts lazy, with no end-of-video probes', async () => {
+    for (const preview of [true, false]) {
+      const script = await generate([customFilter(0, 'Blur')], preview);
+      expect(script).not.toContain('clip.get_frame(');
+      expect(script).not.toContain('clip.num_frames - 1}');
+    }
+  });
+  it('executes one early frame only for an explicit validation', async () => {
+    const generator = new VapourSynthScriptGenerator('win32');
+    const scriptPath = await generator.generateScript({ inputVideo: 'C:/input.mkv', filters: [], validationMode: true });
+    const script = await fs.readFile(scriptPath, 'utf8');
+    expect(script).toContain('clip.get_frame(0)');
+    expect(script).not.toContain('for _vk_probe');
+    await fs.remove(scriptPath);
+  });
+});
+
+describe('opt-in AI chaining', () => {
+  it('keeps adjacent AI work in RGB but preserves preview taps', async () => {
+    const generator = new VapourSynthScriptGenerator('win32');
+    const file = await generator.generateScript({ inputVideo:'C:/input.mkv', filters:[aiFilter(0,'C:/a.engine'),aiFilter(1,'C:/b.engine')], optimizeAiChains:true, generatePreviewOutputs:true });
+    const text=await fs.readFile(file,'utf8'); await fs.remove(file);
+    expect(text).toContain('# Keep RGB for the next adjacent AI model');
+    expect(text).toContain('_vk_set_output(core.resize.Point(clip, format=vs.YUV444P16');
+    expect((text.match(/# Convert to YUV for filter compatibility/g)||[]).length).toBe(1);
+  });
+  it('leaves legacy conversion behavior unchanged by default', async () => {
+    const text=await generate([aiFilter(0,'C:/a.engine'),aiFilter(1,'C:/b.engine')],false);
+    expect(text).not.toContain('# Keep RGB for');
+    expect((text.match(/# Convert to YUV for filter compatibility/g)||[]).length).toBe(2);
+    expect(text).toContain('_vk_sys.stdout = _vk_sys.stderr');
+  });
+});
+
+it('refreshes a stale generated template even when dev packages share an app version', async () => {
+  const shipped = path.join(testRoot, 'include', 'vapoursynth_template.vpy');
+  const installed = path.join(testRoot, 'data', 'config', 'vapoursynth_template.vpy');
+  const actual = path.join(__dirname, '..', 'include', 'vapoursynth_template.vpy');
+  await fs.copy(actual, shipped);
+  try {
+    await fs.writeFile(installed, '# stale template from an earlier dev package');
+    const script = await generate([]);
+    expect(script).toContain('from vk_source_cache import video_source as vk_video_source');
+    expect(script).not.toContain('{{SOURCE_CACHE_ROOT}}');
+    expect(await fs.readFile(installed, 'utf8')).toBe(await fs.readFile(actual, 'utf8'));
+  } finally { await fs.remove(shipped); await fs.copy(actual, installed); }
 });

@@ -6,6 +6,7 @@ import {
   uniqueOutputPath,
   withExtension,
   withItemWorkflow,
+  withPendingWorkflows,
   type QueueEntry,
 } from './queueOutputPath';
 import { projectOutputOverride, type QueueSession } from './projectSnapshot';
@@ -179,5 +180,25 @@ describe('projectOutputOverride', () => {
   it('reads an older record\'s path as chosen only when it is not the automatic name', () => {
     expect(projectOutputOverride(session({ outputPath: 'C:/v/ep-2xanimesharp.mkv' }), video, settings, beside)).toBeNull();
     expect(projectOutputOverride(session({ outputPath: 'E:/mine.mkv' }), video, settings, beside)).toBe('E:/mine.mkv');
+  });
+});
+
+describe('batch settings snapshots', () => {
+  it('inherits preselected settings independently for every newly added video', () => {
+    const settings = { ...workflow(), encoding: { mode: 'simple' as const, simple: { codec: 'h264' as const, encoder: 'software' as const, preset: 'medium' as const, quality: 22 }, customArgs: '', audioTracks: [0], subtitleTracks: [] } };
+    const { items } = newQueueItems([], ['C:/one.mkv', 'C:/two.mkv'], settings, beside);
+    settings.encoding.simple.quality = 10; settings.encoding.audioTracks.push(1);
+    expect(items.map(item => item.workflow.encoding?.simple.quality)).toEqual([22, 22]);
+    items[0].workflow.encoding!.audioTracks!.push(2);
+    expect(items[1].workflow.encoding?.audioTracks).toEqual([0]);
+  });
+  it('applies later settings to all pending jobs, preserving running/finished jobs and unique outputs', () => {
+    const queue = [entry('one', 'C:/v/one.mkv'), entry('two', 'C:/v/two.mkv'), entry('running', 'C:/v/running.mkv', { status: 'processing' }), entry('done', 'C:/v/done.mkv', { status: 'completed' })];
+    const settings = workflow([], 'mp4'); settings.numStreams = 4;
+    const result = withPendingWorkflows(queue, settings, beside);
+    expect(result[0].workflow).toEqual(settings); expect(result[1].workflow).toEqual(settings);
+    expect(result[0].workflow).not.toBe(result[1].workflow);
+    expect(result[2]).toBe(queue[2]); expect(result[3]).toBe(queue[3]);
+    expect(new Set(result.map(item => item.outputPath)).size).toBe(4);
   });
 });

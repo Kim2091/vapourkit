@@ -54,6 +54,9 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from vk_source_cache import video_source
 
 import numpy as np
 import torch
@@ -587,9 +590,9 @@ class AlignError(Exception):
 
 def main_cli(main_path: str, ref_path: str) -> None:
     emit(progress=0.0, message="Opening the videos (the first time indexes them, which can take a while)")
-    main_clip = core.bs.VideoSource(source=main_path, cachemode=3)
+    main_clip = video_source(main_path)
     emit(progress=0.04, message="Opening the videos")
-    ref_clip = core.bs.VideoSource(source=ref_path, cachemode=3)
+    ref_clip = video_source(ref_path)
     try:
         result = align(main_clip, ref_clip)
     except AlignError as exc:

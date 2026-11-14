@@ -1,0 +1,22 @@
+# Encoding and workflows
+
+## Changes and causes
+
+1. **NVENC failures.** The selected H.264, HEVC or AV1 encoder is tested with the selected known pixel format before expensive script/model preparation. A one-frame FFmpeg probe detects missing drivers/libraries, unsupported codecs/formats, exhausted sessions and missing encoders; errors include a remedy and the original diagnostic. The output settings expose a test, CPU fallback, compatible-format correction and driver download link as applicable. Generated constant-quality NVENC settings explicitly select VBR. This does not make unsupported NVIDIA hardware support newer codecs.
+2. **Imported filters.** Import/save validates template structure, declared variable values and editor references. Saved parameter values survive import. Declared placeholders with invalid values fail with the filter name; strings are escaped correctly. Missing Python modules, native namespaces, incompatible libraries and Python errors now receive distinct repair instructions in validation, preview and processing errors. Use workflow validation with a loaded video before rendering. Bundled dependencies can be repaired through Plugins; third-party filters still need compatible dependencies in Vapourkit's private environment.
+3. **Cancelled filter selection.** New VS filters and AI models remain picker drafts until an actual selection is made. Closing either picker discards its draft without inserting a chain item. Editing an existing selection retains the original on cancel.
+4. **Guided encoding.** Simple mode now offers constant quality or target bitrate, maximum bitrate, keyframe interval, H.264 content tuning, CPU threads, ProRes profiles, audio codec/bitrate/channels, metadata copying and MP4/MOV fast start. Controls are conditional on codec and encoder. Advanced arguments remain available.
+5. **Optional preview.** The Preview rail button hides the panel, releases its video decoder, closes interactive chain preview and persists the preference. Processing ignores preview images while hidden. Renders started with preview off omit FFmpeg's JPEG preview output. An already-running FFmpeg process retains its output layout until the next render. The console remains accessible.
+6. **Batch settings.** Queue additions wait for initial saved settings to load and capture independent deep snapshots, including encoding, filters and track selections. `Apply current settings to all pending` replaces every pending job's settings after a confirmation; running and completed jobs retain theirs. Output naming follows format/filter changes and avoids queue collisions.
+7. **Container tracks.** Loading a video lists its audio/subtitle streams, codec, language and title where available. Keep-all, remove-all and individual checkboxes control explicit FFmpeg mapping. Track choices persist in workflows and queue snapshots. Selections use per-type positions across batch files; a missing selected position produces no corresponding track rather than silently copying everything. Use MKV when retaining subtitle formats unsupported by MP4/MOV, or remove those tracks.
+
+## Verification
+
+- `npm run build`
+- `npm test`
+- `npm run test:electron`
+- `npm run test:ui`: Playwright runs the real React app with a mocked Electron transport. Covers NVENC recovery, both picker cancellations, selected filter insertion, preview persistence, guided controls, track selection, inherited queue settings and later batch application. Run `npx playwright install chromium` first, or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to a system Chromium.
+- `npm run test:media`: opt-in integration tests require `ffmpeg`, `ffprobe` and a configured `vspipe` on PATH. Generates a real video with two language-tagged audio tracks and subtitles, pipes actual VapourSynth frames through the production FFmpeg argument builder, and checks retained/removed streams, AAC conversion and metadata using ffprobe.
+- Regression checks cover all shipped filter templates, malformed imports, workflow round trips, independent queue settings, stream mapping, preview suppression and NVENC diagnostic categories/process cleanup.
+
+Physical NVIDIA encoding cannot be verified on a machine without an NVIDIA GPU. The preflight subprocess/error paths and UI fallback are tested; the real-media integration tests use CPU H.264. CI runs build/unit tests on Linux and Windows, browser controls on Linux, and an AppImage version smoke test. Small baseline platform-path and version-entry fixes allow these existing checks to run consistently.

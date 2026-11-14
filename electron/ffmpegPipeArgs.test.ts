@@ -29,7 +29,7 @@ describe('the ffmpeg encode', () => {
     const args = build();
     const pipe = args.indexOf('pipe:0');
     expect(args.slice(0, pipe + 1)).toEqual([
-      '-hide_banner', '-f', 'matroska',
+      '-hide_banner', '-nostats', '-stats_period', '0.5', '-progress', 'pipe:2', '-f', 'matroska',
       '-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709',
       '-i', 'pipe:0',
     ]);
@@ -40,7 +40,7 @@ describe('the ffmpeg encode', () => {
   it('tags no YUV colour on an RGB output, float RGB included', () => {
     for (const pixelFormat of ['RGB24', 'RGBS', 'RGBH']) {
       const args = build({ outputInfo: { ...cfr, pixelFormat } });
-      expect(args.slice(0, args.indexOf('pipe:0') + 1)).toEqual(['-hide_banner', '-f', 'matroska', '-i', 'pipe:0']);
+      expect(args.slice(0, args.indexOf('pipe:0') + 1)).toEqual(['-hide_banner', '-nostats', '-stats_period', '0.5', '-progress', 'pipe:2', '-f', 'matroska', '-i', 'pipe:0']);
     }
   });
 
@@ -92,7 +92,7 @@ describe('the ffmpeg encode', () => {
 
   it('decodes the pipe into the null muxer in benchmark mode', () => {
     expect(build({ benchmarkMode: true, outputInfo: { ...cfr, pixelFormat: 'RGBS' } })).toEqual([
-      '-hide_banner', '-f', 'matroska', '-i', 'pipe:0', '-f', 'null', '-',
+      '-hide_banner', '-nostats', '-stats_period', '0.5', '-progress', 'pipe:2', '-f', 'matroska', '-i', 'pipe:0', '-f', 'null', '-',
     ]);
   });
 });
@@ -106,5 +106,35 @@ describe('movflags', () => {
 
   it('leaves them to encoding arguments that set movflags', () => {
     expect(movflagsFor('C:/out.mp4', { videoArgs: ['-c:v', 'libx264', '-movflags', '+frag_keyframe'] })).toEqual([]);
+  });
+});
+
+describe('selectable source tracks and preview toggle', () => {
+  it('maps per-type track ordinals and removes all subtitles when requested', () => {
+    const args = build({ ffmpegConfig: { videoArgs: ['-c:v', 'libx264'], audioTracks: [1], subtitleTracks: [] }, previewEnabled: false });
+    expect(args).toContain('1:a:1?');
+    expect(args).not.toContain('1:a?'); expect(args).not.toContain('1:s?');
+    expect(args).not.toContain('pipe:1'); expect(args).not.toContain('image2pipe');
+    expect(args).toContain('C:/out.mp4');
+  });
+  it('keeps the main video without accidentally enabling automatic audio selection', () => {
+    const args = build({ ffmpegConfig: { audioTracks: [], subtitleTracks: [], fastStart: false }, previewEnabled: false });
+    const maps = args.flatMap((value, i) => value === '-map' ? [args[i + 1]] : []);
+    expect(maps).toEqual(['0:v:0']);
+    expect(args).not.toContain('-movflags');
+  });
+});
+
+describe('bounded execution preferences', () => {
+  it('uses explicit requests only when they are in the supported range', () => {
+    expect(vspipeArgs('s.vpy',4)).toContain('--requests');
+    expect(vspipeArgs('s.vpy',0)).not.toContain('--requests');
+    expect(vspipeArgs('s.vpy',99)).not.toContain('--requests');
+  });
+  it('changes preview cost without altering the main video arguments', () => {
+    const args=build({previewHeight:360,previewFps:0.5});
+    expect(args).toContain('fps=0.5,scale=-2:360');
+    expect(args.slice(0,args.indexOf('C:/out.mp4'))).toEqual(build().slice(0,build().indexOf('C:/out.mp4')));
+    expect(build({previewEnabled:false,previewHeight:360})).not.toContain('mjpeg');
   });
 });

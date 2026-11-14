@@ -47,8 +47,8 @@ export class VsViewManager {
    * Check if vs-view is installed and at least VSVIEW_MIN_VERSION.
    * An older install reports false so the launch path upgrades it.
    */
-  static async isInstalled(): Promise<boolean> {
-    const packages = await pipList();
+  static async isInstalled(known?: Awaited<ReturnType<typeof pipList>>): Promise<boolean> {
+    const packages = known ?? await pipList();
     if (!packages) return false;
     // Exact-name match: the plugin packages (vsview-comp, ...) also
     // contain "vsview", so a substring check would false-positive
@@ -85,8 +85,8 @@ export class VsViewManager {
    * Detect a leftover vs-preview install from a prior build and uninstall it.
    * Runs before the vs-view install check so upgrading users migrate cleanly.
    */
-  static async migrateFromVsPreview(): Promise<void> {
-    const packages = await pipList();
+  static async migrateFromVsPreview(known?: Awaited<ReturnType<typeof pipList>>): Promise<void> {
+    const packages = known ?? await pipList();
     if (!packages?.some(pkg => pkg.name.toLowerCase() === 'vspreview')) return;
 
     logger.info('Detected vs-preview from a prior build, uninstalling...');
@@ -121,10 +121,11 @@ export class VsViewManager {
       }
 
       // Uninstall vs-preview if present (from a prior build)
-      await this.migrateFromVsPreview();
+      const packages = await pipList();
+      await this.migrateFromVsPreview(packages);
 
       // Check if vs-view is installed and recent enough
-      const isInstalled = await this.isInstalled();
+      const isInstalled = await this.isInstalled(packages);
       if (!isInstalled) {
         logger.info('vs-view missing or outdated, attempting to install...');
         const installResult = await this.install();

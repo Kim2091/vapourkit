@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { selectedComponentRoot } from './componentPaths';
 import { spawnSync } from 'child_process';
 import { app } from 'electron';
 import { VAPOURSYNTH_VERSION } from './vapoursynthCore';
@@ -79,14 +80,18 @@ export const APP_DATA_PATH = app.isPackaged
     : path.join(app.getPath('userData'), 'data')
   : path.join(app.getAppPath(), 'data');
 
-const VS_PATH = path.join(APP_DATA_PATH, 'vapoursynth-portable');
+const VS_PATH = selectedComponentRoot(APP_DATA_PATH, 'runtime', path.join(APP_DATA_PATH, 'vapoursynth-portable'));
+const FFMPEG_COMPONENT = selectedComponentRoot(APP_DATA_PATH, 'ffmpeg', path.join(APP_DATA_PATH, 'ffmpeg'));
 
 /**
  * A Linux venv follows the host interpreter's Python X.Y, which may differ
  * from the Windows embedded runtime. Ask the venv interpreter for its exact
  * site-packages directory rather than inferring it from the filesystem.
  */
+const linuxSitePackageCache = new Map<string, string>();
 export function resolveLinuxSitePackages(vsPath: string = VS_PATH): string {
+  const cached = linuxSitePackageCache.get(vsPath);
+  if (cached) return cached;
   const pythonPath = path.join(vsPath, 'bin', 'python3');
   const result = spawnSync(
     pythonPath,
@@ -95,6 +100,7 @@ export function resolveLinuxSitePackages(vsPath: string = VS_PATH): string {
   );
   const sitePackages = result.status === 0 ? result.stdout.trim() : '';
   if (sitePackages) {
+    linuxSitePackageCache.set(vsPath, sitePackages);
     return sitePackages;
   }
   // The venv has not been created yet. This fallback is only used during its
@@ -118,7 +124,7 @@ export const PATHS = {
       : resolveLinuxSitePackages();
   },
   get PLUGINS() { return path.join(this.SITE_PACKAGES, 'vapoursynth', 'plugins'); },
-  SCRIPTS: path.join(VS_PATH, 'vs-scripts'),
+  SCRIPTS: path.join(APP_DATA_PATH, 'vapoursynth-portable', 'vs-scripts'),
   MODELS: path.join(APP_DATA_PATH, 'models'),
   // vsmlrt.py model zoo (RIFE/DPIR for the bundled filter templates). App-owned
   // so pip reinstalls can't remove it; generated scripts point
@@ -166,7 +172,7 @@ export const PATHS = {
   get TENSORRT_PACKAGE() { return path.join(this.SITE_PACKAGES, 'tensorrt'); },
 
   // FFmpeg
-  FFMPEG_DIR: path.join(APP_DATA_PATH, 'ffmpeg'),
+  FFMPEG_DIR: FFMPEG_COMPONENT,
   get FFMPEG() { return path.join(this.FFMPEG_DIR, 'bin', `ffmpeg${EXE}`); },
   get FFPROBE() { return path.join(this.FFMPEG_DIR, 'bin', `ffprobe${EXE}`); }
 } as const;

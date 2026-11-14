@@ -1,0 +1,1 @@
+export interface RepositoryEntry { id: string; name: string; description: string; kind: string; version: string; api: number | null; namespace: string; compatible: boolean; reason: string; installed: boolean; }

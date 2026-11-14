@@ -7,6 +7,7 @@ interface UseBatchConfigOptions {
   /** The window's settings, as a queue item's workflow. */
   getWorkflow: () => QueueItem['workflow'];
   showQueue: boolean;
+  whenReady?: () => Promise<void>;
   onAddToQueue: (videoPaths: string[], workflow: QueueItem['workflow'], output?: { path: string; custom: boolean }) => void;
   /** Load a video into the project. */
   onLoadVideoInfo: (path: string) => Promise<unknown>;
@@ -14,7 +15,7 @@ interface UseBatchConfigOptions {
 }
 
 export function useBatchConfig(options: UseBatchConfigOptions) {
-  const { getWorkflow, showQueue, onAddToQueue, onLoadVideoInfo, onLog } = options;
+  const { getWorkflow, showQueue, whenReady, onAddToQueue, onLoadVideoInfo, onLog } = options;
 
   const handleSelectVideoWithQueue = async (): Promise<void> => {
     try {
@@ -29,6 +30,7 @@ export function useBatchConfig(options: UseBatchConfigOptions) {
   };
 
   const handleBatchFiles = async (files: string[]): Promise<void> => {
+    await whenReady?.();
     // Single file - load it normally if queue is not shown, otherwise add to queue
     if (files.length === 1 && !showQueue) {
       await onLoadVideoInfo(files[0]);

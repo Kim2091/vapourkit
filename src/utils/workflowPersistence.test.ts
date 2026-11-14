@@ -348,3 +348,22 @@ describe('encoding kept only as ffmpegArgs', () => {
     expect(encodingPatchOf(encodingSettingsOf(settings)).encoding).toEqual(settings.encoding);
   });
 });
+
+describe('explicit fresh working session', () => {
+  it('does not restore the video, filters, encoding or queue editor implicitly', () => {
+    storage.setItem('filters', JSON.stringify([step('old')]));
+    storage.setItem('defaultBackend', 'directml');
+    storage.setItem('preQueueWorkflow', JSON.stringify({ videoPath: 'old.mkv', filters: [step('old')] }));
+    storage.setItem('projectConfigSettings', JSON.stringify({ encoding: adv('-c:v libx265') }));
+    const state = loadDocument(true);
+    expect(state.project.filters).toEqual([]);
+    expect(state.session).toBeNull();
+    expect(state.target.kind).toBe('project');
+    const loaded = workflowDocumentReducer(state, { type: 'loaded', values: projectConfig() });
+    expect(loaded.project.encoding.mode).toBe('simple');
+    expect(loaded.project.filters).toEqual([]);
+    // The pre-queue working snapshot is cleared; explicit queue files are separate.
+    expect(storage.getItem('preQueueWorkflow')).toBeNull();
+    expect(storage.getItem('filters')).toBe('[]');
+  });
+});

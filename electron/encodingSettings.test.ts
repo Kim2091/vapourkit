@@ -18,6 +18,7 @@ import {
   simpleWithCodec,
   splitArgs,
   withEncodingMode,
+  withSimpleEncoding,
   type EncodingSettings,
 } from './encodingSettings';
 import { parseFfmpegArgs } from './ffmpegConfig';
@@ -134,7 +135,14 @@ describe('encodingFrom', () => {
 });
 
 describe('switching modes', () => {
-  it('keeps the advanced arguments through simple edits, and the simple settings through advanced ones', () => {
+  it('updates the advanced baseline immediately when normal bitrate/audio controls change', () => {
+    const simple = { ...DEFAULT_ENCODING.simple, rateControl: 'bitrate' as const, bitrateMbps: 12, audioCodec: 'aac' as const, audioBitrateKbps: 256 };
+    const encoding = withSimpleEncoding({ ...DEFAULT_ENCODING, customArgs: '-c:v stale' }, simple);
+    expect(encoding.customArgs).toBe(simpleArgsOf(simple));
+    expect(encoding.customArgs).toContain('-b:v 12M');
+    expect(encoding.customArgs).toContain('-b:a 256k');
+  });
+  it('regenerates advanced arguments after normal codec changes and retains normal controls', () => {
     // Leaving advanced mode used to regenerate the arguments, and coming back
     // wrote stale stored arguments over the current ones.
     let encoding: EncodingSettings = { ...DEFAULT_ENCODING, mode: 'advanced', customArgs: '-c:v libx264 -crf 18 -tune film' };
@@ -142,11 +150,11 @@ describe('switching modes', () => {
     encoding = { ...encoding, simple: simpleWithCodec(encoding.simple, 'h265') };
     expect(resolveEncodingArgs(encoding)).toContain('libx265');
     encoding = withEncodingMode(encoding, 'advanced');
-    expect(resolveEncodingArgs(encoding)).toBe('-c:v libx264 -crf 18 -tune film');
+    expect(resolveEncodingArgs(encoding)).toBe(simpleArgsOf(encoding.simple));
     encoding = { ...encoding, customArgs: '-c:v libx264 -crf 12' };
     encoding = withEncodingMode(encoding, 'simple');
     expect(encoding.simple.codec).toBe('h265');
-    expect(encoding.customArgs).toBe('-c:v libx264 -crf 12');
+    expect(encoding.customArgs).toBe(simpleArgsOf(encoding.simple));
   });
 
   it('stays advanced when the typed arguments are ones the simple controls could show', () => {
@@ -159,7 +167,7 @@ describe('switching modes', () => {
     const simple = { codec: 'av1', encoder: 'software', preset: '6', quality: 28 } as const;
     const encoding = withEncodingMode({ mode: 'simple', simple, customArgs: '' }, 'advanced');
     expect(encoding.customArgs).toBe(simpleArgsOf(simple));
-    expect(withEncodingMode({ mode: 'simple', simple, customArgs: '-c:v x' }, 'advanced').customArgs).toBe('-c:v x');
+    expect(withEncodingMode({ mode: 'simple', simple, customArgs: '-c:v x' }, 'advanced').customArgs).toBe(simpleArgsOf(simple));
   });
 });
 
@@ -179,5 +187,28 @@ describe('splitArgs', () => {
     expect(splitArgs("-vf drawtext=text='Hello world':x=10 -crf 18"))
       .toEqual(['-vf', "drawtext=text='Hello world':x=10", '-crf', '18']);
     expect(splitArgs("-vf scale='min(1280,iw)':-2")).toEqual(['-vf', "scale='min(1280,iw)':-2"]);
+  });
+});
+
+describe('guided encoding controls and track persistence', () => {
+  it('uses target bitrate without simultaneously emitting constant quality', () => {
+    const args = simpleArgsOf({ ...DEFAULT_ENCODING.simple, encoder: 'nvidia', preset: 'p4', rateControl: 'bitrate', bitrateMbps: 12, maxBitrateMbps: 16 });
+    expect(args).toContain('-rc vbr -b:v 12M');
+    expect(args).toContain('-maxrate 16M -bufsize 32M');
+    expect(args).not.toMatch(/-cq|-crf|-b:v 0/);
+  });
+  it('resolves novice audio, keyframes, tuning and metadata controls', () => {
+    const args = simpleArgsOf({ ...DEFAULT_ENCODING.simple, audioCodec: 'aac', audioBitrateKbps: 256, audioChannels: 2, keyframeInterval: 48, threads: 4, tune: 'film', copyMetadata: false });
+    expect(args).toContain('-c:a aac -b:a 256k -ac 2');
+    expect(args).toContain('-g 48 -threads:v 4 -tune film');
+    expect(args).toContain('-map_metadata -1');
+    expect(simpleArgsOf({ ...DEFAULT_ENCODING.simple, audioCodec: 'none' })).toContain('-an');
+  });
+  it('normalizes new settings and retains explicit remove-all track choices', () => {
+    const encoding = normalizeEncodingSettings({ ...DEFAULT_ENCODING, simple: { ...DEFAULT_ENCODING.simple, rateControl: 'bitrate', bitrateMbps: -5, maxBitrateMbps: 0.01, threads: 999, proresProfile: 99 }, audioTracks: [], subtitleTracks: [2, 0, 2] })!;
+    expect(encoding.simple).toMatchObject({ bitrateMbps: 0.1, maxBitrateMbps: 0.1, threads: 256, proresProfile: 5 });
+    expect(encoding.audioTracks).toEqual([]); expect(encoding.subtitleTracks).toEqual([0, 2]);
+    expect(encodingFrom(encoding, resolveEncodingArgs(encoding))?.audioTracks).toEqual([]);
+    expect(normalizeEncodingSettings({ ...DEFAULT_ENCODING, audioTracks: ['bad'] })).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { validateFilterTemplate } from './filterValidation';
 import { ipcMain } from 'electron';
 import * as fs from 'fs-extra';
 import { logger } from './logger';
@@ -62,6 +63,8 @@ export function registerWorkflowHandlers() {
           tomlData.encoding_settings.encoding_mode = encoding.mode;
           tomlData.encoding_settings.custom_args = encoding.customArgs;
           tomlData.encoding_settings.simple_encoding = { ...encoding.simple };
+          if (encoding.audioTracks !== undefined) tomlData.encoding_settings.audio_tracks = encoding.audioTracks;
+          if (encoding.subtitleTracks !== undefined) tomlData.encoding_settings.subtitle_tracks = encoding.subtitleTracks;
         }
         // Optional: workflows written before it was saved load with the
         // backend the app already has.
@@ -115,6 +118,7 @@ export function registerWorkflowHandlers() {
         createdAt: data.workflow.created_at,
         description: data.workflow.description,
         filters: Array.isArray(data.filters) ? data.filters.map((f: any) => {
+          if ((f.filterType ?? 'custom') === 'custom' && (f.enabled !== false || (typeof f.code === 'string' && f.code.trim()))) validateFilterTemplate(f);
           const normalizedCategory = Array.isArray(f.category) && f.category.length === 1
             ? f.category[0]
             : (f.category || undefined);
@@ -147,7 +151,7 @@ export function registerWorkflowHandlers() {
         // Files written before the mode was stored carry only ffmpeg_args.
         const encoding: EncodingSettings | null = encodingFrom(
           typeof stored.encoding_mode === 'string'
-            ? { mode: stored.encoding_mode, simple: stored.simple_encoding, customArgs: stored.custom_args }
+            ? { mode: stored.encoding_mode, simple: stored.simple_encoding, customArgs: stored.custom_args, audioTracks: stored.audio_tracks, subtitleTracks: stored.subtitle_tracks }
             : undefined,
           stored.ffmpeg_args,
         );

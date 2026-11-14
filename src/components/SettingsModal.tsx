@@ -1,3 +1,5 @@
+import { PipelineSettingsPanel } from './PipelineSettingsPanel';
+import { ComponentUpdatesPanel } from './ComponentUpdatesPanel';
 import { memo, useState, useEffect } from 'react';
 import { Settings, Info, Terminal, FolderOpen, Package, FileCode, RotateCcw, Cpu, Play, ChevronDown, ChevronUp, HardDrive, Palette, MessageCircle, PackageCheck, ChevronRight } from 'lucide-react';
 import type { BackendId, DiscordRichPresenceSettings, UpdateReportSnapshot } from '../electron.d';
@@ -16,6 +18,7 @@ interface SettingsModalProps {
   onChangeBackend: (backend: BackendId) => void;
   showBackendOverrides: boolean;
   onToggleBackendOverrides: (value: boolean) => void;
+  onExportBenchmark?: () => Promise<void>;
   numStreams: number;
   onUpdateNumStreams: (value: number) => void;
   videoCompareArgs: string;
@@ -46,6 +49,7 @@ export const SettingsModal = memo<SettingsModalProps>(({
   onChangeBackend,
   showBackendOverrides,
   onToggleBackendOverrides,
+  onExportBenchmark,
   numStreams,
   onUpdateNumStreams,
   videoCompareArgs,
@@ -170,6 +174,7 @@ export const SettingsModal = memo<SettingsModalProps>(({
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'general' && (
           <>
+            <ComponentUpdatesPanel />
             {(updateNotes?.report || (updateNotes?.decisions.length ?? 0) > 0) && updateNotes && (
               <section>
                 <ModalSectionHeader icon={PackageCheck} title="Last Update" />
@@ -396,6 +401,7 @@ export const SettingsModal = memo<SettingsModalProps>(({
 
         {activeTab === 'processing' && (
           <>
+            <PipelineSettingsPanel onExportBenchmark={onExportBenchmark} />
             {/* Default Output Folder Section */}
             <section className="mt-2 border-t border-ink-700 first:mt-0 first:border-t-0">
               <ModalSectionHeader icon={HardDrive} title="Output Location" />

@@ -1,3 +1,5 @@
+import { overlayComponentFilters } from './componentUpdates';
+import { validateFilterTemplate } from './filterValidation';
 // electron/templateManager.ts
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -123,6 +125,7 @@ export class TemplateManager {
       const templateFiles = files.filter(f => f.endsWith('.vkfilter'));
       
       const templates: FilterTemplate[] = [];
+      const templatePaths = new Map<string, string>();
       
       for (const file of templateFiles) {
         try {
@@ -135,6 +138,7 @@ export class TemplateManager {
           // Validate template structure
           if (template.name && template.code !== undefined) {
             templates.push(template);
+            templatePaths.set(template.name, filePath);
           } else {
             logger.warn(`Invalid template file: ${file}`);
           }
@@ -144,7 +148,7 @@ export class TemplateManager {
       }
       
       logger.info(`Loaded ${templates.length} filter template(s)`);
-      return templates;
+      return await overlayComponentFilters(templates, templatePaths);
     } catch (error) {
       logger.error('Error loading templates:', error);
       return [];
@@ -156,6 +160,7 @@ export class TemplateManager {
    */
   async saveTemplate(template: FilterTemplate): Promise<void> {
     try {
+      validateFilterTemplate(template);
       await this.ensureTemplatesDir();
       
       // Add metadata if not present

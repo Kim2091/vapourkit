@@ -52,10 +52,16 @@ export interface RocmSettingResult {
 }
 
 export interface ElectronAPI {
+  exportPipelineBenchmark: (request: { videoPath: string; defaultBackend: string; filters: Filter[]; numStreams: number; segment?: SegmentSelection }) => Promise<{ cancelled: boolean; directory?: string; message?: string }>;
+  getPipelineSettings: () => Promise<import('../electron/pipelineSettings').PipelineSettings>;
+  setPipelineSettings: (settings: import('../electron/pipelineSettings').PipelineSettings) => Promise<void>;
+  listFilterRepository: (refresh: boolean) => Promise<import('../electron/filterRepositoryTypes').RepositoryEntry[]>;
+  installRepositoryFilter: (id: string) => Promise<{ message: string }>;
   // Dependency management
   platform: NodeJS.Platform;
   checkDependencies: () => Promise<boolean>;
   /** Why NVENC encoding cannot work on this NVIDIA driver, or null */
+  checkEncodingSupport: (request: { encoder: import('../electron/encodingSupportTypes').NvencEncoder; pixelFormat: string }) => Promise<import('../electron/encodingSupportTypes').EncodingSupport>;
   getNvencDriverProblem: () => Promise<string | null>;
   setupDependencies: () => Promise<InstallResult & { phase?: 'core' | 'plugins' }>;
   onSetupProgress: (callback: (progress: SetupProgress) => void) => () => void;
@@ -63,6 +69,8 @@ export interface ElectronAPI {
   getInferenceBackendInfo: () => Promise<{ hasCudaSupport: boolean; backend: BackendId }>;
   getGpuStats: () => Promise<{ gpuMemoryUsed: number; gpuMemoryTotal: number; gpuUtilization: number } | null>;
   
+  setPreviewEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+
   // Video operations
   selectVideoFile: () => Promise<string[] | null>;
   /** One video file, for a step that matches against footage outside the chain. */
@@ -171,6 +179,7 @@ export interface ElectronAPI {
   killUpscale: () => Promise<{ success: boolean }>;
   onUpscaleProgress: (callback: (progress: UpscaleProgress) => void) => () => void;
   onEngineBuildProgress: (callback: (status: EngineBuildStatus) => void) => () => void;
+  onPreviewSuspendedForRender: (callback: () => void) => () => void;
   openOutputFolder: (filePath: string) => Promise<void>;
   compareVideos: (inputPath: string, outputPath: string) => Promise<{ success: boolean; error?: string }>;
   launchVsePreviewer: (
@@ -277,7 +286,7 @@ export interface ElectronAPI {
   saveFilterTemplate: (template: FilterTemplate) => Promise<{ success: boolean; error?: string }>;
   deleteFilterTemplate: (name: string) => Promise<{ success: boolean; error?: string }>;
   readTemplateFile: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
-  importTemplateFile: (filePath: string) => Promise<{ success: boolean; template?: FilterTemplate; error?: string }>;
+  importTemplateFile: (filePath: string) => Promise<{ success: boolean; template?: FilterTemplate; error?: string; warnings?: string[] }>;
   
   // Model category operations
   getModelCategories: () => Promise<string[]>;
@@ -314,6 +323,9 @@ export interface ElectronAPI {
   onPluginDependencyProgress: (callback: (progress: PluginDependencyProgress) => void) => () => void;
   
   // Update operations
+  checkComponents: (online: boolean) => Promise<import('../electron/componentCatalog').ComponentSnapshot>;
+  installComponent: (id: string, version: string, experimental: boolean) => Promise<{ restart: boolean; message: string }>;
+  rollbackComponent: (kind: 'runtime' | 'ffmpeg' | 'filters') => Promise<void>;
   checkForUpdates: () => Promise<{ success: boolean; data?: UpdateInfo; error?: string }>;
   openReleasesPage: () => Promise<{ success: boolean; error?: string }>;
   openReleaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>;
@@ -497,6 +509,7 @@ export interface PreviewFrameResult {
 }
 
 export interface VideoInfo {
+  tracks?: import('../electron/mediaTracks').ContainerTrack[];
   path: string;
   name: string;
   size: number;
@@ -575,6 +588,8 @@ export interface InitializeModelResult {
 export interface ValidateOnnxModelResult {
   isValid: boolean;
   error?: string;
+  contract?: import('../electron/modelContract').ModelContract;
+  compatibilityError?: string;
   inputShape?: number[];
   outputShape?: number[];
   inputName?: string;
@@ -596,6 +611,7 @@ export interface ModelInitProgress {
 }
 
 export interface ImportModelParams {
+  deferBuild?: boolean;
   onnxPath: string;
   modelName: string;
   minShapes: string;

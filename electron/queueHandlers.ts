@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { holdQueuedSourceIndexes } from './sourceIndexCache';
 import * as path from 'path';
 import { logger } from './logger';
 import { PATHS } from './constants';
@@ -29,6 +30,7 @@ export function registerQueueHandlers() {
     switch (read.kind) {
       case 'ok':
         if (Array.isArray(read.value)) {
+          holdQueuedSourceIndexes(read.value);
           queueWriter.unblock();
           logger.info(`Loaded ${read.value.length} queue items`);
           return read.value;
@@ -62,6 +64,7 @@ export function registerQueueHandlers() {
 
   // Save queue to disk
   ipcMain.handle('save-queue', async (event, queue: any[]) => {
+    holdQueuedSourceIndexes(queue);
     logger.info(`Saving queue with ${queue.length} items`);
     try {
       await queueWriter.write(queue);
@@ -79,6 +82,7 @@ export function registerQueueHandlers() {
   // last edits before quitting were lost. Synchronous, so it is done when the
   // window is allowed to close.
   ipcMain.on('save-queue-sync', (event, queue: any[]) => {
+    holdQueuedSourceIndexes(queue);
     try {
       queueWriter.writeSync(queue);
       logger.info(`Saved queue with ${queue.length} items on close`);
@@ -95,6 +99,7 @@ export function registerQueueHandlers() {
     logger.info('Clearing queue');
     try {
       await queueWriter.write([]);
+      holdQueuedSourceIndexes([]);
       logger.info('Queue cleared');
       return { success: true };
     } catch (error) {

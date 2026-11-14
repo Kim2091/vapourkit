@@ -19,6 +19,7 @@ export interface ImportForm {
   useCustomTrtexecParams: boolean;
   customTrtexecParams: string;
   skipValidation: boolean;
+  prepareOnUse?: boolean;
   detectionFailed: boolean;
 }
 
@@ -63,6 +64,7 @@ const DEFAULT_IMPORT_FORM: ImportForm = {
   useCustomTrtexecParams: true, // Always true in refactored UI - the textbox is the main interface
   customTrtexecParams: generateTrtexecCommand('image', false, false, 'input', false),
   skipValidation: false,
+  prepareOnUse: true,
   detectionFailed: false
 };
 
@@ -71,9 +73,13 @@ export const useModelImport = (
   onImportComplete: (enginePath?: string) => void,
   addConsoleLog: (message: string) => void
 ) => {
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportModal, setShowImportModalState] = useState(false);
   const [modalMode, setModalMode] = useState<'import' | 'build'>('import');
   const [importProgress, setImportProgress] = useState<ModelImportProgress | null>(null);
+  const setShowImportModal = useCallback((show: boolean) => {
+    if (show) setImportProgress(null);
+    setShowImportModalState(show);
+  }, []);
   const [isImporting, setIsImporting] = useState(false);
   const [importForm, setImportForm] = useState<ImportForm>(DEFAULT_IMPORT_FORM);
   // Ref to access skipValidation inside callbacks without re-creating them
@@ -95,6 +101,7 @@ export const useModelImport = (
   }, [defaultBackend]);
 
   const handleSelectOnnxFile = useCallback(async (): Promise<void> => {
+    setImportProgress(null);
     try {
       const result = await window.electronAPI.selectOnnxFile();
       if (result) {
@@ -119,7 +126,8 @@ export const useModelImport = (
           if (!validation.isValid) {
             detectionFailed = true;
           }
-          if (validation.isValid && validation.inputName) {
+          if (validation.compatibilityError) { notify.error('Unsupported model layout', validation.compatibilityError); return; }
+      if (validation.isValid && validation.inputName) {
             extractedInputName = validation.inputName;
             addConsoleLog(`[Model] Detected input name: ${extractedInputName}`);
           }
@@ -304,6 +312,7 @@ export const useModelImport = (
     if (!importForm.onnxPath || !importForm.modelName) return;
 
     setIsImporting(true);
+    setImportProgress(null);
     // Reset completion guard at the start of a new import/build
     completionGuardRef.current = false;
     try {
@@ -340,6 +349,7 @@ export const useModelImport = (
           useCustomTrtexecParams: importForm.useCustomTrtexecParams,
           customTrtexecParams: importForm.customTrtexecParams || undefined,
           skipValidation: importForm.skipValidation,
+          deferBuild: importForm.prepareOnUse !== false,
         });
       }
     } catch (error) {
@@ -366,7 +376,7 @@ export const useModelImport = (
 
   const handleAutoBuildModel = useCallback(async (model: { onnxPath: string; name: string; modelType?: string; displayTag?: string }): Promise<void> => {
     // Use existing metadata from ONNX model if available
-    const modelType = model.modelType || 'image';
+    let modelType = model.modelType || 'image';
     const displayTag = model.displayTag || '';
     
     // Extract input name and detect properties from the model
@@ -378,6 +388,7 @@ export const useModelImport = (
     let useBf16 = false;
     try {
       const validation = await window.electronAPI.validateOnnxModel(model.onnxPath);
+      if (validation.compatibilityError) { notify.error('Unsupported model layout', validation.compatibilityError); return; }
       if (validation.isValid && validation.inputName) {
         inputName = validation.inputName;
       }
@@ -387,6 +398,7 @@ export const useModelImport = (
         detectedShape = validation.inputShape;
         addConsoleLog(`[Auto-Build] Detected static model with shape: ${detectedShape.join('x')}`);
       }
+      if (validation.contract) modelType = validation.contract.temporalFrames > 1 ? 'vsr' : 'image';
       // Auto-detect temporal frames from channel count
       if (validation.isValid && validation.inputShape && validation.inputShape.length >= 4) {
         const inputChannels = validation.inputShape[1];
@@ -434,6 +446,7 @@ export const useModelImport = (
     setAutoBuildIsStatic(isStaticModel);
     setAutoBuildStaticShape(isStaticModel && detectedShape ? detectedShape.join('x') : null);
     setShowAutoBuildModal(true);
+    setImportProgress(null);
     setIsImporting(true);
     completionGuardRef.current = false;
     

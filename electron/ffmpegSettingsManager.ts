@@ -13,6 +13,9 @@ export interface FFmpegConfig {
   copyMetadata?: boolean;
   /** Additional output flags (e.g., faststart for MP4) */
   movflags?: string[];
+  audioTracks?: number[];
+  subtitleTracks?: number[];
+  fastStart?: boolean;
 }
 
 /**
@@ -36,9 +39,13 @@ export class FFmpegSettingsManager {
   /** The encoding arguments from the user's settings, or the defaults if they cannot be read. */
   static async loadFFmpegConfig(configManager: ConfigManager): Promise<FFmpegConfig> {
     try {
+      const encoding = configManager.getEncodingSettings();
       // Only videoArgs: the user controls everything else on the command line.
       return {
         videoArgs: FFmpegSettingsManager.parseArgsString(configManager.getFfmpegArgs()),
+        audioTracks: encoding.audioTracks,
+        subtitleTracks: encoding.subtitleTracks,
+        fastStart: encoding.mode === 'simple' ? encoding.simple.fastStart : true,
         preserveAspectRatio: false,
         copyMetadata: false,
         movflags: []

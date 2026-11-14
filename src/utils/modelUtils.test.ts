@@ -57,12 +57,12 @@ describe('getModelDisplayName', () => {
     expect(getModelDisplayName(model, 'directml')).toBe('MyModel [2x]');
   });
 
-  it('adds [Unbuilt] prefix for ONNX without engine on TensorRT', () => {
+  it('adds [Builds on first use] prefix for ONNX without engine on TensorRT', () => {
     const model = makeModel({ path: 'a.onnx', name: 'MyModel', backend: 'onnx', hasEngine: false });
-    expect(getModelDisplayName(model, 'tensorrt')).toBe('[Unbuilt] MyModel');
+    expect(getModelDisplayName(model, 'tensorrt')).toBe('[Builds on first use] MyModel');
   });
 
-  it('does not add [Unbuilt] on DirectML', () => {
+  it('does not add [Builds on first use] on DirectML', () => {
     const model = makeModel({ path: 'a.onnx', name: 'MyModel', backend: 'onnx', hasEngine: false });
     expect(getModelDisplayName(model, 'directml')).toBe('MyModel');
   });

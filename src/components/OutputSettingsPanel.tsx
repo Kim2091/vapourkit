@@ -1,3 +1,5 @@
+import { EncodingSupportPanel } from './EncodingSupportPanel';
+import { GuidedEncodingControls } from './GuidedEncodingControls';
 // OutputSettingsPanel.tsx
 import { memo, useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Sliders, Gauge } from 'lucide-react';
@@ -20,6 +22,7 @@ import {
   simpleWithCodec,
   simpleWithEncoder,
   withEncodingMode,
+  withSimpleEncoding,
   type EncodingSettings,
   type SimpleCodec,
   type SimpleEncoding,
@@ -93,12 +96,13 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
   };
 
   const handleSimpleChange = (simple: SimpleEncoding) => {
-    onEncodingChange({ ...encoding, simple });
+    onEncodingChange(withSimpleEncoding(encoding, simple));
   };
 
   const handleCodecChange = (codec: SimpleCodec) => {
     // ProRes only supports YUV422P10 and YUV444P10 - auto-select if current format is incompatible
     if (codec === 'prores') {
+      if (!['mov', 'mkv'].includes(outputFormat)) onFormatChange('mov');
       const proresCompatibleFormats = ['vs.YUV422P10', 'vs.YUV444P10'];
       if (!proresCompatibleFormats.includes(processingFormat)) {
         onProcessingFormatChange('vs.YUV422P10');
@@ -396,7 +400,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             )}
 
             {/* CRF Quality (not for ProRes) */}
-            {supportsCrf(config.codec) && (
+            {supportsCrf(config.codec) && config.rateControl !== 'bitrate' && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] font-display font-semibold uppercase tracking-[0.09em] text-ink-500">
@@ -418,10 +422,11 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
                 <div className="flex justify-between text-[10.5px] text-ink-500 mt-1">
                   <span>Best ({crfRange.min})</span>
                   <span>Default ({crfRange.default})</span>
-                  <span>Fast ({crfRange.max})</span>
+                  <span>Smaller file ({crfRange.max})</span>
                 </div>
               </div>
             )}
+            <GuidedEncodingControls value={config} onChange={handleSimpleChange} onProcessingFormatChange={onProcessingFormatChange} outputFormat={outputFormat} disabled={isProcessing} />
           </>
         )}
 
@@ -443,6 +448,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
               </button>
             </div>
             <textarea
+              aria-label="Advanced FFmpeg arguments"
               value={encoding.customArgs}
               onChange={(e) => handleCustomArgsChange(e.target.value)}
               disabled={isProcessing}
@@ -452,16 +458,8 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
             />
             <div className="flex items-center justify-between gap-2 mt-1.5">
               <p className="text-[10.5px] text-ink-500">
-                Custom FFmpeg encoding arguments
+                Starts from the current normal settings automatically. Changing normal settings or reopening Advanced regenerates these arguments.
               </p>
-              <button
-                onClick={() => handleCustomArgsChange(simpleArgs)}
-                disabled={isProcessing || encoding.customArgs === simpleArgs}
-                title={`Replace these arguments with the simple settings: ${simpleArgs}`}
-                className="text-[10.5px] text-ink-400 hover:text-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-ink-400"
-              >
-                Copy from simple settings
-              </button>
             </div>
           </div>
         )}
@@ -469,6 +467,7 @@ export const OutputSettingsPanel = memo<OutputSettingsPanelProps>(({
         </div>
       </div>
       )}
+      {!benchmarkMode && <div className="px-3 pb-3"><EncodingSupportPanel encoding={encoding} processingFormat={processingFormat} disabled={isProcessing} onChange={onEncodingChange} onProcessingFormatChange={onProcessingFormatChange} /></div>}
     </Section>
   );
 });

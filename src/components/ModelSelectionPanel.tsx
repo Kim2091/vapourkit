@@ -20,6 +20,7 @@ interface ModelSelectionPanelProps {
   onSaveTemplate?: (template: FilterTemplate) => Promise<boolean>;
   onDeleteTemplate?: (name: string) => Promise<boolean>;
   onRestoreTemplates?: () => Promise<string[]>;
+  onRefreshTemplates?: () => Promise<void>;
   onOpenFilterEditor?: (filter: Filter) => void;
   lut?: LutPanelActions;
   beginStepPatch?: (stepId: string) => (patch: (step: Filter) => Filter) => boolean;
@@ -41,6 +42,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
   onSaveTemplate,
   onDeleteTemplate,
   onRestoreTemplates,
+  onRefreshTemplates,
   onImportClick,
   onModelsUpdated,
   onOpenFilterEditor,
@@ -74,6 +76,7 @@ export const ModelSelectionPanel = memo<ModelSelectionPanelProps>(({
         onSaveTemplate={onSaveTemplate}
         onDeleteTemplate={onDeleteTemplate}
         onRestoreTemplates={onRestoreTemplates}
+          onRefreshTemplates={onRefreshTemplates}
         onImportClick={onImportClick}
         onModelsUpdated={onModelsUpdated}
         onOpenFilterEditor={onOpenFilterEditor}

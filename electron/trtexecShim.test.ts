@@ -39,6 +39,8 @@ import { IS_WINDOWS, PATHS } from './constants';
 const BUILDER_MARKER = '# staged by trtexecShim.test.ts\n';
 
 beforeAll(async () => {
+  await fs.ensureDir(path.join(testRoot, 'include'));
+  await fs.copy(path.join(__dirname, '..', 'include', 'vk_model_runtime.py'), path.join(testRoot, 'include', 'vk_model_runtime.py'));
   // ensureTrtexecShim copies the builder out of the app bundle
   await fs.ensureDir(path.join(testRoot, 'include'));
   await fs.writeFile(path.join(testRoot, 'include', 'build_trt_engine.py'), BUILDER_MARKER);
@@ -63,6 +65,13 @@ describe('ensureTrtexecShim', () => {
     expect(shim).toContain('-u');
     // vsmlrt's arguments must reach the builder verbatim
     expect(shim).toContain(IS_WINDOWS ? '%*' : '"$@"');
+  });
+
+  it('restages a missing application helper before returning a usable builder', async () => {
+    const helper = path.join(PATHS.APP_DATA, 'vk_model_runtime.py');
+    await fs.remove(helper);
+    await ensureTrtexecShim();
+    expect(await fs.readFile(helper, 'utf8')).toBe(await fs.readFile(path.join(testRoot, 'include', 'vk_model_runtime.py'), 'utf8'));
   });
 
   it('restores the environment vsmlrt strips before spawning it', async () => {
